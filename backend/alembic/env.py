@@ -17,8 +17,9 @@ if not database_url:
     raise RuntimeError("DATABASE_URL environment variable is required")
 config.set_main_option("sqlalchemy.url", database_url)
 
-# Import Base metadata when SA models exist (S03+)
-target_metadata = None
+from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
