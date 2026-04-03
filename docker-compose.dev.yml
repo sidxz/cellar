@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    command: .venv/bin/uvicorn chem_vault.interface.app:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend/src:/app/src
+
+  frontend:
+    build:
+      context: ./frontend
+      target: deps
+    command: pnpm dev
+    working_dir: /app
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
