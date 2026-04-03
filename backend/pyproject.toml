@@ -49,6 +49,7 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
+    "import-linter>=2.11",
 ]
 
 [build-system]
@@ -62,3 +63,62 @@ packages = ["src/chem_vault"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# ---------------------------------------------------------------------------
+# Import Linter — enforces Clean Architecture dependency rules
+# Run: uv run lint-imports
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["chem_vault"]
+include_external_packages = true
+
+# Rule 1: Layer dependency direction (domain → app → infra → interface)
+[[tool.importlinter.contracts]]
+name = "Clean Architecture layers"
+type = "layers"
+layers = [
+    "chem_vault.interface",
+    "chem_vault.infrastructure",
+    "chem_vault.application",
+    "chem_vault.domain",
+]
+
+# Rule 2: Domain layer can only import stdlib, pydantic, returns, and itself
+[[tool.importlinter.contracts]]
+name = "Domain purity"
+type = "forbidden"
+source_modules = ["chem_vault.domain"]
+forbidden_modules = [
+    "chem_vault.application",
+    "chem_vault.infrastructure",
+    "chem_vault.interface",
+    "fastapi",
+    "sqlalchemy",
+    "asyncpg",
+    "alembic",
+    "rdkit",
+    "redis",
+    "temporalio",
+    "httpx",
+    "lagom",
+    "fsspec",
+    "scipy",
+    "numpy",
+    "pandas",
+    "structlog",
+]
+
+# Rule 3: No cross-context domain imports (each context only uses shared)
+[[tool.importlinter.contracts]]
+name = "Bounded context independence — chemical_registration"
+type = "independence"
+modules = [
+    "chem_vault.domain.chemical_registration",
+    "chem_vault.domain.screening_assay",
+    "chem_vault.domain.inventory",
+    "chem_vault.domain.formulation",
+    "chem_vault.domain.sar_analysis",
+    "chem_vault.domain.research_organization",
+    "chem_vault.domain.audit_compliance",
+    "chem_vault.domain.workspace_config",
+]

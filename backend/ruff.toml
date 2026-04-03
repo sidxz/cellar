@@ -1,5 +1,6 @@
 target-version = "py313"
 line-length = 99
+src = ["src"]
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

@@ -11,11 +11,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set sqlalchemy.url from environment variable
-config.set_main_option(
-    "sqlalchemy.url",
-    os.environ.get("DATABASE_URL", "postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault"),
-)
+# Set sqlalchemy.url from environment variable — no fallback, fail explicitly
+database_url = os.environ.get("DATABASE_URL")
+if not database_url:
+    raise RuntimeError("DATABASE_URL environment variable is required")
+config.set_main_option("sqlalchemy.url", database_url)
 
 # Import Base metadata when SA models exist (S03+)
 target_metadata = None
