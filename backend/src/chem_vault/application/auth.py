@@ -1,0 +1,79 @@
+"""Application-layer auth context protocol and guards.
+
+The ``AuthContext`` protocol defines what the application layer needs from auth
+without depending on Sentinel SDK types. Infrastructure adapts ``RequestAuth``
+to satisfy this protocol (structural subtyping).
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Protocol, runtime_checkable
+
+from chem_vault.domain.shared.errors import AuthorizationError
+
+# Role hierarchy (ascending privilege)
+_ROLE_HIERARCHY: dict[str, int] = {
+    "viewer": 0,
+    "editor": 1,
+    "admin": 2,
+    "owner": 3,
+}
+
+
+@runtime_checkable
+class AuthContext(Protocol):
+    """Auth context available to use cases. Satisfied by Sentinel's RequestAuth."""
+
+    @property
+    def user_id(self) -> uuid.UUID: ...
+
+    @property
+    def workspace_id(self) -> uuid.UUID: ...
+
+    @property
+    def workspace_role(self) -> str: ...
+
+    @property
+    def is_admin(self) -> bool: ...
+
+    def has_role(self, minimum_role: str) -> bool: ...
+
+
+# ---------------------------------------------------------------------------
+# Guards — raise AuthorizationError on failure
+# ---------------------------------------------------------------------------
+
+
+def require_workspace_role(auth: AuthContext | None, minimum_role: str) -> None:
+    """Raise if auth is present but lacks the required workspace role."""
+    if auth is None:
+        return  # Workers / system calls bypass
+    if not auth.has_role(minimum_role):
+        raise AuthorizationError(
+            f"Requires at least '{minimum_role}' role",
+            detail=f"Current role: '{auth.workspace_role}'",
+        )
+
+
+def require_editor(auth: AuthContext | None) -> None:
+    """Shorthand: require at least editor role."""
+    require_workspace_role(auth, "editor")
+
+
+def require_admin(auth: AuthContext | None) -> None:
+    """Shorthand: require at least admin role."""
+    require_workspace_role(auth, "admin")
+
+
+def require_same_workspace(auth: AuthContext | None, workspace_id: uuid.UUID | None) -> None:
+    """Raise if the entity belongs to a different workspace.
+
+    Returns NotFoundError-style message to avoid leaking entity existence.
+    """
+    if auth is None or workspace_id is None:
+        return
+    if auth.workspace_id != workspace_id:
+        from chem_vault.domain.shared.errors import NotFoundError
+
+        raise NotFoundError("Entity")
