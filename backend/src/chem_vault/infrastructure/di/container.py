@@ -246,7 +246,11 @@ def create_container(
     def _disclosure_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyDisclosureRequestRepository(uow))
+            return uc_cls(
+                uow=uow,
+                disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+                molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            )
         return _f
 
     container.define(GetDisclosure, _disclosure_query(GetDisclosure))

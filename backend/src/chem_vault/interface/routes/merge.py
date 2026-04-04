@@ -54,7 +54,7 @@ class MergeEventResponse(BaseModel):
 
 class MergeBody(BaseModel):
     target_molecule_id: uuid.UUID
-    reason: str = "manual_merge"
+    reason: MergeReason = MergeReason.MANUAL_MERGE
     notes: str | None = None
 
 
@@ -77,7 +77,7 @@ async def merge_molecules(
     command = MergeCommand(
         source_molecule_id=source_molecule_id,
         target_molecule_id=body.target_molecule_id,
-        reason=MergeReason(body.reason),
+        reason=body.reason,
         merged_by=auth.user_id,
         notes=body.notes,
     )

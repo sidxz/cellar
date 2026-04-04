@@ -121,7 +121,7 @@ async def get_disclosure(
     auth: AuthDep,
     use_case: GetDisclosureDep,
 ) -> DisclosureRequestResponse:
-    query = GetDisclosureQuery(disclosure_id=disclosure_id)
+    query = GetDisclosureQuery(workspace_id=auth.workspace_id, disclosure_id=disclosure_id)
     dr = result_to_response(await use_case(query))
     return DisclosureRequestResponse.from_domain(dr)
 
@@ -135,6 +135,6 @@ async def list_disclosures_for_molecule(
     auth: AuthDep,
     use_case: ListDisclosuresDep,
 ) -> list[DisclosureRequestResponse]:
-    query = ListDisclosuresQuery(molecule_id=molecule_id)
+    query = ListDisclosuresQuery(workspace_id=auth.workspace_id, molecule_id=molecule_id)
     disclosures = result_to_response(await use_case(query))
     return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
