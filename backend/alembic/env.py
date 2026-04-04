@@ -19,6 +19,9 @@ config.set_main_option("sqlalchemy.url", database_url)
 
 from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
 
+# Import all SA models so Base.metadata includes their tables
+import chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_models  # noqa: F401
+
 target_metadata = Base.metadata
 
 
