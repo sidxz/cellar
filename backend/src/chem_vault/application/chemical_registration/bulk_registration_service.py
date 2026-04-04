@@ -7,7 +7,7 @@ workflow in S49 for production-grade async execution with progress tracking.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
@@ -28,10 +28,18 @@ from chem_vault.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
 )
 from chem_vault.domain.shared.errors import DomainError, ValidationError
-from chem_vault.infrastructure.parsers.chemical_file_parser import (
-    ParsedMoleculeItem,
-    get_parser,
-)
+
+
+@dataclass(frozen=True)
+class BulkRegistrationItem:
+    """Application-layer DTO for a single parsed molecule record."""
+
+    row_index: int
+    name: str | None = None
+    smiles: str | None = None
+    molecule_type: str = "small_molecule"
+    external_ids: list[dict[str, str]] = field(default_factory=list)
+    error: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -39,7 +47,7 @@ class StartBulkRegistrationCommand(Command):
     workspace_id: uuid.UUID
     source_file: str
     file_format: str
-    file_content: bytes
+    items: list[BulkRegistrationItem]
     submitted_by: uuid.UUID
     originating_org_id: uuid.UUID
 
@@ -60,14 +68,13 @@ class BulkRegistrationOutcome:
 
 
 class BulkRegistrationService:
-    """Orchestrate bulk molecule registration from a parsed file.
+    """Orchestrate bulk molecule registration from pre-parsed items.
 
     Flow:
-    1. Parse file into items
-    2. Create BulkRegistration aggregate
-    3. For each item: delegate to RegisterMolecule use case
-    4. Track progress counters
-    5. Complete the BulkRegistration
+    1. Create BulkRegistration aggregate
+    2. For each item: delegate to RegisterMolecule use case
+    3. Track progress counters
+    4. Complete the BulkRegistration
     """
 
     def __init__(
@@ -91,42 +98,38 @@ class BulkRegistrationService:
     ) -> Result[BulkRegistrationOutcome, DomainError]:
         require_editor(auth)
 
-        # 1. Parse
         try:
             file_format = BulkRegistrationFileFormat(cmd.file_format)
         except ValueError:
             return Failure(ValidationError(f"Unsupported file format: {cmd.file_format}"))
 
-        parser = get_parser(file_format)
-        items = parser.parse(cmd.file_content, cmd.source_file)
-
-        if not items:
+        if not cmd.items:
             return Failure(ValidationError("File contains no records"))
 
-        # 2. Create BulkRegistration tracking aggregate
+        # 1. Create BulkRegistration tracking aggregate
         async with self._uow:
             bulk_reg = BulkRegistration.create(
                 workspace_id=cmd.workspace_id,
                 source_file=cmd.source_file,
                 file_format=file_format,
                 submitted_by=cmd.submitted_by,
-                total_count=len(items),
+                total_count=len(cmd.items),
             )
             bulk_reg.start_processing()
             await self._bulk_reg_repo.save(bulk_reg)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
 
-        # 3. Process each item sequentially (within-batch dedup)
+        # 2. Process each item sequentially (within-batch dedup)
         item_results = await self._process_items(
-            items=items,
+            items=cmd.items,
             bulk_reg=bulk_reg,
             workspace_id=cmd.workspace_id,
             originating_org_id=cmd.originating_org_id,
             submitted_by=cmd.submitted_by,
         )
 
-        # 4. Complete
+        # 3. Complete
         async with self._uow:
             bulk_reg.complete()
             await self._bulk_reg_repo.save(bulk_reg)
@@ -143,7 +146,7 @@ class BulkRegistrationService:
     async def _process_items(
         self,
         *,
-        items: list[ParsedMoleculeItem],
+        items: list[BulkRegistrationItem],
         bulk_reg: BulkRegistration,
         workspace_id: uuid.UUID,
         originating_org_id: uuid.UUID,

@@ -15,6 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
+from chem_vault.application.inventory.create_batch import CreateBatch
+from chem_vault.application.inventory.create_sample import CreateSample
+from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
+from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
+from chem_vault.application.inventory.manage_sample import AliquotSample, DisposeSample, MoveSample
+from chem_vault.application.inventory.manage_storage import (
+    CreateStorageLocation,
+    GetStorageLocationChildren,
+    ListStorageLocations,
+)
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
@@ -46,6 +56,7 @@ from chem_vault.application.workspace_config.update_vocabulary import UpdateVoca
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
 from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository
+from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, StorageLocationRepository
 from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
@@ -66,6 +77,15 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
     SQLAlchemyBulkRegistrationRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
+    SQLAlchemyBatchRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_repository import (
+    SQLAlchemySampleRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
+    SQLAlchemyStorageLocationRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
     SQLAlchemyDisclosureRequestRepository,
@@ -342,5 +362,59 @@ def create_container(
         )
 
     container.define(BulkRegistrationService, _bulk_registration_service)
+
+    # --- Inventory ---
+    def _batch_cmd(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher])
+
+    def _batch_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyBatchRepository(uow))
+        return _f
+
+    container.define(CreateBatch, _batch_cmd)
+    container.define(GetBatch, _batch_query(GetBatch))
+    container.define(ListBatchesByMolecule, _batch_query(ListBatchesByMolecule))
+
+    def _sample_create(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateSample(
+            uow, SQLAlchemyBatchRepository(uow), SQLAlchemySampleRepository(uow), c[EventDispatcher]
+        )
+
+    def _sample_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySampleRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _sample_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySampleRepository(uow))
+        return _f
+
+    container.define(CreateSample, _sample_create)
+    container.define(GetSample, _sample_query(GetSample))
+    container.define(ListSamplesByBatch, _sample_query(ListSamplesByBatch))
+    container.define(AliquotSample, _sample_cmd(AliquotSample))
+    container.define(MoveSample, _sample_cmd(MoveSample))
+    container.define(DisposeSample, _sample_cmd(DisposeSample))
+
+    def _storage_cmd(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateStorageLocation(uow, SQLAlchemyStorageLocationRepository(uow), c[EventDispatcher])
+
+    def _storage_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyStorageLocationRepository(uow))
+        return _f
+
+    container.define(CreateStorageLocation, _storage_cmd)
+    container.define(ListStorageLocations, _storage_query(ListStorageLocations))
+    container.define(GetStorageLocationChildren, _storage_query(GetStorageLocationChildren))
 
     return container

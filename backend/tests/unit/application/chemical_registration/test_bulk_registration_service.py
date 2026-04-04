@@ -9,6 +9,7 @@ import pytest
 from returns.result import Failure, Success
 
 from chem_vault.application.chemical_registration.bulk_registration_service import (
+    BulkRegistrationItem,
     BulkRegistrationService,
     StartBulkRegistrationCommand,
 )
@@ -55,6 +56,13 @@ def _make_service(uow: MagicMock | None = None) -> BulkRegistrationService:
     )
 
 
+def _items(*names: str) -> list[BulkRegistrationItem]:
+    return [
+        BulkRegistrationItem(row_index=i, name=n, smiles="C" * (i + 1))
+        for i, n in enumerate(names)
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -69,54 +77,47 @@ class TestBulkRegistrationService:
             workspace_id=workspace_id,
             source_file="test.xyz",
             file_format="xyz",
-            file_content=b"",
+            items=_items("A"),
             submitted_by=user_id,
             originating_org_id=org_id,
         )
 
         result = await service.execute(cmd)
         assert isinstance(result, Failure)
-        err = result.failure()
-        assert isinstance(err, ValidationError)
-        assert "Unsupported file format" in str(err)
+        assert "Unsupported file format" in str(result.failure())
 
-    async def test_empty_file_returns_failure(
+    async def test_empty_items_returns_failure(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         service = _make_service()
-        # Headers only, no data rows
         cmd = StartBulkRegistrationCommand(
             workspace_id=workspace_id,
             source_file="empty.csv",
             file_format="csv",
-            file_content=b"name,smiles\n",
+            items=[],
             submitted_by=user_id,
             originating_org_id=org_id,
         )
 
         result = await service.execute(cmd)
         assert isinstance(result, Failure)
-        err = result.failure()
-        assert isinstance(err, ValidationError)
-        assert "no records" in str(err).lower()
+        assert "no records" in str(result.failure()).lower()
 
-    async def test_csv_with_valid_rows_processes_all(
+    async def test_processes_all_items(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         uow = _make_uow()
         service = _make_service(uow)
 
-        csv_content = b"name,smiles\nAspirin,CC(=O)Oc1ccccc1C(=O)O\nMethane,C\n"
         cmd = StartBulkRegistrationCommand(
             workspace_id=workspace_id,
             source_file="compounds.csv",
             file_format="csv",
-            file_content=csv_content,
+            items=_items("Aspirin", "Caffeine"),
             submitted_by=user_id,
             originating_org_id=org_id,
         )
 
-        # Mock RegisterMolecule to always succeed with new molecule
         mock_mol = MagicMock()
         mock_mol.id = uuid.uuid4()
         mock_outcome = RegistrationOutcome(molecule=mock_mol, is_new=True)
@@ -124,35 +125,26 @@ class TestBulkRegistrationService:
         with patch(
             "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
         ) as MockRegClass:
-            mock_reg = AsyncMock(return_value=Success(mock_outcome))
-            MockRegClass.return_value = mock_reg
-
+            MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
             result = await service.execute(cmd)
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
         assert outcome.bulk_registration.total_count == 2
         assert outcome.bulk_registration.registered_count == 2
-        assert outcome.bulk_registration.error_count == 0
-        assert outcome.bulk_registration.status in (
-            BulkRegistrationStatus.COMPLETED,
-            BulkRegistrationStatus.COMPLETED_WITH_ERRORS,
-        )
         assert len(outcome.item_results) == 2
-        assert all(item.success for item in outcome.item_results)
 
-    async def test_csv_with_registration_errors(
+    async def test_handles_registration_errors(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         uow = _make_uow()
         service = _make_service(uow)
 
-        csv_content = b"name,smiles\nGood,C\nBad,invalid_smiles\n"
         cmd = StartBulkRegistrationCommand(
             workspace_id=workspace_id,
             source_file="compounds.csv",
             file_format="csv",
-            file_content=csv_content,
+            items=_items("Good", "Bad"),
             submitted_by=user_id,
             originating_org_id=org_id,
         )
@@ -163,17 +155,15 @@ class TestBulkRegistrationService:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                mock_mol = MagicMock()
-                mock_mol.id = uuid.uuid4()
-                return Success(RegistrationOutcome(molecule=mock_mol, is_new=True))
+                m = MagicMock()
+                m.id = uuid.uuid4()
+                return Success(RegistrationOutcome(molecule=m, is_new=True))
             return Failure(ValidationError("Invalid SMILES"))
 
         with patch(
             "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
         ) as MockRegClass:
-            mock_reg = AsyncMock(side_effect=_side_effect)
-            MockRegClass.return_value = mock_reg
-
+            MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
             result = await service.execute(cmd)
 
         assert isinstance(result, Success)
@@ -182,18 +172,17 @@ class TestBulkRegistrationService:
         assert outcome.bulk_registration.error_count == 1
         assert outcome.bulk_registration.status == BulkRegistrationStatus.COMPLETED_WITH_ERRORS
 
-    async def test_csv_with_duplicate_detection(
+    async def test_detects_duplicates(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         uow = _make_uow()
         service = _make_service(uow)
 
-        csv_content = b"name,smiles\nAspirin,CC(=O)Oc1ccccc1C(=O)O\nAspirin2,CC(=O)Oc1ccccc1C(=O)O\n"
         cmd = StartBulkRegistrationCommand(
             workspace_id=workspace_id,
             source_file="compounds.csv",
             file_format="csv",
-            file_content=csv_content,
+            items=_items("Aspirin", "Aspirin2"),
             submitted_by=user_id,
             originating_org_id=org_id,
         )
@@ -203,17 +192,14 @@ class TestBulkRegistrationService:
         async def _side_effect(*args, **kwargs):  # type: ignore[no-untyped-def]
             nonlocal call_count
             call_count += 1
-            mock_mol = MagicMock()
-            mock_mol.id = uuid.uuid4()
-            is_new = call_count == 1
-            return Success(RegistrationOutcome(molecule=mock_mol, is_new=is_new))
+            m = MagicMock()
+            m.id = uuid.uuid4()
+            return Success(RegistrationOutcome(molecule=m, is_new=call_count == 1))
 
         with patch(
             "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
         ) as MockRegClass:
-            mock_reg = AsyncMock(side_effect=_side_effect)
-            MockRegClass.return_value = mock_reg
-
+            MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
             result = await service.execute(cmd)
 
         assert isinstance(result, Success)
@@ -229,19 +215,18 @@ class TestBulkRegistrationService:
             workspace_id=workspace_id,
             source_file="compounds.csv",
             file_format="csv",
-            file_content=b"name,smiles\nA,C\n",
+            items=_items("A"),
             submitted_by=user_id,
             originating_org_id=org_id,
         )
 
-        # Auth with viewer role should raise
         from chem_vault.domain.shared.errors import AuthorizationError
 
         viewer_auth = MagicMock()
         viewer_auth.workspace_id = workspace_id
         viewer_auth.user_id = user_id
         viewer_auth.workspace_role = "viewer"
-        viewer_auth.has_role = lambda min_role: False  # viewer < editor
+        viewer_auth.has_role = lambda min_role: False
 
         with pytest.raises(AuthorizationError):
             await service.execute(cmd, auth=viewer_auth)

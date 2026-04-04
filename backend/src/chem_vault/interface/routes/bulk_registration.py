@@ -8,9 +8,12 @@ from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.bulk_registration_service import (
+    BulkRegistrationItem,
     BulkRegistrationItemResult,
     StartBulkRegistrationCommand,
 )
+from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from chem_vault.infrastructure.parsers.chemical_file_parser import get_parser
 from chem_vault.interface.dependencies import AuthDep, BulkRegistrationServiceDep
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -66,11 +69,29 @@ async def start_bulk_registration(
     """Upload a file (SDF, CSV, XLSX) to register molecules in bulk."""
     content = await file.read()
 
+    # Parse in the interface layer (infrastructure dependency stays out of application)
+    fmt = BulkRegistrationFileFormat(file_format)
+    parser = get_parser(fmt)
+    parsed = parser.parse(content, file.filename or "unknown")
+
+    # Convert infrastructure DTOs to application DTOs
+    items = [
+        BulkRegistrationItem(
+            row_index=p.row_index,
+            name=p.name,
+            smiles=p.smiles,
+            molecule_type=p.molecule_type,
+            external_ids=p.external_ids,
+            error=p.error,
+        )
+        for p in parsed
+    ]
+
     cmd = StartBulkRegistrationCommand(
         workspace_id=auth.workspace_id,
         source_file=file.filename or "unknown",
         file_format=file_format,
-        file_content=content,
+        items=items,
         submitted_by=auth.user_id,
         originating_org_id=originating_org_id,
     )
