@@ -126,3 +126,25 @@ export function useUnlockRun() {
     onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
   });
 }
+
+export function useUpdateRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      runId,
+      data,
+    }: {
+      runId: string;
+      data: {
+        qc_metrics?: Record<string, unknown> | null;
+        notes?: string | null;
+      };
+    }) =>
+      customInstance<Run>({
+        url: `/api/v1/runs/${runId}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+  });
+}
