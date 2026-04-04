@@ -55,3 +55,31 @@ export function useMergeMolecules(sourceMoleculeId: string) {
     },
   });
 }
+
+export function useResolveDisclosureConflict(disclosureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resolution: string; reason?: string }) =>
+      customInstance<DisclosureRequest>({
+        url: `/api/v1/disclosures/${disclosureId}/resolve`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: DISCLOSURES_KEY });
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+    },
+  });
+}
+
+export function useMergeHistory(moleculeId: string | undefined) {
+  return useQuery({
+    queryKey: ["merge-history", moleculeId],
+    queryFn: () =>
+      customInstance<MergeEventResponse[]>({
+        url: `/api/v1/molecules/${moleculeId}/merge-history`,
+        method: "GET",
+      }),
+    enabled: !!moleculeId,
+  });
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FlaskConical, Plus } from "lucide-react";
+import { FlaskConical, Plus, Upload } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -22,6 +22,8 @@ import {
   type MoleculeType,
 } from "../types";
 import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
+import { BulkRegistrationDialog } from "./bulk-registration-dialog";
+import { CompoundSearchBar } from "./compound-search-bar";
 import { DisclosureDialog } from "./disclosure-dialog";
 import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
 
@@ -47,6 +49,7 @@ function lifecycleBadgeVariant(
 export function MoleculeList() {
   const { data: molecules, isLoading } = useMolecules();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
 
@@ -69,10 +72,20 @@ export function MoleculeList() {
             Search, register, and manage chemical compounds.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Register Compound
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setBulkOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Bulk Upload
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Register Compound
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <CompoundSearchBar />
       </div>
 
       {!molecules?.length ? (
@@ -166,6 +179,8 @@ export function MoleculeList() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
       />
+
+      <BulkRegistrationDialog open={bulkOpen} onOpenChange={setBulkOpen} />
 
       {discloseMol && (
         <DisclosureDialog

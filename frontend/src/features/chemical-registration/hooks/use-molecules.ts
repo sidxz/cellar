@@ -64,3 +64,42 @@ export function useUpdateMolecule(id: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
   });
 }
+
+export function useSearchMolecules(params: {
+  search_type: string;
+  query: string;
+  threshold?: number;
+} | undefined) {
+  const queryParams = params
+    ? {
+        search_type: params.search_type,
+        query: params.query,
+        ...(params.threshold !== undefined
+          ? { threshold: String(params.threshold) }
+          : {}),
+      }
+    : undefined;
+
+  return useQuery({
+    queryKey: [...MOLECULES_KEY, "search", params],
+    queryFn: () =>
+      customInstance<Molecule[]>({
+        url: "/api/v1/molecules/search",
+        method: "GET",
+        params: queryParams,
+      }),
+    enabled: !!params?.query,
+  });
+}
+
+export function useMoleculeByIdentifier(identifier: string | undefined) {
+  return useQuery({
+    queryKey: [...MOLECULES_KEY, "by-identifier", identifier],
+    queryFn: () =>
+      customInstance<Molecule>({
+        url: `/api/v1/molecules/by-identifier/${identifier}`,
+        method: "GET",
+      }),
+    enabled: !!identifier,
+  });
+}

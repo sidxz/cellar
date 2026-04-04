@@ -11,6 +11,11 @@ export function setApiBaseUrl(url: string) {
   _baseUrl = url;
 }
 
+/** Get the current base URL for direct fetch calls (e.g., file upload). */
+export function getApiBaseUrl() {
+  return _baseUrl;
+}
+
 export const customInstance = async <T>({
   url,
   method,

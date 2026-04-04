@@ -16,9 +16,10 @@ import { BATCH_SOURCE_LABELS, type Batch, type BatchSource } from "../types";
 
 interface BatchListProps {
   moleculeId?: string;
+  onSelectBatch?: (batchId: string | null) => void;
 }
 
-export function BatchList({ moleculeId }: BatchListProps) {
+export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
   const { data: batches, isLoading } = useBatchesByMolecule(moleculeId);
 
   if (isLoading) {
@@ -70,7 +71,11 @@ export function BatchList({ moleculeId }: BatchListProps) {
         </TableHeader>
         <TableBody>
           {batches.map((batch: Batch) => (
-            <TableRow key={batch.id}>
+            <TableRow
+              key={batch.id}
+              className={onSelectBatch ? "cursor-pointer hover:bg-muted/50" : ""}
+              onClick={() => onSelectBatch?.(batch.id)}
+            >
               <TableCell className="font-mono text-sm">
                 {batch.batch_number}
               </TableCell>
