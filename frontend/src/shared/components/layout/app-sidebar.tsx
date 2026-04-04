@@ -21,6 +21,9 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <NavMain />
       </SidebarContent>
       <SidebarFooter>
+        <p className="px-2 pb-1 text-[10px] tracking-wider text-sidebar-foreground/30 group-data-[collapsible=icon]:hidden">
+          openchemvault.com
+        </p>
         <UserMenu />
       </SidebarFooter>
       <SidebarRail />
