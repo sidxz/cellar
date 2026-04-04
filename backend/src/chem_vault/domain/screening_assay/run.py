@@ -1,0 +1,391 @@
+"""Run aggregate root with owned Plate and Well entities."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, date, datetime
+from typing import Any
+
+from chem_vault.domain.screening_assay.enums import (
+    PlateFormat,
+    RunRelationshipType,
+    RunStatus,
+    WellType,
+)
+from chem_vault.domain.screening_assay.events import (
+    RunApproved,
+    RunCompleted,
+    RunCreated,
+    RunLocked,
+    RunRejected,
+    RunUnlocked,
+)
+from chem_vault.domain.shared.entity import AggregateRoot, Entity
+from chem_vault.domain.shared.errors import ConflictError, ValidationError
+from chem_vault.domain.shared.value_objects import Barcode, Concentration
+
+# ---------------------------------------------------------------------------
+# Run state machine
+# ---------------------------------------------------------------------------
+
+_RUN_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
+    RunStatus.DRAFT: {RunStatus.IN_PROGRESS},
+    RunStatus.IN_PROGRESS: {RunStatus.COMPLETED},
+    RunStatus.COMPLETED: {RunStatus.APPROVED, RunStatus.REJECTED},
+    RunStatus.APPROVED: set(),  # terminal
+    RunStatus.REJECTED: {RunStatus.DRAFT},  # rework
+}
+
+_LOCKABLE_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
+
+
+# ---------------------------------------------------------------------------
+# Owned entities
+# ---------------------------------------------------------------------------
+
+
+class Plate(Entity):
+    """A microplate belonging to a run.
+
+    Owned by Run — created and managed only through the aggregate root.
+
+    Invariants:
+        - plate_number >= 1
+    """
+
+    def __init__(
+        self,
+        *,
+        id: uuid.UUID | None = None,
+        run_id: uuid.UUID,
+        plate_number: int,
+        barcode: Barcode | None = None,
+        format: PlateFormat | None = None,
+        plate_map: dict[str, Any] | None = None,
+        parent_plate_id: uuid.UUID | None = None,
+        template_id: uuid.UUID | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+    ) -> None:
+        super().__init__(id=id, created_at=created_at, updated_at=updated_at)
+
+        if plate_number < 1:
+            raise ValidationError("plate_number must be >= 1")
+
+        self.run_id = run_id
+        self.plate_number = plate_number
+        self.barcode = barcode
+        self.format = format
+        self.plate_map = plate_map
+        self.parent_plate_id = parent_plate_id
+        self.template_id = template_id
+
+
+class Well(Entity):
+    """A single well on a plate.
+
+    Owned by Run — created and managed only through the aggregate root.
+
+    Invariants:
+        - row: 1-2 uppercase characters
+        - column >= 1
+    """
+
+    def __init__(
+        self,
+        *,
+        id: uuid.UUID | None = None,
+        plate_id: uuid.UUID,
+        row: str,
+        column: int,
+        well_type: WellType = WellType.SAMPLE,
+        batch_id: uuid.UUID | None = None,
+        concentration: Concentration | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+    ) -> None:
+        super().__init__(id=id, created_at=created_at, updated_at=updated_at)
+
+        # Normalize row to uppercase
+        row = row.upper()
+        if not row or len(row) > 2 or not row.isalpha():
+            raise ValidationError(
+                "Well row must be 1-2 alphabetic characters"
+            )
+        if column < 1:
+            raise ValidationError("Well column must be >= 1")
+
+        self.plate_id = plate_id
+        self.row = row
+        self.column = column
+        self.well_type = well_type
+        self.batch_id = batch_id
+        self.concentration = concentration
+
+
+# ---------------------------------------------------------------------------
+# Run aggregate root
+# ---------------------------------------------------------------------------
+
+
+class Run(AggregateRoot):
+    """An execution of a protocol — the central screening experiment record.
+
+    Invariants:
+        - parent_run_id and run_relationship_type must both be set or both null
+        - Status transitions follow the state machine
+        - Locked runs cannot be modified (plates, QC metrics)
+        - Only completed or approved runs can be locked
+
+    State machine:
+        draft -[start]-> in_progress -[complete]-> completed
+            -[approve]-> approved (terminal)
+            -[reject]-> rejected -[rework]-> draft
+    """
+
+    def __init__(
+        self,
+        *,
+        id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        run_date: date,
+        operator: uuid.UUID,
+        performed_at_org_id: uuid.UUID | None = None,
+        status: RunStatus = RunStatus.DRAFT,
+        parent_run_id: uuid.UUID | None = None,
+        run_relationship_type: RunRelationshipType | None = None,
+        plate_format: PlateFormat | None = None,
+        conditions: dict[str, Any] | None = None,
+        qc_metrics: dict[str, Any] | None = None,
+        is_locked: bool = False,
+        locked_at: datetime | None = None,
+        locked_by: uuid.UUID | None = None,
+        lock_reason: str | None = None,
+        notes: str | None = None,
+        eln_entry_id: uuid.UUID | None = None,
+        plates: list[Plate] | None = None,
+        wells: list[Well] | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        version: int = 1,
+    ) -> None:
+        super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
+
+        # Parent run consistency: both or neither
+        has_parent = parent_run_id is not None
+        has_relationship = run_relationship_type is not None
+        if has_parent != has_relationship:
+            raise ValidationError(
+                "parent_run_id and run_relationship_type must both be set or both null"
+            )
+
+        self.workspace_id = workspace_id
+        self.protocol_id = protocol_id
+        self.run_date = run_date
+        self.operator = operator
+        self.performed_at_org_id = performed_at_org_id
+        self.status = status
+        self.parent_run_id = parent_run_id
+        self.run_relationship_type = run_relationship_type
+        self.plate_format = plate_format
+        self.conditions = conditions
+        self.qc_metrics = qc_metrics
+        self.is_locked = is_locked
+        self.locked_at = locked_at
+        self.locked_by = locked_by
+        self.lock_reason = lock_reason
+        self.notes = notes
+        self.eln_entry_id = eln_entry_id
+        self.plates: list[Plate] = plates or []
+        self.wells: list[Well] = wells or []
+
+    # ------------------------------------------------------------------
+    # Guards
+    # ------------------------------------------------------------------
+
+    def _guard_transition(self, target: RunStatus) -> None:
+        allowed = _RUN_TRANSITIONS.get(self.status, set())
+        if target not in allowed:
+            raise ConflictError(
+                f"Cannot transition run from '{self.status}' to '{target}'"
+            )
+
+    def _guard_not_locked(self) -> None:
+        if self.is_locked:
+            raise ConflictError(
+                "Cannot modify a locked run — unlock it first"
+            )
+
+    # ------------------------------------------------------------------
+    # Factory method
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        run_date: date,
+        operator: uuid.UUID,
+        performed_at_org_id: uuid.UUID | None = None,
+        parent_run_id: uuid.UUID | None = None,
+        run_relationship_type: RunRelationshipType | None = None,
+        plate_format: PlateFormat | None = None,
+        conditions: dict[str, Any] | None = None,
+        notes: str | None = None,
+        eln_entry_id: uuid.UUID | None = None,
+    ) -> Run:
+        run = cls(
+            workspace_id=workspace_id,
+            protocol_id=protocol_id,
+            run_date=run_date,
+            operator=operator,
+            performed_at_org_id=performed_at_org_id,
+            parent_run_id=parent_run_id,
+            run_relationship_type=run_relationship_type,
+            plate_format=plate_format,
+            conditions=conditions,
+            notes=notes,
+            eln_entry_id=eln_entry_id,
+        )
+        run.register_event(
+            RunCreated(
+                aggregate_id=run.id,
+                aggregate_type="Run",
+                protocol_id=protocol_id,
+                operator=operator,
+            )
+        )
+        return run
+
+    # ------------------------------------------------------------------
+    # Status transitions
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """Move run from draft to in_progress."""
+        self._guard_transition(RunStatus.IN_PROGRESS)
+        self.status = RunStatus.IN_PROGRESS
+        self.updated_at = datetime.now(UTC)
+
+    def complete(self, *, plate_count: int, data_point_count: int) -> None:
+        """Mark run as completed with summary metrics."""
+        self._guard_transition(RunStatus.COMPLETED)
+        self.status = RunStatus.COMPLETED
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunCompleted(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                plate_count=plate_count,
+                data_point_count=data_point_count,
+            )
+        )
+
+    def approve(self, *, approved_by: uuid.UUID) -> None:
+        """Approve a completed run."""
+        self._guard_transition(RunStatus.APPROVED)
+        self.status = RunStatus.APPROVED
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunApproved(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                approved_by=approved_by,
+            )
+        )
+
+    def reject(self, *, rejected_by: uuid.UUID, reason: str) -> None:
+        """Reject a completed run. Reason is required."""
+        if not reason or not reason.strip():
+            raise ValidationError("Rejection reason is required")
+        self._guard_transition(RunStatus.REJECTED)
+        self.status = RunStatus.REJECTED
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunRejected(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                rejected_by=rejected_by,
+                reason=reason.strip(),
+            )
+        )
+
+    def rework(self) -> None:
+        """Send a rejected run back to draft for rework."""
+        self._guard_transition(RunStatus.DRAFT)
+        self.status = RunStatus.DRAFT
+        self.updated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------
+    # Data modification (lock-guarded)
+    # ------------------------------------------------------------------
+
+    def record_qc_metrics(self, metrics: dict[str, Any]) -> None:
+        """Update QC metrics. Blocked when run is locked."""
+        self._guard_not_locked()
+        self.qc_metrics = metrics
+        self.updated_at = datetime.now(UTC)
+
+    def add_plate(self, plate: Plate) -> None:
+        """Add a plate to this run. Blocked when run is locked."""
+        self._guard_not_locked()
+        plate.run_id = self.id
+        self.plates.append(plate)
+        self.updated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------
+    # Locking
+    # ------------------------------------------------------------------
+
+    def lock(self, *, locked_by: uuid.UUID, reason: str) -> None:
+        """Lock the run to prevent data modifications.
+
+        Only completed or approved runs can be locked.
+        """
+        if not reason or not reason.strip():
+            raise ValidationError("Lock reason is required")
+        if self.is_locked:
+            raise ConflictError("Run is already locked")
+        if self.status not in _LOCKABLE_STATES:
+            raise ConflictError(
+                f"Cannot lock run in '{self.status}' status — "
+                "only completed or approved runs can be locked"
+            )
+
+        self.is_locked = True
+        self.locked_at = datetime.now(UTC)
+        self.locked_by = locked_by
+        self.lock_reason = reason.strip()
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunLocked(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                locked_by=locked_by,
+                lock_reason=reason.strip(),
+            )
+        )
+
+    def unlock(self, *, unlocked_by: uuid.UUID, reason: str) -> None:
+        """Unlock a previously locked run."""
+        if not reason or not reason.strip():
+            raise ValidationError("Unlock reason is required")
+        if not self.is_locked:
+            raise ConflictError("Run is not locked")
+
+        self.is_locked = False
+        self.locked_at = None
+        self.locked_by = None
+        self.lock_reason = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunUnlocked(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                unlocked_by=unlocked_by,
+                reason=reason.strip(),
+            )
+        )
