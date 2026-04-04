@@ -20,6 +20,16 @@ from lagom import Container
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
+from chem_vault.application.workspace_config.create_organization import CreateOrganization
+from chem_vault.application.workspace_config.create_vocabulary import CreateVocabulary
+from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabulary
+from chem_vault.application.workspace_config.get_organization import GetOrganization
+from chem_vault.application.workspace_config.get_workspace_settings import GetWorkspaceSettings
+from chem_vault.application.workspace_config.list_organizations import ListOrganizations
+from chem_vault.application.workspace_config.list_vocabularies import ListVocabularies
+from chem_vault.application.workspace_config.update_organization import UpdateOrganization
+from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
+from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.sentinel.auth import get_sentinel
@@ -75,3 +85,22 @@ EventDispatcherDep = Annotated[EventDispatcher, Depends(get_event_dispatcher)]
 AuditServiceDep = Annotated[AuditRecordingService, Depends(get_audit_service)]
 GetPreferencesDep = Annotated[GetPreferences, Depends(get_preferences_query)]
 UpdatePreferencesDep = Annotated[UpdatePreferences, Depends(get_preferences_command)]
+
+
+# --- Workspace Config dependencies ---
+def _get_use_case(uc_type: type):  # noqa: ANN001
+    def _dep(container: Annotated[Container, Depends(get_container)]):  # noqa: ANN001
+        return container[uc_type]
+    return _dep
+
+
+CreateOrganizationDep = Annotated[CreateOrganization, Depends(_get_use_case(CreateOrganization))]
+UpdateOrganizationDep = Annotated[UpdateOrganization, Depends(_get_use_case(UpdateOrganization))]
+GetOrganizationDep = Annotated[GetOrganization, Depends(_get_use_case(GetOrganization))]
+ListOrganizationsDep = Annotated[ListOrganizations, Depends(_get_use_case(ListOrganizations))]
+GetWorkspaceSettingsDep = Annotated[GetWorkspaceSettings, Depends(_get_use_case(GetWorkspaceSettings))]
+UpdateWorkspaceSettingsDep = Annotated[UpdateWorkspaceSettings, Depends(_get_use_case(UpdateWorkspaceSettings))]
+CreateVocabularyDep = Annotated[CreateVocabulary, Depends(_get_use_case(CreateVocabulary))]
+UpdateVocabularyDep = Annotated[UpdateVocabulary, Depends(_get_use_case(UpdateVocabulary))]
+ListVocabulariesDep = Annotated[ListVocabularies, Depends(_get_use_case(ListVocabularies))]
+DeleteVocabularyDep = Annotated[DeleteVocabulary, Depends(_get_use_case(DeleteVocabulary))]

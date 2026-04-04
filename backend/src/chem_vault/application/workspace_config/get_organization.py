@@ -1,0 +1,35 @@
+"""GetOrganization query — retrieve a single organization by ID."""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+
+from returns.result import Failure, Result, Success
+
+from chem_vault.application.shared.query import Query
+from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.domain.workspace_config.organization import Organization
+from chem_vault.domain.workspace_config.repository import OrganizationRepository
+from chem_vault.application.shared.unit_of_work import UnitOfWork
+
+
+@dataclass(frozen=True, kw_only=True)
+class GetOrganizationQuery(Query):
+    workspace_id: uuid.UUID
+    org_id: uuid.UUID
+
+
+class GetOrganization:
+    def __init__(self, uow: UnitOfWork, repo: OrganizationRepository) -> None:
+        self._uow = uow
+        self._repo = repo
+
+    async def __call__(
+        self, input: GetOrganizationQuery
+    ) -> Result[Organization, DomainError]:
+        async with self._uow:
+            org = await self._repo.find_by_id(input.org_id)
+            if org is None or org.workspace_id != input.workspace_id:
+                return Failure(NotFoundError("Organization", str(input.org_id)))
+            return Success(org)
