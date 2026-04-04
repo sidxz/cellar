@@ -1,6 +1,7 @@
 import { CommandPalette } from "@/shared/components/layout/command-palette";
 import { AuthProvider } from "@/shared/providers/auth-provider";
 import { QueryProvider } from "@/shared/providers/query-provider";
+import { ThemeProvider } from "@/shared/providers/theme-provider";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
@@ -27,15 +28,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <AuthProvider>
-          <QueryProvider>
-            {children}
-            <CommandPalette />
-            <Toaster position="bottom-right" theme="dark" />
-          </QueryProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <QueryProvider>
+              {children}
+              <CommandPalette />
+              <Toaster position="bottom-right" />
+            </QueryProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

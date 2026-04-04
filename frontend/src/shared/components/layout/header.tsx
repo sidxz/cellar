@@ -5,6 +5,7 @@ import { Separator } from "@/shared/components/ui/separator";
 import { SidebarTrigger } from "@/shared/components/ui/sidebar";
 import { Bell, Search } from "lucide-react";
 import { Breadcrumbs } from "./breadcrumbs";
+import { ThemeToggle } from "./theme-toggle";
 
 export function Header() {
   return (
@@ -20,6 +21,7 @@ export function Header() {
             <span className="text-xs">&#8984;</span>K
           </kbd>
         </Button>
+        <ThemeToggle />
         <Button variant="ghost" size="icon" className="relative h-8 w-8">
           <Bell className="size-4" />
           <span className="sr-only">Notifications</span>
