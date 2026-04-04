@@ -7,22 +7,20 @@
 #   make test      — run all backend unit tests + import-linter
 #   make nuke      — destroy everything (volumes, containers) and start fresh
 #   make restart   — nuke + up + dev
+#
+# Secrets are read from .env (gitignored). Copy .env.example to .env and fill in.
 # ============================================================================
 
-# Shared env vars — single source of truth
-DB_URL   := postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault
-SENT_URL := https://sentinel.orca-03.biobio.tamu.edu
-SENT_KEY := sk_5sdLzYlegEgpEFGzlmZNX3zwq4YZ6b4MJttehFKepgk
-
-# Env block passed to every backend command
-BE_ENV := DATABASE_URL=$(DB_URL) \
-          SENTINEL_URL=$(SENT_URL) \
-          SENTINEL_SERVICE_KEY=$(SENT_KEY)
+# Load .env into Make variables (if the file exists)
+ifneq (,$(wildcard ./.env))
+  include .env
+  export
+endif
 
 BACKEND  := cd backend
 FRONTEND := cd frontend
 
-.PHONY: help up down dev dev-be dev-fe migrate test lint nuke restart seed status logs
+.PHONY: help up down dev dev-be dev-fe migrate test lint nuke restart status logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -35,7 +33,7 @@ up: ## Start Postgres + Valkey, run migrations
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec postgres pg_isready -U chemvault -q 2>/dev/null; do sleep 1; done
 	@echo "Postgres ready"
-	$(BACKEND) && $(BE_ENV) uv run alembic upgrade head
+	$(BACKEND) && uv run alembic upgrade head
 	@echo "Migrations applied"
 
 down: ## Stop all containers (keep data)
@@ -52,18 +50,18 @@ logs: ## Tail container logs
 dev: ## Start backend + frontend (parallel, requires `make up` first)
 	@echo "Starting backend on :8000 and frontend on :3000..."
 	@trap 'kill 0' INT TERM; \
-		($(BACKEND) && $(BE_ENV) uv run uvicorn chem_vault.interface.app:app --reload --port 8000) & \
+		($(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000) & \
 		($(FRONTEND) && pnpm dev) & \
 		wait
 
 dev-be: ## Start backend only
-	$(BACKEND) && $(BE_ENV) uv run uvicorn chem_vault.interface.app:app --reload --port 8000
+	$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000
 
 dev-fe: ## Start frontend only
 	$(FRONTEND) && pnpm dev
 
 migrate: ## Run Alembic migrations
-	$(BACKEND) && $(BE_ENV) uv run alembic upgrade head
+	$(BACKEND) && uv run alembic upgrade head
 
 # ── Testing ────────────────────────────────────────────────────
 
