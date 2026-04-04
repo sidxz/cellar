@@ -114,62 +114,38 @@ def create_container(
     )
 
     # --- Workspace Config ---
-    container.define(
-        SQLAlchemyOrganizationRepository,
-        lambda c: SQLAlchemyOrganizationRepository(c[AsyncUnitOfWork]),
-    )
-    container.define(OrganizationRepository, lambda c: c[SQLAlchemyOrganizationRepository])
-    container.define(
-        SQLAlchemyWorkspaceSettingsRepository,
-        lambda c: SQLAlchemyWorkspaceSettingsRepository(c[AsyncUnitOfWork]),
-    )
-    container.define(WorkspaceSettingsRepository, lambda c: c[SQLAlchemyWorkspaceSettingsRepository])
-    container.define(
-        SQLAlchemyControlledVocabularyRepository,
-        lambda c: SQLAlchemyControlledVocabularyRepository(c[AsyncUnitOfWork]),
-    )
-    container.define(ControlledVocabularyRepository, lambda c: c[SQLAlchemyControlledVocabularyRepository])
+    # Each use case gets a shared UoW + repo pair (repo uses the same UoW as the use case).
 
-    # Workspace Config use cases
-    container.define(
-        CreateOrganization,
-        lambda c: CreateOrganization(c[UnitOfWork], c[OrganizationRepository]),
-    )
-    container.define(
-        UpdateOrganization,
-        lambda c: UpdateOrganization(c[UnitOfWork], c[OrganizationRepository]),
-    )
-    container.define(
-        GetOrganization,
-        lambda c: GetOrganization(c[UnitOfWork], c[OrganizationRepository]),
-    )
-    container.define(
-        ListOrganizations,
-        lambda c: ListOrganizations(c[UnitOfWork], c[OrganizationRepository]),
-    )
-    container.define(
-        GetWorkspaceSettings,
-        lambda c: GetWorkspaceSettings(c[UnitOfWork], c[WorkspaceSettingsRepository]),
-    )
-    container.define(
-        UpdateWorkspaceSettings,
-        lambda c: UpdateWorkspaceSettings(c[UnitOfWork], c[WorkspaceSettingsRepository]),
-    )
-    container.define(
-        CreateVocabulary,
-        lambda c: CreateVocabulary(c[UnitOfWork], c[ControlledVocabularyRepository]),
-    )
-    container.define(
-        UpdateVocabulary,
-        lambda c: UpdateVocabulary(c[UnitOfWork], c[ControlledVocabularyRepository]),
-    )
-    container.define(
-        ListVocabularies,
-        lambda c: ListVocabularies(c[UnitOfWork], c[ControlledVocabularyRepository]),
-    )
-    container.define(
-        DeleteVocabulary,
-        lambda c: DeleteVocabulary(c[UnitOfWork], c[ControlledVocabularyRepository]),
-    )
+    def _org_use_case(uc_cls):  # type: ignore[no-untyped-def]
+        def _factory(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            repo = SQLAlchemyOrganizationRepository(uow)
+            return uc_cls(uow, repo)
+        return _factory
+
+    def _settings_use_case(uc_cls):  # type: ignore[no-untyped-def]
+        def _factory(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            repo = SQLAlchemyWorkspaceSettingsRepository(uow)
+            return uc_cls(uow, repo)
+        return _factory
+
+    def _vocab_use_case(uc_cls):  # type: ignore[no-untyped-def]
+        def _factory(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            repo = SQLAlchemyControlledVocabularyRepository(uow)
+            return uc_cls(uow, repo)
+        return _factory
+
+    container.define(CreateOrganization, _org_use_case(CreateOrganization))
+    container.define(UpdateOrganization, _org_use_case(UpdateOrganization))
+    container.define(GetOrganization, _org_use_case(GetOrganization))
+    container.define(ListOrganizations, _org_use_case(ListOrganizations))
+    container.define(GetWorkspaceSettings, _settings_use_case(GetWorkspaceSettings))
+    container.define(UpdateWorkspaceSettings, _settings_use_case(UpdateWorkspaceSettings))
+    container.define(CreateVocabulary, _vocab_use_case(CreateVocabulary))
+    container.define(UpdateVocabulary, _vocab_use_case(UpdateVocabulary))
+    container.define(ListVocabularies, _vocab_use_case(ListVocabularies))
+    container.define(DeleteVocabulary, _vocab_use_case(DeleteVocabulary))
 
     return container

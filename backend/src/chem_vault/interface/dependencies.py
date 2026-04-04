@@ -75,11 +75,19 @@ def get_preferences_command(
     return container[UpdatePreferences]
 
 
-# Sentinel auth dependency — no circular import with app.py
+# Sentinel auth dependency — stable wrapper so dependency_overrides work in tests.
+# _sentinel.get_auth is a property returning a new callable each time, so we wrap it.
 _sentinel = get_sentinel()
+_sentinel_get_auth = _sentinel.get_auth  # capture once
+
+
+async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
+    """Stable auth dependency wrapper — overridable via dependency_overrides."""
+    return auth
+
 
 # Convenience type aliases for route handler signatures
-AuthDep = Annotated[Any, Depends(_sentinel.get_auth)]
+AuthDep = Annotated[Any, Depends(get_auth)]
 UoWDep = Annotated[AsyncUnitOfWork, Depends(get_uow)]
 EventDispatcherDep = Annotated[EventDispatcher, Depends(get_event_dispatcher)]
 AuditServiceDep = Annotated[AuditRecordingService, Depends(get_audit_service)]
