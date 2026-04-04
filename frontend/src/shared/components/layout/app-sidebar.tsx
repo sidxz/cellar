@@ -21,10 +21,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <NavMain />
       </SidebarContent>
       <SidebarFooter>
-        <p className="px-2 pb-1 text-[10px] tracking-wider text-sidebar-foreground/30 group-data-[collapsible=icon]:hidden">
-          openchemvault.com
-        </p>
         <UserMenu />
+        <div className="flex items-center justify-center border-t border-sidebar-border py-2 group-data-[collapsible=icon]:hidden">
+          <span className="text-[11px] font-medium tracking-wide text-sidebar-foreground/40">
+            openchemvault.com
+          </span>
+        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
