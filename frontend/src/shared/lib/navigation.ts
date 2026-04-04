@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BookOpen,
   Building2,
   FlaskConical,
   FolderKanban,
@@ -41,6 +42,7 @@ export const navigation: NavGroup[] = [
     label: "Administration",
     items: [
       { title: "Organizations", href: "/admin/organizations", icon: Building2 },
+      { title: "Vocabularies", href: "/admin/vocabularies", icon: BookOpen },
       { title: "Settings", href: "/admin/settings", icon: Settings },
     ],
   },

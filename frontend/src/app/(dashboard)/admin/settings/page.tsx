@@ -1,10 +1,5 @@
+import { WorkspaceSettingsForm } from "@/features/workspace-config/components/workspace-settings-form";
+
 export default function SettingsPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-      <p className="mt-1 text-muted-foreground">
-        Configure workspace settings, controlled vocabularies, and registration rules.
-      </p>
-    </div>
-  );
+  return <WorkspaceSettingsForm />;
 }
