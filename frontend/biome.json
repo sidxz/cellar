@@ -20,6 +20,6 @@
     }
   },
   "files": {
-    "ignore": [".next/", "node_modules/", "src/lib/api/"]
+    "ignore": [".next/", "node_modules/", "src/shared/lib/api/", "src/shared/components/ui/"]
   }
 }

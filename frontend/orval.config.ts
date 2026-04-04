@@ -6,13 +6,13 @@ export default defineConfig({
       target: "http://localhost:8000/openapi.json",
     },
     output: {
-      target: "src/lib/api/endpoints.ts",
-      schemas: "src/lib/api/model",
+      target: "src/shared/lib/api/endpoints.ts",
+      schemas: "src/shared/lib/api/model",
       client: "react-query",
       mode: "tags-split",
       override: {
         mutator: {
-          path: "src/lib/api/custom-instance.ts",
+          path: "src/shared/lib/api/custom-instance.ts",
           name: "customInstance",
         },
         query: {
