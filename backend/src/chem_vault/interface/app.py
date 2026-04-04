@@ -67,12 +67,16 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.settings import router as settings_router
     from chem_vault.interface.routes.vocabularies import router as vocab_router
     from chem_vault.interface.routes.molecules import router as mol_router
+    from chem_vault.interface.routes.disclosures import router as disclosure_router
+    from chem_vault.interface.routes.merge import router as merge_router
 
     app.include_router(user_router)
     app.include_router(org_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
     app.include_router(mol_router)
+    app.include_router(disclosure_router)
+    app.include_router(merge_router)
 
     # Health check (unauthenticated)
     @app.get("/health")

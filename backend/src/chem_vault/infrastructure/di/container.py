@@ -14,8 +14,13 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
+from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.get_molecule import GetMolecule
+from chem_vault.application.chemical_registration.list_disclosures import ListDisclosures
 from chem_vault.application.chemical_registration.list_molecules import ListMolecules
+from chem_vault.application.chemical_registration.merge_service import MergeService
+from chem_vault.application.chemical_registration.merge_side_effect_registry import MergeSideEffectRegistry
 from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
 from chem_vault.application.chemical_registration.update_molecule import UpdateMolecule
 from chem_vault.application.user.get_preferences import GetPreferences
@@ -47,6 +52,15 @@ from chem_vault.infrastructure.persistence.database import (
 from chem_vault.infrastructure.persistence.settings import DatabaseSettings
 from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
     SQLAlchemyAuditRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_disclosure_repository import (
+    SQLAlchemyBulkDisclosureRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
+    SQLAlchemyDisclosureRequestRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (
+    SQLAlchemyMergeEventRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
@@ -200,5 +214,42 @@ def create_container(
     container.define(UpdateMolecule, _mol_cmd_no_proc(UpdateMolecule))
     container.define(GetMolecule, _mol_query(GetMolecule))
     container.define(ListMolecules, _mol_query(ListMolecules))
+
+    # --- Merge & Disclosure ---
+    container.define(MergeSideEffectRegistry, Singleton(MergeSideEffectRegistry))
+
+    def _merge_service(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MergeService(
+            uow=uow,
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            merge_event_repo=SQLAlchemyMergeEventRepository(uow),
+            dispatcher=c[EventDispatcher],
+            side_effect_registry=c[MergeSideEffectRegistry],
+        )
+
+    container.define(MergeService, _merge_service)
+
+    def _disclosure_service(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DisclosureService(
+            uow=uow,
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+            structure_processor=c[StructureProcessorProtocol],
+            merge_service=c[MergeService],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(DisclosureService, _disclosure_service)
+
+    def _disclosure_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyDisclosureRequestRepository(uow))
+        return _f
+
+    container.define(GetDisclosure, _disclosure_query(GetDisclosure))
+    container.define(ListDisclosures, _disclosure_query(ListDisclosures))
 
     return container

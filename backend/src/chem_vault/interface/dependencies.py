@@ -18,8 +18,12 @@ from fastapi import Depends, Request
 from lagom import Container
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
+from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.get_molecule import GetMolecule
+from chem_vault.application.chemical_registration.list_disclosures import ListDisclosures
 from chem_vault.application.chemical_registration.list_molecules import ListMolecules
+from chem_vault.application.chemical_registration.merge_service import MergeService
 from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
 from chem_vault.application.chemical_registration.update_molecule import UpdateMolecule
 from chem_vault.application.user.get_preferences import GetPreferences
@@ -123,3 +127,9 @@ RegisterMoleculeDep = Annotated[RegisterMolecule, Depends(_get_use_case(Register
 GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
 ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules))]
 UpdateMoleculeDep = Annotated[UpdateMolecule, Depends(_get_use_case(UpdateMolecule))]
+
+# --- Disclosure & Merge dependencies ---
+DisclosureServiceDep = Annotated[DisclosureService, Depends(_get_use_case(DisclosureService))]
+MergeServiceDep = Annotated[MergeService, Depends(_get_use_case(MergeService))]
+GetDisclosureDep = Annotated[GetDisclosure, Depends(_get_use_case(GetDisclosure))]
+ListDisclosuresDep = Annotated[ListDisclosures, Depends(_get_use_case(ListDisclosures))]
