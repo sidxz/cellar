@@ -18,6 +18,10 @@ from fastapi import Depends, Request
 from lagom import Container
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.chemical_registration.get_molecule import GetMolecule
+from chem_vault.application.chemical_registration.list_molecules import ListMolecules
+from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
+from chem_vault.application.chemical_registration.update_molecule import UpdateMolecule
 from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.application.workspace_config.create_organization import CreateOrganization
@@ -113,3 +117,9 @@ CreateVocabularyDep = Annotated[CreateVocabulary, Depends(_get_use_case(CreateVo
 UpdateVocabularyDep = Annotated[UpdateVocabulary, Depends(_get_use_case(UpdateVocabulary))]
 ListVocabulariesDep = Annotated[ListVocabularies, Depends(_get_use_case(ListVocabularies))]
 DeleteVocabularyDep = Annotated[DeleteVocabulary, Depends(_get_use_case(DeleteVocabulary))]
+
+# --- Chemical Registration dependencies ---
+RegisterMoleculeDep = Annotated[RegisterMolecule, Depends(_get_use_case(RegisterMolecule))]
+GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
+ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules))]
+UpdateMoleculeDep = Annotated[UpdateMolecule, Depends(_get_use_case(UpdateMolecule))]

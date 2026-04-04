@@ -14,6 +14,10 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.chemical_registration.get_molecule import GetMolecule
+from chem_vault.application.chemical_registration.list_molecules import ListMolecules
+from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
+from chem_vault.application.chemical_registration.update_molecule import UpdateMolecule
 from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -28,6 +32,7 @@ from chem_vault.application.workspace_config.update_organization import UpdateOr
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
@@ -43,6 +48,11 @@ from chem_vault.infrastructure.persistence.settings import DatabaseSettings
 from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
     SQLAlchemyAuditRepository,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+    SQLAlchemyMoleculeRepository,
+)
+from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
+from chem_vault.infrastructure.rdkit.structure_processor import StructureProcessor
 from chem_vault.infrastructure.persistence.sqlalchemy.user_preferences_repository import (
     SQLAlchemyUserPreferencesRepository,
 )
@@ -163,5 +173,32 @@ def create_container(
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))
     container.define(DeleteVocabulary, _vocab_query(DeleteVocabulary))
+
+    # --- Chemical Registration ---
+    container.define(StructureProcessor, Singleton(StructureProcessor))
+    container.define(StructureProcessorProtocol, lambda c: c[StructureProcessor])
+
+    def _mol_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[StructureProcessorProtocol])
+        return _f
+
+    def _mol_cmd_no_proc(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _mol_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow))
+        return _f
+
+    container.define(RegisterMolecule, _mol_cmd(RegisterMolecule))
+    container.define(UpdateMolecule, _mol_cmd_no_proc(UpdateMolecule))
+    container.define(GetMolecule, _mol_query(GetMolecule))
+    container.define(ListMolecules, _mol_query(ListMolecules))
 
     return container

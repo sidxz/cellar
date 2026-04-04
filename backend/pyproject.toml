@@ -24,6 +24,7 @@ dependencies = [
     "httpx>=0.28.0",
     # Chemistry
     "rdkit>=2024.9.1",
+    "chembl-structure-pipeline>=1.2.4",
     # Cache / PubSub
     "redis>=5.2.0",
     # Workflow

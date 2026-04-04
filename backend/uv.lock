@@ -213,6 +213,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "chembl-structure-pipeline" },
     { name = "fastapi" },
     { name = "fsspec" },
     { name = "httpx" },
@@ -253,6 +254,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "chembl-structure-pipeline", specifier = ">=1.2.4" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fsspec", specifier = ">=2024.10.0" },
     { name = "httpx", specifier = ">=0.28.0" },
@@ -287,6 +289,19 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "ruff", specifier = ">=0.8.0" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.0.0" },
+]
+
+[[package]]
+name = "chembl-structure-pipeline"
+version = "1.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "rdkit" },
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/56/29/4ce697880f4b239dc96e89c371d7a86c43cd08e3f9b54c375510f49f19d8/chembl_structure_pipeline-1.2.4.tar.gz", hash = "sha256:e381500ac815ded31cc4841d1fbfe7c089788a07f2fbaa9bb818b52facfa9030", size = 16159, upload-time = "2025-11-24T16:41:34.971Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/5c/b9d714ff6381793e811ef96daa744350e1c5f233e0f15044e1f6160aeeaa/chembl_structure_pipeline-1.2.4-py3-none-any.whl", hash = "sha256:1bb5121b3714d564610c55e39e214ae6409001d0a50bb48a00831b3f5573c479", size = 17302, upload-time = "2025-11-24T16:41:34.053Z" },
 ]
 
 [[package]]
@@ -1561,6 +1576,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/73/08/ba44b8667bbeb770fb1efec4846ef0728fe5a096971ceb6ad4b30d7b8b89/sentinel_auth_sdk-0.10.2.tar.gz", hash = "sha256:8f15103d5086cd3f17c989b112cd73dea0508e1e062ccb75c18428ac0695b550", size = 21788, upload-time = "2026-03-20T21:18:43.949Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/65/eb103c63949716ec931362c645cf43ca9534b2427ea203e66145e5092bf5/sentinel_auth_sdk-0.10.2-py3-none-any.whl", hash = "sha256:d3c3c073f264367906f9392f3fca3231bf0f3ba4d97e68cf1bfdf93c52b95d4a", size = 20404, upload-time = "2026-03-20T21:18:42.617Z" },
+]
+
+[[package]]
+name = "setuptools"
+version = "82.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/db/cfac1baf10650ab4d1c111714410d2fbb77ac5a616db26775db562c8fab2/setuptools-82.0.1.tar.gz", hash = "sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9", size = 1152316, upload-time = "2026-03-09T12:47:17.221Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/76/f789f7a86709c6b087c5a2f52f911838cad707cc613162401badc665acfe/setuptools-82.0.1-py3-none-any.whl", hash = "sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb", size = 1006223, upload-time = "2026-03-09T12:47:15.026Z" },
 ]
 
 [[package]]
