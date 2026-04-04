@@ -22,6 +22,8 @@ import {
   type MoleculeType,
 } from "../types";
 import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
+import { DisclosureDialog } from "./disclosure-dialog";
+import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
 
 function lifecycleBadgeVariant(
   stage: LifecycleStage
@@ -45,6 +47,8 @@ function lifecycleBadgeVariant(
 export function MoleculeList() {
   const { data: molecules, isLoading } = useMolecules();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
+  const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
 
   if (isLoading) {
     return (
@@ -94,6 +98,7 @@ export function MoleculeList() {
                 <TableHead>Formula</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -127,6 +132,29 @@ export function MoleculeList() {
                         : "Undisclosed"}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {mol.structure_status === "undisclosed" &&
+                        !mol.merged_into_id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDiscloseMol(mol)}
+                          >
+                            Disclose
+                          </Button>
+                        )}
+                      {!mol.merged_into_id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMergeMol(mol)}
+                        >
+                          Merge
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -138,6 +166,22 @@ export function MoleculeList() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
       />
+
+      {discloseMol && (
+        <DisclosureDialog
+          molecule={discloseMol}
+          open={!!discloseMol}
+          onOpenChange={(open) => !open && setDiscloseMol(null)}
+        />
+      )}
+
+      {mergeMol && (
+        <MergeConfirmationDialog
+          sourceMolecule={mergeMol}
+          open={!!mergeMol}
+          onOpenChange={(open) => !open && setMergeMol(null)}
+        />
+      )}
     </>
   );
 }
