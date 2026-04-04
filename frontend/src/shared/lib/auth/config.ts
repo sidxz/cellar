@@ -1,46 +1,41 @@
+import type { AppConfig } from "@/shared/lib/app-config";
 import {
   AuthzLocalStorageStore,
   type IdpConfig,
   IdpConfigs,
   SentinelAuthz,
-  type SentinelAuthzConfig,
 } from "@sentinel-auth/js";
 
-const IDP_PROVIDER = process.env.NEXT_PUBLIC_IDP_PROVIDER ?? "google";
-const IDP_CLIENT_ID = process.env.NEXT_PUBLIC_IDP_CLIENT_ID ?? "";
-const SENTINEL_URL = process.env.NEXT_PUBLIC_SENTINEL_URL ?? "http://localhost:9003";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-
-function buildIdpConfig(provider: string, clientId: string): Record<string, IdpConfig> {
-  switch (provider) {
-    case "google":
-      return { google: IdpConfigs.google(clientId) };
-    case "entraId":
-      return {
-        entraId: IdpConfigs.entraId(clientId, process.env.NEXT_PUBLIC_ENTRA_TENANT_ID ?? ""),
-      };
-    default:
-      return { [provider]: IdpConfigs.google(clientId) };
+function buildIdps(config: AppConfig): Record<string, IdpConfig> {
+  const idps: Record<string, IdpConfig> = {};
+  if (config.googleClientId) {
+    idps.google = IdpConfigs.google(config.googleClientId);
   }
+  if (config.entraIdClientId && config.entraIdTenantId) {
+    idps.entraId = IdpConfigs.entraId(config.entraIdClientId, config.entraIdTenantId);
+  }
+  return idps;
 }
 
-export const sentinelConfig: SentinelAuthzConfig = {
-  sentinelUrl: SENTINEL_URL,
-  idps: buildIdpConfig(IDP_PROVIDER, IDP_CLIENT_ID),
-  redirectUri: `${APP_URL}/auth/callback`,
-  storage: typeof window !== "undefined" ? new AuthzLocalStorageStore() : undefined,
-  autoRefresh: true,
-  refreshBuffer: 30,
-};
+let _client: SentinelAuthz | null = null;
 
-export const defaultIdpProvider = IDP_PROVIDER;
+/**
+ * Create (or return cached) SentinelAuthz client.
+ * Accepts runtime AppConfig so no process.env is read at module load.
+ */
+export function getSentinelClient(config?: AppConfig): SentinelAuthz {
+  if (!_client) {
+    const sentinelUrl = config?.sentinelUrl ?? "http://localhost:9003";
+    const appUrl = config?.appUrl ?? "http://localhost:3000";
 
-/** Shared SentinelAuthz client singleton — used by AuthzProvider and API custom-instance. */
-let _sentinelClient: SentinelAuthz | null = null;
-
-export function getSentinelClient(): SentinelAuthz {
-  if (!_sentinelClient) {
-    _sentinelClient = new SentinelAuthz(sentinelConfig);
+    _client = new SentinelAuthz({
+      sentinelUrl,
+      idps: config ? buildIdps(config) : {},
+      redirectUri: `${appUrl}/auth/callback`,
+      storage: typeof window !== "undefined" ? new AuthzLocalStorageStore() : undefined,
+      autoRefresh: true,
+      refreshBuffer: 30,
+    });
   }
-  return _sentinelClient;
+  return _client;
 }

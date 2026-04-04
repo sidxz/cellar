@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import { defaultIdpProvider } from "@/shared/lib/auth/config";
+import { useAppConfig } from "@/shared/lib/app-config";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { FlaskConical } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -16,6 +16,7 @@ import { useEffect } from "react";
 
 export default function LoginPage() {
   const { isAuthenticated, isLoading, login } = useAuthz();
+  const { idpProvider } = useAppConfig();
   const router = useRouter();
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export default function LoginPage() {
           <CardDescription>Chemical compound management & screening platform</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full" onClick={() => login(defaultIdpProvider)}>
+          <Button className="w-full" onClick={() => login(idpProvider)}>
             Sign in
           </Button>
         </CardContent>

@@ -1,9 +1,15 @@
 // Custom fetch instance for orval-generated API client.
+// Base URL set at runtime via setApiBaseUrl() from AppConfig.
 // Auth tokens injected from the shared Sentinel SDK singleton.
 
 import { getSentinelClient } from "@/shared/lib/auth/config";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+let _baseUrl = "http://localhost:8000";
+
+/** Called by AuthProvider after fetching runtime AppConfig. */
+export function setApiBaseUrl(url: string) {
+  _baseUrl = url;
+}
 
 export const customInstance = async <T>({
   url,
@@ -24,7 +30,7 @@ export const customInstance = async <T>({
   const client = typeof window !== "undefined" ? getSentinelClient() : null;
   const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
 
-  const response = await fetch(`${BASE_URL}${url}${queryString}`, {
+  const response = await fetch(`${_baseUrl}${url}${queryString}`, {
     method,
     headers: {
       "Content-Type": "application/json",
