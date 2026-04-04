@@ -1,0 +1,53 @@
+"""Repository protocols for inventory entities."""
+
+from __future__ import annotations
+
+import uuid
+from typing import Protocol, runtime_checkable
+
+from chem_vault.domain.inventory.batch import Batch
+from chem_vault.domain.inventory.sample import Sample
+from chem_vault.domain.inventory.storage_location import StorageLocation
+from chem_vault.domain.shared.value_objects import BatchNumber
+
+
+@runtime_checkable
+class BatchRepository(Protocol):
+    """Repository for Batch aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> Batch | None: ...
+    async def find_by_molecule(self, molecule_id: uuid.UUID) -> list[Batch]: ...
+    async def find_by_batch_number(
+        self, workspace_id: uuid.UUID, batch_number: str
+    ) -> Batch | None: ...
+    async def next_batch_number(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+    ) -> BatchNumber: ...
+    async def save(self, aggregate: Batch) -> None: ...
+
+
+@runtime_checkable
+class SampleRepository(Protocol):
+    """Repository for Sample aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> Sample | None: ...
+    async def find_by_batch(self, batch_id: uuid.UUID) -> list[Sample]: ...
+    async def find_by_location(self, location_id: uuid.UUID) -> list[Sample]: ...
+    async def find_by_barcode(
+        self, workspace_id: uuid.UUID, barcode: str
+    ) -> Sample | None: ...
+    async def find_low_stock(self, workspace_id: uuid.UUID) -> list[Sample]: ...
+    async def save(self, aggregate: Sample) -> None: ...
+
+
+@runtime_checkable
+class StorageLocationRepository(Protocol):
+    """Repository for StorageLocation entities."""
+
+    async def find_by_id(self, id: uuid.UUID) -> StorageLocation | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[StorageLocation]: ...
+    async def find_children(self, parent_id: uuid.UUID) -> list[StorageLocation]: ...
+    async def save(self, entity: StorageLocation) -> None: ...
+    async def delete(self, id: uuid.UUID) -> None: ...
