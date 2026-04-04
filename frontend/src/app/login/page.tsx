@@ -40,7 +40,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
             <FlaskConical className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">Chem-Vault</CardTitle>
+          <CardTitle className="text-2xl">OpenChemVault</CardTitle>
           <CardDescription>Chemical compound management & screening platform</CardDescription>
         </CardHeader>
         <CardContent>
