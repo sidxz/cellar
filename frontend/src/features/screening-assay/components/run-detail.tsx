@@ -9,7 +9,6 @@ import {
   ThumbsDown,
   Lock,
   Unlock,
-  FlaskConical,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -44,6 +43,7 @@ import {
   type PlateFormat,
   type RunStatus,
 } from "../types";
+import { RunDataPanel } from "./run-data-panel";
 
 interface RunDetailProps {
   runId: string;
@@ -283,20 +283,8 @@ export function RunDetail({ runId }: RunDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Data placeholder */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Data</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-            <p className="mt-4 text-sm text-muted-foreground">
-              Readout data and visualizations will appear here.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Data visualizations */}
+      <RunDataPanel run={run} />
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
