@@ -127,3 +127,20 @@ class MergeReason(StrEnum):
     MANUAL_MERGE = "manual_merge"
     STRUCTURE_CORRECTION = "structure_correction"
     DUPLICATE_CLEANUP = "duplicate_cleanup"
+
+
+class BulkRegistrationStatus(StrEnum):
+    """Status of a bulk registration operation."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+
+
+class BulkRegistrationFileFormat(StrEnum):
+    """Supported file formats for bulk registration."""
+
+    SDF = "sdf"
+    CSV = "csv"
+    XLSX = "xlsx"

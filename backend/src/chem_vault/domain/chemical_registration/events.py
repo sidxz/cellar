@@ -67,3 +67,24 @@ class DisclosureResolved(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class DisclosureConflict(DomainEvent):
     conflict_reason: str
+
+
+# ---------------------------------------------------------------------------
+# Bulk Registration events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class BulkRegistrationStarted(DomainEvent):
+    workspace_id: uuid.UUID
+    source_file: str
+    file_format: str
+    total_count: int
+    submitted_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class BulkRegistrationCompleted(DomainEvent):
+    registered_count: int
+    duplicate_count: int
+    error_count: int

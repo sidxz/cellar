@@ -18,6 +18,7 @@ from fastapi import Depends, Request
 from lagom import Container
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
@@ -147,3 +148,4 @@ GetDisclosureDep = Annotated[GetDisclosure, Depends(_get_use_case(GetDisclosure)
 ListDisclosuresDep = Annotated[ListDisclosures, Depends(_get_use_case(ListDisclosures))]
 ResolveDisclosureConflictDep = Annotated[ResolveDisclosureConflict, Depends(_get_use_case(ResolveDisclosureConflict))]
 GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHistory))]
+BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]

@@ -14,6 +14,7 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
@@ -44,7 +45,7 @@ from chem_vault.application.workspace_config.update_organization import UpdateOr
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
-from chem_vault.domain.chemical_registration.repository import MoleculeRelationshipRepository, MoleculeRepository
+from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository
 from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
@@ -62,6 +63,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository imp
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_disclosure_repository import (
     SQLAlchemyBulkDisclosureRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
+    SQLAlchemyBulkRegistrationRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
     SQLAlchemyDisclosureRequestRepository,
@@ -325,5 +329,18 @@ def create_container(
         )
 
     container.define(GetMergeHistory, _merge_history)
+
+    # --- Bulk Registration ---
+    def _bulk_registration_service(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return BulkRegistrationService(
+            uow=uow,
+            bulk_reg_repo=SQLAlchemyBulkRegistrationRepository(uow),
+            mol_repo=SQLAlchemyMoleculeRepository(uow),
+            dispatcher=c[EventDispatcher],
+            structure_processor=c[StructureProcessorProtocol],
+        )
+
+    container.define(BulkRegistrationService, _bulk_registration_service)
 
     return container

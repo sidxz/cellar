@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Protocol, runtime_checkable
 
 from chem_vault.domain.chemical_registration.bulk_disclosure import BulkDisclosure
+from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
 from chem_vault.domain.chemical_registration.molecule import Molecule
@@ -96,3 +97,14 @@ class MergeEventRepository(Protocol):
     async def find_by_target(self, target_molecule_id: uuid.UUID) -> list[MergeEvent]: ...
     async def find_by_molecule(self, molecule_id: uuid.UUID) -> list[MergeEvent]: ...
     async def save(self, entity: MergeEvent) -> None: ...
+
+
+@runtime_checkable
+class BulkRegistrationRepository(Protocol):
+    """Repository for BulkRegistration aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> BulkRegistration | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[BulkRegistration]: ...
+    async def save(self, aggregate: BulkRegistration) -> None: ...
