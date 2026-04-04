@@ -45,6 +45,19 @@ from chem_vault.application.workspace_config.list_organizations import ListOrgan
 from chem_vault.application.workspace_config.list_vocabularies import ListVocabularies
 from chem_vault.application.workspace_config.update_organization import UpdateOrganization
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
+from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
+from chem_vault.application.screening.create_protocol import CreateProtocol
+from chem_vault.application.screening.create_readout_data import CreateReadoutData
+from chem_vault.application.screening.create_run import CreateRun
+from chem_vault.application.screening.create_target import CreateTarget
+from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
+from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
+from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
+from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
+from chem_vault.application.screening.get_target import GetTarget, ListTargets
+from chem_vault.application.screening.lock_run import LockRun, UnlockRun
+from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
+from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -149,3 +162,27 @@ ListDisclosuresDep = Annotated[ListDisclosures, Depends(_get_use_case(ListDisclo
 ResolveDisclosureConflictDep = Annotated[ResolveDisclosureConflict, Depends(_get_use_case(ResolveDisclosureConflict))]
 GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHistory))]
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]
+
+# --- Screening dependencies ---
+CreateProtocolDep = Annotated[CreateProtocol, Depends(_get_use_case(CreateProtocol))]
+GetProtocolDep = Annotated[GetProtocol, Depends(_get_use_case(GetProtocol))]
+ListProtocolsDep = Annotated[ListProtocols, Depends(_get_use_case(ListProtocols))]
+PublishProtocolDep = Annotated[PublishProtocol, Depends(_get_use_case(PublishProtocol))]
+RetireProtocolDep = Annotated[RetireProtocol, Depends(_get_use_case(RetireProtocol))]
+VersionProtocolDep = Annotated[VersionProtocol, Depends(_get_use_case(VersionProtocol))]
+CreateTargetDep = Annotated[CreateTarget, Depends(_get_use_case(CreateTarget))]
+GetTargetDep = Annotated[GetTarget, Depends(_get_use_case(GetTarget))]
+ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]
+CreateRunDep = Annotated[CreateRun, Depends(_get_use_case(CreateRun))]
+GetRunDep = Annotated[GetRun, Depends(_get_use_case(GetRun))]
+ListRunsByProtocolDep = Annotated[ListRunsByProtocol, Depends(_get_use_case(ListRunsByProtocol))]
+StartRunDep = Annotated[StartRun, Depends(_get_use_case(StartRun))]
+CompleteRunDep = Annotated[CompleteRun, Depends(_get_use_case(CompleteRun))]
+ApproveRunDep = Annotated[ApproveRun, Depends(_get_use_case(ApproveRun))]
+RejectRunDep = Annotated[RejectRun, Depends(_get_use_case(RejectRun))]
+LockRunDep = Annotated[LockRun, Depends(_get_use_case(LockRun))]
+UnlockRunDep = Annotated[UnlockRun, Depends(_get_use_case(UnlockRun))]
+CreateReadoutDataDep = Annotated[CreateReadoutData, Depends(_get_use_case(CreateReadoutData))]
+ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(ListReadoutDataByRun))]
+CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
+ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]

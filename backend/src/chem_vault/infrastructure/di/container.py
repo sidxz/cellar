@@ -25,6 +25,19 @@ from chem_vault.application.inventory.manage_storage import (
     GetStorageLocationChildren,
     ListStorageLocations,
 )
+from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
+from chem_vault.application.screening.create_protocol import CreateProtocol
+from chem_vault.application.screening.create_readout_data import CreateReadoutData
+from chem_vault.application.screening.create_run import CreateRun
+from chem_vault.application.screening.create_target import CreateTarget
+from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
+from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
+from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
+from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
+from chem_vault.application.screening.get_target import GetTarget, ListTargets
+from chem_vault.application.screening.lock_run import LockRun, UnlockRun
+from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
+from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
@@ -57,6 +70,14 @@ from chem_vault.application.workspace_config.update_workspace_settings import Up
 from chem_vault.domain.audit_compliance.repository import AuditRepository
 from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, StorageLocationRepository
+from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
+from chem_vault.domain.screening_assay.repository import (
+    DoseResponseCurveRepository,
+    ProtocolRepository,
+    ReadoutDataRepository,
+    RunRepository,
+    TargetRepository,
+)
 from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
@@ -86,6 +107,21 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_repositor
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
     SQLAlchemyStorageLocationRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+    SQLAlchemyDoseResponseCurveRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+    SQLAlchemyReadoutDataRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+    SQLAlchemyRunRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
+    SQLAlchemyTargetRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
     SQLAlchemyDisclosureRequestRepository,
@@ -418,5 +454,93 @@ def create_container(
     container.define(CreateStorageLocation, _storage_cmd)
     container.define(ListStorageLocations, _storage_query(ListStorageLocations))
     container.define(GetStorageLocationChildren, _storage_query(GetStorageLocationChildren))
+
+    # --- Screening ---
+    def _protocol_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _protocol_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProtocolRepository(uow))
+        return _f
+
+    container.define(CreateProtocol, _protocol_cmd(CreateProtocol))
+    container.define(GetProtocol, _protocol_query(GetProtocol))
+    container.define(ListProtocols, _protocol_query(ListProtocols))
+    container.define(PublishProtocol, _protocol_cmd(PublishProtocol))
+    container.define(RetireProtocol, _protocol_cmd(RetireProtocol))
+    container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
+
+    def _target_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyTargetRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _target_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyTargetRepository(uow))
+        return _f
+
+    container.define(CreateTarget, _target_cmd(CreateTarget))
+    container.define(GetTarget, _target_query(GetTarget))
+    container.define(ListTargets, _target_query(ListTargets))
+
+    def _run_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRunRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _run_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRunRepository(uow))
+        return _f
+
+    container.define(CreateRun, _run_cmd(CreateRun))
+    container.define(GetRun, _run_query(GetRun))
+    container.define(ListRunsByProtocol, _run_query(ListRunsByProtocol))
+    container.define(StartRun, _run_cmd(StartRun))
+    container.define(CompleteRun, _run_cmd(CompleteRun))
+    container.define(ApproveRun, _run_cmd(ApproveRun))
+    container.define(RejectRun, _run_cmd(RejectRun))
+    container.define(LockRun, _run_cmd(LockRun))
+    container.define(UnlockRun, _run_cmd(UnlockRun))
+
+    def _readout_create(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        run_repo = SQLAlchemyRunRepository(uow)
+        guard = DataLockGuard(run_repo)
+        return CreateReadoutData(uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher])
+
+    def _readout_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyReadoutDataRepository(uow))
+        return _f
+
+    container.define(CreateReadoutData, _readout_create)
+    container.define(ListReadoutDataByRun, _readout_query(ListReadoutDataByRun))
+
+    def _dose_response_create(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        run_repo = SQLAlchemyRunRepository(uow)
+        guard = DataLockGuard(run_repo)
+        return CreateDoseResponseCurve(uow, SQLAlchemyDoseResponseCurveRepository(uow), guard, c[EventDispatcher])
+
+    def _dose_response_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyDoseResponseCurveRepository(uow))
+        return _f
+
+    container.define(CreateDoseResponseCurve, _dose_response_create)
+    container.define(ListDoseResponseByRun, _dose_response_query(ListDoseResponseByRun))
 
     return container
