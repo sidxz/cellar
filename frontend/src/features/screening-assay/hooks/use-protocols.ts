@@ -57,7 +57,7 @@ export function usePublishProtocol() {
 export function useRetireProtocol() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+    mutationFn: ({ id, reason }: { id: string; reason?: string | null }) =>
       customInstance<Protocol>({
         url: `/api/v1/protocols/${id}/retire`,
         method: "POST",

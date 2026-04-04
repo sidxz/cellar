@@ -106,7 +106,8 @@ export function DoseResponseChart({ curves, className }: DoseResponseChartProps)
     const excluded = extractPoints(curve.excluded_points);
 
     const allX = [...included.x, ...excluded.x, curve.fitted_value];
-    const xMin = allX.length > 0 ? Math.min(...allX) * 0.1 : curve.fitted_value * 0.01;
+    const xMinRaw = allX.length > 0 ? Math.min(...allX) * 0.1 : curve.fitted_value * 0.01;
+    const xMin = Math.max(xMinRaw, 1e-12);
     const xMax = allX.length > 0 ? Math.max(...allX) * 10 : curve.fitted_value * 100;
 
     // Included data points

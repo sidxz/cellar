@@ -312,7 +312,6 @@ export interface CreateTargetInput {
 export interface CreateRunInput {
   protocol_id: string;
   run_date: string;
-  operator: string;
   plate_format?: PlateFormat | null;
   performed_at_org_id?: string | null;
   parent_run_id?: string | null;

@@ -54,7 +54,6 @@ export function CreateRunDialog({
       {
         protocol_id: protocolId,
         run_date: runDate,
-        operator: "",
         plate_format: plateFormat as PlateFormat,
         notes: notes || null,
       },
