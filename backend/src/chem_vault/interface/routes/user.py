@@ -1,78 +1,52 @@
-"""User preferences endpoints — cross-device settings sync."""
+"""User preferences endpoints — thin route resolving use cases from DI."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from fastapi import APIRouter
+from pydantic import BaseModel
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from chem_vault.infrastructure.persistence.sqlalchemy.user_preferences import (
-    UserPreferencesModel,
+from chem_vault.application.user.get_preferences import GetPreferencesQuery
+from chem_vault.application.user.update_preferences import UpdatePreferencesCommand
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    GetPreferencesDep,
+    UpdatePreferencesDep,
 )
-from chem_vault.interface.app import sentinel
+from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/user", tags=["user"])
 
-AuthDep = Annotated[Any, Depends(sentinel.get_auth)]
+
+class PreferencesResponse(BaseModel):
+    theme: str = "dark"
+    sidebar_collapsed: bool = False
 
 
-async def _get_session(request: Any) -> AsyncSession:
-    """Get a raw async session from the container (no UoW needed for simple CRUD)."""
-    from chem_vault.interface.dependencies import get_container
-
-    container = get_container(request)
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
-    factory = container[async_sessionmaker]
-    async with factory() as session:
-        yield session
+class UpdatePreferencesBody(BaseModel):
+    theme: str | None = None
+    sidebar_collapsed: bool | None = None
 
 
-SessionDep = Annotated[AsyncSession, Depends(_get_session)]
+@router.get("/preferences", response_model=PreferencesResponse)
+async def get_preferences(auth: AuthDep, use_case: GetPreferencesDep) -> PreferencesResponse:
+    query = GetPreferencesQuery(workspace_id=auth.workspace_id, user_id=auth.user_id)
+    result = await use_case(query)
+    prefs = result_to_response(result)
+    return PreferencesResponse(theme=prefs.theme, sidebar_collapsed=prefs.sidebar_collapsed)
 
 
-@router.get("/preferences")
-async def get_preferences(auth: AuthDep, session: SessionDep) -> dict:
-    """Get user preferences for the current workspace."""
-    result = await session.execute(
-        select(UserPreferencesModel).where(
-            UserPreferencesModel.workspace_id == auth.workspace_id,
-            UserPreferencesModel.user_id == auth.user_id,
-        )
-    )
-    row = result.scalar_one_or_none()
-    return row.preferences if row else {}
-
-
-@router.patch("/preferences")
+@router.patch("/preferences", response_model=PreferencesResponse)
 async def update_preferences(
-    body: dict,
+    body: UpdatePreferencesBody,
     auth: AuthDep,
-    session: SessionDep,
-) -> dict:
-    """Upsert user preferences for the current workspace (partial merge)."""
-    # Fetch existing or create
-    result = await session.execute(
-        select(UserPreferencesModel).where(
-            UserPreferencesModel.workspace_id == auth.workspace_id,
-            UserPreferencesModel.user_id == auth.user_id,
-        )
+    use_case: UpdatePreferencesDep,
+) -> PreferencesResponse:
+    command = UpdatePreferencesCommand(
+        workspace_id=auth.workspace_id,
+        user_id=auth.user_id,
+        theme=body.theme,
+        sidebar_collapsed=body.sidebar_collapsed,
     )
-    row = result.scalar_one_or_none()
-
-    if row:
-        merged = {**row.preferences, **body}
-        row.preferences = merged
-    else:
-        row = UserPreferencesModel(
-            workspace_id=auth.workspace_id,
-            user_id=auth.user_id,
-            preferences=body,
-        )
-        session.add(row)
-
-    await session.commit()
-    await session.refresh(row)
-    return row.preferences
+    result = await use_case(command)
+    prefs = result_to_response(result)
+    return PreferencesResponse(theme=prefs.theme, sidebar_collapsed=prefs.sidebar_collapsed)

@@ -30,7 +30,7 @@ SERVICE_ACTIONS = [
 
 
 def create_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
-    """Create and configure the Sentinel instance.
+    """Create and configure a new Sentinel instance.
 
     The returned object provides:
     - ``sentinel.lifespan`` — FastAPI lifespan (fetches keys, registers actions)
@@ -50,3 +50,15 @@ def create_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
         cache_ttl=settings.cache_ttl,
         actions=SERVICE_ACTIONS,
     )
+
+
+# Lazy singleton — shared across app.py, dependencies.py, and routes.
+_instance: Sentinel | None = None
+
+
+def get_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
+    """Get the shared Sentinel instance (creates on first call)."""
+    global _instance
+    if _instance is None:
+        _instance = create_sentinel(settings)
+    return _instance

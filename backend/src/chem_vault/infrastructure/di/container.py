@@ -14,7 +14,10 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.user.get_preferences import GetPreferences
+from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.domain.audit_compliance.repository import AuditRepository
+from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.database import (
     create_engine,
@@ -23,6 +26,9 @@ from chem_vault.infrastructure.persistence.database import (
 from chem_vault.infrastructure.persistence.settings import DatabaseSettings
 from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
     SQLAlchemyAuditRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.user_preferences_repository import (
+    SQLAlchemyUserPreferencesRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -62,6 +68,23 @@ def create_container(
     container.define(
         AuditRecordingService,
         lambda c: AuditRecordingService(c[AuditRepository]),
+    )
+
+    # --- User Preferences ---
+    container.define(
+        SQLAlchemyUserPreferencesRepository,
+        lambda c: SQLAlchemyUserPreferencesRepository(c[async_sessionmaker]()),
+    )
+    container.define(
+        UserPreferencesRepository, lambda c: c[SQLAlchemyUserPreferencesRepository]
+    )
+    container.define(
+        GetPreferences,
+        lambda c: GetPreferences(c[UserPreferencesRepository]),
+    )
+    container.define(
+        UpdatePreferences,
+        lambda c: UpdatePreferences(c[UserPreferencesRepository]),
     )
 
     return container

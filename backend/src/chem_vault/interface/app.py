@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from chem_vault.infrastructure.di.container import create_container
-from chem_vault.infrastructure.sentinel.auth import create_sentinel
+from chem_vault.infrastructure.sentinel.auth import get_sentinel
 from chem_vault.interface.error_handlers import register_error_handlers
 
-sentinel = create_sentinel()
+sentinel = get_sentinel()
 
 
 @asynccontextmanager
