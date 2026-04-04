@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpenChemVault",
+  title: "Chem Vault",
   description: "Chemical compound management & screening platform",
 };
 

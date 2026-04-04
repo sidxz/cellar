@@ -36,7 +36,7 @@ export function WorkspaceSwitcher() {
                 <FlaskConical className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">OpenChemVault</span>
+                <span className="truncate font-semibold">Chem Vault</span>
                 <span className="truncate text-xs text-muted-foreground">{workspaceName}</span>
               </div>
               <ChevronsUpDown className="ml-auto" />
