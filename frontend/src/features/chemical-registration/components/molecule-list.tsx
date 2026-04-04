@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FlaskConical, Plus, Upload } from "lucide-react";
+import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -105,6 +106,7 @@ export function MoleculeList() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[56px]">Structure</TableHead>
                 <TableHead>Reg #</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
@@ -116,7 +118,22 @@ export function MoleculeList() {
             </TableHeader>
             <TableBody>
               {molecules.map((mol: Molecule) => (
-                <TableRow key={mol.id}>
+                <TableRow
+                  key={mol.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => {
+                    window.location.href = `/compounds/${mol.id}`;
+                  }}
+                >
+                  <TableCell>
+                    {mol.structure_status === "disclosed" && mol.structure?.smiles ? (
+                      <StructureThumbnail smiles={mol.structure.smiles} size={40} />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+                        N/A
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="font-mono text-sm">
                     {mol.registration_number}
                   </TableCell>
@@ -152,7 +169,10 @@ export function MoleculeList() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setDiscloseMol(mol)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDiscloseMol(mol);
+                            }}
                           >
                             Disclose
                           </Button>
@@ -161,7 +181,10 @@ export function MoleculeList() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setMergeMol(mol)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMergeMol(mol);
+                          }}
                         >
                           Merge
                         </Button>
