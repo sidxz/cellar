@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Any, Protocol, runtime_checkable
 
+from chem_vault.domain.chemical_registration.bulk_disclosure import BulkDisclosure
+from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_relationship import MoleculeRelationship
 from chem_vault.domain.shared.value_objects import RegistrationNumber
@@ -56,3 +58,21 @@ class MoleculeRelationshipRepository(Protocol):
     async def save(self, entity: MoleculeRelationship) -> None: ...
 
     async def delete(self, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class DisclosureRequestRepository(Protocol):
+    """Repository for DisclosureRequest aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> DisclosureRequest | None: ...
+    async def find_by_molecule(self, molecule_id: uuid.UUID) -> list[DisclosureRequest]: ...
+    async def find_by_bulk_disclosure(self, bulk_disclosure_id: uuid.UUID) -> list[DisclosureRequest]: ...
+    async def save(self, aggregate: DisclosureRequest) -> None: ...
+
+
+@runtime_checkable
+class BulkDisclosureRepository(Protocol):
+    """Repository for BulkDisclosure aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> BulkDisclosure | None: ...
+    async def save(self, aggregate: BulkDisclosure) -> None: ...
