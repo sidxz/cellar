@@ -5,6 +5,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import {
@@ -14,14 +15,70 @@ import {
   useSidebar,
 } from "@/shared/components/ui/sidebar";
 import { useAuthz } from "@sentinel-auth/nextjs";
-import { ChevronsUpDown } from "lucide-react";
-import { FlaskConical } from "lucide-react";
+import { Check, ChevronsUpDown, FlaskConical } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+
+interface WorkspaceOption {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+}
+
+/** Read stored IdP token + provider from AuthzLocalStorageStore keys. */
+function getStoredCredentials(): { idpToken: string; provider: string } | null {
+  if (typeof window === "undefined") return null;
+  const idpToken = localStorage.getItem("sentinel_idp_token");
+  const provider = localStorage.getItem("sentinel_idp_provider");
+  if (!idpToken || !provider) return null;
+  return { idpToken, provider };
+}
 
 export function WorkspaceSwitcher() {
-  const { user } = useAuthz();
+  const { user, client } = useAuthz();
   const { isMobile } = useSidebar();
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+  const [switching, setSwitching] = useState(false);
 
-  const workspaceName = user?.workspaceSlug ?? "Workspace";
+  const currentWorkspace = user?.workspaceSlug ?? "Workspace";
+  const currentWorkspaceId = user?.workspaceId;
+
+  const loadWorkspaces = useCallback(async () => {
+    if (!client) return;
+    try {
+      const creds = getStoredCredentials();
+      if (!creds) return;
+
+      const response = await client.resolve(creds.idpToken, creds.provider);
+      if (response.workspaces) {
+        setWorkspaces(response.workspaces);
+      }
+    } catch {
+      // Silent fail — show current workspace only
+    }
+  }, [client]);
+
+  const switchWorkspace = useCallback(
+    async (workspaceId: string) => {
+      if (!client || switching) return;
+      setSwitching(true);
+      try {
+        const creds = getStoredCredentials();
+        if (!creds) return;
+
+        await client.selectWorkspace(creds.idpToken, creds.provider, workspaceId);
+        window.location.href = "/";
+      } catch {
+        setSwitching(false);
+      }
+    },
+    [client, switching],
+  );
+
+  // Load workspaces when dropdown opens
+  useEffect(() => {
+    loadWorkspaces();
+  }, [loadWorkspaces]);
 
   return (
     <SidebarMenu>
@@ -37,7 +94,7 @@ export function WorkspaceSwitcher() {
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">Chem Vault</span>
-                <span className="truncate text-xs text-muted-foreground">{workspaceName}</span>
+                <span className="truncate text-xs text-muted-foreground">{currentWorkspace}</span>
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
@@ -51,10 +108,32 @@ export function WorkspaceSwitcher() {
             <DropdownMenuLabel className="text-xs text-muted-foreground">
               Workspaces
             </DropdownMenuLabel>
-            <DropdownMenuItem>
-              <FlaskConical className="mr-2 size-4" />
-              <span>{workspaceName}</span>
-            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {workspaces.length > 0 ? (
+              workspaces.map((ws) => (
+                <DropdownMenuItem
+                  key={ws.id}
+                  disabled={switching}
+                  onClick={() => {
+                    if (ws.id !== currentWorkspaceId) switchWorkspace(ws.id);
+                  }}
+                >
+                  <FlaskConical className="mr-2 size-4" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">{ws.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground">{ws.role}</span>
+                      {ws.id === currentWorkspaceId && <Check className="size-3.5 text-primary" />}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <DropdownMenuItem disabled>
+                <FlaskConical className="mr-2 size-4" />
+                <span>{currentWorkspace}</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
