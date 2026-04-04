@@ -91,3 +91,39 @@ class RelationshipType(StrEnum):
     SALT_OF = "salt_of"
     ENANTIOMER_OF = "enantiomer_of"
     COMPONENT_OF = "component_of"
+
+
+class DisclosureStatus(StrEnum):
+    """Status of a disclosure request."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    DISCLOSED = "disclosed"
+    MERGED = "merged"
+    CONFLICT = "conflict"
+    REJECTED = "rejected"
+
+
+class DisclosureResolutionType(StrEnum):
+    """How a disclosure was resolved."""
+
+    NEW_STRUCTURE = "new_structure"
+    MERGED_INTO_EXISTING = "merged_into_existing"
+
+
+class BulkDisclosureStatus(StrEnum):
+    """Status of a bulk disclosure operation."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+
+
+class MergeReason(StrEnum):
+    """Reason for merging two molecules."""
+
+    DISCLOSURE_RESOLVED = "disclosure_resolved"
+    MANUAL_MERGE = "manual_merge"
+    STRUCTURE_CORRECTION = "structure_correction"
+    DUPLICATE_CLEANUP = "duplicate_cleanup"
