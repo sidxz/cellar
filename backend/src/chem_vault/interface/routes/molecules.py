@@ -9,6 +9,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.get_molecule import GetMoleculeQuery
+from chem_vault.application.chemical_registration.identifiers import (
+    AddIdentifierCommand,
+    ListIdentifiersQuery,
+    RemoveIdentifierCommand,
+)
 from chem_vault.application.chemical_registration.list_molecules import ListMoleculesQuery
 from chem_vault.application.chemical_registration.get_molecule_by_identifier import (
     GetMoleculeByIdentifierQuery,
@@ -21,16 +26,25 @@ from chem_vault.application.chemical_registration.search_molecules import Search
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.chemical_registration.molecule import Molecule
+from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from chem_vault.interface.dependencies import (
+    AddIdentifierDep,
     AuthDep,
     GetMoleculeByIdentifierDep,
     GetMoleculeDep,
+    ListIdentifiersDep,
     ListMoleculesDep,
     RegisterMoleculeDep,
+    RemoveIdentifierDep,
     SearchMoleculesDep,
     UpdateMoleculeDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
+from chem_vault.interface.pagination import (
+    PaginatedResponse,
+    clamp_limit,
+    parse_cursor,
+)
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecules"])
 
@@ -68,6 +82,16 @@ class IdentifierResponse(BaseModel):
     identifier_type: str
     source: str
     registered_by: uuid.UUID
+
+    @classmethod
+    def from_domain(cls, i: MoleculeIdentifier) -> IdentifierResponse:
+        return cls(
+            id=i.id,
+            identifier=i.identifier,
+            identifier_type=i.identifier_type.value,
+            source=i.source,
+            registered_by=i.registered_by,
+        )
 
 
 class MoleculeResponse(BaseModel):
@@ -119,16 +143,7 @@ class MoleculeResponse(BaseModel):
                 heavy_atom_count=mol.descriptors.heavy_atom_count,
                 ro5_violations=mol.descriptors.ro5_violations,
             )
-        identifiers = [
-            IdentifierResponse(
-                id=i.id,
-                identifier=i.identifier,
-                identifier_type=i.identifier_type.value,
-                source=i.source,
-                registered_by=i.registered_by,
-            )
-            for i in mol.identifiers
-        ]
+        identifiers = [IdentifierResponse.from_domain(i) for i in mol.identifiers]
         return cls(
             id=mol.id,
             workspace_id=mol.workspace_id,
@@ -189,6 +204,12 @@ class UpdateMoleculeBody(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class AddIdentifierBody(BaseModel):
+    identifier: str
+    identifier_type: str
+    source: str
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -221,22 +242,29 @@ async def register_molecule(
     )
 
 
-@router.get("", response_model=list[MoleculeResponse])
+@router.get("", response_model=PaginatedResponse[MoleculeResponse])
 async def list_molecules(
     auth: AuthDep,
     use_case: ListMoleculesDep,
     molecule_type: str | None = None,
     lifecycle_stage: str | None = None,
     structure_status: str | None = None,
-) -> list[MoleculeResponse]:
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[MoleculeResponse]:
     query = ListMoleculesQuery(
         workspace_id=auth.workspace_id,
         molecule_type=molecule_type,
         lifecycle_stage=lifecycle_stage,
         structure_status=structure_status,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
     )
-    mols = result_to_response(await use_case(query))
-    return [MoleculeResponse.from_domain(m) for m in mols]
+    page = result_to_response(await use_case(query))
+    return PaginatedResponse(
+        items=[MoleculeResponse.from_domain(m) for m in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/search", response_model=list[MoleculeResponse])
@@ -303,3 +331,69 @@ async def update_molecule(
     )
     mol = result_to_response(await use_case(command, auth=auth))
     return MoleculeResponse.from_domain(mol)
+
+
+# ---------------------------------------------------------------------------
+# Identifier sub-resource endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{molecule_id}/identifiers",
+    response_model=list[IdentifierResponse],
+)
+async def list_identifiers(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListIdentifiersDep,
+) -> list[IdentifierResponse]:
+    """List all external identifiers for a molecule."""
+    query = ListIdentifiersQuery(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+    )
+    identifiers = result_to_response(await use_case(query))
+    return [IdentifierResponse.from_domain(i) for i in identifiers]
+
+
+@router.post(
+    "/{molecule_id}/identifiers",
+    response_model=list[IdentifierResponse],
+    status_code=201,
+)
+async def add_identifier(
+    molecule_id: uuid.UUID,
+    body: AddIdentifierBody,
+    auth: AuthDep,
+    use_case: AddIdentifierDep,
+) -> list[IdentifierResponse]:
+    """Add an external identifier to a molecule. Returns the updated list."""
+    command = AddIdentifierCommand(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+        identifier=body.identifier,
+        identifier_type=body.identifier_type,
+        source=body.source,
+        registered_by=auth.user_id,
+    )
+    mol = result_to_response(await use_case(command, auth=auth))
+    return [IdentifierResponse.from_domain(i) for i in mol.identifiers]
+
+
+@router.delete(
+    "/{molecule_id}/identifiers/{identifier_id}",
+    status_code=204,
+)
+async def remove_identifier(
+    molecule_id: uuid.UUID,
+    identifier_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: RemoveIdentifierDep,
+) -> None:
+    """Remove an identifier from a molecule."""
+    command = RemoveIdentifierCommand(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+        identifier_id=identifier_id,
+    )
+    result_to_response(await use_case(command, auth=auth))

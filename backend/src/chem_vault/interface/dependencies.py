@@ -23,6 +23,11 @@ from chem_vault.application.chemical_registration.create_relationship import Cre
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
+from chem_vault.application.chemical_registration.identifiers import (
+    AddIdentifier,
+    ListIdentifiers,
+    RemoveIdentifier,
+)
 from chem_vault.application.chemical_registration.get_molecule import GetMolecule
 from chem_vault.application.chemical_registration.get_molecule_by_identifier import GetMoleculeByIdentifier
 from chem_vault.application.chemical_registration.get_merge_history import GetMergeHistory
@@ -45,8 +50,11 @@ from chem_vault.application.workspace_config.list_organizations import ListOrgan
 from chem_vault.application.workspace_config.list_vocabularies import ListVocabularies
 from chem_vault.application.workspace_config.update_organization import UpdateOrganization
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
+from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
+from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
+from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from chem_vault.application.screening.create_readout_data import CreateReadoutData
 from chem_vault.application.screening.create_run import CreateRun
 from chem_vault.application.screening.create_target import CreateTarget
@@ -58,6 +66,7 @@ from chem_vault.application.screening.get_target import GetTarget, ListTargets
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
+from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -150,6 +159,9 @@ ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules)
 UpdateMoleculeDep = Annotated[UpdateMolecule, Depends(_get_use_case(UpdateMolecule))]
 SearchMoleculesDep = Annotated[SearchMolecules, Depends(_get_use_case(SearchMolecules))]
 GetMoleculeByIdentifierDep = Annotated[GetMoleculeByIdentifier, Depends(_get_use_case(GetMoleculeByIdentifier))]
+AddIdentifierDep = Annotated[AddIdentifier, Depends(_get_use_case(AddIdentifier))]
+RemoveIdentifierDep = Annotated[RemoveIdentifier, Depends(_get_use_case(RemoveIdentifier))]
+ListIdentifiersDep = Annotated[ListIdentifiers, Depends(_get_use_case(ListIdentifiers))]
 CreateRelationshipDep = Annotated[CreateRelationship, Depends(_get_use_case(CreateRelationship))]
 ListRelationshipsDep = Annotated[ListRelationships, Depends(_get_use_case(ListRelationships))]
 DeleteRelationshipDep = Annotated[DeleteRelationship, Depends(_get_use_case(DeleteRelationship))]
@@ -162,6 +174,10 @@ ListDisclosuresDep = Annotated[ListDisclosures, Depends(_get_use_case(ListDisclo
 ResolveDisclosureConflictDep = Annotated[ResolveDisclosureConflict, Depends(_get_use_case(ResolveDisclosureConflict))]
 GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHistory))]
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]
+
+# --- Inventory dependencies ---
+UpdateStorageLocationDep = Annotated[UpdateStorageLocation, Depends(_get_use_case(UpdateStorageLocation))]
+DeleteStorageLocationDep = Annotated[DeleteStorageLocation, Depends(_get_use_case(DeleteStorageLocation))]
 
 # --- Screening dependencies ---
 CreateProtocolDep = Annotated[CreateProtocol, Depends(_get_use_case(CreateProtocol))]
@@ -181,8 +197,10 @@ CompleteRunDep = Annotated[CompleteRun, Depends(_get_use_case(CompleteRun))]
 ApproveRunDep = Annotated[ApproveRun, Depends(_get_use_case(ApproveRun))]
 RejectRunDep = Annotated[RejectRun, Depends(_get_use_case(RejectRun))]
 LockRunDep = Annotated[LockRun, Depends(_get_use_case(LockRun))]
+UpdateRunDep = Annotated[UpdateRun, Depends(_get_use_case(UpdateRun))]
 UnlockRunDep = Annotated[UnlockRun, Depends(_get_use_case(UnlockRun))]
 CreateReadoutDataDep = Annotated[CreateReadoutData, Depends(_get_use_case(CreateReadoutData))]
+BulkCreateReadoutDataDep = Annotated[BulkCreateReadoutData, Depends(_get_use_case(BulkCreateReadoutData))]
 ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(ListReadoutDataByRun))]
 CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
 ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]

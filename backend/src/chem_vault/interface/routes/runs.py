@@ -14,6 +14,7 @@ from chem_vault.application.screening.create_run import CreateRun, CreateRunComm
 from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
+from chem_vault.application.screening.update_run import UpdateRun, UpdateRunCommand
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -100,6 +101,11 @@ class UnlockRequest(BaseModel):
     reason: str
 
 
+class UpdateRunRequest(BaseModel):
+    qc_metrics: dict[str, Any] | None = None
+    notes: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Dependency resolvers
 # ---------------------------------------------------------------------------
@@ -131,6 +137,9 @@ def _lock_run(c: Annotated[Container, Depends(get_container)]) -> LockRun:
 
 def _unlock_run(c: Annotated[Container, Depends(get_container)]) -> UnlockRun:
     return c[UnlockRun]
+
+def _update_run(c: Annotated[Container, Depends(get_container)]) -> UpdateRun:
+    return c[UpdateRun]
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +186,25 @@ async def get_run(
     uc: Annotated[GetRun, Depends(_get_run)],
 ) -> RunResponse:
     result = await uc(run_id, auth=auth)
+    return RunResponse.from_domain(result_to_response(result))
+
+
+@router.patch("/runs/{run_id}", response_model=RunResponse)
+async def update_run(
+    run_id: uuid.UUID,
+    body: UpdateRunRequest,
+    auth: AuthDep,
+    uc: Annotated[UpdateRun, Depends(_update_run)],
+) -> RunResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateRunCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        qc_metrics=body.qc_metrics if "qc_metrics" in body.model_fields_set else UNSET,
+        notes=body.notes if "notes" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
     return RunResponse.from_domain(result_to_response(result))
 
 

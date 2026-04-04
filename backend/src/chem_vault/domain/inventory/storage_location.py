@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from chem_vault.domain.inventory.enums import VALID_PARENT_TYPES, StorageLocationType
 from chem_vault.domain.inventory.events import StorageLocationCreated
@@ -126,3 +126,45 @@ class StorageLocation(AggregateRoot):
             )
         )
         return loc
+
+    # ------------------------------------------------------------------
+    # Updates
+    # ------------------------------------------------------------------
+
+    def update(
+        self,
+        *,
+        name: str | None = None,
+        barcode: Barcode | None = ...,  # type: ignore[assignment]
+        temperature: str | None = ...,  # type: ignore[assignment]
+        rows: int | None = ...,  # type: ignore[assignment]
+        columns: int | None = ...,  # type: ignore[assignment]
+        capacity: int | None = ...,  # type: ignore[assignment]
+    ) -> None:
+        """Update mutable fields.
+
+        Type and parent_id are NOT updatable (structural change).
+        Uses sentinel ``...`` for optional nullable fields so callers can
+        explicitly pass ``None`` to clear them.
+        """
+        if name is not None:
+            if not name.strip():
+                raise ValidationError("StorageLocation name must not be empty")
+            self.name = name.strip()
+        if barcode is not ...:
+            self.barcode = barcode
+        if temperature is not ...:
+            self.temperature = temperature
+        if rows is not ...:
+            if rows is not None and rows <= 0:
+                raise ValidationError("Rows must be > 0")
+            self.rows = rows
+        if columns is not ...:
+            if columns is not None and columns <= 0:
+                raise ValidationError("Columns must be > 0")
+            self.columns = columns
+        if capacity is not ...:
+            if capacity is not None and capacity <= 0:
+                raise ValidationError("Capacity must be > 0")
+            self.capacity = capacity
+        self.updated_at = datetime.now(UTC)

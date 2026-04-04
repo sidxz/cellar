@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
+from chem_vault.application.inventory.update_batch import UpdateBatch, UpdateBatchCommand
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -77,6 +78,20 @@ class CreateBatchRequest(BaseModel):
     custom_fields: dict | None = None
 
 
+class UpdateBatchRequest(BaseModel):
+    salt_form: str | None = None
+    purity: float | None = None
+    amount_value: float | None = None
+    amount_unit: str | None = None
+    concentration_value: float | None = None
+    concentration_unit: str | None = None
+    appearance: str | None = None
+    expiry_date: date | None = None
+    notebook_reference: str | None = None
+    storage_conditions_notes: str | None = None
+    custom_fields: dict | None = None
+
+
 def _get_create_batch(container: Annotated[Container, Depends(get_container)]) -> CreateBatch:
     return container[CreateBatch]
 
@@ -85,6 +100,9 @@ def _get_batch(container: Annotated[Container, Depends(get_container)]) -> GetBa
 
 def _get_list_batches(container: Annotated[Container, Depends(get_container)]) -> ListBatchesByMolecule:
     return container[ListBatchesByMolecule]
+
+def _get_update_batch(container: Annotated[Container, Depends(get_container)]) -> UpdateBatch:
+    return container[UpdateBatch]
 
 
 @router.post("/batches", response_model=BatchResponse, status_code=201)
@@ -136,3 +154,31 @@ async def list_batches_by_molecule(
     result = await uc(molecule_id, auth=auth)
     batches = result_to_response(result)
     return [BatchResponse.from_domain(b) for b in batches]
+
+
+@router.patch("/batches/{batch_id}", response_model=BatchResponse)
+async def update_batch(
+    batch_id: uuid.UUID,
+    body: UpdateBatchRequest,
+    auth: AuthDep,
+    uc: Annotated[UpdateBatch, Depends(_get_update_batch)],
+) -> BatchResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateBatchCommand(
+        workspace_id=auth.workspace_id,
+        batch_id=batch_id,
+        salt_form=body.salt_form if "salt_form" in body.model_fields_set else UNSET,
+        purity=body.purity if "purity" in body.model_fields_set else UNSET,
+        amount_value=body.amount_value,
+        amount_unit=body.amount_unit,
+        concentration_value=body.concentration_value if "concentration_value" in body.model_fields_set else UNSET,
+        concentration_unit=body.concentration_unit if "concentration_unit" in body.model_fields_set else UNSET,
+        appearance=body.appearance if "appearance" in body.model_fields_set else UNSET,
+        expiry_date=body.expiry_date if "expiry_date" in body.model_fields_set else UNSET,
+        notebook_reference=body.notebook_reference if "notebook_reference" in body.model_fields_set else UNSET,
+        storage_conditions_notes=body.storage_conditions_notes if "storage_conditions_notes" in body.model_fields_set else UNSET,
+        custom_fields=body.custom_fields if "custom_fields" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    return BatchResponse.from_domain(result_to_response(result))

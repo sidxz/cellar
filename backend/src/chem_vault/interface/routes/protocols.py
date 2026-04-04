@@ -11,9 +11,11 @@ from pydantic import BaseModel
 
 from chem_vault.application.screening.create_protocol import CreateProtocol, CreateProtocolCommand
 from chem_vault.application.screening.create_target import CreateTarget, CreateTargetCommand
+from chem_vault.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
 from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
 from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
+from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -162,6 +164,18 @@ class CreateTargetRequest(BaseModel):
     sequence: str | None = None
 
 
+class UpdateTargetRequest(BaseModel):
+    name: str | None = None
+    target_type: str | None = None
+    organism: str | None = None
+    gene_name: str | None = None
+    uniprot_id: str | None = None
+    ncbi_gene_id: str | None = None
+    description: str | None = None
+    target_class: str | None = None
+    sequence: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Dependency resolvers
 # ---------------------------------------------------------------------------
@@ -193,6 +207,12 @@ def _get_target(c: Annotated[Container, Depends(get_container)]) -> GetTarget:
 
 def _list_targets(c: Annotated[Container, Depends(get_container)]) -> ListTargets:
     return c[ListTargets]
+
+def _get_update_target(c: Annotated[Container, Depends(get_container)]) -> UpdateTarget:
+    return c[UpdateTarget]
+
+def _get_delete_target(c: Annotated[Container, Depends(get_container)]) -> DeleteTarget:
+    return c[DeleteTarget]
 
 
 # ---------------------------------------------------------------------------
@@ -316,3 +336,39 @@ async def get_target(
 ) -> TargetResponse:
     result = await uc(target_id, auth=auth)
     return TargetResponse.from_domain(result_to_response(result))
+
+
+@router.patch("/targets/{target_id}", response_model=TargetResponse, tags=["targets"])
+async def update_target(
+    target_id: uuid.UUID,
+    body: UpdateTargetRequest,
+    auth: AuthDep,
+    uc: Annotated[UpdateTarget, Depends(_get_update_target)],
+) -> TargetResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateTargetCommand(
+        workspace_id=auth.workspace_id,
+        target_id=target_id,
+        name=body.name,
+        target_type=body.target_type,
+        organism=body.organism if "organism" in body.model_fields_set else UNSET,
+        gene_name=body.gene_name if "gene_name" in body.model_fields_set else UNSET,
+        uniprot_id=body.uniprot_id if "uniprot_id" in body.model_fields_set else UNSET,
+        ncbi_gene_id=body.ncbi_gene_id if "ncbi_gene_id" in body.model_fields_set else UNSET,
+        description=body.description if "description" in body.model_fields_set else UNSET,
+        target_class=body.target_class if "target_class" in body.model_fields_set else UNSET,
+        sequence=body.sequence if "sequence" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    return TargetResponse.from_domain(result_to_response(result))
+
+
+@router.delete("/targets/{target_id}", status_code=204, tags=["targets"])
+async def delete_target(
+    target_id: uuid.UUID,
+    auth: AuthDep,
+    uc: Annotated[DeleteTarget, Depends(_get_delete_target)],
+) -> None:
+    cmd = DeleteTargetCommand(workspace_id=auth.workspace_id, target_id=target_id)
+    result_to_response(await uc(cmd, auth=auth))

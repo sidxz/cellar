@@ -20,26 +20,37 @@ from chem_vault.application.inventory.create_sample import CreateSample
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import AliquotSample, ClearQuarantineSample, DisposeSample, MoveSample, QuarantineSample
+from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
 from chem_vault.application.inventory.manage_storage import (
     CreateStorageLocation,
     GetStorageLocationChildren,
     ListStorageLocations,
 )
+from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
+from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from chem_vault.application.screening.create_readout_data import CreateReadoutData
 from chem_vault.application.screening.create_run import CreateRun
 from chem_vault.application.screening.create_target import CreateTarget
+from chem_vault.application.screening.delete_target import DeleteTarget
 from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
 from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
 from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
 from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
+from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
+from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
+from chem_vault.application.chemical_registration.identifiers import (
+    AddIdentifier,
+    ListIdentifiers,
+    RemoveIdentifier,
+)
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
 from chem_vault.application.chemical_registration.get_merge_history import GetMergeHistory
@@ -285,6 +296,9 @@ def create_container(
     container.define(GetMolecule, _mol_query(GetMolecule))
     container.define(ListMolecules, _mol_query(ListMolecules))
     container.define(GetMoleculeByIdentifier, _mol_query(GetMoleculeByIdentifier))
+    container.define(AddIdentifier, _mol_cmd_no_proc(AddIdentifier))
+    container.define(RemoveIdentifier, _mol_cmd_no_proc(RemoveIdentifier))
+    container.define(ListIdentifiers, _mol_query(ListIdentifiers))
 
     def _search_molecules(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -451,7 +465,19 @@ def create_container(
             return uc_cls(uow, SQLAlchemyStorageLocationRepository(uow))
         return _f
 
+    def _storage_update(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateStorageLocation(uow, SQLAlchemyStorageLocationRepository(uow), c[EventDispatcher])
+
+    def _storage_delete(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteStorageLocation(
+            uow, SQLAlchemyStorageLocationRepository(uow), SQLAlchemySampleRepository(uow), c[EventDispatcher]
+        )
+
     container.define(CreateStorageLocation, _storage_cmd)
+    container.define(UpdateStorageLocation, _storage_update)
+    container.define(DeleteStorageLocation, _storage_delete)
     container.define(ListStorageLocations, _storage_query(ListStorageLocations))
     container.define(GetStorageLocationChildren, _storage_query(GetStorageLocationChildren))
 
@@ -488,6 +514,8 @@ def create_container(
         return _f
 
     container.define(CreateTarget, _target_cmd(CreateTarget))
+    container.define(UpdateTarget, _target_cmd(UpdateTarget))
+    container.define(DeleteTarget, _target_cmd(DeleteTarget))
     container.define(GetTarget, _target_query(GetTarget))
     container.define(ListTargets, _target_query(ListTargets))
 
@@ -510,6 +538,7 @@ def create_container(
     container.define(CompleteRun, _run_cmd(CompleteRun))
     container.define(ApproveRun, _run_cmd(ApproveRun))
     container.define(RejectRun, _run_cmd(RejectRun))
+    container.define(UpdateRun, _run_cmd(UpdateRun))
     container.define(LockRun, _run_cmd(LockRun))
     container.define(UnlockRun, _run_cmd(UnlockRun))
 
@@ -525,7 +554,14 @@ def create_container(
             return uc_cls(uow, SQLAlchemyReadoutDataRepository(uow))
         return _f
 
+    def _readout_bulk_create(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        run_repo = SQLAlchemyRunRepository(uow)
+        guard = DataLockGuard(run_repo)
+        return BulkCreateReadoutData(uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher])
+
     container.define(CreateReadoutData, _readout_create)
+    container.define(BulkCreateReadoutData, _readout_bulk_create)
     container.define(ListReadoutDataByRun, _readout_query(ListReadoutDataByRun))
 
     def _dose_response_create(c):  # type: ignore[no-untyped-def]

@@ -151,14 +151,55 @@ class TestListMolecules:
         resp = await client.get("/api/v1/molecules")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) >= 1
-        names = [m["name"] for m in data]
+        assert "items" in data
+        assert len(data["items"]) >= 1
+        names = [m["name"] for m in data["items"]]
         assert "Caffeine" in names
 
     async def test_list_empty_workspace(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/molecules")
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert data["items"] == []
+        assert data["next_cursor"] is None
+
+    async def test_list_with_limit(
+        self, client: AsyncClient, seed_org: str
+    ) -> None:
+        # Register two molecules
+        await client.post(
+            "/api/v1/molecules",
+            json={
+                "name": "Mol A",
+                "smiles": "C",
+                "originating_org_id": seed_org,
+            },
+        )
+        await client.post(
+            "/api/v1/molecules",
+            json={
+                "name": "Mol B",
+                "smiles": "CC",
+                "originating_org_id": seed_org,
+            },
+        )
+
+        resp = await client.get("/api/v1/molecules", params={"limit": 1})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["items"]) == 1
+        assert data["next_cursor"] is not None
+
+        # Fetch next page
+        resp2 = await client.get(
+            "/api/v1/molecules",
+            params={"cursor": data["next_cursor"], "limit": 1},
+        )
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        assert len(data2["items"]) == 1
+        # IDs should be different
+        assert data2["items"][0]["id"] != data["items"][0]["id"]
 
 
 class TestGetMolecule:

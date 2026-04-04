@@ -178,3 +178,42 @@ class Batch(AggregateRoot):
             raise ValidationError("Purity must be in range (0, 100]")
         self.purity = purity
         self.updated_at = datetime.now(UTC)
+
+    def update(
+        self,
+        *,
+        salt_form: str | None = ...,  # type: ignore[assignment]
+        purity: float | None = ...,  # type: ignore[assignment]
+        amount: Amount | None = None,
+        concentration: Concentration | None = ...,  # type: ignore[assignment]
+        appearance: str | None = ...,  # type: ignore[assignment]
+        expiry_date: date | None = ...,  # type: ignore[assignment]
+        notebook_reference: str | None = ...,  # type: ignore[assignment]
+        storage_conditions: StorageCondition | None = ...,  # type: ignore[assignment]
+        storage_conditions_notes: str | None = ...,  # type: ignore[assignment]
+        custom_fields: dict | None = ...,  # type: ignore[assignment]
+    ) -> None:
+        """Update mutable fields. Uses sentinel ``...`` for optional nullable fields."""
+        if purity is not ...:
+            if purity is not None and not (0 < purity <= 100):
+                raise ValidationError("Purity must be in range (0, 100]")
+            self.purity = purity
+        if salt_form is not ...:
+            self.salt_form = salt_form
+        if amount is not None:
+            self.amount = amount
+        if concentration is not ...:
+            self.concentration = concentration
+        if appearance is not ...:
+            self.appearance = appearance
+        if expiry_date is not ...:
+            self.expiry_date = expiry_date
+        if notebook_reference is not ...:
+            self.notebook_reference = notebook_reference
+        if storage_conditions is not ...:
+            self.storage_conditions = storage_conditions
+        if storage_conditions_notes is not ...:
+            self.storage_conditions_notes = storage_conditions_notes
+        if custom_fields is not ...:
+            self.custom_fields = custom_fields
+        self.updated_at = datetime.now(UTC)

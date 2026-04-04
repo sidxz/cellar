@@ -9,6 +9,11 @@ from fastapi import APIRouter, Depends, Query
 from lagom import Container
 from pydantic import BaseModel
 
+from chem_vault.application.screening.bulk_create_readout_data import (
+    BulkCreateReadoutData,
+    BulkCreateReadoutDataCommand,
+    ReadoutDataItem,
+)
 from chem_vault.application.screening.create_dose_response import (
     CreateDoseResponseCurve,
     CreateDoseResponseCurveCommand,
@@ -123,6 +128,17 @@ class CreateReadoutDataRequest(BaseModel):
     is_outlier: bool = False
 
 
+class BulkReadoutDataRequest(BaseModel):
+    items: list[CreateReadoutDataRequest]
+
+
+class BulkReadoutDataResponse(BaseModel):
+    total_count: int
+    success_count: int
+    error_count: int
+    errors: list[dict] = []
+
+
 class CreateDoseResponseCurveRequest(BaseModel):
     molecule_id: uuid.UUID
     batch_id: uuid.UUID
@@ -150,6 +166,9 @@ class CreateDoseResponseCurveRequest(BaseModel):
 
 def _create_readout(c: Annotated[Container, Depends(get_container)]) -> CreateReadoutData:
     return c[CreateReadoutData]
+
+def _bulk_create_readout(c: Annotated[Container, Depends(get_container)]) -> BulkCreateReadoutData:
+    return c[BulkCreateReadoutData]
 
 def _list_readout(c: Annotated[Container, Depends(get_container)]) -> ListReadoutDataByRun:
     return c[ListReadoutDataByRun]
@@ -186,6 +205,39 @@ async def create_readout_data(
     )
     result = await uc(cmd, auth=auth)
     return ReadoutDataResponse.from_domain(result_to_response(result))
+
+
+@router.post("/readout-data/bulk", response_model=BulkReadoutDataResponse, status_code=201)
+async def bulk_create_readout_data(
+    auth: AuthDep,
+    body: BulkReadoutDataRequest,
+    uc: Annotated[BulkCreateReadoutData, Depends(_bulk_create_readout)],
+) -> BulkReadoutDataResponse:
+    cmd = BulkCreateReadoutDataCommand(
+        workspace_id=auth.workspace_id,
+        items=[
+            ReadoutDataItem(
+                run_id=item.run_id,
+                well_id=item.well_id,
+                molecule_id=item.molecule_id,
+                batch_id=item.batch_id,
+                readout_definition_id=item.readout_definition_id,
+                value_numeric=item.value_numeric,
+                value_qualifier=item.value_qualifier,
+                value_text=item.value_text,
+                is_outlier=item.is_outlier,
+            )
+            for item in body.items
+        ],
+    )
+    result = await uc(cmd, auth=auth)
+    data = result_to_response(result)
+    return BulkReadoutDataResponse(
+        total_count=data.total_count,
+        success_count=data.success_count,
+        error_count=data.error_count,
+        errors=data.errors,
+    )
 
 
 @router.get("/readout-data", response_model=list[ReadoutDataResponse])

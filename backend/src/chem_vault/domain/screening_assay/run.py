@@ -323,6 +323,21 @@ class Run(AggregateRoot):
     # Data modification (lock-guarded)
     # ------------------------------------------------------------------
 
+    def update(self, **fields: Any) -> None:
+        """Partial update of mutable fields. Blocked when run is locked.
+
+        Supported fields: qc_metrics, notes.
+        """
+        self._guard_not_locked()
+        for key, value in fields.items():
+            if key == "qc_metrics":
+                self.qc_metrics = value
+            elif key == "notes":
+                self.notes = value
+            else:
+                raise ValidationError(f"Cannot update field '{key}' on Run")
+        self.updated_at = datetime.now(UTC)
+
     def record_qc_metrics(self, metrics: dict[str, Any]) -> None:
         """Update QC metrics. Blocked when run is locked."""
         self._guard_not_locked()

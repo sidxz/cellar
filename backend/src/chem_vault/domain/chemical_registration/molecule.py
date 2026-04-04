@@ -467,6 +467,15 @@ class Molecule(AggregateRoot):
         self.identifiers.append(identifier)
         self.updated_at = datetime.now(UTC)
 
+    def remove_identifier(self, identifier_id: uuid.UUID) -> None:
+        """Remove an identifier by ID."""
+        self._guard_tombstone()
+        original_count = len(self.identifiers)
+        self.identifiers = [i for i in self.identifiers if i.id != identifier_id]
+        if len(self.identifiers) == original_count:
+            raise ValidationError(f"Identifier {identifier_id} not found on this molecule")
+        self.updated_at = datetime.now(UTC)
+
     # ------------------------------------------------------------------
     # Mutations — mixture components
     # ------------------------------------------------------------------

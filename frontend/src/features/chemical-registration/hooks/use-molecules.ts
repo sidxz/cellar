@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import type { PaginatedResponse } from "@/shared/types/pagination";
 import type {
   Molecule,
   RegisterMoleculeInput,
@@ -18,12 +19,14 @@ export function useMolecules(filters?: {
 }) {
   return useQuery({
     queryKey: [...MOLECULES_KEY, filters],
-    queryFn: () =>
-      customInstance<Molecule[]>({
+    queryFn: async () => {
+      const page = await customInstance<PaginatedResponse<Molecule>>({
         url: "/api/v1/molecules",
         method: "GET",
         params: filters,
-      }),
+      });
+      return page.items;
+    },
   });
 }
 

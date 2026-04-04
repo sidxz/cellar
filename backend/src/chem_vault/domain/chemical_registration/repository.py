@@ -33,7 +33,12 @@ class MoleculeRepository(Protocol):
     ) -> Molecule | None: ...
 
     async def find_active(
-        self, workspace_id: uuid.UUID, *, filters: dict[str, Any] | None = None
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        filters: dict[str, Any] | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Molecule]: ...
 
     async def next_registration_number(

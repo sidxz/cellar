@@ -310,7 +310,12 @@ class SQLAlchemyMoleculeRepository(
         return domain
 
     async def find_active(
-        self, workspace_id: uuid.UUID, *, filters: dict[str, Any] | None = None
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        filters: dict[str, Any] | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Molecule]:
         stmt = select(MoleculeModel).where(
             MoleculeModel.workspace_id == workspace_id,
@@ -324,7 +329,16 @@ class SQLAlchemyMoleculeRepository(
                 stmt = stmt.where(MoleculeModel.lifecycle_stage == filters["lifecycle_stage"])
             if "structure_status" in filters and filters["structure_status"]:
                 stmt = stmt.where(MoleculeModel.structure_status == filters["structure_status"])
-        stmt = stmt.order_by(MoleculeModel.registration_number)
+
+        # Deterministic ordering by PK for stable cursor pagination
+        stmt = stmt.order_by(MoleculeModel.id)
+
+        if cursor_id is not None:
+            stmt = stmt.where(MoleculeModel.id > cursor_id)
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
 
