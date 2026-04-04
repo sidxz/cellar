@@ -4,6 +4,7 @@ import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import { Header } from "@/shared/components/layout/header";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { usePreferencesSync } from "@/shared/hooks/use-preferences-sync";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -23,6 +24,7 @@ function DashboardSkeleton() {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthz();
   const router = useRouter();
+  usePreferencesSync();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

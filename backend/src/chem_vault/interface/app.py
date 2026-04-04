@@ -61,6 +61,11 @@ def create_app() -> FastAPI:
     # Domain error → HTTP response mapping
     register_error_handlers(app)
 
+    # Routes
+    from chem_vault.interface.routes.user import router as user_router
+
+    app.include_router(user_router)
+
     # Health check (unauthenticated)
     @app.get("/health")
     async def health() -> dict[str, str]:
