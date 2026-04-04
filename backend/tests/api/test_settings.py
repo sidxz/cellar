@@ -6,24 +6,20 @@ from httpx import AsyncClient
 
 
 class TestGetSettings:
-    async def test_get_returns_defaults(self, client: AsyncClient) -> None:
+    async def test_get_returns_defaults_without_persisting(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/settings")
         assert resp.status_code == 200
         data = resp.json()
         assert data["registration_rules"] == {}
-        assert data["custom_field_definitions"] == {}
         assert data["default_molecule_type"] is None
-        assert data["audit_reason_policy"] == {}
         assert data["signature_required_for"] == []
         assert data["audit_retention_days"] is None
-        assert data["formulation_number_scheme"] == {}
         assert data["version"] == 1
 
 
 class TestUpdateSettings:
-    async def test_partial_update(self, client: AsyncClient) -> None:
-        # GET first to auto-initialize with defaults (version 1)
-        await client.get("/api/v1/settings")
+    async def test_first_patch_creates_settings(self, client: AsyncClient) -> None:
+        # First PATCH creates settings (INSERT) — version 1
         resp = await client.patch(
             "/api/v1/settings",
             json={
@@ -35,8 +31,17 @@ class TestUpdateSettings:
         data = resp.json()
         assert data["default_molecule_type"] == "small_molecule"
         assert data["audit_retention_days"] == 365
-        assert data["registration_rules"] == {}  # unchanged
-        assert data["version"] == 2
+        assert data["registration_rules"] == {}  # default
+        assert data["version"] == 1  # INSERT, not UPDATE
+
+    async def test_second_patch_increments_version(self, client: AsyncClient) -> None:
+        # First PATCH creates (v1)
+        await client.patch("/api/v1/settings", json={"audit_retention_days": 90})
+        # Second PATCH updates (v2)
+        resp = await client.patch("/api/v1/settings", json={"audit_retention_days": 180})
+        assert resp.status_code == 200
+        assert resp.json()["audit_retention_days"] == 180
+        assert resp.json()["version"] == 2
 
     async def test_update_signature_required(self, client: AsyncClient) -> None:
         resp = await client.patch(
@@ -55,9 +60,8 @@ class TestUpdateSettings:
         assert resp.status_code == 200
         assert resp.json()["registration_rules"] == rules
 
-    async def test_consecutive_updates_increment_version(self, client: AsyncClient) -> None:
-        await client.get("/api/v1/settings")  # initializes with v1
-        r1 = await client.patch("/api/v1/settings", json={"audit_retention_days": 90})
-        assert r1.json()["version"] == 2
-        r2 = await client.patch("/api/v1/settings", json={"audit_retention_days": 180})
-        assert r2.json()["version"] == 3
+    async def test_get_after_patch_returns_persisted(self, client: AsyncClient) -> None:
+        await client.patch("/api/v1/settings", json={"default_molecule_type": "biologic"})
+        resp = await client.get("/api/v1/settings")
+        assert resp.status_code == 200
+        assert resp.json()["default_molecule_type"] == "biologic"

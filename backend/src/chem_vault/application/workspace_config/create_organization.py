@@ -7,12 +7,14 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import ConflictError, DomainError
 from chem_vault.domain.workspace_config.enums import OrganizationType
 from chem_vault.domain.workspace_config.organization import Organization
 from chem_vault.domain.workspace_config.repository import OrganizationRepository
-from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -26,13 +28,21 @@ class CreateOrganizationCommand(Command):
 
 
 class CreateOrganization:
-    def __init__(self, uow: UnitOfWork, repo: OrganizationRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: OrganizationRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: CreateOrganizationCommand
+        self, input: CreateOrganizationCommand, auth: AuthContext | None = None
     ) -> Result[Organization, DomainError]:
+        require_editor(auth)
+
         async with self._uow:
             existing = await self._repo.find_by_name(input.workspace_id, input.name.strip())
             if existing is not None:
@@ -49,5 +59,6 @@ class CreateOrganization:
                 notes=input.notes,
             )
             await self._repo.save(org)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(org)

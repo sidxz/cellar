@@ -12,8 +12,6 @@ from datetime import UTC, datetime
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.workspace_config.events import WorkspaceSettingsUpdated
 
-_SENTINEL = object()
-
 
 class WorkspaceSettings(AggregateRoot):
     """Workspace-level domain configuration.
@@ -56,32 +54,20 @@ class WorkspaceSettings(AggregateRoot):
         """Factory for a new workspace with all default settings."""
         return cls(id=workspace_id)
 
-    def update(
-        self,
-        *,
-        registration_rules: dict | object = _SENTINEL,
-        custom_field_definitions: dict | object = _SENTINEL,
-        default_molecule_type: str | None | object = _SENTINEL,
-        audit_reason_policy: dict | object = _SENTINEL,
-        signature_required_for: list[str] | object = _SENTINEL,
-        audit_retention_days: int | None | object = _SENTINEL,
-        formulation_number_scheme: dict | object = _SENTINEL,
-    ) -> None:
-        """Partial update — only provided fields are changed."""
-        if registration_rules is not _SENTINEL:
-            self.registration_rules = registration_rules  # type: ignore[assignment]
-        if custom_field_definitions is not _SENTINEL:
-            self.custom_field_definitions = custom_field_definitions  # type: ignore[assignment]
-        if default_molecule_type is not _SENTINEL:
-            self.default_molecule_type = default_molecule_type  # type: ignore[assignment]
-        if audit_reason_policy is not _SENTINEL:
-            self.audit_reason_policy = audit_reason_policy  # type: ignore[assignment]
-        if signature_required_for is not _SENTINEL:
-            self.signature_required_for = signature_required_for  # type: ignore[assignment]
-        if audit_retention_days is not _SENTINEL:
-            self.audit_retention_days = audit_retention_days  # type: ignore[assignment]
-        if formulation_number_scheme is not _SENTINEL:
-            self.formulation_number_scheme = formulation_number_scheme  # type: ignore[assignment]
+    def update(self, **fields: object) -> None:
+        """Partial update — only keys present in ``fields`` are changed.
+
+        Accepted keys: registration_rules, custom_field_definitions,
+        default_molecule_type, audit_reason_policy, signature_required_for,
+        audit_retention_days, formulation_number_scheme.
+        """
+        for key in (
+            "registration_rules", "custom_field_definitions", "default_molecule_type",
+            "audit_reason_policy", "signature_required_for", "audit_retention_days",
+            "formulation_number_scheme",
+        ):
+            if key in fields:
+                setattr(self, key, fields[key])
         self.updated_at = datetime.now(UTC)
         self.register_event(
             WorkspaceSettingsUpdated(

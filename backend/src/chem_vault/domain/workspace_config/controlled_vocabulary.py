@@ -101,10 +101,12 @@ class ControlledVocabulary(AggregateRoot):
     def lock(self) -> None:
         self.is_locked = True
         self.updated_at = datetime.now(UTC)
+        self._emit_updated()
 
     def unlock(self) -> None:
         self.is_locked = False
         self.updated_at = datetime.now(UTC)
+        self._emit_updated()
 
     def _emit_updated(self) -> None:
         self.register_event(

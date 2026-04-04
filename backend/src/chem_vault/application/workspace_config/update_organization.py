@@ -7,12 +7,15 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
+from chem_vault.application.shared.sentinel import UNSET
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from chem_vault.domain.workspace_config.enums import OrganizationType
-from chem_vault.domain.workspace_config.organization import Organization, _SENTINEL
+from chem_vault.domain.workspace_config.organization import Organization
 from chem_vault.domain.workspace_config.repository import OrganizationRepository
-from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -21,19 +24,27 @@ class UpdateOrganizationCommand(Command):
     org_id: uuid.UUID
     name: str | None = None
     org_type: OrganizationType | None = None
-    contact_name: str | None | object = _SENTINEL
-    contact_email: str | None | object = _SENTINEL
-    notes: str | None | object = _SENTINEL
+    contact_name: str | None | object = UNSET
+    contact_email: str | None | object = UNSET
+    notes: str | None | object = UNSET
 
 
 class UpdateOrganization:
-    def __init__(self, uow: UnitOfWork, repo: OrganizationRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: OrganizationRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: UpdateOrganizationCommand
+        self, input: UpdateOrganizationCommand, auth: AuthContext | None = None
     ) -> Result[Organization, DomainError]:
+        require_editor(auth)
+
         async with self._uow:
             org = await self._repo.find_by_id(input.org_id)
             if org is None or org.workspace_id != input.workspace_id:
@@ -49,13 +60,22 @@ class UpdateOrganization:
                         ConflictError(f"Organization '{input.name.strip()}' already exists")
                     )
 
-            org.update(
-                name=input.name if input.name is not None else _SENTINEL,
-                org_type=input.org_type if input.org_type is not None else _SENTINEL,
-                contact_name=input.contact_name,
-                contact_email=input.contact_email,
-                notes=input.notes,
-            )
+            # Build kwargs dict — only include fields that were provided
+            fields: dict[str, object] = {}
+            if input.name is not None:
+                fields["name"] = input.name
+            if input.org_type is not None:
+                fields["org_type"] = input.org_type
+            if input.contact_name is not UNSET:
+                fields["contact_name"] = input.contact_name
+            if input.contact_email is not UNSET:
+                fields["contact_email"] = input.contact_email
+            if input.notes is not UNSET:
+                fields["notes"] = input.notes
+
+            if fields:
+                org.update(**fields)
             await self._repo.save(org)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(org)

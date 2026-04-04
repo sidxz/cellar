@@ -114,38 +114,54 @@ def create_container(
     )
 
     # --- Workspace Config ---
-    # Each use case gets a shared UoW + repo pair (repo uses the same UoW as the use case).
+    # Each use case gets a shared UoW + repo pair.
+    # Command use cases also get the event dispatcher.
 
-    def _org_use_case(uc_cls):  # type: ignore[no-untyped-def]
-        def _factory(c):  # type: ignore[no-untyped-def]
+    def _org_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            repo = SQLAlchemyOrganizationRepository(uow)
-            return uc_cls(uow, repo)
-        return _factory
+            return uc_cls(uow, SQLAlchemyOrganizationRepository(uow), c[EventDispatcher])
+        return _f
 
-    def _settings_use_case(uc_cls):  # type: ignore[no-untyped-def]
-        def _factory(c):  # type: ignore[no-untyped-def]
+    def _org_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            repo = SQLAlchemyWorkspaceSettingsRepository(uow)
-            return uc_cls(uow, repo)
-        return _factory
+            return uc_cls(uow, SQLAlchemyOrganizationRepository(uow))
+        return _f
 
-    def _vocab_use_case(uc_cls):  # type: ignore[no-untyped-def]
-        def _factory(c):  # type: ignore[no-untyped-def]
+    def _settings_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            repo = SQLAlchemyControlledVocabularyRepository(uow)
-            return uc_cls(uow, repo)
-        return _factory
+            return uc_cls(uow, SQLAlchemyWorkspaceSettingsRepository(uow), c[EventDispatcher])
+        return _f
 
-    container.define(CreateOrganization, _org_use_case(CreateOrganization))
-    container.define(UpdateOrganization, _org_use_case(UpdateOrganization))
-    container.define(GetOrganization, _org_use_case(GetOrganization))
-    container.define(ListOrganizations, _org_use_case(ListOrganizations))
-    container.define(GetWorkspaceSettings, _settings_use_case(GetWorkspaceSettings))
-    container.define(UpdateWorkspaceSettings, _settings_use_case(UpdateWorkspaceSettings))
-    container.define(CreateVocabulary, _vocab_use_case(CreateVocabulary))
-    container.define(UpdateVocabulary, _vocab_use_case(UpdateVocabulary))
-    container.define(ListVocabularies, _vocab_use_case(ListVocabularies))
-    container.define(DeleteVocabulary, _vocab_use_case(DeleteVocabulary))
+    def _settings_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyWorkspaceSettingsRepository(uow))
+        return _f
+
+    def _vocab_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyControlledVocabularyRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _vocab_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyControlledVocabularyRepository(uow))
+        return _f
+
+    container.define(CreateOrganization, _org_cmd(CreateOrganization))
+    container.define(UpdateOrganization, _org_cmd(UpdateOrganization))
+    container.define(GetOrganization, _org_query(GetOrganization))
+    container.define(ListOrganizations, _org_query(ListOrganizations))
+    container.define(GetWorkspaceSettings, _settings_query(GetWorkspaceSettings))
+    container.define(UpdateWorkspaceSettings, _settings_cmd(UpdateWorkspaceSettings))
+    container.define(CreateVocabulary, _vocab_cmd(CreateVocabulary))
+    container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
+    container.define(ListVocabularies, _vocab_query(ListVocabularies))
+    container.define(DeleteVocabulary, _vocab_query(DeleteVocabulary))
 
     return container

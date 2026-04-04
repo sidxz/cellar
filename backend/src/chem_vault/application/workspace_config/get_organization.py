@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.shared.query import Query
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 from chem_vault.domain.workspace_config.organization import Organization
 from chem_vault.domain.workspace_config.repository import OrganizationRepository
-from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)

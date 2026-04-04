@@ -79,7 +79,7 @@ async def create_vocabulary(
         terms=body.terms,
         created_by=auth.user_id,
     )
-    vocab = result_to_response(await use_case(command))
+    vocab = result_to_response(await use_case(command, auth=auth))
     return VocabularyResponse.from_domain(vocab)
 
 
@@ -97,7 +97,7 @@ async def update_vocabulary(
         terms=body.terms,
         is_locked=body.is_locked,
     )
-    vocab = result_to_response(await use_case(command))
+    vocab = result_to_response(await use_case(command, auth=auth))
     return VocabularyResponse.from_domain(vocab)
 
 
@@ -110,4 +110,4 @@ async def delete_vocabulary(
     command = DeleteVocabularyCommand(
         workspace_id=auth.workspace_id, vocab_id=vocab_id
     )
-    result_to_response(await use_case(command))
+    result_to_response(await use_case(command, auth=auth))

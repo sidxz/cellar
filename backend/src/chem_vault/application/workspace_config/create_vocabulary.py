@@ -7,11 +7,13 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import ConflictError, DomainError
 from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
-from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -23,13 +25,21 @@ class CreateVocabularyCommand(Command):
 
 
 class CreateVocabulary:
-    def __init__(self, uow: UnitOfWork, repo: ControlledVocabularyRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ControlledVocabularyRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: CreateVocabularyCommand
+        self, input: CreateVocabularyCommand, auth: AuthContext | None = None
     ) -> Result[ControlledVocabulary, DomainError]:
+        require_editor(auth)
+
         async with self._uow:
             existing = await self._repo.find_by_name(input.workspace_id, input.name.strip())
             if existing is not None:
@@ -44,5 +54,6 @@ class CreateVocabulary:
                 created_by=input.created_by,
             )
             await self._repo.save(vocab)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(vocab)

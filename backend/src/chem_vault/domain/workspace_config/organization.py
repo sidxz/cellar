@@ -14,9 +14,6 @@ from chem_vault.domain.workspace_config.events import (
     OrganizationUpdated,
 )
 
-_SENTINEL = object()
-
-
 class Organization(AggregateRoot):
     """A company, institution, or lab participating in the compound lifecycle.
 
@@ -79,28 +76,24 @@ class Organization(AggregateRoot):
         )
         return org
 
-    def update(
-        self,
-        *,
-        name: str | object = _SENTINEL,
-        org_type: OrganizationType | object = _SENTINEL,
-        contact_name: str | None | object = _SENTINEL,
-        contact_email: str | None | object = _SENTINEL,
-        notes: str | None | object = _SENTINEL,
-    ) -> None:
-        """Partial update — only provided fields are changed."""
-        if name is not _SENTINEL:
+    def update(self, **fields: object) -> None:
+        """Partial update — only keys present in ``fields`` are changed.
+
+        Accepted keys: name, org_type, contact_name, contact_email, notes.
+        """
+        if "name" in fields:
+            name = fields["name"]
             if not name or not str(name).strip():
                 raise ValidationError("Organization name must not be empty")
             self.name = str(name).strip()
-        if org_type is not _SENTINEL:
-            self.org_type = org_type  # type: ignore[assignment]
-        if contact_name is not _SENTINEL:
-            self.contact_name = contact_name  # type: ignore[assignment]
-        if contact_email is not _SENTINEL:
-            self.contact_email = contact_email  # type: ignore[assignment]
-        if notes is not _SENTINEL:
-            self.notes = notes  # type: ignore[assignment]
+        if "org_type" in fields:
+            self.org_type = fields["org_type"]  # type: ignore[assignment]
+        if "contact_name" in fields:
+            self.contact_name = fields["contact_name"]  # type: ignore[assignment]
+        if "contact_email" in fields:
+            self.contact_email = fields["contact_email"]  # type: ignore[assignment]
+        if "notes" in fields:
+            self.notes = fields["notes"]  # type: ignore[assignment]
         self.updated_at = datetime.now(UTC)
         self.register_event(
             OrganizationUpdated(

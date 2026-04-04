@@ -7,10 +7,11 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
-from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,8 +26,10 @@ class DeleteVocabulary:
         self._repo = repo
 
     async def __call__(
-        self, input: DeleteVocabularyCommand
+        self, input: DeleteVocabularyCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
+        require_editor(auth)
+
         async with self._uow:
             vocab = await self._repo.find_by_id(input.vocab_id)
             if vocab is None or vocab.workspace_id != input.workspace_id:

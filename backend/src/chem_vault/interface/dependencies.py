@@ -30,6 +30,7 @@ from chem_vault.application.workspace_config.list_vocabularies import ListVocabu
 from chem_vault.application.workspace_config.update_organization import UpdateOrganization
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.sentinel.auth import get_sentinel
@@ -88,7 +89,7 @@ async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
 
 # Convenience type aliases for route handler signatures
 AuthDep = Annotated[Any, Depends(get_auth)]
-UoWDep = Annotated[AsyncUnitOfWork, Depends(get_uow)]
+UoWDep = Annotated[UnitOfWork, Depends(get_uow)]
 EventDispatcherDep = Annotated[EventDispatcher, Depends(get_event_dispatcher)]
 AuditServiceDep = Annotated[AuditRecordingService, Depends(get_audit_service)]
 GetPreferencesDep = Annotated[GetPreferences, Depends(get_preferences_query)]

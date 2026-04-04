@@ -5,13 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.application.workspace_config.get_workspace_settings import (
     GetWorkspaceSettingsQuery,
 )
 from chem_vault.application.workspace_config.update_workspace_settings import (
     UpdateWorkspaceSettingsCommand,
 )
-from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings, _SENTINEL
+from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
 from chem_vault.interface.dependencies import (
     AuthDep,
     GetWorkspaceSettingsDep,
@@ -49,13 +50,13 @@ class WorkspaceSettingsResponse(BaseModel):
 class UpdateWorkspaceSettingsBody(BaseModel):
     registration_rules: dict | None = None
     custom_field_definitions: dict | None = None
-    default_molecule_type: str | None | object = _SENTINEL
+    default_molecule_type: str | None = None
     audit_reason_policy: dict | None = None
     signature_required_for: list[str] | None = None
-    audit_retention_days: int | None | object = _SENTINEL
+    audit_retention_days: int | None = None
     formulation_number_scheme: dict | None = None
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = {"extra": "forbid"}
 
 
 @router.get("", response_model=WorkspaceSettingsResponse)
@@ -74,15 +75,18 @@ async def update_settings(
     auth: AuthDep,
     use_case: UpdateWorkspaceSettingsDep,
 ) -> WorkspaceSettingsResponse:
+    provided = body.model_fields_set
     command = UpdateWorkspaceSettingsCommand(
         workspace_id=auth.workspace_id,
-        registration_rules=body.registration_rules if body.registration_rules is not None else _SENTINEL,
-        custom_field_definitions=body.custom_field_definitions if body.custom_field_definitions is not None else _SENTINEL,
-        default_molecule_type=body.default_molecule_type,
-        audit_reason_policy=body.audit_reason_policy if body.audit_reason_policy is not None else _SENTINEL,
-        signature_required_for=body.signature_required_for if body.signature_required_for is not None else _SENTINEL,
-        audit_retention_days=body.audit_retention_days,
-        formulation_number_scheme=body.formulation_number_scheme if body.formulation_number_scheme is not None else _SENTINEL,
+        **{
+            key: getattr(body, key)
+            for key in (
+                "registration_rules", "custom_field_definitions", "default_molecule_type",
+                "audit_reason_policy", "signature_required_for", "audit_retention_days",
+                "formulation_number_scheme",
+            )
+            if key in provided
+        },
     )
-    settings = result_to_response(await use_case(command))
+    settings = result_to_response(await use_case(command, auth=auth))
     return WorkspaceSettingsResponse.from_domain(settings)

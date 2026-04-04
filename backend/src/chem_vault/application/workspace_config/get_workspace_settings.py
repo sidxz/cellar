@@ -1,4 +1,4 @@
-"""GetWorkspaceSettings query — retrieve or initialize default settings."""
+"""GetWorkspaceSettings query — retrieve settings or return defaults (no hidden write)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from chem_vault.application.shared.query import Query
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.workspace_config.repository import WorkspaceSettingsRepository
 from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
-from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,8 +30,7 @@ class GetWorkspaceSettings:
         async with self._uow:
             settings = await self._repo.find_by_id(input.workspace_id)
             if settings is None:
-                # Auto-initialize with defaults on first access
+                # Return in-memory defaults — no hidden write.
+                # Settings are persisted on first explicit PATCH.
                 settings = WorkspaceSettings.create_default(workspace_id=input.workspace_id)
-                await self._repo.save(settings)
-                await self._uow.commit()
             return Success(settings)
