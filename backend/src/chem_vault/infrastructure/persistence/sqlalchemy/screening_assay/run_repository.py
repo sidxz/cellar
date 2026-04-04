@@ -1,0 +1,251 @@
+"""SQLAlchemy repository for Run aggregates."""
+
+from __future__ import annotations
+
+import uuid
+
+from sqlalchemy import select
+
+from chem_vault.domain.screening_assay.enums import (
+    PlateFormat,
+    RunRelationshipType,
+    RunStatus,
+    WellType,
+)
+from chem_vault.domain.screening_assay.run import Plate, Run, Well
+from chem_vault.domain.shared.enums import ConcentrationUnit
+from chem_vault.domain.shared.value_objects import Barcode, Concentration
+from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
+    SQLAlchemyRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    PlateModel,
+    RunModel,
+    WellModel,
+)
+
+
+class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
+    model_class = RunModel
+
+    # ------------------------------------------------------------------
+    # Custom query methods
+    # ------------------------------------------------------------------
+
+    async def find_by_protocol(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[Run]:
+        """List all runs for a protocol in a workspace, newest first."""
+        stmt = (
+            select(RunModel)
+            .where(
+                RunModel.workspace_id == workspace_id,
+                RunModel.protocol_id == protocol_id,
+            )
+            .order_by(RunModel.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        runs = []
+        for model in result.scalars().all():
+            domain = self._to_domain(model)
+            self._uow.track(domain)
+            runs.append(domain)
+        return runs
+
+    async def find_children(
+        self, workspace_id: uuid.UUID, parent_run_id: uuid.UUID
+    ) -> list[Run]:
+        """Find all child runs of a parent run."""
+        stmt = (
+            select(RunModel)
+            .where(
+                RunModel.workspace_id == workspace_id,
+                RunModel.parent_run_id == parent_run_id,
+            )
+            .order_by(RunModel.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        runs = []
+        for model in result.scalars().all():
+            domain = self._to_domain(model)
+            self._uow.track(domain)
+            runs.append(domain)
+        return runs
+
+    async def is_locked(self, run_id: uuid.UUID) -> bool:
+        """Efficient lock check — selects only the is_locked column."""
+        stmt = select(RunModel.is_locked).where(RunModel.id == run_id)
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            return False
+        return bool(row)
+
+    # ------------------------------------------------------------------
+    # Mapping: SA model <-> domain aggregate
+    # ------------------------------------------------------------------
+
+    def _to_domain(self, model: RunModel) -> Run:
+        # Build plates with nested wells
+        plates: list[Plate] = []
+        all_wells: list[Well] = []
+
+        for pm in model.plates:
+            plate = Plate(
+                id=pm.id,
+                run_id=pm.run_id,
+                plate_number=pm.plate_number,
+                barcode=Barcode(value=pm.barcode) if pm.barcode else None,
+                format=PlateFormat(pm.format) if pm.format else None,
+                plate_map=pm.plate_map,
+                parent_plate_id=pm.parent_plate_id,
+                template_id=pm.template_id,
+                created_at=pm.created_at,
+                updated_at=pm.updated_at,
+            )
+            plates.append(plate)
+
+            for wm in pm.wells:
+                concentration = None
+                if wm.concentration_value is not None and wm.concentration_unit is not None:
+                    concentration = Concentration(
+                        value=wm.concentration_value,
+                        unit=ConcentrationUnit(wm.concentration_unit),
+                    )
+                well = Well(
+                    id=wm.id,
+                    plate_id=wm.plate_id,
+                    row=wm.row,
+                    column=wm.column,
+                    well_type=WellType(wm.well_type),
+                    batch_id=wm.batch_id,
+                    concentration=concentration,
+                    created_at=wm.created_at,
+                    updated_at=wm.updated_at,
+                )
+                all_wells.append(well)
+
+        return Run(
+            id=model.id,
+            workspace_id=model.workspace_id,
+            protocol_id=model.protocol_id,
+            run_date=model.run_date,
+            operator=model.operator,
+            performed_at_org_id=model.performed_at_org_id,
+            status=RunStatus(model.status),
+            parent_run_id=model.parent_run_id,
+            run_relationship_type=(
+                RunRelationshipType(model.run_relationship_type)
+                if model.run_relationship_type
+                else None
+            ),
+            plate_format=PlateFormat(model.plate_format) if model.plate_format else None,
+            conditions=model.conditions,
+            qc_metrics=model.qc_metrics,
+            is_locked=model.is_locked,
+            locked_at=model.locked_at,
+            locked_by=model.locked_by,
+            lock_reason=model.lock_reason,
+            notes=model.notes,
+            eln_entry_id=model.eln_entry_id,
+            plates=plates,
+            wells=all_wells,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+            version=model.version,
+        )
+
+    def _to_model(self, aggregate: Run) -> RunModel:
+        model = RunModel(
+            id=aggregate.id,
+            workspace_id=aggregate.workspace_id,
+            protocol_id=aggregate.protocol_id,
+            run_date=aggregate.run_date,
+            operator=aggregate.operator,
+            performed_at_org_id=aggregate.performed_at_org_id,
+            status=aggregate.status.value,
+            parent_run_id=aggregate.parent_run_id,
+            run_relationship_type=(
+                aggregate.run_relationship_type.value
+                if aggregate.run_relationship_type
+                else None
+            ),
+            plate_format=aggregate.plate_format.value if aggregate.plate_format else None,
+            conditions=aggregate.conditions,
+            qc_metrics=aggregate.qc_metrics,
+            is_locked=aggregate.is_locked,
+            locked_at=aggregate.locked_at,
+            locked_by=aggregate.locked_by,
+            lock_reason=aggregate.lock_reason,
+            notes=aggregate.notes,
+            eln_entry_id=aggregate.eln_entry_id,
+            version=aggregate.version,
+        )
+
+        # Build well lookup by plate_id
+        wells_by_plate: dict[uuid.UUID, list[Well]] = {}
+        for w in aggregate.wells:
+            wells_by_plate.setdefault(w.plate_id, []).append(w)
+
+        model.plates = [
+            self._plate_to_model(p, wells_by_plate.get(p.id, []))
+            for p in aggregate.plates
+        ]
+        return model
+
+    def _update_model(self, model: RunModel, aggregate: Run) -> None:
+        model.status = aggregate.status.value
+        model.conditions = aggregate.conditions
+        model.qc_metrics = aggregate.qc_metrics
+        model.is_locked = aggregate.is_locked
+        model.locked_at = aggregate.locked_at
+        model.locked_by = aggregate.locked_by
+        model.lock_reason = aggregate.lock_reason
+        model.notes = aggregate.notes
+        model.eln_entry_id = aggregate.eln_entry_id
+
+        # Rebuild plate/well collections
+        wells_by_plate: dict[uuid.UUID, list[Well]] = {}
+        for w in aggregate.wells:
+            wells_by_plate.setdefault(w.plate_id, []).append(w)
+
+        model.plates = [
+            self._plate_to_model(p, wells_by_plate.get(p.id, []))
+            for p in aggregate.plates
+        ]
+
+    # ------------------------------------------------------------------
+    # Owned entity mapping helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _plate_to_model(plate: Plate, wells: list[Well]) -> PlateModel:
+        pm = PlateModel(
+            id=plate.id,
+            run_id=plate.run_id,
+            plate_number=plate.plate_number,
+            barcode=plate.barcode.value if plate.barcode else None,
+            format=plate.format.value if plate.format else None,
+            plate_map=plate.plate_map,
+            parent_plate_id=plate.parent_plate_id,
+            template_id=plate.template_id,
+        )
+        pm.wells = [SQLAlchemyRunRepository._well_to_model(w) for w in wells]
+        return pm
+
+    @staticmethod
+    def _well_to_model(well: Well) -> WellModel:
+        return WellModel(
+            id=well.id,
+            plate_id=well.plate_id,
+            row=well.row,
+            column=well.column,
+            well_type=well.well_type.value,
+            batch_id=well.batch_id,
+            concentration_value=(
+                well.concentration.value if well.concentration else None
+            ),
+            concentration_unit=(
+                well.concentration.unit.value if well.concentration else None
+            ),
+        )
