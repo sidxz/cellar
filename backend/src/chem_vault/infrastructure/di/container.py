@@ -16,12 +16,19 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
+from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
+from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
+from chem_vault.application.chemical_registration.get_merge_history import GetMergeHistory
 from chem_vault.application.chemical_registration.get_molecule import GetMolecule
+from chem_vault.application.chemical_registration.get_molecule_by_identifier import GetMoleculeByIdentifier
+from chem_vault.application.chemical_registration.list_relationships import ListRelationships
 from chem_vault.application.chemical_registration.list_disclosures import ListDisclosures
 from chem_vault.application.chemical_registration.list_molecules import ListMolecules
 from chem_vault.application.chemical_registration.merge_service import MergeService
 from chem_vault.application.chemical_registration.merge_side_effect_registry import MergeSideEffectRegistry
 from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
+from chem_vault.application.chemical_registration.resolve_disclosure_conflict import ResolveDisclosureConflict
+from chem_vault.application.chemical_registration.search_molecules import SearchMolecules
 from chem_vault.application.chemical_registration.update_molecule import UpdateMolecule
 from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
@@ -37,7 +44,7 @@ from chem_vault.application.workspace_config.update_organization import UpdateOr
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
-from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.domain.chemical_registration.repository import MoleculeRelationshipRepository, MoleculeRepository
 from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
@@ -61,6 +68,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disc
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (
     SQLAlchemyMergeEventRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_relationship_repository import (
+    SQLAlchemyMoleculeRelationshipRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
@@ -214,6 +224,43 @@ def create_container(
     container.define(UpdateMolecule, _mol_cmd_no_proc(UpdateMolecule))
     container.define(GetMolecule, _mol_query(GetMolecule))
     container.define(ListMolecules, _mol_query(ListMolecules))
+    container.define(GetMoleculeByIdentifier, _mol_query(GetMoleculeByIdentifier))
+
+    def _search_molecules(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SearchMolecules(uow, SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
+
+    container.define(SearchMolecules, _search_molecules)
+
+    # --- Molecule Relationships ---
+    def _rel_cmd(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateRelationship(
+            uow=uow,
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            relationship_repo=SQLAlchemyMoleculeRelationshipRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _rel_query(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListRelationships(
+            uow=uow,
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            relationship_repo=SQLAlchemyMoleculeRelationshipRepository(uow),
+        )
+
+    def _rel_delete(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteRelationship(
+            uow=uow,
+            relationship_repo=SQLAlchemyMoleculeRelationshipRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(CreateRelationship, _rel_cmd)
+    container.define(ListRelationships, _rel_query)
+    container.define(DeleteRelationship, _rel_delete)
 
     # --- Merge & Disclosure ---
     container.define(MergeSideEffectRegistry, Singleton(MergeSideEffectRegistry))
@@ -255,5 +302,28 @@ def create_container(
 
     container.define(GetDisclosure, _disclosure_query(GetDisclosure))
     container.define(ListDisclosures, _disclosure_query(ListDisclosures))
+
+    def _resolve_conflict(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveDisclosureConflict(
+            uow=uow,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            merge_service=c[MergeService],
+            structure_processor=c[StructureProcessorProtocol],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ResolveDisclosureConflict, _resolve_conflict)
+
+    def _merge_history(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetMergeHistory(
+            uow=uow,
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            merge_event_repo=SQLAlchemyMergeEventRepository(uow),
+        )
+
+    container.define(GetMergeHistory, _merge_history)
 
     return container

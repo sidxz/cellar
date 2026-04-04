@@ -9,10 +9,11 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from chem_vault.application.chemical_registration.get_merge_history import GetMergeHistoryQuery
 from chem_vault.application.chemical_registration.merge_service import MergeCommand
 from chem_vault.domain.chemical_registration.enums import MergeReason
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
-from chem_vault.interface.dependencies import AuthDep, MergeServiceDep
+from chem_vault.interface.dependencies import AuthDep, GetMergeHistoryDep, MergeServiceDep
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecules"])
@@ -83,3 +84,21 @@ async def merge_molecules(
     )
     merge_event = result_to_response(await use_case(command, auth=auth))
     return MergeEventResponse.from_domain(merge_event)
+
+
+@router.get(
+    "/{molecule_id}/merge-history",
+    response_model=list[MergeEventResponse],
+)
+async def get_merge_history(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: GetMergeHistoryDep,
+) -> list[MergeEventResponse]:
+    """Retrieve merge history for a molecule (as source or target)."""
+    query = GetMergeHistoryQuery(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+    )
+    events = result_to_response(await use_case(query))
+    return [MergeEventResponse.from_domain(e) for e in events]

@@ -30,7 +30,11 @@ _DISCLOSURE_TRANSITIONS: dict[DisclosureStatus, set[DisclosureStatus]] = {
     },
     DisclosureStatus.DISCLOSED: set(),
     DisclosureStatus.MERGED: set(),
-    DisclosureStatus.CONFLICT: {DisclosureStatus.REJECTED},
+    DisclosureStatus.CONFLICT: {
+        DisclosureStatus.REJECTED,
+        DisclosureStatus.MERGED,
+        DisclosureStatus.DISCLOSED,
+    },
     DisclosureStatus.REJECTED: set(),
 }
 
@@ -44,7 +48,9 @@ class DisclosureRequest(AggregateRoot):
         pending -> processing -> merged      (InChIKey matched existing)
         pending -> processing -> conflict    (needs manual review)
         pending -> rejected                  (invalid SMILES / admin rejected)
-        conflict -> rejected                 (admin can reject conflicts)
+        conflict -> rejected                 (admin rejects conflict)
+        conflict -> merged                   (admin accepts merge resolution)
+        conflict -> disclosed                (admin accepts as new structure)
     """
 
     def __init__(

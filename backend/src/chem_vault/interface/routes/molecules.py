@@ -10,18 +10,24 @@ from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.get_molecule import GetMoleculeQuery
 from chem_vault.application.chemical_registration.list_molecules import ListMoleculesQuery
+from chem_vault.application.chemical_registration.get_molecule_by_identifier import (
+    GetMoleculeByIdentifierQuery,
+)
 from chem_vault.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMoleculeCommand,
 )
+from chem_vault.application.chemical_registration.search_molecules import SearchMoleculesQuery
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.interface.dependencies import (
     AuthDep,
+    GetMoleculeByIdentifierDep,
     GetMoleculeDep,
     ListMoleculesDep,
     RegisterMoleculeDep,
+    SearchMoleculesDep,
     UpdateMoleculeDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
@@ -231,6 +237,40 @@ async def list_molecules(
     )
     mols = result_to_response(await use_case(query))
     return [MoleculeResponse.from_domain(m) for m in mols]
+
+
+@router.get("/search", response_model=list[MoleculeResponse])
+async def search_molecules(
+    auth: AuthDep,
+    use_case: SearchMoleculesDep,
+    search_type: str,
+    query: str,
+    threshold: float = 0.7,
+) -> list[MoleculeResponse]:
+    """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES)."""
+    q = SearchMoleculesQuery(
+        workspace_id=auth.workspace_id,
+        search_type=search_type,
+        query=query,
+        threshold=threshold,
+    )
+    mols = result_to_response(await use_case(q))
+    return [MoleculeResponse.from_domain(m) for m in mols]
+
+
+@router.get("/by-identifier/{identifier}", response_model=MoleculeResponse)
+async def get_molecule_by_identifier(
+    identifier: str,
+    auth: AuthDep,
+    use_case: GetMoleculeByIdentifierDep,
+) -> MoleculeResponse:
+    """Look up a molecule by any external identifier (CAS, ChEMBL, vendor ID, etc.)."""
+    q = GetMoleculeByIdentifierQuery(
+        workspace_id=auth.workspace_id,
+        identifier=identifier,
+    )
+    mol = result_to_response(await use_case(q))
+    return MoleculeResponse.from_domain(mol)
 
 
 @router.get("/{molecule_id}", response_model=MoleculeResponse)

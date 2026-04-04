@@ -11,12 +11,14 @@ from pydantic import BaseModel
 from chem_vault.application.chemical_registration.disclosure_service import SubmitDisclosureCommand
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosureQuery
 from chem_vault.application.chemical_registration.list_disclosures import ListDisclosuresQuery
+from chem_vault.application.chemical_registration.resolve_disclosure_conflict import ResolveConflictCommand
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.interface.dependencies import (
     AuthDep,
     DisclosureServiceDep,
     GetDisclosureDep,
     ListDisclosuresDep,
+    ResolveDisclosureConflictDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -86,6 +88,11 @@ class SubmitDisclosureBody(BaseModel):
     notes: str | None = None
 
 
+class ResolveConflictBody(BaseModel):
+    resolution: str  # "reject" | "accept_merge" | "accept_as_new"
+    reason: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -138,3 +145,25 @@ async def list_disclosures_for_molecule(
     query = ListDisclosuresQuery(workspace_id=auth.workspace_id, molecule_id=molecule_id)
     disclosures = result_to_response(await use_case(query))
     return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
+
+
+@router.patch(
+    "/{disclosure_id}/resolve",
+    response_model=DisclosureRequestResponse,
+)
+async def resolve_disclosure_conflict(
+    disclosure_id: uuid.UUID,
+    body: ResolveConflictBody,
+    auth: AuthDep,
+    use_case: ResolveDisclosureConflictDep,
+) -> DisclosureRequestResponse:
+    """Resolve a disclosure request in CONFLICT status."""
+    command = ResolveConflictCommand(
+        workspace_id=auth.workspace_id,
+        disclosure_id=disclosure_id,
+        resolution=body.resolution,
+        reason=body.reason,
+        resolved_by=auth.user_id,
+    )
+    dr = result_to_response(await use_case(command, auth=auth))
+    return DisclosureRequestResponse.from_domain(dr)

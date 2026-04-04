@@ -1,4 +1,8 @@
-"""SQLAlchemy repository for MoleculeRelationship entities."""
+"""SQLAlchemy repository for MoleculeRelationship entities.
+
+Follows the same UoW pattern as SQLAlchemyMergeEventRepository — takes
+AsyncUnitOfWork for transaction management.
+"""
 
 from __future__ import annotations
 
@@ -12,13 +16,18 @@ from chem_vault.domain.chemical_registration.molecule_relationship import Molecu
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeRelationshipModel,
 )
+from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 class SQLAlchemyMoleculeRelationshipRepository:
     """Simple CRUD repository for MoleculeRelationship (not an aggregate root)."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    def __init__(self, uow: AsyncUnitOfWork) -> None:
+        self._uow = uow
+
+    @property
+    def _session(self) -> AsyncSession:
+        return self._uow.session
 
     def _to_domain(self, model: MoleculeRelationshipModel) -> MoleculeRelationship:
         return MoleculeRelationship(

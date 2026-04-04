@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from returns.result import Failure, Result, Success
+from returns.result import Failure, Result, Success  # noqa: F401 (Failure used in isinstance checks)
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.chemical_registration.merge_service import MergeCommand, MergeService
@@ -126,7 +126,7 @@ class DisclosureService:
 
             # --- Process SMILES ---
             process_result = self._structure_processor.process(input.disclosed_smiles)
-            if not process_result.is_success:
+            if isinstance(process_result, Failure):
                 # Reject disclosure if structure processing fails
                 reason = str(process_result.failure())
                 dr.reject(reason=reason)
@@ -198,7 +198,7 @@ class DisclosureService:
             if loaded_dr is None:
                 return Failure(NotFoundError("DisclosureRequest", str(dr.id)))
 
-            if merge_result.is_success:
+            if isinstance(merge_result, Success):
                 loaded_dr.resolve_as_merged(
                     canonical_smiles=canonical_smiles,
                     inchi_key=inchi_key,
@@ -213,7 +213,7 @@ class DisclosureService:
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
 
-        if not merge_result.is_success:
+        if isinstance(merge_result, Failure):
             return Failure(merge_result.failure())
 
         return Success(

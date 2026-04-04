@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 
+import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,6 +88,23 @@ class SQLAlchemyMergeEventRepository:
     ) -> list[MergeEvent]:
         stmt = select(MergeEventModel).where(
             MergeEventModel.target_molecule_id == target_molecule_id,
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars()]
+
+    async def find_by_molecule(
+        self, molecule_id: uuid.UUID
+    ) -> list[MergeEvent]:
+        """Return merge events where the molecule is either source or target."""
+        stmt = (
+            select(MergeEventModel)
+            .where(
+                sa.or_(
+                    MergeEventModel.source_molecule_id == molecule_id,
+                    MergeEventModel.target_molecule_id == molecule_id,
+                )
+            )
+            .order_by(MergeEventModel.merged_at.desc())
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
