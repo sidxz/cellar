@@ -1,8 +1,9 @@
-"""Shared test fixtures — testcontainers PostgreSQL+RDKit, async sessions."""
+"""Shared test fixtures — testcontainers PostgreSQL+RDKit, async sessions, UoW, auth."""
 
 from __future__ import annotations
 
 import os
+import uuid
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
@@ -16,14 +17,29 @@ from sqlalchemy.ext.asyncio import (
 )
 from testcontainers.postgres import PostgresContainer
 
+from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from tests.fakes.fake_auth import FakeAuth
+
 RDKIT_IMAGE = "informaticsmatters/rdkit-cartridge-debian:Release_2024_03_3"
+
+# ---------------------------------------------------------------------------
+# Markers — allow separating fast unit tests from slow integration tests
+# ---------------------------------------------------------------------------
+# Usage:
+#   pytest -m "not integration"    # unit tests only (no Docker)
+#   pytest -m integration          # integration tests only
+#   pytest                         # all tests
+
+
+def pytest_collection_modifyitems(config, items):  # type: ignore[no-untyped-def]
+    """Auto-mark tests under tests/integration/ with the 'integration' marker."""
+    for item in items:
+        if "/integration/" in str(item.fspath):
+            item.add_marker(pytest.mark.integration)
 
 
 # ---------------------------------------------------------------------------
 # Session-scoped: container, migrations, engine, session factory
-# All tests share a single event loop (asyncio_default_test_loop_scope=session
-# in pyproject.toml) so session-scoped async fixtures work correctly with
-# asyncpg's event-loop-bound connections.
 # ---------------------------------------------------------------------------
 
 
@@ -73,7 +89,7 @@ def session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 
 
 # ---------------------------------------------------------------------------
-# Function-scoped: isolated database session per test
+# Function-scoped: isolated database session, UoW, auth
 # ---------------------------------------------------------------------------
 
 
@@ -85,3 +101,35 @@ async def db_session(
     async with session_factory() as session, session.begin():
         yield session
         await session.rollback()
+
+
+@pytest.fixture
+def uow(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncUnitOfWork:
+    """Function-scoped Unit of Work for integration tests."""
+    return AsyncUnitOfWork(session_factory)
+
+
+@pytest.fixture
+def fake_auth() -> FakeAuth:
+    """Default editor auth context for tests."""
+    return FakeAuth(role="editor")
+
+
+@pytest.fixture
+def admin_auth() -> FakeAuth:
+    """Admin auth context for tests."""
+    return FakeAuth(role="admin")
+
+
+@pytest.fixture
+def workspace_id() -> uuid.UUID:
+    """Stable workspace ID for a test."""
+    return uuid.uuid4()
+
+
+@pytest.fixture
+def user_id() -> uuid.UUID:
+    """Stable user ID for a test."""
+    return uuid.uuid4()
