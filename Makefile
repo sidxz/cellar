@@ -9,8 +9,17 @@
 #   make restart   — nuke + up + dev
 # ============================================================================
 
-COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
-BACKEND := cd backend
+# Shared env vars — single source of truth
+DB_URL   := postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault
+SENT_URL := https://sentinel.orca-03.biobio.tamu.edu
+SENT_KEY := sk_5sdLzYlegEgpEFGzlmZNX3zwq4YZ6b4MJttehFKepgk
+
+# Env block passed to every backend command
+BE_ENV := DATABASE_URL=$(DB_URL) \
+          SENTINEL_URL=$(SENT_URL) \
+          SENTINEL_SERVICE_KEY=$(SENT_KEY)
+
+BACKEND  := cd backend
 FRONTEND := cd frontend
 
 .PHONY: help up down dev dev-be dev-fe migrate test lint nuke restart seed status logs
@@ -21,13 +30,13 @@ help: ## Show this help
 
 # ── Infrastructure ─────────────────────────────────────────────
 
-up: ## Start Postgres + Valkey, run migrations, seed
+up: ## Start Postgres + Valkey, run migrations
 	docker compose up -d postgres valkey
-	@echo "⏳ Waiting for Postgres to be healthy..."
+	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec postgres pg_isready -U chemvault -q 2>/dev/null; do sleep 1; done
-	@echo "✅ Postgres ready"
-	$(BACKEND) && uv run alembic upgrade head
-	@echo "✅ Migrations applied"
+	@echo "Postgres ready"
+	$(BACKEND) && $(BE_ENV) uv run alembic upgrade head
+	@echo "Migrations applied"
 
 down: ## Stop all containers (keep data)
 	docker compose down
@@ -43,25 +52,18 @@ logs: ## Tail container logs
 dev: ## Start backend + frontend (parallel, requires `make up` first)
 	@echo "Starting backend on :8000 and frontend on :3000..."
 	@trap 'kill 0' INT TERM; \
-		($(BACKEND) && DATABASE_URL=postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault \
-			SENTINEL_SERVICE_KEY=sk_5sdLzYlegEgpEFGzlmZNX3zwq4YZ6b4MJttehFKepgk \
-			SENTINEL_URL=https://sentinel.orca-03.biobio.tamu.edu \
-			uv run uvicorn chem_vault.interface.app:app --reload --port 8000) & \
+		($(BACKEND) && $(BE_ENV) uv run uvicorn chem_vault.interface.app:app --reload --port 8000) & \
 		($(FRONTEND) && pnpm dev) & \
 		wait
 
 dev-be: ## Start backend only
-	$(BACKEND) && DATABASE_URL=postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault \
-		SENTINEL_SERVICE_KEY=sk_5sdLzYlegEgpEFGzlmZNX3zwq4YZ6b4MJttehFKepgk \
-		SENTINEL_URL=https://sentinel.orca-03.biobio.tamu.edu \
-		uv run uvicorn chem_vault.interface.app:app --reload --port 8000
+	$(BACKEND) && $(BE_ENV) uv run uvicorn chem_vault.interface.app:app --reload --port 8000
 
 dev-fe: ## Start frontend only
 	$(FRONTEND) && pnpm dev
 
 migrate: ## Run Alembic migrations
-	$(BACKEND) && DATABASE_URL=postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault \
-		uv run alembic upgrade head
+	$(BACKEND) && $(BE_ENV) uv run alembic upgrade head
 
 # ── Testing ────────────────────────────────────────────────────
 
@@ -79,16 +81,8 @@ lint: ## Run import-linter only
 
 # ── Cleanup ────────────────────────────────────────────────────
 
-nuke: ## Destroy containers, volumes, and all data — start fresh
-	@echo "🔥 Nuking everything..."
+nuke: ## Destroy containers, volumes, and all data
 	docker compose down -v --remove-orphans
-	@echo "✅ All containers and volumes removed"
+	@echo "All containers and volumes removed"
 
 restart: nuke up dev ## Nuke + start fresh + dev servers
-
-# ── Seed Data ──────────────────────────────────────────────────
-
-seed: ## Seed test data (organization + sample molecules) via API
-	@echo "Seeding data via API (backend must be running on :8000)..."
-	@echo "This requires you to be logged in (Sentinel auth tokens)."
-	@echo "Use the UI to create an Organization first, then register molecules."
