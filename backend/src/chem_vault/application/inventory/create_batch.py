@@ -6,17 +6,18 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.shared.errors import DomainError, NotFoundError
 from chem_vault.domain.shared.value_objects import Amount, Concentration
 
 
@@ -47,10 +48,12 @@ class CreateBatch:
         self,
         uow: UnitOfWork,
         repo: BatchRepository,
+        molecule_repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._molecule_repo = molecule_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -59,6 +62,12 @@ class CreateBatch:
         require_editor(auth)
 
         async with self._uow:
+            # Validate molecule exists and belongs to this workspace
+            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
+            if molecule is None:
+                return Failure(NotFoundError("Molecule"))
+            require_same_workspace(auth, molecule.workspace_id)
+
             batch_number = await self._repo.next_batch_number(
                 input.workspace_id, input.molecule_id
             )

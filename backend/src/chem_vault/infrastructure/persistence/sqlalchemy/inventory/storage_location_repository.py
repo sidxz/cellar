@@ -33,17 +33,25 @@ class SQLAlchemyStorageLocationRepository(
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
-    async def find_children(self, parent_id: uuid.UUID) -> list[StorageLocation]:
+    async def find_children(
+        self, workspace_id: uuid.UUID, parent_id: uuid.UUID
+    ) -> list[StorageLocation]:
         stmt = (
             select(StorageLocationModel)
-            .where(StorageLocationModel.parent_id == parent_id)
+            .where(
+                StorageLocationModel.workspace_id == workspace_id,
+                StorageLocationModel.parent_id == parent_id,
+            )
             .order_by(StorageLocationModel.name)
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
-    async def delete(self, id: uuid.UUID) -> None:
-        stmt = delete(StorageLocationModel).where(StorageLocationModel.id == id)
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = delete(StorageLocationModel).where(
+            StorageLocationModel.workspace_id == workspace_id,
+            StorageLocationModel.id == id,
+        )
         await self._session.execute(stmt)
 
     # ------------------------------------------------------------------

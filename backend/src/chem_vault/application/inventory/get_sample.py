@@ -6,6 +6,7 @@ import uuid
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_same_workspace
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import SampleRepository
 from chem_vault.domain.inventory.sample import Sample
@@ -17,11 +18,14 @@ class GetSample:
         self._uow = uow
         self._repo = repo
 
-    async def __call__(self, sample_id: uuid.UUID) -> Result[Sample, DomainError]:
+    async def __call__(
+        self, sample_id: uuid.UUID, auth: AuthContext | None = None
+    ) -> Result[Sample, DomainError]:
         async with self._uow:
             sample = await self._repo.find_by_id(sample_id)
             if sample is None:
                 return Failure(NotFoundError("Sample"))
+            require_same_workspace(auth, sample.workspace_id)
             return Success(sample)
 
 
@@ -30,7 +34,15 @@ class ListSamplesByBatch:
         self._uow = uow
         self._repo = repo
 
-    async def __call__(self, batch_id: uuid.UUID) -> Result[list[Sample], DomainError]:
+    async def __call__(
+        self,
+        batch_id: uuid.UUID,
+        auth: AuthContext | None = None,
+    ) -> Result[list[Sample], DomainError]:
+        if auth is None:
+            return Failure(NotFoundError("Sample"))
         async with self._uow:
-            samples = await self._repo.find_by_batch(batch_id)
+            samples = await self._repo.find_by_batch(
+                auth.workspace_id, batch_id
+            )
             return Success(samples)

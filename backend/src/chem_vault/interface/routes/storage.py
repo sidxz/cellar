@@ -110,7 +110,7 @@ async def list_storage_locations(
     auth: AuthDep,
     uc: Annotated[ListStorageLocations, Depends(_list)],
 ) -> list[StorageLocationResponse]:
-    result = await uc(auth.workspace_id)
+    result = await uc(auth.workspace_id, auth=auth)
     locations = result_to_response(result)
     return [StorageLocationResponse.from_domain(loc) for loc in locations]
 
@@ -121,6 +121,6 @@ async def get_children(
     auth: AuthDep,
     uc: Annotated[GetStorageLocationChildren, Depends(_children)],
 ) -> list[StorageLocationResponse]:
-    result = await uc(location_id)
+    result = await uc(location_id, auth=auth)
     children = result_to_response(result)
     return [StorageLocationResponse.from_domain(loc) for loc in children]

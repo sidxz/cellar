@@ -11,16 +11,17 @@ from pydantic import BaseModel
 
 from chem_vault.application.inventory.create_sample import CreateSample, CreateSampleCommand
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
-from chem_vault.application.inventory.manage_sample import AliquotSample, DisposeSample, MoveSample
+from chem_vault.application.inventory.manage_sample import (
+    AliquotSample,
+    ClearQuarantineSample,
+    DisposeSample,
+    MoveSample,
+    QuarantineSample,
+)
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["samples"])
-
-
-# ---------------------------------------------------------------------------
-# Response / request models
-# ---------------------------------------------------------------------------
 
 
 class SampleResponse(BaseModel):
@@ -76,13 +77,15 @@ class MoveRequest(BaseModel):
     location_id: uuid.UUID | None = None
 
 
+class QuarantineRequest(BaseModel):
+    reason: str
+
+
 class DisposeRequest(BaseModel):
     reason: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# Deps
-# ---------------------------------------------------------------------------
+# --- Deps ---
 
 def _create_sample(c: Annotated[Container, Depends(get_container)]) -> CreateSample:
     return c[CreateSample]
@@ -99,13 +102,17 @@ def _aliquot(c: Annotated[Container, Depends(get_container)]) -> AliquotSample:
 def _move(c: Annotated[Container, Depends(get_container)]) -> MoveSample:
     return c[MoveSample]
 
+def _quarantine(c: Annotated[Container, Depends(get_container)]) -> QuarantineSample:
+    return c[QuarantineSample]
+
+def _clear_quarantine(c: Annotated[Container, Depends(get_container)]) -> ClearQuarantineSample:
+    return c[ClearQuarantineSample]
+
 def _dispose(c: Annotated[Container, Depends(get_container)]) -> DisposeSample:
     return c[DisposeSample]
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+# --- Routes ---
 
 
 @router.post("/samples", response_model=SampleResponse, status_code=201)
@@ -137,7 +144,7 @@ async def get_sample(
     auth: AuthDep,
     uc: Annotated[GetSample, Depends(_get_sample)],
 ) -> SampleResponse:
-    result = await uc(sample_id)
+    result = await uc(sample_id, auth=auth)
     return SampleResponse.from_domain(result_to_response(result))
 
 
@@ -147,7 +154,7 @@ async def list_samples_by_batch(
     auth: AuthDep,
     uc: Annotated[ListSamplesByBatch, Depends(_list_samples)],
 ) -> list[SampleResponse]:
-    result = await uc(batch_id)
+    result = await uc(batch_id, auth=auth)
     samples = result_to_response(result)
     return [SampleResponse.from_domain(s) for s in samples]
 
@@ -171,6 +178,27 @@ async def move_sample(
     uc: Annotated[MoveSample, Depends(_move)],
 ) -> SampleResponse:
     result = await uc(sample_id, body.location_id, auth=auth)
+    return SampleResponse.from_domain(result_to_response(result))
+
+
+@router.post("/samples/{sample_id}/quarantine", response_model=SampleResponse)
+async def quarantine_sample(
+    sample_id: uuid.UUID,
+    body: QuarantineRequest,
+    auth: AuthDep,
+    uc: Annotated[QuarantineSample, Depends(_quarantine)],
+) -> SampleResponse:
+    result = await uc(sample_id, body.reason, auth=auth)
+    return SampleResponse.from_domain(result_to_response(result))
+
+
+@router.post("/samples/{sample_id}/clear-quarantine", response_model=SampleResponse)
+async def clear_quarantine_sample(
+    sample_id: uuid.UUID,
+    auth: AuthDep,
+    uc: Annotated[ClearQuarantineSample, Depends(_clear_quarantine)],
+) -> SampleResponse:
+    result = await uc(sample_id, auth=auth)
     return SampleResponse.from_domain(result_to_response(result))
 
 

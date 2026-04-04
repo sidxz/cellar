@@ -4,27 +4,19 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from lagom import Container
 from pydantic import BaseModel
 
-from chem_vault.application.inventory.create_batch import CreateBatchCommand
+from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
-from chem_vault.application.inventory.create_batch import CreateBatch
-from chem_vault.interface.dependencies import AuthDep
+from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
-
-from typing import Annotated
-from fastapi import Depends
-from lagom import Container
-from chem_vault.interface.dependencies import get_container
 
 router = APIRouter(prefix="/api/v1", tags=["batches"])
 
-
-# ---------------------------------------------------------------------------
-# Response / request models
-# ---------------------------------------------------------------------------
 
 class BatchResponse(BaseModel):
     id: uuid.UUID
@@ -85,10 +77,6 @@ class CreateBatchRequest(BaseModel):
     custom_fields: dict | None = None
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 def _get_create_batch(container: Annotated[Container, Depends(get_container)]) -> CreateBatch:
     return container[CreateBatch]
 
@@ -126,8 +114,7 @@ async def create_batch(
         custom_fields=body.custom_fields,
     )
     result = await uc(cmd, auth=auth)
-    batch = result_to_response(result)
-    return BatchResponse.from_domain(batch)
+    return BatchResponse.from_domain(result_to_response(result))
 
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
@@ -136,9 +123,8 @@ async def get_batch(
     auth: AuthDep,
     uc: Annotated[GetBatch, Depends(_get_batch)],
 ) -> BatchResponse:
-    result = await uc(batch_id)
-    batch = result_to_response(result)
-    return BatchResponse.from_domain(batch)
+    result = await uc(batch_id, auth=auth)
+    return BatchResponse.from_domain(result_to_response(result))
 
 
 @router.get("/molecules/{molecule_id}/batches", response_model=list[BatchResponse])
@@ -147,6 +133,6 @@ async def list_batches_by_molecule(
     auth: AuthDep,
     uc: Annotated[ListBatchesByMolecule, Depends(_get_list_batches)],
 ) -> list[BatchResponse]:
-    result = await uc(molecule_id)
+    result = await uc(molecule_id, auth=auth)
     batches = result_to_response(result)
     return [BatchResponse.from_domain(b) for b in batches]

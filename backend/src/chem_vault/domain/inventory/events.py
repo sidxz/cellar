@@ -76,3 +76,16 @@ class LowStockDetected(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class SampleQuarantined(DomainEvent):
     reason: str
+
+
+# ---------------------------------------------------------------------------
+# Storage location events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class StorageLocationCreated(DomainEvent):
+    workspace_id: uuid.UUID
+    name: str
+    location_type: str
+    parent_id: uuid.UUID | None = None

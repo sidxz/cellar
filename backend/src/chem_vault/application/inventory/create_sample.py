@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -56,6 +56,7 @@ class CreateSample:
             batch = await self._batch_repo.find_by_id(input.batch_id)
             if batch is None:
                 return Failure(NotFoundError("Batch"))
+            require_same_workspace(auth, batch.workspace_id)
 
             concentration = None
             if input.concentration_value is not None and input.concentration_unit is not None:

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -48,12 +48,12 @@ class CreateStorageLocation:
         require_editor(auth)
 
         async with self._uow:
-            # Resolve parent type if parent_id is provided
             parent_type: StorageLocationType | None = None
             if input.parent_id is not None:
                 parent = await self._repo.find_by_id(input.parent_id)
                 if parent is None:
                     return Failure(NotFoundError("Parent StorageLocation"))
+                require_same_workspace(auth, parent.workspace_id)
                 parent_type = parent.type
 
             loc = StorageLocation.create(
@@ -81,7 +81,7 @@ class ListStorageLocations:
         self._repo = repo
 
     async def __call__(
-        self, workspace_id: uuid.UUID
+        self, workspace_id: uuid.UUID, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
         async with self._uow:
             locations = await self._repo.find_by_workspace(workspace_id)
@@ -94,8 +94,12 @@ class GetStorageLocationChildren:
         self._repo = repo
 
     async def __call__(
-        self, parent_id: uuid.UUID
+        self, parent_id: uuid.UUID, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
+        if auth is None:
+            return Failure(NotFoundError("StorageLocation"))
         async with self._uow:
-            children = await self._repo.find_children(parent_id)
+            children = await self._repo.find_children(
+                auth.workspace_id, parent_id
+            )
             return Success(children)

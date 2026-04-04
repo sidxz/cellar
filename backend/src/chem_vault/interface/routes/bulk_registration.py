@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.bulk_registration_service import (
@@ -66,8 +66,10 @@ async def start_bulk_registration(
     originating_org_id: uuid.UUID = Form(...),
     file_format: str = Form(...),
 ) -> BulkRegistrationResponse:
-    """Upload a file (SDF, CSV, XLSX) to register molecules in bulk."""
+    """Upload a file (SDF, CSV, XLSX) to register molecules in bulk. Max 50 MB."""
     content = await file.read()
+    if len(content) > 50 * 1024 * 1024:  # 50 MB
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
 
     # Parse in the interface layer (infrastructure dependency stays out of application)
     fmt = BulkRegistrationFileFormat(file_format)

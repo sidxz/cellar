@@ -19,19 +19,29 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import Sa
 class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
     model_class = SampleModel
 
-    async def find_by_batch(self, batch_id: uuid.UUID) -> list[Sample]:
+    async def find_by_batch(
+        self, workspace_id: uuid.UUID, batch_id: uuid.UUID
+    ) -> list[Sample]:
         stmt = (
             select(SampleModel)
-            .where(SampleModel.batch_id == batch_id)
+            .where(
+                SampleModel.workspace_id == workspace_id,
+                SampleModel.batch_id == batch_id,
+            )
             .order_by(SampleModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
-    async def find_by_location(self, location_id: uuid.UUID) -> list[Sample]:
+    async def find_by_location(
+        self, workspace_id: uuid.UUID, location_id: uuid.UUID
+    ) -> list[Sample]:
         stmt = (
             select(SampleModel)
-            .where(SampleModel.location_id == location_id)
+            .where(
+                SampleModel.workspace_id == workspace_id,
+                SampleModel.location_id == location_id,
+            )
             .order_by(SampleModel.barcode)
         )
         result = await self._session.execute(stmt)

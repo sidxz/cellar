@@ -19,7 +19,7 @@ from chem_vault.application.inventory.create_batch import CreateBatch
 from chem_vault.application.inventory.create_sample import CreateSample
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
-from chem_vault.application.inventory.manage_sample import AliquotSample, DisposeSample, MoveSample
+from chem_vault.application.inventory.manage_sample import AliquotSample, ClearQuarantineSample, DisposeSample, MoveSample, QuarantineSample
 from chem_vault.application.inventory.manage_storage import (
     CreateStorageLocation,
     GetStorageLocationChildren,
@@ -366,7 +366,7 @@ def create_container(
     # --- Inventory ---
     def _batch_cmd(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher])
+        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), SQLAlchemyMoleculeRepository(uow), c[EventDispatcher])
 
     def _batch_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -401,6 +401,8 @@ def create_container(
     container.define(ListSamplesByBatch, _sample_query(ListSamplesByBatch))
     container.define(AliquotSample, _sample_cmd(AliquotSample))
     container.define(MoveSample, _sample_cmd(MoveSample))
+    container.define(QuarantineSample, _sample_cmd(QuarantineSample))
+    container.define(ClearQuarantineSample, _sample_cmd(ClearQuarantineSample))
     container.define(DisposeSample, _sample_cmd(DisposeSample))
 
     def _storage_cmd(c):  # type: ignore[no-untyped-def]

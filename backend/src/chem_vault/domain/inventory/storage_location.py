@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from chem_vault.domain.inventory.enums import VALID_PARENT_TYPES, StorageLocationType
+from chem_vault.domain.inventory.events import StorageLocationCreated
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.shared.value_objects import Barcode
@@ -102,7 +103,7 @@ class StorageLocation(AggregateRoot):
         columns: int | None = None,
         capacity: int | None = None,
     ) -> StorageLocation:
-        return cls(
+        loc = cls(
             workspace_id=workspace_id,
             name=name,
             type=type,
@@ -114,3 +115,14 @@ class StorageLocation(AggregateRoot):
             columns=columns,
             capacity=capacity,
         )
+        loc.register_event(
+            StorageLocationCreated(
+                aggregate_id=loc.id,
+                aggregate_type="StorageLocation",
+                workspace_id=workspace_id,
+                name=name,
+                location_type=type.value,
+                parent_id=parent_id,
+            )
+        )
+        return loc

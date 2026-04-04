@@ -19,10 +19,15 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import Ba
 class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     model_class = BatchModel
 
-    async def find_by_molecule(self, molecule_id: uuid.UUID) -> list[Batch]:
+    async def find_by_molecule(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+    ) -> list[Batch]:
         stmt = (
             select(BatchModel)
-            .where(BatchModel.molecule_id == molecule_id)
+            .where(
+                BatchModel.workspace_id == workspace_id,
+                BatchModel.molecule_id == molecule_id,
+            )
             .order_by(BatchModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
