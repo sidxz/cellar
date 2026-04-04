@@ -15,6 +15,7 @@ from chem_vault.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
 )
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.interface.dependencies import (
     AuthDep,
@@ -257,7 +258,7 @@ async def update_molecule(
         remove_tags=body.remove_tags,
         lifecycle_stage=body.lifecycle_stage,
         lifecycle_reason=body.lifecycle_reason,
-        custom_fields=body.custom_fields if "custom_fields" in body.model_fields_set else UpdateMoleculeCommand.custom_fields,  # type: ignore[arg-type]
+        custom_fields=body.custom_fields if "custom_fields" in body.model_fields_set else UNSET,
         changed_by=auth.user_id,
     )
     mol = result_to_response(await use_case(command, auth=auth))

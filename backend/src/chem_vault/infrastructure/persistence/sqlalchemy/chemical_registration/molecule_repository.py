@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy import func, select, text
 
 from chem_vault.domain.chemical_registration.enums import (
@@ -330,12 +331,22 @@ class SQLAlchemyMoleculeRepository(
     async def next_registration_number(
         self, workspace_id: uuid.UUID
     ) -> RegistrationNumber:
-        stmt = select(func.count()).select_from(MoleculeModel).where(
-            MoleculeModel.workspace_id == workspace_id
-        )
+        # Extract numeric suffix from "CV-NNNNN" and find the max.
+        # Handles tombstones correctly (they keep their numbers).
+        stmt = select(
+            func.coalesce(
+                func.max(
+                    func.cast(
+                        func.substr(MoleculeModel.registration_number, 4),
+                        sa.Integer,
+                    )
+                ),
+                0,
+            )
+        ).where(MoleculeModel.workspace_id == workspace_id)
         result = await self._session.execute(stmt)
-        count = result.scalar_one()
-        return RegistrationNumber(value=f"CV-{count + 1:05d}")
+        max_num: int = result.scalar_one()
+        return RegistrationNumber(value=f"CV-{max_num + 1:05d}")
 
     async def search_substructure(
         self, workspace_id: uuid.UUID, smarts: str
@@ -351,7 +362,7 @@ class SQLAlchemyMoleculeRepository(
                 MoleculeModel.workspace_id == workspace_id,
                 MoleculeModel.merged_into_id.is_(None),
                 MoleculeModel.smiles.is_not(None),
-                text("mol_from_smiles(smiles::cstring) @> mol_from_smarts(:smarts::cstring)"),
+                text("mol_from_smiles(smiles) @> mol_from_smarts(:smarts)"),
             )
             .params(smarts=smarts)
         )
@@ -373,8 +384,8 @@ class SQLAlchemyMoleculeRepository(
                 MoleculeModel.smiles.is_not(None),
                 text(
                     "tanimoto_sml("
-                    "morganbv_fp(mol_from_smiles(smiles::cstring)), "
-                    "morganbv_fp(mol_from_smiles(:query_smiles::cstring))"
+                    "morganbv_fp(mol_from_smiles(smiles)), "
+                    "morganbv_fp(mol_from_smiles(:query_smiles))"
                     ") > :threshold"
                 ),
             )

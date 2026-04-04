@@ -46,9 +46,9 @@ class RegisterMoleculeCommand(Command):
     smiles: str | None = None  # None for undisclosed
     molecule_type: str = MoleculeType.SMALL_MOLECULE.value
     external_ids: list[ExternalId] = field(default_factory=list)
-    originating_org_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    originating_org_id: uuid.UUID
+    registered_by: uuid.UUID
     custom_fields: dict | None = None
-    registered_by: uuid.UUID = field(default_factory=uuid.uuid4)
     qc_reject_threshold: int | None = None
     qc_warn_threshold: int | None = None
 
@@ -194,40 +194,55 @@ class RegisterMolecule:
     async def _register_undisclosed(
         self, input: RegisterMoleculeCommand
     ) -> Result[RegistrationOutcome, DomainError]:
-        # ID-only dedup check
+        # Phase 1: Check ALL IDs for conflicts before acting
+        matched_molecule: Molecule | None = None
         for ext_id in input.external_ids:
             existing = await self._repo.find_by_identifier(
                 input.workspace_id, ext_id.identifier
             )
-            if existing is not None:
-                if existing.structure_status.value == "disclosed":
-                    return Failure(
-                        ConflictError(
-                            f"Identifier '{ext_id.identifier}' belongs to disclosed "
-                            f"molecule '{existing.registration_number.value}'"
-                        )
+            if existing is None:
+                continue
+            if existing.structure_status.value == "disclosed":
+                return Failure(
+                    ConflictError(
+                        f"Identifier '{ext_id.identifier}' belongs to disclosed "
+                        f"molecule '{existing.registration_number.value}'"
                     )
-                # Existing undisclosed — add IDs, return as existing
-                for eid in input.external_ids:
-                    has_id = any(
-                        i.identifier == eid.identifier for i in existing.identifiers
-                    )
-                    if not has_id:
-                        existing.add_identifier(
-                            MoleculeIdentifier.create(
-                                molecule_id=existing.id,
-                                identifier=eid.identifier,
-                                identifier_type=IdentifierType(eid.identifier_type),
-                                source="Registration (duplicate)",
-                                registered_by=input.registered_by,
-                            )
-                        )
-                await self._repo.save(existing)
-                events = await self._uow.commit()
-                await self._dispatcher.dispatch_all(events)
-                return Success(
-                    RegistrationOutcome(molecule=existing, is_new=False)
                 )
+            if matched_molecule is None:
+                matched_molecule = existing
+            elif existing.id != matched_molecule.id:
+                # Two IDs point to different undisclosed molecules — conflict
+                return Failure(
+                    ConflictError(
+                        f"Identifiers map to different molecules: "
+                        f"'{matched_molecule.registration_number.value}' and "
+                        f"'{existing.registration_number.value}'"
+                    )
+                )
+
+        # Phase 2: If matched an existing undisclosed molecule, add new IDs
+        if matched_molecule is not None:
+            for ext_id in input.external_ids:
+                has_id = any(
+                    i.identifier == ext_id.identifier for i in matched_molecule.identifiers
+                )
+                if not has_id:
+                    matched_molecule.add_identifier(
+                        MoleculeIdentifier.create(
+                            molecule_id=matched_molecule.id,
+                            identifier=ext_id.identifier,
+                            identifier_type=IdentifierType(ext_id.identifier_type),
+                            source="Registration (duplicate)",
+                            registered_by=input.registered_by,
+                        )
+                    )
+            await self._repo.save(matched_molecule)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(
+                RegistrationOutcome(molecule=matched_molecule, is_new=False)
+            )
 
         # New undisclosed molecule
         reg_number = await self._repo.next_registration_number(input.workspace_id)

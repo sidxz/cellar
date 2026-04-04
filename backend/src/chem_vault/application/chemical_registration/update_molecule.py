@@ -14,9 +14,8 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.enums import LifecycleStage
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
-
-_UNSET = object()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,7 +29,7 @@ class UpdateMoleculeCommand(Command):
     lifecycle_stage: str | None = None
     lifecycle_reason: str | None = None
     # Custom fields
-    custom_fields: dict | None = field(default=_UNSET)  # type: ignore[assignment]
+    custom_fields: dict | None = field(default=UNSET)  # type: ignore[assignment]
     # Actor
     changed_by: uuid.UUID = field(default_factory=uuid.uuid4)
 
@@ -69,7 +68,7 @@ class UpdateMolecule:
                         reason=input.lifecycle_reason,
                     )
 
-                if input.custom_fields is not _UNSET:
+                if input.custom_fields is not UNSET:
                     mol.update_custom_fields(input.custom_fields)  # type: ignore[arg-type]
             except ValidationError as exc:
                 return Failure(exc)

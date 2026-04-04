@@ -2,32 +2,25 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.chemical_registration.protocols import (
+    ProcessedStructureDTO,
+    QCResultDTO,
+)
 from chem_vault.domain.shared.errors import DomainError
-from chem_vault.domain.shared.value_objects import ChemicalStructure, ComputedDescriptors
+from chem_vault.domain.shared.value_objects import ChemicalStructure
 from chem_vault.infrastructure.rdkit.descriptor_calculator import DescriptorCalculator
 from chem_vault.infrastructure.rdkit.errors import QCRejectedError
 from chem_vault.infrastructure.rdkit.fingerprint_generator import FingerprintGenerator
-from chem_vault.infrastructure.rdkit.standardizer import QCResult, StructureStandardizer
-
-
-@dataclass(frozen=True)
-class ProcessedStructure:
-    """Full output of the structure processing pipeline."""
-
-    structure: ChemicalStructure
-    descriptors: ComputedDescriptors
-    fingerprints: dict[str, bytes]
-    qc_result: QCResult
+from chem_vault.infrastructure.rdkit.standardizer import StructureStandardizer
 
 
 class StructureProcessor:
     """Single entry point for processing a raw SMILES string.
 
     Pipeline: standardize -> QC check -> compute descriptors -> generate fingerprints.
+    Returns application-layer DTOs to satisfy StructureProcessorProtocol.
     """
 
     def __init__(
@@ -45,7 +38,7 @@ class StructureProcessor:
         raw_smiles: str,
         *,
         qc_reject_threshold: int | None = None,
-    ) -> Result[ProcessedStructure, DomainError]:
+    ) -> Result[ProcessedStructureDTO, DomainError]:
         """Process a raw SMILES through the full pipeline.
 
         Args:
@@ -53,7 +46,7 @@ class StructureProcessor:
             qc_reject_threshold: If set, reject molecules with QC penalty >= this value.
 
         Returns:
-            Result with ProcessedStructure on success.
+            Result with ProcessedStructureDTO on success.
         """
         # 1. Standardize
         std_result = self._standardizer.standardize(raw_smiles)
@@ -63,7 +56,10 @@ class StructureProcessor:
         std_mol = std_result.unwrap()
 
         # 2. QC check
-        qc_result = self._standardizer.check_molecule(std_mol.mol)
+        raw_qc = self._standardizer.check_molecule(std_mol.mol)
+        qc_result = QCResultDTO(
+            total_penalty=raw_qc.total_penalty, issues=raw_qc.issues
+        )
 
         if qc_reject_threshold is not None and qc_result.total_penalty >= qc_reject_threshold:
             return Failure(
@@ -91,7 +87,7 @@ class StructureProcessor:
         )
 
         return Success(
-            ProcessedStructure(
+            ProcessedStructureDTO(
                 structure=structure,
                 descriptors=descriptors,
                 fingerprints=fingerprints,
