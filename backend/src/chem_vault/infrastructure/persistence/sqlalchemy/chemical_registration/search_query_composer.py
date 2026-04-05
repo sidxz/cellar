@@ -15,6 +15,14 @@ from sqlalchemy.sql import ColumnElement
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    DoseResponseCurveModel,
+    ReadoutDataModel,
+    RunModel,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    CollectionMoleculeModel,
+)
 
 # Mappings of query field names -> SA column references
 TEXT_FIELDS: dict[str, Any] = {
@@ -57,6 +65,14 @@ def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
             clauses.append(_property_clause(criterion))
         elif ctype == "structure":
             clauses.append(_structure_clause(criterion))
+        elif ctype == "activity":
+            clauses.append(_activity_clause(criterion))
+        elif ctype == "collection":
+            clauses.append(_collection_clause(criterion))
+        elif ctype == "keyword_list":
+            clauses.append(_keyword_list_clause(criterion))
+        elif ctype == "run_date":
+            clauses.append(_run_date_clause(criterion))
         else:
             msg = f"Unknown criterion type: {ctype}"
             raise ValueError(msg)
@@ -142,3 +158,96 @@ def _structure_clause(criterion: dict[str, Any]) -> ColumnElement:
     else:
         msg = f"Unknown structure search_type: {search_type}"
         raise ValueError(msg)
+
+
+def _activity_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules by biological activity values."""
+    protocol_id = criterion["protocol_id"]
+    operator = criterion.get("operator", "lt")
+    value = criterion["value"]
+
+    op_map = {
+        "eq": "__eq__",
+        "lt": "__lt__",
+        "lte": "__le__",
+        "gt": "__gt__",
+        "gte": "__ge__",
+    }
+    op_name = op_map.get(operator)
+    if not op_name:
+        msg = f"Unknown activity operator: {operator}"
+        raise ValueError(msg)
+
+    # Dose-response curve filtering
+    if "curve_type" in criterion:
+        col = DoseResponseCurveModel.fitted_value
+        return MoleculeModel.id.in_(
+            sa.select(DoseResponseCurveModel.molecule_id).where(
+                DoseResponseCurveModel.protocol_id == protocol_id,
+                DoseResponseCurveModel.curve_type == criterion["curve_type"],
+                getattr(col, op_name)(value),
+            )
+        )
+
+    # Raw readout filtering
+    readout_def_id = criterion["readout_definition_id"]
+    col = ReadoutDataModel.value_numeric
+    return MoleculeModel.id.in_(
+        sa.select(ReadoutDataModel.molecule_id).where(
+            ReadoutDataModel.readout_definition_id == readout_def_id,
+            ReadoutDataModel.is_outlier == False,  # noqa: E712
+            getattr(col, op_name)(value),
+        )
+    )
+
+
+def _collection_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules to those in a specific collection."""
+    collection_id = criterion["collection_id"]
+    return MoleculeModel.id.in_(
+        sa.select(CollectionMoleculeModel.molecule_id).where(
+            CollectionMoleculeModel.collection_id == collection_id,
+        )
+    )
+
+
+def _keyword_list_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules by a list of identifiers."""
+    values = criterion["values"]
+    ref_type = criterion.get("ref_type", "registration_number")
+
+    if not values:
+        msg = "keyword_list values must not be empty"
+        raise ValueError(msg)
+
+    if ref_type == "uuid":
+        return MoleculeModel.id.in_(values)
+    elif ref_type == "registration_number":
+        return MoleculeModel.registration_number.in_(values)
+    elif ref_type == "inchi_key":
+        return MoleculeModel.inchi_key.in_(values)
+    elif ref_type == "name":
+        return MoleculeModel.name.in_(values)
+    else:
+        msg = f"keyword_list ref_type '{ref_type}' requires pre-resolution to UUIDs"
+        raise ValueError(msg)
+
+
+def _run_date_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules to those with data in a date range."""
+    from datetime import date
+
+    date_from = criterion.get("date_from")
+    date_to = criterion.get("date_to")
+
+    conditions: list[ColumnElement] = []
+    if date_from:
+        conditions.append(RunModel.run_date >= date.fromisoformat(date_from))
+    if date_to:
+        conditions.append(RunModel.run_date <= date.fromisoformat(date_to))
+
+    return MoleculeModel.id.in_(
+        sa.select(ReadoutDataModel.molecule_id)
+        .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
+        .where(*conditions)
+    )
