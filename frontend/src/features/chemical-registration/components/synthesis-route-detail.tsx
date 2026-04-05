@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, GitBranch } from "lucide-react";
+import { X, GitBranch, Plus, FlaskConical } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { MemberName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
+import { Input } from "@/shared/components/ui/input";
 import {
   Card,
   CardContent,
@@ -23,6 +24,8 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
 import {
   useSynthesisRoute,
+  useAddReactionStep,
+  useRecordStepOutcome,
   useValidateSynthesisRoute,
   useSetPreferredRoute,
   useDeprecateSynthesisRoute,
@@ -34,6 +37,8 @@ import {
   type RouteStatus,
   type ReactionStep,
   type ReactionReagent,
+  type AddReactionStepInput,
+  type RecordStepOutcomeInput,
 } from "../types/synthesis-route";
 
 // ---------------------------------------------------------------------------
@@ -120,6 +125,262 @@ function DeprecateDialog({
 }
 
 // ---------------------------------------------------------------------------
+// Add step dialog
+// ---------------------------------------------------------------------------
+
+interface AddStepDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  routeId: string;
+  nextStepNumber: number;
+}
+
+function AddStepDialog({
+  open,
+  onOpenChange,
+  routeId,
+  nextStepNumber,
+}: AddStepDialogProps) {
+  const [stepNumber, setStepNumber] = useState(nextStepNumber);
+  const [name, setName] = useState("");
+  const [namedReaction, setNamedReaction] = useState("");
+  const [reactionSmiles, setReactionSmiles] = useState("");
+  const [productDescription, setProductDescription] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const addStepMutation = useAddReactionStep(routeId);
+
+  const resetForm = () => {
+    setStepNumber(nextStepNumber);
+    setName("");
+    setNamedReaction("");
+    setReactionSmiles("");
+    setProductDescription("");
+    setNotes("");
+  };
+
+  const handleSubmit = () => {
+    const data: AddReactionStepInput = {
+      step_number: stepNumber,
+      name: name.trim() || null,
+      named_reaction: namedReaction.trim() || null,
+      reaction_smiles: reactionSmiles.trim() || null,
+      product_description: productDescription.trim() || null,
+      notes: notes.trim() || null,
+    };
+
+    addStepMutation.mutate(data, {
+      onSuccess: () => {
+        resetForm();
+        onOpenChange(false);
+      },
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) resetForm();
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Add Reaction Step</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label htmlFor="add-step-number">Step Number *</Label>
+            <Input
+              id="add-step-number"
+              type="number"
+              min={1}
+              className="mt-1"
+              value={stepNumber}
+              onChange={(e) => setStepNumber(parseInt(e.target.value) || 1)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="add-step-name">Name</Label>
+            <Input
+              id="add-step-name"
+              className="mt-1"
+              placeholder="e.g. Suzuki coupling"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="add-step-named-reaction">Named Reaction</Label>
+            <Input
+              id="add-step-named-reaction"
+              className="mt-1"
+              placeholder="e.g. Suzuki-Miyaura"
+              value={namedReaction}
+              onChange={(e) => setNamedReaction(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="add-step-smiles">Reaction SMILES</Label>
+            <Input
+              id="add-step-smiles"
+              className="mt-1"
+              placeholder="SMILES string"
+              value={reactionSmiles}
+              onChange={(e) => setReactionSmiles(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="add-step-product">Product Description</Label>
+            <Input
+              id="add-step-product"
+              className="mt-1"
+              placeholder="e.g. Biaryl intermediate"
+              value={productDescription}
+              onChange={(e) => setProductDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="add-step-notes">Notes</Label>
+            <Textarea
+              id="add-step-notes"
+              className="mt-1"
+              rows={3}
+              placeholder="Additional notes for this step"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={addStepMutation.isPending}>
+            {addStepMutation.isPending ? "Adding..." : "Add Step"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Record outcome dialog
+// ---------------------------------------------------------------------------
+
+interface RecordOutcomeDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  routeId: string;
+  stepId: string;
+  stepLabel: string;
+}
+
+function RecordOutcomeDialog({
+  open,
+  onOpenChange,
+  routeId,
+  stepId,
+  stepLabel,
+}: RecordOutcomeDialogProps) {
+  const [yieldPercent, setYieldPercent] = useState("");
+  const [purityPercent, setPurityPercent] = useState("");
+  const [purificationMethod, setPurificationMethod] = useState("");
+
+  const recordOutcomeMutation = useRecordStepOutcome(routeId, stepId);
+
+  const resetForm = () => {
+    setYieldPercent("");
+    setPurityPercent("");
+    setPurificationMethod("");
+  };
+
+  const handleSubmit = () => {
+    const data: RecordStepOutcomeInput = {
+      yield_percent: yieldPercent ? parseFloat(yieldPercent) : null,
+      purity_percent: purityPercent ? parseFloat(purityPercent) : null,
+      purification_method: purificationMethod.trim() || null,
+    };
+
+    recordOutcomeMutation.mutate(data, {
+      onSuccess: () => {
+        resetForm();
+        onOpenChange(false);
+      },
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) resetForm();
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle>Record Outcome &mdash; {stepLabel}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label htmlFor="outcome-yield">Yield (%)</Label>
+            <Input
+              id="outcome-yield"
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              className="mt-1"
+              placeholder="e.g. 85.0"
+              value={yieldPercent}
+              onChange={(e) => setYieldPercent(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="outcome-purity">Purity (%)</Label>
+            <Input
+              id="outcome-purity"
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              className="mt-1"
+              placeholder="e.g. 97.5"
+              value={purityPercent}
+              onChange={(e) => setPurityPercent(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="outcome-purification">Purification Method</Label>
+            <Input
+              id="outcome-purification"
+              className="mt-1"
+              placeholder="e.g. Column chromatography"
+              value={purificationMethod}
+              onChange={(e) => setPurificationMethod(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={recordOutcomeMutation.isPending}
+          >
+            {recordOutcomeMutation.isPending ? "Saving..." : "Save Outcome"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Reagent row
 // ---------------------------------------------------------------------------
 
@@ -148,11 +409,28 @@ function ReagentRow({ reagent }: { reagent: ReactionReagent }) {
 // Step card
 // ---------------------------------------------------------------------------
 
-function StepCard({ step, stepNumberById }: { step: ReactionStep; stepNumberById: Map<string, number> }) {
+function StepCard({
+  step,
+  stepNumberById,
+  routeId,
+  routeStatus,
+}: {
+  step: ReactionStep;
+  stepNumberById: Map<string, number>;
+  routeId: string;
+  routeStatus: string;
+}) {
   const conditions = step.conditions as Record<string, unknown> | null;
   const outcome = step.outcome as Record<string, unknown> | null;
+  const [outcomeOpen, setOutcomeOpen] = useState(false);
+
+  const canRecordOutcome =
+    (routeStatus === "draft" || routeStatus === "validated") && !outcome;
+
+  const stepLabel = step.name ?? step.named_reaction ?? `Step ${step.step_number}`;
 
   return (
+    <>
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
@@ -161,14 +439,27 @@ function StepCard({ step, stepNumberById }: { step: ReactionStep; stepNumberById
               {step.step_number}
             </span>
             <CardTitle className="text-base">
-              {step.name ?? step.named_reaction ?? `Step ${step.step_number}`}
+              {stepLabel}
             </CardTitle>
           </div>
-          {step.branch_label && (
-            <Badge variant="outline" className="text-xs">
-              {step.branch_label}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {canRecordOutcome && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setOutcomeOpen(true)}
+              >
+                <FlaskConical className="mr-1 h-3 w-3" />
+                Record Outcome
+              </Button>
+            )}
+            {step.branch_label && (
+              <Badge variant="outline" className="text-xs">
+                {step.branch_label}
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -266,6 +557,17 @@ function StepCard({ step, stepNumberById }: { step: ReactionStep; stepNumberById
         )}
       </CardContent>
     </Card>
+
+    {canRecordOutcome && (
+      <RecordOutcomeDialog
+        open={outcomeOpen}
+        onOpenChange={setOutcomeOpen}
+        routeId={routeId}
+        stepId={step.id}
+        stepLabel={stepLabel}
+      />
+    )}
+    </>
   );
 }
 
@@ -288,6 +590,7 @@ export function SynthesisRouteDetail({
   const deprecateMutation = useDeprecateSynthesisRoute();
 
   const [deprecateOpen, setDeprecateOpen] = useState(false);
+  const [addStepOpen, setAddStepOpen] = useState(false);
 
   // --- Loading ---
   if (isLoading) {
@@ -433,14 +736,26 @@ export function SynthesisRouteDetail({
 
       {/* Steps */}
       <div className="space-y-3">
-        <h3 className="text-base font-semibold">
-          Reaction Steps
-          {route.steps.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              ({route.steps.length})
-            </span>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold">
+            Reaction Steps
+            {route.steps.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                ({route.steps.length})
+              </span>
+            )}
+          </h3>
+          {status === "draft" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddStepOpen(true)}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              Add Step
+            </Button>
           )}
-        </h3>
+        </div>
         {route.steps.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No steps added yet.
@@ -451,7 +766,13 @@ export function SynthesisRouteDetail({
               const sorted = route.steps.slice().sort((a, b) => a.step_number - b.step_number);
               const idMap = new Map(sorted.map((s) => [s.id, s.step_number]));
               return sorted.map((step) => (
-                <StepCard key={step.id} step={step} stepNumberById={idMap} />
+                <StepCard
+                  key={step.id}
+                  step={step}
+                  stepNumberById={idMap}
+                  routeId={routeId}
+                  routeStatus={status}
+                />
               ));
             })()}
           </div>
@@ -464,6 +785,15 @@ export function SynthesisRouteDetail({
         onConfirm={handleDeprecate}
         isPending={deprecateMutation.isPending}
       />
+
+      {status === "draft" && (
+        <AddStepDialog
+          open={addStepOpen}
+          onOpenChange={setAddStepOpen}
+          routeId={routeId}
+          nextStepNumber={route.steps.length + 1}
+        />
+      )}
     </div>
   );
 }
