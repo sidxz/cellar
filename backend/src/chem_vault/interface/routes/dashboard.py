@@ -10,19 +10,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from chem_vault.interface.dependencies import AuthDep, SessionFactoryDep
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_models import (
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_models import (
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
-)
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_models import (
     SampleModel,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.screening.protocol_models import (
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ProtocolModel,
-)
-from chem_vault.infrastructure.persistence.sqlalchemy.screening.run_models import (
     RunModel,
 )
 

@@ -17,7 +17,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models import (
     DisclosureRequestModel,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_models import (
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
 
