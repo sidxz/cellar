@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, GitBranch, Plus, FlaskConical } from "lucide-react";
+import { X, GitBranch, Plus, FlaskConical, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { MemberName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
@@ -20,6 +20,13 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Label } from "@/shared/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
 import {
@@ -29,6 +36,9 @@ import {
   useValidateSynthesisRoute,
   useSetPreferredRoute,
   useDeprecateSynthesisRoute,
+  useUpdateSynthesisRoute,
+  useDeleteSynthesisRoute,
+  useRemoveReactionStep,
 } from "../hooks/use-synthesis-routes";
 import {
   ROUTE_STATUS_LABELS,
@@ -117,6 +127,108 @@ function DeprecateDialog({
             disabled={isPending}
           >
             {isPending ? "Deprecating..." : "Deprecate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit route dialog
+// ---------------------------------------------------------------------------
+
+interface EditRouteDialogProps {
+  route: {
+    id: string;
+    name: string;
+    description: string | null;
+    scale: string | null;
+  };
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function EditRouteDialog({ route, open, onOpenChange }: EditRouteDialogProps) {
+  const mutation = useUpdateSynthesisRoute();
+  const [name, setName] = useState(route.name);
+  const [description, setDescription] = useState(route.description ?? "");
+  const [scale, setScale] = useState(route.scale ?? "");
+
+  const handleSave = () => {
+    mutation.mutate(
+      {
+        id: route.id,
+        name: name.trim(),
+        description: description.trim() || null,
+        scale: scale || null,
+      },
+      { onSuccess: () => onOpenChange(false) }
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setName(route.name);
+          setDescription(route.description ?? "");
+          setScale(route.scale ?? "");
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Edit Route</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label htmlFor="edit-route-name">Name *</Label>
+            <Input
+              id="edit-route-name"
+              className="mt-1"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-route-description">Description</Label>
+            <Textarea
+              id="edit-route-description"
+              className="mt-1"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-route-scale">Scale</Label>
+            <Select value={scale} onValueChange={setScale}>
+              <SelectTrigger id="edit-route-scale" className="mt-1">
+                <SelectValue placeholder="Select scale..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {Object.entries(ROUTE_SCALE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!name.trim() || mutation.isPending}
+          >
+            {mutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -414,11 +526,13 @@ function StepCard({
   stepNumberById,
   routeId,
   routeStatus,
+  onRemove,
 }: {
   step: ReactionStep;
   stepNumberById: Map<string, number>;
   routeId: string;
   routeStatus: string;
+  onRemove?: (stepId: string) => void;
 }) {
   const conditions = step.conditions as Record<string, unknown> | null;
   const outcome = step.outcome as Record<string, unknown> | null;
@@ -443,6 +557,21 @@ function StepCard({
             </CardTitle>
           </div>
           <div className="flex items-center gap-2">
+            {routeStatus === "draft" && onRemove && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (confirm(`Remove step "${stepLabel}"? This cannot be undone.`)) {
+                    onRemove(step.id);
+                  }
+                }}
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Remove
+              </Button>
+            )}
             {canRecordOutcome && (
               <Button
                 size="sm"
@@ -588,9 +717,12 @@ export function SynthesisRouteDetail({
   const validateMutation = useValidateSynthesisRoute();
   const preferMutation = useSetPreferredRoute();
   const deprecateMutation = useDeprecateSynthesisRoute();
+  const deleteMutation = useDeleteSynthesisRoute();
+  const removeStepMutation = useRemoveReactionStep(routeId);
 
   const [deprecateOpen, setDeprecateOpen] = useState(false);
   const [addStepOpen, setAddStepOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   // --- Loading ---
   if (isLoading) {
@@ -646,16 +778,44 @@ export function SynthesisRouteDetail({
             <p className="text-sm text-muted-foreground">{route.description}</p>
           )}
         </div>
-        {onClose && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="shrink-0"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {status === "draft" && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditOpen(true)}
+              >
+                <Pencil className="mr-1 h-3.5 w-3.5" />
+                Edit
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (confirm("Delete this route? This cannot be undone.")) {
+                    deleteMutation.mutate(routeId, {
+                      onSuccess: () => onClose?.(),
+                    });
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            </>
+          )}
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Metadata */}
@@ -772,12 +932,21 @@ export function SynthesisRouteDetail({
                   stepNumberById={idMap}
                   routeId={routeId}
                   routeStatus={status}
+                  onRemove={(stepId) => removeStepMutation.mutate(stepId)}
                 />
               ));
             })()}
           </div>
         )}
       </div>
+
+      {status === "draft" && (
+        <EditRouteDialog
+          route={route}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
+      )}
 
       <DeprecateDialog
         open={deprecateOpen}

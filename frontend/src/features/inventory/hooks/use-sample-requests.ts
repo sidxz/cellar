@@ -124,3 +124,28 @@ export function useCancelSampleRequest() {
     },
   });
 }
+
+export function useUpdateSampleRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      purpose?: string;
+      priority?: string;
+      amount_value?: number;
+      amount_unit?: string;
+    }) =>
+      customInstance<SampleRequest>({
+        url: `/api/v1/sample-requests/${id}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SAMPLE_REQUESTS_KEY });
+      showSuccess("Request updated");
+    },
+  });
+}

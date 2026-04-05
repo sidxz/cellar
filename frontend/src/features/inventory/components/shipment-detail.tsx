@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, PackageCheck, Truck } from "lucide-react";
+import { ArrowLeft, PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
@@ -26,6 +27,8 @@ import {
   useReturnShipment,
   useShipment,
   useShipShipment,
+  useUpdateShipment,
+  useDeleteShipment,
 } from "../hooks/use-shipments";
 import {
   SHIPMENT_STATUS_LABELS,
@@ -55,13 +58,16 @@ function statusBadgeVariant(
 }
 
 export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
+  const router = useRouter();
   const { data: shipment, isLoading } = useShipment(shipmentId);
   const [shipDialogOpen, setShipDialogOpen] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const markInTransit = useMarkInTransit();
   const returnShipment = useReturnShipment();
+  const deleteMutation = useDeleteShipment();
 
   if (isLoading) {
     return (
@@ -116,6 +122,14 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setAddItemOpen(true)}
                 >
                   Add Item
@@ -123,6 +137,21 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 <Button size="sm" onClick={() => setShipDialogOpen(true)}>
                   <Truck className="mr-2 h-4 w-4" />
                   Ship
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm("Delete this shipment? This cannot be undone.")) {
+                      deleteMutation.mutate(shipmentId, {
+                        onSuccess: () => router.push("/inventory/shipments"),
+                      });
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
                 </Button>
               </>
             )}
@@ -254,6 +283,13 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
       </div>
 
       {/* Dialogs */}
+      {shipment.status === "preparing" && (
+        <EditShipmentDialog
+          shipment={shipment}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
+      )}
       <ShipDialog
         shipment={shipment}
         open={shipDialogOpen}
@@ -270,6 +306,110 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         onOpenChange={setDeliverOpen}
       />
     </div>
+  );
+}
+
+// --- EditShipmentDialog ---
+
+function EditShipmentDialog({
+  shipment,
+  open,
+  onOpenChange,
+}: {
+  shipment: Shipment;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const mutation = useUpdateShipment();
+  const [carrier, setCarrier] = useState(shipment.carrier ?? "");
+  const [expectedArrival, setExpectedArrival] = useState(
+    shipment.expected_arrival_date ?? ""
+  );
+  const [shippingConditions, setShippingConditions] = useState(
+    shipment.shipping_conditions ?? ""
+  );
+  const [notes, setNotes] = useState(shipment.notes ?? "");
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setCarrier(shipment.carrier ?? "");
+          setExpectedArrival(shipment.expected_arrival_date ?? "");
+          setShippingConditions(shipment.shipping_conditions ?? "");
+          setNotes(shipment.notes ?? "");
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Shipment</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="edit-ship-carrier">Carrier</Label>
+            <Input
+              id="edit-ship-carrier"
+              placeholder="e.g. FedEx, DHL, UPS"
+              value={carrier}
+              onChange={(e) => setCarrier(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-ship-arrival">Expected Arrival Date</Label>
+            <Input
+              id="edit-ship-arrival"
+              type="date"
+              value={expectedArrival}
+              onChange={(e) => setExpectedArrival(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-ship-conditions">Shipping Conditions</Label>
+            <Input
+              id="edit-ship-conditions"
+              placeholder="e.g. Ambient, Cold chain (2-8C)"
+              value={shippingConditions}
+              onChange={(e) => setShippingConditions(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-ship-notes">Notes</Label>
+            <Textarea
+              id="edit-ship-notes"
+              rows={3}
+              placeholder="Additional notes..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              mutation.mutate(
+                {
+                  id: shipment.id,
+                  carrier: carrier.trim() || null,
+                  expected_arrival_date: expectedArrival || null,
+                  shipping_conditions: shippingConditions.trim() || null,
+                  notes: notes.trim() || null,
+                },
+                { onSuccess: () => onOpenChange(false) }
+              );
+            }}
+            disabled={mutation.isPending}
+          >
+            {mutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

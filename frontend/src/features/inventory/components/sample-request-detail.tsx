@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ClipboardList } from "lucide-react";
+import { ArrowLeft, ClipboardList, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Textarea } from "@/shared/components/ui/textarea";
 import { MoleculeName, MemberName, BatchName, SampleName } from "@/shared/components/entity-name";
 import {
   useSampleRequest,
@@ -33,6 +34,7 @@ import {
   useStartPreparingSampleRequest,
   useFulfillSampleRequest,
   useCancelSampleRequest,
+  useUpdateSampleRequest,
 } from "../hooks/use-sample-requests";
 import { useSamplesByBatch } from "../hooks/use-samples";
 import {
@@ -88,6 +90,7 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [fulfillOpen, setFulfillOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const startPreparing = useStartPreparingSampleRequest();
   const cancel = useCancelSampleRequest();
@@ -143,6 +146,14 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
           <div className="flex gap-2">
             {request.status === "submitted" && (
               <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Edit
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -268,6 +279,13 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
       </Card>
 
       {/* Action dialogs */}
+      {request.status === "submitted" && (
+        <EditSampleRequestDialog
+          request={request}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
+      )}
       <ApproveDialog
         request={request}
         open={approveOpen}
@@ -288,6 +306,119 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
 }
 
 // --- Inline action dialogs ---
+
+function EditSampleRequestDialog({
+  request,
+  open,
+  onOpenChange,
+}: {
+  request: SampleRequest;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const mutation = useUpdateSampleRequest();
+  const [purpose, setPurpose] = useState(request.purpose);
+  const [priority, setPriority] = useState<string>(request.priority);
+  const [amountValue, setAmountValue] = useState(String(request.amount_value));
+  const [amountUnit, setAmountUnit] = useState(request.amount_unit);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setPurpose(request.purpose);
+          setPriority(request.priority);
+          setAmountValue(String(request.amount_value));
+          setAmountUnit(request.amount_unit);
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Sample Request</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="edit-sr-purpose">Purpose</Label>
+            <Textarea
+              id="edit-sr-purpose"
+              rows={3}
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-sr-priority">Priority</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger id="edit-sr-priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(REQUEST_PRIORITY_LABELS).map(
+                  ([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  )
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-sr-amount">Amount</Label>
+              <Input
+                id="edit-sr-amount"
+                type="number"
+                min={0}
+                value={amountValue}
+                onChange={(e) => setAmountValue(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-sr-unit">Unit</Label>
+              <select
+                id="edit-sr-unit"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={amountUnit}
+                onChange={(e) => setAmountUnit(e.target.value)}
+              >
+                <option value="mg">mg</option>
+                <option value="g">g</option>
+                <option value="mL">mL</option>
+                <option value="L">L</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              mutation.mutate(
+                {
+                  id: request.id,
+                  purpose: purpose.trim(),
+                  priority,
+                  amount_value: parseFloat(amountValue) || request.amount_value,
+                  amount_unit: amountUnit,
+                },
+                { onSuccess: () => onOpenChange(false) }
+              );
+            }}
+            disabled={!purpose.trim() || mutation.isPending}
+          >
+            {mutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ApproveDialog({
   request,

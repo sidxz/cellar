@@ -153,3 +153,43 @@ export function useAddShipmentItem() {
     },
   });
 }
+
+export function useUpdateShipment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      carrier?: string | null;
+      expected_arrival_date?: string | null;
+      shipping_conditions?: string | null;
+      notes?: string | null;
+    }) =>
+      customInstance<Shipment>({
+        url: `/api/v1/shipments/${id}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
+      showSuccess("Shipment updated");
+    },
+  });
+}
+
+export function useDeleteShipment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      customInstance<void>({
+        url: `/api/v1/shipments/${id}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
+      showSuccess("Shipment deleted");
+    },
+  });
+}

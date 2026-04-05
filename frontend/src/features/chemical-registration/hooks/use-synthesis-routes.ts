@@ -131,3 +131,57 @@ export function useDeprecateSynthesisRoute() {
     },
   });
 }
+
+export function useUpdateSynthesisRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      name?: string;
+      description?: string | null;
+      scale?: string | null;
+    }) =>
+      customInstance<SynthesisRoute>({
+        url: `/api/v1/synthesis-routes/${id}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
+      showSuccess("Route updated");
+    },
+  });
+}
+
+export function useDeleteSynthesisRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      customInstance<void>({
+        url: `/api/v1/synthesis-routes/${id}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
+      showSuccess("Route deleted");
+    },
+  });
+}
+
+export function useRemoveReactionStep(routeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (stepId: string) =>
+      customInstance<SynthesisRoute>({
+        url: `/api/v1/synthesis-routes/${routeId}/steps/${stepId}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
+      showSuccess("Step removed");
+    },
+  });
+}

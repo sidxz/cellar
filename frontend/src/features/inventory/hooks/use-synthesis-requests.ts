@@ -242,3 +242,44 @@ export function useCancelSynthesisRequest() {
     },
   });
 }
+
+export function useUpdateSynthesisRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      purpose?: string;
+      priority?: string;
+      amount_value?: number;
+      amount_unit?: string;
+      target_purity?: number | null;
+    }) =>
+      customInstance<SynthesisRequest>({
+        url: `/api/v1/synthesis-requests/${id}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
+      showSuccess("Synthesis request updated");
+    },
+  });
+}
+
+export function useDeleteSynthesisRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      customInstance<void>({
+        url: `/api/v1/synthesis-requests/${id}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
+      showSuccess("Synthesis request deleted");
+    },
+  });
+}

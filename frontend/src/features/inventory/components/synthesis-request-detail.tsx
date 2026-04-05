@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, FlaskRound, RefreshCw } from "lucide-react";
+import { ArrowLeft, FlaskRound, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/shared/components/ui/badge";
 import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
@@ -39,6 +40,8 @@ import {
   useFulfillSynthesisRequest,
   useFailSynthesis,
   useCancelSynthesisRequest,
+  useUpdateSynthesisRequest,
+  useDeleteSynthesisRequest,
 } from "../hooks/use-synthesis-requests";
 import { useBatchesByMolecule } from "../hooks/use-batches";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
@@ -105,6 +108,7 @@ const CANCELLABLE_STATUSES = new Set<SynthesisRequestStatus>([
 export function SynthesisRequestDetail({
   requestId,
 }: SynthesisRequestDetailProps) {
+  const router = useRouter();
   const { data: request, isLoading } = useSynthesisRequest(requestId);
 
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -114,10 +118,12 @@ export function SynthesisRequestDetail({
   const [completeOpen, setCompleteOpen] = useState(false);
   const [fulfillOpen, setFulfillOpen] = useState(false);
   const [failOpen, setFailOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const submit = useSubmitSynthesisRequest();
   const approve = useApproveSynthesisRequest();
   const cancel = useCancelSynthesisRequest();
+  const deleteMutation = useDeleteSynthesisRequest();
 
   if (isLoading) {
     return (
@@ -175,14 +181,39 @@ export function SynthesisRequestDetail({
           <div className="flex flex-wrap gap-2">
             {/* DRAFT */}
             {request.status === "draft" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => submit.mutate(requestId)}
-                disabled={submit.isPending}
-              >
-                {submit.isPending ? "Submitting..." : "Submit"}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => submit.mutate(requestId)}
+                  disabled={submit.isPending}
+                >
+                  {submit.isPending ? "Submitting..." : "Submit"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm("Delete this synthesis request? This cannot be undone.")) {
+                      deleteMutation.mutate(requestId, {
+                        onSuccess: () => router.push("/inventory/synthesis-requests"),
+                      });
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                </Button>
+              </>
             )}
 
             {/* SUBMITTED */}
@@ -510,6 +541,13 @@ export function SynthesisRequestDetail({
       )}
 
       {/* Action dialogs */}
+      {request.status === "draft" && (
+        <EditSynthesisRequestDialog
+          request={request}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
+      )}
       <RejectDialog
         request={request}
         open={rejectOpen}
@@ -550,6 +588,137 @@ export function SynthesisRequestDetail({
 }
 
 // --- Inline action dialogs ---
+
+function EditSynthesisRequestDialog({
+  request,
+  open,
+  onOpenChange,
+}: {
+  request: SynthesisRequest;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const mutation = useUpdateSynthesisRequest();
+  const [purpose, setPurpose] = useState(request.purpose);
+  const [priority, setPriority] = useState(request.priority);
+  const [amountValue, setAmountValue] = useState(String(request.amount_value));
+  const [amountUnit, setAmountUnit] = useState(request.amount_unit);
+  const [targetPurity, setTargetPurity] = useState(
+    request.target_purity != null ? String(request.target_purity) : ""
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setPurpose(request.purpose);
+          setPriority(request.priority);
+          setAmountValue(String(request.amount_value));
+          setAmountUnit(request.amount_unit);
+          setTargetPurity(
+            request.target_purity != null ? String(request.target_purity) : ""
+          );
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Synthesis Request</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="edit-synreq-purpose">Purpose</Label>
+            <Textarea
+              id="edit-synreq-purpose"
+              rows={3}
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-synreq-priority">Priority</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger id="edit-synreq-priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="routine">Routine</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-synreq-amount">Amount</Label>
+              <Input
+                id="edit-synreq-amount"
+                type="number"
+                min={0}
+                value={amountValue}
+                onChange={(e) => setAmountValue(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-synreq-unit">Unit</Label>
+              <select
+                id="edit-synreq-unit"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={amountUnit}
+                onChange={(e) => setAmountUnit(e.target.value)}
+              >
+                <option value="mg">mg</option>
+                <option value="g">g</option>
+                <option value="mL">mL</option>
+                <option value="L">L</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-synreq-purity">Target Purity (%)</Label>
+            <Input
+              id="edit-synreq-purity"
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              placeholder="e.g. 95.0"
+              value={targetPurity}
+              onChange={(e) => setTargetPurity(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              mutation.mutate(
+                {
+                  id: request.id,
+                  purpose: purpose.trim(),
+                  priority,
+                  amount_value: parseFloat(amountValue) || request.amount_value,
+                  amount_unit: amountUnit,
+                  target_purity: targetPurity
+                    ? parseFloat(targetPurity)
+                    : null,
+                },
+                { onSuccess: () => onOpenChange(false) }
+              );
+            }}
+            disabled={!purpose.trim() || mutation.isPending}
+          >
+            {mutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function RejectDialog({
   request,
