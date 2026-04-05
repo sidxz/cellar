@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Send,
@@ -88,6 +89,7 @@ function statusBadgeVariant(
 }
 
 export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
+  const router = useRouter();
   const { data: protocol, isLoading } = useProtocol(protocolId);
   const publishMutation = usePublishProtocol();
   const retireMutation = useRetireProtocol();
@@ -135,7 +137,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => window.history.back()}
+        onClick={() => router.back()}
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back
@@ -386,7 +388,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         <RunList
           protocolId={protocolId}
           onSelect={(runId) => {
-            window.location.href = `/assays/runs/${runId}`;
+            router.push(`/assays/runs/${runId}`);
           }}
         />
       </div>
@@ -471,7 +473,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               onClick={() => {
                 deleteMutation.mutate(protocolId, {
                   onSuccess: () => {
-                    window.location.href = "/assays";
+                    router.push("/assays");
                   },
                 });
               }}

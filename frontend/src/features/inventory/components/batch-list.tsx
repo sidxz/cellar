@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Boxes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
@@ -14,6 +15,7 @@ interface BatchListProps {
 }
 
 export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
+  const router = useRouter();
   const { data: batches, isLoading } = useBatchesByMolecule(moleculeId);
 
   const columnDefs = useMemo<ColDef<Batch>[]>(
@@ -88,7 +90,7 @@ export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
         onSelectBatch
           ? (batch) => onSelectBatch(batch.id)
           : (batch) => {
-              window.location.href = `/inventory/batches/${batch.id}`;
+              router.push(`/inventory/batches/${batch.id}`);
             }
       }
       emptyState={

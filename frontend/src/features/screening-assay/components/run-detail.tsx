@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Play,
@@ -67,6 +68,7 @@ function statusBadgeVariant(
 }
 
 export function RunDetail({ runId }: RunDetailProps) {
+  const router = useRouter();
   const { data: run, isLoading } = useRun(runId);
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
@@ -144,7 +146,7 @@ export function RunDetail({ runId }: RunDetailProps) {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => window.history.back()}
+        onClick={() => router.back()}
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back

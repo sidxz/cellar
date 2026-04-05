@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FlaskConical, Plus, Upload } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
@@ -41,6 +42,7 @@ function lifecycleBadgeVariant(
 }
 
 export function MoleculeList() {
+  const router = useRouter();
   const { data: molecules, isLoading, error } = useMolecules();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -194,7 +196,7 @@ export function MoleculeList() {
           loading={isLoading}
           height="calc(100vh - 280px)"
           onRowClick={(mol) => {
-            window.location.href = `/compounds/${mol.id}`;
+            router.push(`/compounds/${mol.id}`);
           }}
           emptyState={
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">

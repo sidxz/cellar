@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { TestTubes, Crosshair, Plus } from "lucide-react";
 import {
   Tabs,
@@ -15,6 +16,7 @@ import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateTargetDialog } from "./create-target-dialog";
 
 export function ScreeningDashboard() {
+  const router = useRouter();
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [createTargetOpen, setCreateTargetOpen] = useState(false);
@@ -58,7 +60,7 @@ export function ScreeningDashboard() {
         <TabsContent value="protocols" className="mt-4">
           <ProtocolList
             onSelect={(protocolId) => {
-              window.location.href = `/assays/protocols/${protocolId}`;
+              router.push(`/assays/protocols/${protocolId}`);
             }}
           />
         </TabsContent>

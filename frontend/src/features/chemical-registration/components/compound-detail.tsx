@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Plus,
@@ -229,6 +230,7 @@ interface CompoundDetailProps {
 }
 
 export function CompoundDetail({ compoundId }: CompoundDetailProps) {
+  const router = useRouter();
   const { data: mol, isLoading } = useMolecule(compoundId);
   const { data: disclosures } = useDisclosuresForMolecule(compoundId);
   const { data: mergeHistory } = useMergeHistory(compoundId);
@@ -259,7 +261,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
           variant="ghost"
           size="sm"
           className="mt-4"
-          onClick={() => window.history.back()}
+          onClick={() => router.back()}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to compounds
@@ -278,7 +280,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => window.history.back()}
+        onClick={() => router.back()}
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to compounds
@@ -323,7 +325,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             variant="outline"
             size="sm"
             onClick={() => {
-              window.location.href = `/compounds/${mol.merged_into_id}`;
+              router.push(`/compounds/${mol.merged_into_id}`);
             }}
           >
             View target
