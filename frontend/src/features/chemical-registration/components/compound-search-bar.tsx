@@ -22,11 +22,10 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useMoleculeSearch, useSearchMolecules } from "../hooks/use-molecules";
+import { useMoleculeSearch, useSearchMolecules, type SearchResult } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
   type LifecycleStage,
-  type Molecule,
 } from "../types";
 
 type SearchType = "name_id" | "exact" | "substructure" | "similarity";
@@ -57,9 +56,11 @@ export function CompoundSearchBar() {
   // Structure search uses the dedicated search endpoint
   const { data: structResults, isLoading: structLoading, isError: structError } = useSearchMolecules(activeStructSearch);
 
-  const results = isTextMode ? textResults : structResults;
+  const textData: SearchResult[] | undefined = textResults?.map((m) => ({ molecule: m, similarity: null }));
+  const results = isTextMode ? textData : structResults;
   const isLoading = isTextMode ? textLoading : structLoading;
   const isError = isTextMode ? textError : structError;
+  const showSimilarity = searchType === "similarity";
 
   const handleSearch = () => {
     if (!query.trim()) return;
@@ -173,28 +174,39 @@ export function CompoundSearchBar() {
                   <TableHead>Reg #</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Formula</TableHead>
+                  {showSimilarity && <TableHead className="w-[100px]">Similarity</TableHead>}
                   <TableHead>Stage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {results.map((mol: Molecule) => (
+                {results.map((r) => (
                   <TableRow
-                    key={mol.id}
+                    key={r.molecule.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/compounds/${mol.id}`)}
+                    onClick={() => router.push(`/compounds/${r.molecule.id}`)}
                   >
                     <TableCell className="font-mono text-sm">
-                      {mol.registration_number}
+                      {r.molecule.registration_number}
                     </TableCell>
-                    <TableCell className="font-medium">{mol.name}</TableCell>
+                    <TableCell className="font-medium">{r.molecule.name}</TableCell>
                     <TableCell className="font-mono text-sm text-muted-foreground">
-                      {mol.molecular_formula ?? "—"}
+                      {r.molecule.molecular_formula ?? "—"}
                     </TableCell>
+                    {showSimilarity && r.similarity != null && (
+                      <TableCell>
+                        <span className={
+                          r.similarity > 0.8 ? "text-green-400 font-medium" :
+                          r.similarity > 0.6 ? "text-yellow-400" : "text-muted-foreground"
+                        }>
+                          {(r.similarity * 100).toFixed(1)}%
+                        </span>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Badge variant="outline">
                         {LIFECYCLE_LABELS[
-                          mol.lifecycle_stage as LifecycleStage
-                        ] ?? mol.lifecycle_stage}
+                          r.molecule.lifecycle_stage as LifecycleStage
+                        ] ?? r.molecule.lifecycle_stage}
                       </Badge>
                     </TableCell>
                   </TableRow>

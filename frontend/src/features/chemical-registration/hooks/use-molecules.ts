@@ -88,6 +88,16 @@ export function useMoleculeSearch(q: string) {
   });
 }
 
+export interface SimilaritySearchResult {
+  molecule: Molecule;
+  similarity: number;
+}
+
+export type SearchResult = {
+  molecule: Molecule;
+  similarity: number | null;
+};
+
 export function useSearchMolecules(params: {
   search_type: string;
   query: string;
@@ -103,14 +113,26 @@ export function useSearchMolecules(params: {
       }
     : undefined;
 
+  const isSimilarity = params?.search_type === "similarity";
+
   return useQuery({
     queryKey: [...MOLECULES_KEY, "search", params],
-    queryFn: () =>
-      customInstance<Molecule[]>({
+    queryFn: async () => {
+      if (isSimilarity) {
+        const data = await customInstance<SimilaritySearchResult[]>({
+          url: "/api/v1/molecules/search",
+          method: "GET",
+          params: queryParams,
+        });
+        return data.map((r) => ({ molecule: r.molecule, similarity: r.similarity }));
+      }
+      const data = await customInstance<Molecule[]>({
         url: "/api/v1/molecules/search",
         method: "GET",
         params: queryParams,
-      }),
+      });
+      return data.map((m) => ({ molecule: m, similarity: null }));
+    },
     enabled: !!params?.query,
   });
 }
