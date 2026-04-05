@@ -46,16 +46,30 @@ class EventDispatcher:
 
         Handlers are called in registration order. If a handler raises,
         the exception propagates (fail-fast for in-process dispatch).
+
+        Supports base-class handlers: a handler registered for ``DomainEvent``
+        receives all events (catch-all).
         """
         event_type = type(event)
-        handlers = self._handlers.get(event_type, [])
-        for handler in handlers:
+
+        # Exact-match handlers
+        for handler in self._handlers.get(event_type, []):
             logger.debug(
                 "Dispatching %s to %s",
                 event_type.__name__,
                 getattr(handler, "__qualname__", repr(handler)),
             )
             await handler(event)
+
+        # Base-class catch-all handlers (e.g., DomainEvent → audit)
+        if event_type is not DomainEvent:
+            for handler in self._handlers.get(DomainEvent, []):
+                logger.debug(
+                    "Dispatching %s to catch-all %s",
+                    event_type.__name__,
+                    getattr(handler, "__qualname__", repr(handler)),
+                )
+                await handler(event)
 
     async def dispatch_all(self, events: list[DomainEvent]) -> None:
         """Dispatch a batch of events (e.g., from UoW.commit())."""

@@ -30,6 +30,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     container = create_container()
     app.state.container = container
 
+    # Wire audit event handler — catch-all for all domain events
+    from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
+
+    from chem_vault.domain.shared.events import DomainEvent
+    from chem_vault.infrastructure.messaging.audit_event_handler import AuditEventHandler
+    from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+
+    dispatcher = container[EventDispatcher]
+    session_factory = container[async_sm]
+    dispatcher.register(DomainEvent, AuditEventHandler(session_factory))
+
     # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
     async with sentinel.lifespan(app):
         yield
