@@ -153,6 +153,7 @@ from chem_vault.domain.workspace_config.repository import (
     WorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.application.research_organization.collection_merge_side_effect import CollectionMergeSideEffect
 from chem_vault.infrastructure.messaging.merge_handlers import (
     BatchMergeSideEffect,
     DoseResponseCurveMergeSideEffect,
@@ -437,6 +438,7 @@ def create_container(
             DoseResponseCurveMergeSideEffect(),
             MoleculeRelationshipMergeSideEffect(),
             SynthesisRouteMergeSideEffect(),
+            CollectionMergeSideEffect(),
         ])),
     )
 
