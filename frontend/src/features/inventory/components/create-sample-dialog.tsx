@@ -20,7 +20,8 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useCreateSample } from "../hooks/use-samples";
-import { CONTAINER_TYPE_LABELS } from "../types";
+import { useStorageLocations } from "../hooks/use-storage-locations";
+import { CONTAINER_TYPE_LABELS, type StorageLocation } from "../types";
 
 interface CreateSampleDialogProps {
   batchId: string;
@@ -34,7 +35,9 @@ export function CreateSampleDialog({
   onOpenChange,
 }: CreateSampleDialogProps) {
   const createMutation = useCreateSample();
+  const { data: locations } = useStorageLocations();
   const [barcode, setBarcode] = useState("");
+  const [locationId, setLocationId] = useState("");
   const [containerType, setContainerType] = useState("vial");
   const [amountValue, setAmountValue] = useState("");
   const [amountUnit, setAmountUnit] = useState("mg");
@@ -50,6 +53,7 @@ export function CreateSampleDialog({
         amount_value: parseFloat(amountValue),
         amount_unit: amountUnit,
         solvent: solvent || null,
+        location_id: locationId || null,
         low_stock_threshold: lowStockThreshold
           ? parseFloat(lowStockThreshold)
           : null,
@@ -60,6 +64,7 @@ export function CreateSampleDialog({
           setBarcode("");
           setContainerType("vial");
           setAmountValue("");
+          setLocationId("");
           setSolvent("");
           setLowStockThreshold("");
         },
@@ -127,6 +132,22 @@ export function CreateSampleDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Storage Location</Label>
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              value={locationId}
+              onChange={(e) => setLocationId(e.target.value)}
+            >
+              <option value="">No location</option>
+              {locations?.map((loc: StorageLocation) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name} ({loc.type})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid gap-2">
