@@ -29,7 +29,15 @@ import {
 } from "@/shared/components/ui/table";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +53,8 @@ import {
   useVersionProtocol,
   useUpdateProtocol,
   useDeleteProtocol,
+  useAddReadoutDefinition,
+  useRemoveReadoutDefinition,
 } from "../hooks/use-protocols";
 import { RunList } from "./run-list";
 import { CreateRunDialog } from "./create-run-dialog";
@@ -84,12 +94,20 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const versionMutation = useVersionProtocol();
   const updateMutation = useUpdateProtocol(protocolId);
   const deleteMutation = useDeleteProtocol();
+  const addReadoutDef = useAddReadoutDefinition(protocolId);
+  const removeReadoutDef = useRemoveReadoutDefinition(protocolId);
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [addReadoutOpen, setAddReadoutOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [rdName, setRdName] = useState("");
+  const [rdDataType, setRdDataType] = useState("numeric");
+  const [rdUnit, setRdUnit] = useState("");
+  const [rdAggregation, setRdAggregation] = useState("none");
+  const [rdNormalization, setRdNormalization] = useState("none");
 
   if (isLoading) {
     return (
@@ -241,11 +259,19 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
       {/* Readout Definitions */}
       <Card>
-        <CardHeader>
-          <CardTitle>Readout Definitions</CardTitle>
-          <CardDescription>
-            Data points collected in each run.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Readout Definitions</CardTitle>
+            <CardDescription>
+              Data points collected in each run.
+            </CardDescription>
+          </div>
+          {status === "draft" && (
+            <Button size="sm" variant="outline" onClick={() => setAddReadoutOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Readout
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {protocol.readout_definitions.length === 0 ? (
@@ -263,6 +289,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     <TableHead>Unit</TableHead>
                     <TableHead>Aggregation</TableHead>
                     <TableHead>Normalization</TableHead>
+                    {status === "draft" && <TableHead className="w-12" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -288,6 +315,20 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                           rd.normalization as ReadoutNormalization
                         ] ?? rd.normalization}
                       </TableCell>
+                      {status === "draft" && (
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeReadoutDef.mutate(rd.id)}
+                            disabled={removeReadoutDef.isPending || protocol.readout_definitions.length <= 1}
+                            title={protocol.readout_definitions.length <= 1 ? "Cannot remove last readout definition" : "Remove"}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -375,10 +416,11 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             </div>
             <div className="grid gap-2">
               <Label>Description</Label>
-              <Input
+              <Textarea
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Optional"
+                placeholder="Optional — describe the assay procedure, controls, and acceptance criteria"
+                rows={4}
               />
             </div>
             <div className="grid gap-2">
@@ -436,6 +478,101 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Readout Definition Dialog */}
+      <Dialog open={addReadoutOpen} onOpenChange={setAddReadoutOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Readout Definition</DialogTitle>
+            <DialogDescription>
+              Define a new measurement column for this protocol.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                value={rdName}
+                onChange={(e) => setRdName(e.target.value)}
+                placeholder="e.g., % Inhibition, IC50, Fluorescence"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Data Type</Label>
+                <Select value={rdDataType} onValueChange={setRdDataType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(READOUT_DATA_TYPE_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Unit</Label>
+                <Input
+                  value={rdUnit}
+                  onChange={(e) => setRdUnit(e.target.value)}
+                  placeholder="e.g., %, nM, RFU"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Aggregation</Label>
+                <Select value={rdAggregation} onValueChange={setRdAggregation}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(READOUT_AGGREGATION_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Normalization</Label>
+                <Select value={rdNormalization} onValueChange={setRdNormalization}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(READOUT_NORMALIZATION_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                addReadoutDef.mutate(
+                  {
+                    name: rdName,
+                    data_type: rdDataType,
+                    unit: rdUnit || undefined,
+                    aggregation: rdAggregation,
+                    normalization: rdNormalization,
+                  },
+                  {
+                    onSuccess: () => {
+                      setAddReadoutOpen(false);
+                      setRdName("");
+                      setRdDataType("numeric");
+                      setRdUnit("");
+                      setRdAggregation("none");
+                      setRdNormalization("none");
+                    },
+                  }
+                );
+              }}
+              disabled={!rdName.trim() || addReadoutDef.isPending}
+            >
+              {addReadoutDef.isPending ? "Adding..." : "Add Readout"}
             </Button>
           </DialogFooter>
         </DialogContent>

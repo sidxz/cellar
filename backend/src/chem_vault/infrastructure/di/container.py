@@ -43,6 +43,7 @@ from chem_vault.application.screening.get_target import GetTarget, ListTargets
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.screening.manage_protocol import DeleteProtocol, PublishProtocol, RetireProtocol, UpdateProtocol, VersionProtocol
+from chem_vault.application.screening.manage_readout_definitions import AddReadoutDefinition, RemoveReadoutDefinition
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
@@ -511,6 +512,8 @@ def create_container(
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
     container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
+    container.define(AddReadoutDefinition, _protocol_cmd(AddReadoutDefinition))
+    container.define(RemoveReadoutDefinition, _protocol_cmd(RemoveReadoutDefinition))
 
     def _target_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]

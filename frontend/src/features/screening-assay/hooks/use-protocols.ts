@@ -103,3 +103,37 @@ export function useDeleteProtocol() {
     onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
   });
 }
+
+export function useAddReadoutDefinition(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      data_type: string;
+      unit?: string | null;
+      aggregation?: string;
+      normalization?: string;
+      is_calculated?: boolean;
+      calculation_formula?: string | null;
+      display_order?: number;
+    }) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${protocolId}/readout-definitions`,
+        method: "POST",
+        data,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+  });
+}
+
+export function useRemoveReadoutDefinition(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (definitionId: string) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+  });
+}

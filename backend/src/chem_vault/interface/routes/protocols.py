@@ -22,6 +22,12 @@ from chem_vault.application.screening.manage_protocol import (
     UpdateProtocolCommand,
     VersionProtocol,
 )
+from chem_vault.application.screening.manage_readout_definitions import (
+    AddReadoutDefinition,
+    AddReadoutDefinitionCommand,
+    RemoveReadoutDefinition,
+    RemoveReadoutDefinitionCommand,
+)
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
@@ -159,6 +165,18 @@ class RetireRequest(BaseModel):
     reason: str | None = None
 
 
+class AddReadoutDefinitionRequest(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    aggregation: str = "none"
+    precision: int | None = None
+    normalization: str = "none"
+    is_calculated: bool = False
+    calculation_formula: str | None = None
+    display_order: int = 0
+
+
 class CreateTargetRequest(BaseModel):
     name: str
     target_type: str
@@ -211,6 +229,12 @@ def _update_protocol(c: Annotated[Container, Depends(get_container)]) -> UpdateP
 
 def _delete_protocol(c: Annotated[Container, Depends(get_container)]) -> DeleteProtocol:
     return c[DeleteProtocol]
+
+def _add_readout_definition(c: Annotated[Container, Depends(get_container)]) -> AddReadoutDefinition:
+    return c[AddReadoutDefinition]
+
+def _remove_readout_definition(c: Annotated[Container, Depends(get_container)]) -> RemoveReadoutDefinition:
+    return c[RemoveReadoutDefinition]
 
 def _create_target(c: Annotated[Container, Depends(get_container)]) -> CreateTarget:
     return c[CreateTarget]
@@ -340,6 +364,62 @@ async def delete_protocol(
 ) -> None:
     """Delete a DRAFT protocol. Only drafts can be deleted."""
     result_to_response(await uc(protocol_id, auth=auth))
+
+
+# ---------------------------------------------------------------------------
+# Readout definition routes
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/protocols/{protocol_id}/readout-definitions",
+    response_model=ProtocolResponse,
+    status_code=201,
+    tags=["protocols"],
+)
+async def add_readout_definition(
+    protocol_id: uuid.UUID,
+    body: AddReadoutDefinitionRequest,
+    auth: AuthDep,
+    uc: Annotated[AddReadoutDefinition, Depends(_add_readout_definition)],
+) -> ProtocolResponse:
+    """Add a readout definition to a DRAFT protocol."""
+    cmd = AddReadoutDefinitionCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        name=body.name,
+        data_type=body.data_type,
+        unit=body.unit,
+        aggregation=body.aggregation,
+        precision=body.precision,
+        normalization=body.normalization,
+        is_calculated=body.is_calculated,
+        calculation_formula=body.calculation_formula,
+        display_order=body.display_order,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/readout-definitions/{definition_id}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def remove_readout_definition(
+    protocol_id: uuid.UUID,
+    definition_id: uuid.UUID,
+    auth: AuthDep,
+    uc: Annotated[RemoveReadoutDefinition, Depends(_remove_readout_definition)],
+) -> ProtocolResponse:
+    """Remove a readout definition from a DRAFT protocol."""
+    cmd = RemoveReadoutDefinitionCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        definition_id=definition_id,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
 
 
 # ---------------------------------------------------------------------------
