@@ -31,10 +31,10 @@ function downloadCsvTemplate() {
   // Multiple identifier columns supported — each compound can carry
   // CAS, vendor ID, ChEMBL, PubChem, and custom IDs in the same row.
   // All ID columns are optional; include only the ones you have.
-  const header = "name,smiles,molecule_type,cas_number,vendor_id,chembl_id,pubchem_cid,custom_id";
-  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,VENDOR-001,CHEMBL25,2244,";
-  const example2 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,58-08-2,,CHEMBL113,2519,";
-  const example3 = "Undisclosed Partner Compound,,small_molecule,,PARTNER-042,,,PROJECT-X-017";
+  const header = "name,smiles,molecule_type,cas_number,vendor_id,chembl_id,pubchem_cid,custom_id,custom_id_1,custom_id_2";
+  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,VENDOR-001,CHEMBL25,2244,,,";
+  const example2 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,58-08-2,,CHEMBL113,2519,,,";
+  const example3 = "Undisclosed Partner Compound,,small_molecule,,PARTNER-042,,,PROJECT-X-017,PLATE-042,LOT-2026-A";
   const csv = [header, example1, example2, example3].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
