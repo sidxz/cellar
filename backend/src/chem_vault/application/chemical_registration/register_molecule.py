@@ -51,6 +51,7 @@ class RegisterMoleculeCommand(Command):
     custom_fields: dict | None = None
     qc_reject_threshold: int | None = None
     qc_warn_threshold: int | None = None
+    promote_name_as_identifier: bool = True  # False for auto-generated names
 
 
 class RegisterMolecule:
@@ -93,7 +94,7 @@ class RegisterMolecule:
     def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
         """Collect name + all external IDs into a single set for batch lookup."""
         ids = {ext.identifier for ext in input.external_ids}
-        if input.name:
+        if input.name and input.promote_name_as_identifier:
             ids.add(input.name)
         return ids
 
@@ -135,8 +136,8 @@ class RegisterMolecule:
         """Add name as custom identifier + all external_ids to molecule."""
         existing_values = {i.identifier for i in mol.identifiers}
 
-        # Auto-promote name as custom identifier
-        if input.name and input.name not in existing_values:
+        # Auto-promote name as custom identifier (skip for auto-generated names)
+        if input.name and input.promote_name_as_identifier and input.name not in existing_values:
             mol.add_identifier(
                 MoleculeIdentifier.create(
                     molecule_id=mol.id,

@@ -172,6 +172,7 @@ class BulkRegistrationService:
                 )
                 continue
 
+            has_explicit_name = bool(item.name)
             cmd = RegisterMoleculeCommand(
                 workspace_id=workspace_id,
                 name=item.name or f"Compound-{item.row_index + 1}",
@@ -186,6 +187,7 @@ class BulkRegistrationService:
                 ],
                 originating_org_id=originating_org_id,
                 registered_by=submitted_by,
+                promote_name_as_identifier=has_explicit_name,
             )
 
             result = await register_uc(cmd)
