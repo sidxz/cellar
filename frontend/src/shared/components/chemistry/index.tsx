@@ -30,3 +30,6 @@ export const StructureThumbnail = dynamic(
     ),
   }
 );
+
+export { StructureEditorDialog } from "./structure-editor-dialog";
+export type { StructureEditorDialogProps } from "./structure-editor-dialog";
