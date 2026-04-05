@@ -282,7 +282,7 @@ async def list_synthesis_routes(
     molecule_id: uuid.UUID, auth: AuthDep, uc: ListSynthesisRoutesByMoleculeDep
 ) -> list[SynthesisRouteSummaryResponse]:
     result = await uc(
-        ListSynthesisRoutesByMoleculeQuery(target_molecule_id=molecule_id),
+        ListSynthesisRoutesByMoleculeQuery(workspace_id=auth.workspace_id, target_molecule_id=molecule_id),
         auth=auth,
     )
     routes = result_to_response(result)

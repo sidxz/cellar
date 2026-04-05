@@ -39,11 +39,14 @@ class SQLAlchemySynthesisRouteRepository(
     # ------------------------------------------------------------------
 
     async def find_by_target_molecule(
-        self, target_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, target_molecule_id: uuid.UUID
     ) -> list[SynthesisRoute]:
         stmt = (
             select(SynthesisRouteModel)
-            .where(SynthesisRouteModel.target_molecule_id == target_molecule_id)
+            .where(
+                SynthesisRouteModel.workspace_id == workspace_id,
+                SynthesisRouteModel.target_molecule_id == target_molecule_id,
+            )
             .order_by(SynthesisRouteModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
@@ -62,9 +65,10 @@ class SQLAlchemySynthesisRouteRepository(
         await self._session.execute(stmt)
 
     async def find_preferred(
-        self, target_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, target_molecule_id: uuid.UUID
     ) -> SynthesisRoute | None:
         stmt = select(SynthesisRouteModel).where(
+            SynthesisRouteModel.workspace_id == workspace_id,
             SynthesisRouteModel.target_molecule_id == target_molecule_id,
             SynthesisRouteModel.status == RouteStatus.PREFERRED.value,
         )

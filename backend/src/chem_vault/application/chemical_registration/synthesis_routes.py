@@ -111,6 +111,7 @@ class GetSynthesisRouteQuery(Query):
 
 @dataclass(frozen=True, kw_only=True)
 class ListSynthesisRoutesByMoleculeQuery(Query):
+    workspace_id: uuid.UUID
     target_molecule_id: uuid.UUID
 
 
@@ -183,8 +184,11 @@ class ListSynthesisRoutesByMolecule:
     async def __call__(
         self, input: ListSynthesisRoutesByMoleculeQuery, auth: AuthContext | None = None
     ) -> Result[list[SynthesisRoute], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
-            routes = await self._route_repo.find_by_target_molecule(input.target_molecule_id)
+            routes = await self._route_repo.find_by_target_molecule(
+                input.workspace_id, input.target_molecule_id
+            )
             return Success(routes)
 
 
@@ -331,7 +335,7 @@ class SetPreferredRoute:
             require_same_workspace(auth, route.workspace_id)
 
             # Demote current preferred (if any)
-            current_preferred = await self._route_repo.find_preferred(route.target_molecule_id)
+            current_preferred = await self._route_repo.find_preferred(route.workspace_id, route.target_molecule_id)
             previous_id = None
             if current_preferred is not None and current_preferred.id != route.id:
                 previous_id = current_preferred.id

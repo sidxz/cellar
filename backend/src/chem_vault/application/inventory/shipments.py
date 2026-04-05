@@ -160,10 +160,7 @@ class CreateShipment:
                 notes=input.notes,
                 items=items,
             )
-
-            # Fix item refs to use the real shipment id
-            for item in shipment._items:
-                item.shipment_id = shipment.id
+            # Shipment.create() now fixes item.shipment_id internally
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
@@ -182,7 +179,7 @@ class GetShipment:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
             return Success(shipment)
 
@@ -195,6 +192,7 @@ class ListShipments:
     async def __call__(
         self, input: ListShipmentsQuery, auth: AuthContext | None = None
     ) -> Result[list[Shipment], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             shipments = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status
@@ -221,7 +219,7 @@ class ShipShipment:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             shipment.ship(input.tracking_number, shipping_date=input.shipping_date)
@@ -251,7 +249,7 @@ class MarkShipmentInTransit:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             shipment.mark_in_transit()
@@ -281,7 +279,7 @@ class DeliverShipment:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             shipment.deliver(received_date=input.received_date)
@@ -311,7 +309,7 @@ class ReturnShipment:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             shipment.return_shipment()
@@ -341,7 +339,7 @@ class AddShipmentItem:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             item = ShipmentItem(
@@ -378,7 +376,7 @@ class UpdateShipment:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             if shipment.status != ShipmentStatus.PREPARING:
@@ -417,7 +415,7 @@ class DeleteShipment:
         async with self._uow:
             shipment = await self._repo.find_by_id(input.shipment_id)
             if shipment is None:
-                return Failure(NotFoundError("Shipment"))
+                return Failure(NotFoundError("Shipment", str(input.shipment_id)))
             require_same_workspace(auth, shipment.workspace_id)
 
             if shipment.status != ShipmentStatus.PREPARING:

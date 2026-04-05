@@ -155,6 +155,7 @@ class ListSampleRequests:
     async def __call__(
         self, input: ListSampleRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SampleRequest], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             requests = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status

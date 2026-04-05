@@ -83,6 +83,10 @@ class SQLAlchemySampleRequestRepository(
         )
 
     def _update_model(self, model: SampleRequestModel, aggregate: SampleRequest) -> None:
+        model.purpose = aggregate.purpose
+        model.priority = aggregate.priority.value
+        model.requested_amount_value = aggregate.requested_amount.value
+        model.requested_amount_unit = aggregate.requested_amount.unit.value
         model.status = aggregate.status.value
         model.assigned_to = aggregate.assigned_to
         model.fulfilled_sample_id = aggregate.fulfilled_sample_id

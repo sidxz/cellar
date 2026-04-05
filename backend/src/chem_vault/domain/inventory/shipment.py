@@ -127,6 +127,9 @@ class Shipment(AggregateRoot):
             notes=notes,
             items=items,
         )
+        # Fix item references to point to the actual shipment ID
+        for item in shipment._items:
+            item.shipment_id = shipment.id
         shipment.register_event(
             ShipmentCreated(
                 aggregate_id=shipment.id,

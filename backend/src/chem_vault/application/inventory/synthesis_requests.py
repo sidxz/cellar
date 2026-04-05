@@ -485,6 +485,7 @@ class ListSynthesisRequests:
     async def __call__(
         self, input: ListSynthesisRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SynthesisRequest], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             if input.molecule_id is not None:
                 requests = await self._repo.find_by_molecule(
