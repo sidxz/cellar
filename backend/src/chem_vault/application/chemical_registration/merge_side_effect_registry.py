@@ -27,8 +27,10 @@ class MergeSideEffectHandler(Protocol):
 class MergeSideEffectRegistry:
     """Collects and executes all registered merge side-effect handlers."""
 
-    def __init__(self) -> None:
-        self._handlers: list[MergeSideEffectHandler] = []
+    def __init__(
+        self, handlers: list[MergeSideEffectHandler] | None = None
+    ) -> None:
+        self._handlers: list[MergeSideEffectHandler] = list(handlers or [])
 
     def register(self, handler: MergeSideEffectHandler) -> None:
         """Register a handler to be called on every merge."""

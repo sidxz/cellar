@@ -99,6 +99,12 @@ from chem_vault.domain.workspace_config.repository import (
     WorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.infrastructure.messaging.merge_handlers import (
+    BatchMergeSideEffect,
+    DoseResponseCurveMergeSideEffect,
+    MoleculeRelationshipMergeSideEffect,
+    ReadoutDataMergeSideEffect,
+)
 from chem_vault.infrastructure.persistence.database import (
     create_engine,
     create_session_factory,
@@ -356,7 +362,15 @@ def create_container(
     container.define(DeleteRelationship, _rel_delete)
 
     # --- Merge & Disclosure ---
-    container.define(MergeSideEffectRegistry, Singleton(MergeSideEffectRegistry))
+    container.define(
+        MergeSideEffectRegistry,
+        Singleton(lambda: MergeSideEffectRegistry([
+            BatchMergeSideEffect(),
+            ReadoutDataMergeSideEffect(),
+            DoseResponseCurveMergeSideEffect(),
+            MoleculeRelationshipMergeSideEffect(),
+        ])),
+    )
 
     def _merge_service(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
