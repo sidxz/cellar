@@ -140,3 +140,21 @@ class MoleculeRelationshipMergeSideEffect:
             ),
             params,
         )
+
+
+class SynthesisRouteMergeSideEffect:
+    """Re-point SynthesisRoute.target_molecule_id from source to target."""
+
+    async def on_merge(
+        self,
+        session: AsyncSession,
+        source_molecule_id: uuid.UUID,
+        target_molecule_id: uuid.UUID,
+    ) -> None:
+        await session.execute(
+            sa.text(
+                "UPDATE synthesis_routes SET target_molecule_id = :target "
+                "WHERE target_molecule_id = :source"
+            ),
+            {"target": target_molecule_id, "source": source_molecule_id},
+        )

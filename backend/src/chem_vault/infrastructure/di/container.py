@@ -16,6 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
+from chem_vault.application.chemical_registration.synthesis_routes import (
+    AddReactionStep,
+    CreateSynthesisRoute,
+    DeprecateSynthesisRoute,
+    GetSynthesisRoute,
+    ListSynthesisRoutesByMolecule,
+    RecordStepOutcome,
+    SetPreferredRoute,
+    ValidateSynthesisRoute,
+)
 from chem_vault.application.inventory.create_batch import CreateBatch
 from chem_vault.application.inventory.create_sample import CreateSample
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
@@ -104,6 +114,7 @@ from chem_vault.infrastructure.messaging.merge_handlers import (
     DoseResponseCurveMergeSideEffect,
     MoleculeRelationshipMergeSideEffect,
     ReadoutDataMergeSideEffect,
+    SynthesisRouteMergeSideEffect,
 )
 from chem_vault.infrastructure.persistence.database import (
     create_engine,
@@ -372,6 +383,7 @@ def create_container(
             ReadoutDataMergeSideEffect(),
             DoseResponseCurveMergeSideEffect(),
             MoleculeRelationshipMergeSideEffect(),
+            SynthesisRouteMergeSideEffect(),
         ])),
     )
 
@@ -458,11 +470,34 @@ def create_container(
 
     container.define(BulkRegistrationService, _bulk_registration_service)
 
-    # --- Synthesis Routes (repo only — use cases in S19b) ---
-    container.define(
-        SynthesisRouteRepository,
-        lambda c: SQLAlchemySynthesisRouteRepository(AsyncUnitOfWork(c[async_sessionmaker])),
-    )
+    # --- Synthesis Routes ---
+    def _synth_route_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySynthesisRouteRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _synth_route_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySynthesisRouteRepository(uow))
+        return _f
+
+    def _create_synth_route(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateSynthesisRoute(
+            uow, SQLAlchemySynthesisRouteRepository(uow),
+            SQLAlchemyMoleculeRepository(uow), c[EventDispatcher],
+        )
+
+    container.define(CreateSynthesisRoute, _create_synth_route)
+    container.define(GetSynthesisRoute, _synth_route_query(GetSynthesisRoute))
+    container.define(ListSynthesisRoutesByMolecule, _synth_route_query(ListSynthesisRoutesByMolecule))
+    container.define(AddReactionStep, _synth_route_cmd(AddReactionStep))
+    container.define(RecordStepOutcome, _synth_route_cmd(RecordStepOutcome))
+    container.define(ValidateSynthesisRoute, _synth_route_cmd(ValidateSynthesisRoute))
+    container.define(SetPreferredRoute, _synth_route_cmd(SetPreferredRoute))
+    container.define(DeprecateSynthesisRoute, _synth_route_cmd(DeprecateSynthesisRoute))
 
     # --- Inventory ---
     def _batch_cmd(c):  # type: ignore[no-untyped-def]
