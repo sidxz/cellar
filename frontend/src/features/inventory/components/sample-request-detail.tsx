@@ -335,7 +335,7 @@ function EditSampleRequestDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Edit Sample Request</DialogTitle>
         </DialogHeader>
@@ -434,7 +434,7 @@ function ApproveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Approve Request</DialogTitle>
           <DialogDescription>
@@ -483,7 +483,7 @@ function RejectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Reject Request</DialogTitle>
           <DialogDescription>
@@ -538,7 +538,7 @@ function FulfillDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Fulfill Request</DialogTitle>
           <DialogDescription>

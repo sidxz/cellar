@@ -623,7 +623,7 @@ function EditSynthesisRequestDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Edit Synthesis Request</DialogTitle>
         </DialogHeader>
@@ -734,7 +734,7 @@ function RejectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Reject Request</DialogTitle>
           <DialogDescription>
@@ -791,7 +791,7 @@ function AssignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Assign Request</DialogTitle>
           <DialogDescription>
@@ -891,7 +891,7 @@ function StartDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Start Synthesis</DialogTitle>
           <DialogDescription>
@@ -985,7 +985,7 @@ function FlagInfeasibleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Flag Feasibility</DialogTitle>
           <DialogDescription>
@@ -1062,7 +1062,7 @@ function CompleteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Complete Synthesis</DialogTitle>
           <DialogDescription>
@@ -1140,7 +1140,7 @@ function FulfillDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Fulfill Request</DialogTitle>
           <DialogDescription>
@@ -1209,7 +1209,7 @@ function FailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Mark as Failed</DialogTitle>
           <DialogDescription>

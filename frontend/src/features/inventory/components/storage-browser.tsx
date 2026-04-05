@@ -152,7 +152,7 @@ function EditStorageLocationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Edit Location</DialogTitle>
           <DialogDescription>

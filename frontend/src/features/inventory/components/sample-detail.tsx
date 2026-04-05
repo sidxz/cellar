@@ -290,7 +290,7 @@ function AliquotDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Aliquot Sample</DialogTitle>
           <DialogDescription>
@@ -352,7 +352,7 @@ function MoveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Move Sample</DialogTitle>
           <DialogDescription>
@@ -406,7 +406,7 @@ function DisposeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Dispose Sample</DialogTitle>
           <DialogDescription>
@@ -455,7 +455,7 @@ function QuarantineDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Quarantine Sample</DialogTitle>
           <DialogDescription>

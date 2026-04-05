@@ -343,7 +343,7 @@ function EditShipmentDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Edit Shipment</DialogTitle>
         </DialogHeader>
@@ -430,7 +430,7 @@ function ShipDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Ship Shipment</DialogTitle>
           <DialogDescription>
@@ -502,7 +502,7 @@ function AddItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Add Item</DialogTitle>
           <DialogDescription>
@@ -601,7 +601,7 @@ function DeliverDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Mark as Delivered</DialogTitle>
           <DialogDescription>
