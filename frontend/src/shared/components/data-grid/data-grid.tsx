@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import {
   AllCommunityModule,
@@ -11,6 +11,7 @@ import {
 } from "ag-grid-community";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { chemVaultTheme } from "./ag-grid-theme";
+import { ExportToolbar } from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -27,6 +28,8 @@ export interface DataGridProps<TData = unknown>
   height?: string | number;
   /** Suppress built-in column filters. Default: false */
   suppressFilters?: boolean;
+  /** When provided, renders CSV + Excel export buttons above the grid */
+  exportFilename?: string;
 }
 
 export function DataGrid<TData = unknown>({
@@ -37,8 +40,10 @@ export function DataGrid<TData = unknown>({
   onRowClick,
   height = "400px",
   suppressFilters = false,
+  exportFilename,
   ...rest
 }: DataGridProps<TData>) {
+  const gridRef = useRef<AgGridReact<TData>>(null);
   const defaultColDef = useMemo<ColDef<TData>>(
     () => ({
       sortable: true,
@@ -80,19 +85,27 @@ export function DataGrid<TData = unknown>({
   }
 
   return (
-    <div style={{ height, width: "100%" }}>
-      <AgGridReact<TData>
-        theme={chemVaultTheme}
-        rowData={rowData ?? []}
-        columnDefs={columnDefs}
-        defaultColDef={defaultColDef}
-        onRowClicked={onRowClick ? handleRowClicked : undefined}
-        onGridReady={handleGridReady}
-        rowClass={onRowClick ? "cursor-pointer" : undefined}
-        suppressCellFocus
-        animateRows={false}
-        {...rest}
-      />
+    <div>
+      {exportFilename && rowData?.length ? (
+        <div className="mb-2 flex justify-end">
+          <ExportToolbar gridRef={gridRef} filename={exportFilename} />
+        </div>
+      ) : null}
+      <div style={{ height, width: "100%" }}>
+        <AgGridReact<TData>
+          ref={gridRef}
+          theme={chemVaultTheme}
+          rowData={rowData ?? []}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onRowClicked={onRowClick ? handleRowClicked : undefined}
+          onGridReady={handleGridReady}
+          rowClass={onRowClick ? "cursor-pointer" : undefined}
+          suppressCellFocus
+          animateRows={false}
+          {...rest}
+        />
+      </div>
     </div>
   );
 }
