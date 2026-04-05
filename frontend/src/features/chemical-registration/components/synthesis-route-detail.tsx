@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X, GitBranch } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { MemberName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -147,7 +148,7 @@ function ReagentRow({ reagent }: { reagent: ReactionReagent }) {
 // Step card
 // ---------------------------------------------------------------------------
 
-function StepCard({ step }: { step: ReactionStep }) {
+function StepCard({ step, stepNumberById }: { step: ReactionStep; stepNumberById: Map<string, number> }) {
   const conditions = step.conditions as Record<string, unknown> | null;
   const outcome = step.outcome as Record<string, unknown> | null;
 
@@ -251,7 +252,7 @@ function StepCard({ step }: { step: ReactionStep }) {
             <span>Follows steps:</span>
             {step.preceding_step_ids.map((sid) => (
               <Badge key={sid} variant="outline" className="text-xs">
-                {sid.slice(0, 8)}
+                Step {stepNumberById.get(sid) ?? "?"}
               </Badge>
             ))}
           </div>
@@ -383,7 +384,7 @@ export function SynthesisRouteDetail({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Created By</p>
-            <p className="font-mono text-sm">{route.created_by.slice(0, 8)}</p>
+            <p className="font-medium text-sm"><MemberName id={route.created_by} /></p>
           </div>
         </CardContent>
       </Card>
@@ -446,12 +447,13 @@ export function SynthesisRouteDetail({
           </p>
         ) : (
           <div className="space-y-3">
-            {route.steps
-              .slice()
-              .sort((a, b) => a.step_number - b.step_number)
-              .map((step) => (
-                <StepCard key={step.id} step={step} />
-              ))}
+            {(() => {
+              const sorted = route.steps.slice().sort((a, b) => a.step_number - b.step_number);
+              const idMap = new Map(sorted.map((s) => [s.id, s.step_number]));
+              return sorted.map((step) => (
+                <StepCard key={step.id} step={step} stepNumberById={idMap} />
+              ));
+            })()}
           </div>
         )}
       </div>

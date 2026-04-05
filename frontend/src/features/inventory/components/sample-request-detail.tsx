@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { MoleculeName } from "@/shared/components/entity-name";
+import { MoleculeName, MemberName, BatchName, SampleName } from "@/shared/components/entity-name";
 import {
   useSampleRequest,
   useApproveSampleRequest,
@@ -134,7 +134,7 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
             </Badge>
           </div>
           <p className="mt-1 text-muted-foreground text-sm">
-            Requested by {request.requester_id.slice(0, 8)}&hellip;
+            Requested by <MemberName id={request.requester_id} />
           </p>
         </div>
 
@@ -208,8 +208,8 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
           </div>
           {request.batch_id && (
             <div>
-              <p className="text-xs text-muted-foreground">Batch ID</p>
-              <p className="font-mono text-sm break-all">{request.batch_id}</p>
+              <p className="text-xs text-muted-foreground">Preferred Batch</p>
+              <p className="font-medium text-sm"><BatchName id={request.batch_id} /></p>
             </div>
           )}
           <div>
@@ -233,14 +233,14 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
           {request.assigned_to && (
             <div>
               <p className="text-xs text-muted-foreground">Assigned To</p>
-              <p className="font-mono text-sm">{request.assigned_to.slice(0, 8)}&hellip;</p>
+              <p className="font-medium text-sm"><MemberName id={request.assigned_to} /></p>
             </div>
           )}
           {request.fulfilled_sample_id && (
             <div>
-              <p className="text-xs text-muted-foreground">Fulfilled Sample ID</p>
-              <p className="font-mono text-sm break-all">
-                {request.fulfilled_sample_id}
+              <p className="text-xs text-muted-foreground">Fulfilled Sample</p>
+              <p className="font-medium text-sm">
+                <SampleName id={request.fulfilled_sample_id} />
               </p>
             </div>
           )}

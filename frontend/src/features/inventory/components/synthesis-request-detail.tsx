@@ -26,7 +26,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { MoleculeName, OrgName } from "@/shared/components/entity-name";
+import { MoleculeName, OrgName, MemberName, BatchName, RouteName } from "@/shared/components/entity-name";
 import {
   useSynthesisRequest,
   useSubmitSynthesisRequest,
@@ -166,7 +166,7 @@ export function SynthesisRequestDetail({
             </Badge>
           </div>
           <p className="mt-1 text-muted-foreground text-sm">
-            Requested by {request.requester_id.slice(0, 8)}&hellip;
+            Requested by <MemberName id={request.requester_id} />
           </p>
         </div>
 
@@ -314,18 +314,12 @@ export function SynthesisRequestDetail({
               <p className="font-medium">{request.target_purity}%</p>
             </div>
           )}
-          {request.project_id && (
-            <div>
-              <p className="text-xs text-muted-foreground">Project ID</p>
-              <p className="font-mono text-sm break-all">{request.project_id}</p>
-            </div>
-          )}
           {request.parent_request_id && (
             <div>
-              <p className="text-xs text-muted-foreground">Parent Request</p>
-              <p className="font-mono text-sm">
-                {request.parent_request_id.slice(0, 8)}&hellip;
-              </p>
+              <p className="text-xs text-muted-foreground">Follow-up of</p>
+              <a href={`/inventory/synthesis-requests/${request.parent_request_id}`} className="text-sm text-primary hover:underline">
+                View parent request
+              </a>
             </div>
           )}
         </div>
@@ -348,8 +342,8 @@ export function SynthesisRequestDetail({
           {request.approved_by && (
             <div>
               <p className="text-xs text-muted-foreground">Approved By</p>
-              <p className="font-mono text-sm">
-                {request.approved_by.slice(0, 8)}&hellip;
+              <p className="font-medium text-sm">
+                <MemberName id={request.approved_by} />
               </p>
             </div>
           )}
@@ -403,8 +397,8 @@ export function SynthesisRequestDetail({
             {request.assigned_to && (
               <div>
                 <p className="text-xs text-muted-foreground">Assigned To</p>
-                <p className="font-mono text-sm">
-                  {request.assigned_to.slice(0, 8)}&hellip;
+                <p className="font-medium text-sm">
+                  <MemberName id={request.assigned_to} />
                 </p>
               </div>
             )}
@@ -419,8 +413,8 @@ export function SynthesisRequestDetail({
             {request.proposed_route_id && (
               <div>
                 <p className="text-xs text-muted-foreground">Proposed Route</p>
-                <p className="font-mono text-sm">
-                  {request.proposed_route_id.slice(0, 8)}&hellip;
+                <p className="font-medium text-sm">
+                  <RouteName id={request.proposed_route_id} />
                 </p>
               </div>
             )}
@@ -490,8 +484,8 @@ export function SynthesisRequestDetail({
             {request.fulfilled_batch_id && (
               <div>
                 <p className="text-xs text-muted-foreground">Fulfilled Batch</p>
-                <p className="font-mono text-sm break-all">
-                  {request.fulfilled_batch_id}
+                <p className="font-medium text-sm">
+                  <BatchName id={request.fulfilled_batch_id} />
                 </p>
               </div>
             )}

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
-import { OrgName } from "@/shared/components/entity-name";
+import { OrgName, SampleName } from "@/shared/components/entity-name";
 import {
   Dialog,
   DialogContent,
@@ -226,7 +226,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="px-4 py-2 text-left font-medium">
-                      Sample ID
+                      Sample
                     </th>
                     <th className="px-4 py-2 text-right font-medium">
                       Amount
@@ -237,8 +237,8 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 <tbody>
                   {shipment.items.map((item) => (
                     <tr key={item.id} className="border-b last:border-0">
-                      <td className="px-4 py-2 font-mono text-xs">
-                        {item.sample_id}
+                      <td className="px-4 py-2 text-sm">
+                        <SampleName id={item.sample_id} />
                       </td>
                       <td className="px-4 py-2 text-right">
                         {item.amount_value}
