@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.get_molecule import GetMoleculeQuery
@@ -22,6 +23,8 @@ from chem_vault.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMoleculeCommand,
 )
+from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
+from chem_vault.interface.routes.batches import BatchResponse
 from chem_vault.application.chemical_registration.search_molecules import SearchMoleculesQuery
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
 from chem_vault.application.shared.sentinel import UNSET
@@ -39,6 +42,7 @@ from chem_vault.interface.dependencies import (
     SearchMoleculesDep,
     UpdateMoleculeDep,
 )
+from chem_vault.infrastructure.di.container import Container, get_container
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import (
     PaginatedResponse,
@@ -173,6 +177,7 @@ class RegistrationResponse(BaseModel):
     molecule: MoleculeResponse
     is_new: bool
     qc_warnings: list[str]
+    batch: BatchResponse | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +190,26 @@ class ExternalIdBody(BaseModel):
     identifier_type: str
 
 
+class BatchBody(BaseModel):
+    """Optional batch to create alongside molecule registration."""
+
+    source: str
+    amount_value: float
+    amount_unit: str
+    salt_form: str | None = None
+    purity: float | None = None
+    concentration_value: float | None = None
+    concentration_unit: str | None = None
+    supplier_org_id: uuid.UUID | None = None
+    vendor_catalog_number: str | None = None
+    vendor_lot_number: str | None = None
+    synthesis_date: date | None = None
+    expiry_date: date | None = None
+    notebook_reference: str | None = None
+    appearance: str | None = None
+    custom_fields: dict | None = None
+
+
 class RegisterMoleculeBody(BaseModel):
     name: str
     smiles: str | None = None
@@ -192,6 +217,7 @@ class RegisterMoleculeBody(BaseModel):
     external_ids: list[ExternalIdBody] = []
     originating_org_id: uuid.UUID
     custom_fields: dict | None = None
+    batch: BatchBody | None = None
 
 
 class UpdateMoleculeBody(BaseModel):
@@ -215,11 +241,16 @@ class AddIdentifierBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _get_create_batch(c: Annotated[Container, Depends(get_container)]) -> CreateBatch:
+    return c[CreateBatch]
+
+
 @router.post("", response_model=RegistrationResponse, status_code=201)
 async def register_molecule(
     body: RegisterMoleculeBody,
     auth: AuthDep,
     use_case: RegisterMoleculeDep,
+    create_batch_uc: Annotated[CreateBatch, Depends(_get_create_batch)],
 ) -> RegistrationResponse:
     command = RegisterMoleculeCommand(
         workspace_id=auth.workspace_id,
@@ -235,10 +266,39 @@ async def register_molecule(
         registered_by=auth.user_id,
     )
     outcome = result_to_response(await use_case(command, auth=auth))
+
+    # Optionally create a batch on the (new or existing) molecule
+    batch_response: BatchResponse | None = None
+    if body.batch is not None:
+        b = body.batch
+        batch_cmd = CreateBatchCommand(
+            workspace_id=auth.workspace_id,
+            molecule_id=outcome.molecule.id,
+            source=b.source,
+            chemist=auth.user_id,
+            amount_value=b.amount_value,
+            amount_unit=b.amount_unit,
+            salt_form=b.salt_form,
+            purity=b.purity,
+            concentration_value=b.concentration_value,
+            concentration_unit=b.concentration_unit,
+            supplier_org_id=b.supplier_org_id,
+            vendor_catalog_number=b.vendor_catalog_number,
+            vendor_lot_number=b.vendor_lot_number,
+            synthesis_date=b.synthesis_date,
+            expiry_date=b.expiry_date,
+            notebook_reference=b.notebook_reference,
+            appearance=b.appearance,
+            custom_fields=b.custom_fields,
+        )
+        batch_outcome = result_to_response(await create_batch_uc(batch_cmd, auth=auth))
+        batch_response = BatchResponse.from_domain(batch_outcome)
+
     return RegistrationResponse(
         molecule=MoleculeResponse.from_domain(outcome.molecule),
         is_new=outcome.is_new,
         qc_warnings=outcome.qc_warnings,
+        batch=batch_response,
     )
 
 

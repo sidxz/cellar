@@ -94,10 +94,21 @@ export interface Molecule {
   version: number;
 }
 
+export interface BatchInput {
+  source: string;
+  amount_value: number;
+  amount_unit: string;
+  salt_form?: string | null;
+  purity?: number | null;
+  supplier_org_id?: string | null;
+  appearance?: string | null;
+}
+
 export interface RegistrationResponse {
   molecule: Molecule;
   is_new: boolean;
   qc_warnings: string[];
+  batch?: { id: string; batch_number: string } | null;
 }
 
 export interface RegisterMoleculeInput {
@@ -107,6 +118,7 @@ export interface RegisterMoleculeInput {
   external_ids?: { identifier: string; identifier_type: string }[];
   originating_org_id: string;
   custom_fields?: Record<string, unknown> | null;
+  batch?: BatchInput | null;
 }
 
 export interface UpdateMoleculeInput {

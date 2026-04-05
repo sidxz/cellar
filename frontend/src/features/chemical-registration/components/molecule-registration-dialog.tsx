@@ -51,6 +51,12 @@ export function MoleculeRegistrationDialog({
   const [isUndisclosed, setIsUndisclosed] = useState(false);
   const [extIdValue, setExtIdValue] = useState("");
   const [extIdType, setExtIdType] = useState<string>("vendor_id");
+  const [includeBatch, setIncludeBatch] = useState(false);
+  const [batchSource, setBatchSource] = useState("synthesized");
+  const [batchAmount, setBatchAmount] = useState("");
+  const [batchUnit, setBatchUnit] = useState("mg");
+  const [batchPurity, setBatchPurity] = useState("");
+  const [batchAppearance, setBatchAppearance] = useState("");
   const [customFieldValues, setCustomFieldValues] = useState<
     Record<string, string>
   >({});
@@ -70,6 +76,12 @@ export function MoleculeRegistrationDialog({
     setIsUndisclosed(false);
     setExtIdValue("");
     setExtIdType("vendor_id");
+    setIncludeBatch(false);
+    setBatchSource("synthesized");
+    setBatchAmount("");
+    setBatchUnit("mg");
+    setBatchPurity("");
+    setBatchAppearance("");
     setCustomFieldValues({});
     setError(null);
   };
@@ -106,6 +118,17 @@ export function MoleculeRegistrationDialog({
       const external_ids = extIdValue.trim()
         ? [{ identifier: extIdValue.trim(), identifier_type: extIdType }]
         : [];
+      const batch =
+        includeBatch && batchAmount
+          ? {
+              source: batchSource,
+              amount_value: parseFloat(batchAmount),
+              amount_unit: batchUnit,
+              purity: batchPurity ? parseFloat(batchPurity) : null,
+              appearance: batchAppearance || null,
+              supplier_org_id: orgId || null,
+            }
+          : null;
       await registerMutation.mutateAsync({
         name: name.trim(),
         smiles: isUndisclosed ? null : smiles.trim(),
@@ -115,6 +138,7 @@ export function MoleculeRegistrationDialog({
         custom_fields: Object.keys(customFieldValues).length
           ? customFieldValues
           : undefined,
+        batch,
       });
       reset();
       onOpenChange(false);
@@ -235,6 +259,73 @@ export function MoleculeRegistrationDialog({
               added to the existing compound.
             </p>
           </div>
+
+          {/* Optional Batch */}
+          <div className="flex items-center gap-2">
+            <Switch
+              id="include-batch"
+              checked={includeBatch}
+              onCheckedChange={setIncludeBatch}
+            />
+            <Label htmlFor="include-batch">Include initial batch</Label>
+          </div>
+
+          {includeBatch && (
+            <div className="grid gap-3 rounded-lg border border-dashed p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1">
+                  <Label className="text-xs">Amount</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 100"
+                    value={batchAmount}
+                    onChange={(e) => setBatchAmount(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Unit</Label>
+                  <Select value={batchUnit} onValueChange={setBatchUnit}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mg">mg</SelectItem>
+                      <SelectItem value="g">g</SelectItem>
+                      <SelectItem value="kg">kg</SelectItem>
+                      <SelectItem value="uL">uL</SelectItem>
+                      <SelectItem value="mL">mL</SelectItem>
+                      <SelectItem value="L">L</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1">
+                  <Label className="text-xs">Source</Label>
+                  <Select value={batchSource} onValueChange={setBatchSource}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="synthesized">Synthesized</SelectItem>
+                      <SelectItem value="purchased">Purchased</SelectItem>
+                      <SelectItem value="donated">Donated</SelectItem>
+                      <SelectItem value="natural_extract">Natural Extract</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Purity (%)</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 99.5"
+                    value={batchPurity}
+                    onChange={(e) => setBatchPurity(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Custom fields from workspace settings */}
           {customFields.map((field) => (
