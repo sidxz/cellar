@@ -86,6 +86,7 @@ export function MoleculeRegistrationDialog({
     setBatchPurity("");
     setBatchAppearance("");
     setCustomFieldValues({});
+    setEditorOpen(false);
     setError(null);
   };
 

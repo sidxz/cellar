@@ -38,6 +38,7 @@ export function DisclosureDialog({
   const reset = () => {
     setSmiles("");
     setNotes("");
+    setEditorOpen(false);
     setError(null);
   };
 

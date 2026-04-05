@@ -403,7 +403,7 @@ function StructureCriterionRow({
           onOpenChange={setEditorOpen}
           initialStructure={previewSmiles ?? ""}
           onApply={handleEditorApply}
-          outputFormat={editorOutputFormat as "smiles" | "smarts"}
+          outputFormat={editorOutputFormat}
         />
       )}
     </div>
