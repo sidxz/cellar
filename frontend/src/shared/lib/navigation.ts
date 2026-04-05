@@ -2,13 +2,16 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   Building2,
+  ClipboardList,
   FlaskConical,
+  FlaskRound,
   FolderKanban,
   LayoutDashboard,
   Package,
   Settings,
   ShieldCheck,
   TestTubes,
+  Truck,
 } from "lucide-react";
 
 export interface NavItem {
@@ -33,6 +36,9 @@ export const navigation: NavGroup[] = [
       { title: "Compounds", href: "/compounds", icon: FlaskConical },
       { title: "Assays", href: "/assays", icon: TestTubes },
       { title: "Inventory", href: "/inventory", icon: Package },
+      { title: "Sample Requests", href: "/inventory/sample-requests", icon: ClipboardList },
+      { title: "Shipments", href: "/inventory/shipments", icon: Truck },
+      { title: "Synthesis Requests", href: "/inventory/synthesis-requests", icon: FlaskRound },
     ],
   },
   {
