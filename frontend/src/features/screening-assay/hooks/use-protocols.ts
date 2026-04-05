@@ -78,3 +78,28 @@ export function useVersionProtocol() {
     onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
   });
 }
+
+export function useUpdateProtocol(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name?: string; description?: string | null; target_id?: string | null; category?: string | null }) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${id}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+  });
+}
+
+export function useDeleteProtocol() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      customInstance<void>({
+        url: `/api/v1/protocols/${id}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+  });
+}

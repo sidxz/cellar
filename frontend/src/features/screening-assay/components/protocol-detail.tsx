@@ -7,6 +7,8 @@ import {
   RotateCcw,
   Archive,
   Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -25,12 +27,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
 import {
   useProtocol,
   usePublishProtocol,
   useRetireProtocol,
   useVersionProtocol,
+  useUpdateProtocol,
+  useDeleteProtocol,
 } from "../hooks/use-protocols";
 import { RunList } from "./run-list";
 import { CreateRunDialog } from "./create-run-dialog";
@@ -68,7 +82,14 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const publishMutation = usePublishProtocol();
   const retireMutation = useRetireProtocol();
   const versionMutation = useVersionProtocol();
+  const updateMutation = useUpdateProtocol(protocolId);
+  const deleteMutation = useDeleteProtocol();
   const [createRunOpen, setCreateRunOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState("");
 
   if (isLoading) {
     return (
@@ -123,14 +144,37 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
         <div className="flex items-center gap-2">
           {status === "draft" && (
-            <Button
-              size="sm"
-              onClick={() => publishMutation.mutate(protocolId)}
-              disabled={publishMutation.isPending}
-            >
-              <Send className="mr-2 h-4 w-4" />
-              {publishMutation.isPending ? "Publishing..." : "Publish"}
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditName(protocol.name);
+                  setEditDescription(protocol.description ?? "");
+                  setEditCategory(protocol.category ?? "");
+                  setEditOpen(true);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => publishMutation.mutate(protocolId)}
+                disabled={publishMutation.isPending}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {publishMutation.isPending ? "Publishing..." : "Publish"}
+              </Button>
+            </>
           )}
           {status === "active" && (
             <>
@@ -311,6 +355,91 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         open={createRunOpen}
         onOpenChange={setCreateRunOpen}
       />
+
+      {/* Edit Draft Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Protocol</DialogTitle>
+            <DialogDescription>
+              Update this draft protocol&apos;s metadata.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Description</Label>
+              <Input
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Category</Label>
+              <Input
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                updateMutation.mutate(
+                  {
+                    name: editName || undefined,
+                    description: editDescription || null,
+                    category: editCategory || null,
+                  },
+                  { onSuccess: () => setEditOpen(false) }
+                );
+              }}
+              disabled={!editName.trim() || updateMutation.isPending}
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Draft Protocol</DialogTitle>
+            <DialogDescription>
+              This will permanently delete &quot;{protocol.name}&quot; (v{protocol.protocol_version}).
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                deleteMutation.mutate(protocolId, {
+                  onSuccess: () => {
+                    window.location.href = "/assays";
+                  },
+                });
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
