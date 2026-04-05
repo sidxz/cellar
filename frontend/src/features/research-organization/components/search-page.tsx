@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { BookmarkPlus, Download } from "lucide-react";
+import { BookmarkPlus, Download, ListPlus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -36,6 +36,7 @@ import {
   useCreateSavedSearch,
 } from "../hooks/use-saved-searches";
 import { SearchQueryBuilder } from "./search-query-builder";
+import { CollectionPickerDialog } from "./collection-picker-dialog";
 import type { SearchQuery, SavedSearch } from "../types";
 
 // ─── Results grid columns ───────────────────────────────────────────────────
@@ -106,6 +107,7 @@ export function SearchPage() {
   // Save search dialog state
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
   const searchMutation = useExecuteSearch();
   const { data: savedSearches } = useSavedSearches();
@@ -259,6 +261,21 @@ export function SearchPage() {
             loading={searchMutation.isPending && results.length === 0}
             height="500px"
             exportFilename="search-results"
+            selectionToolbar={(selected) => (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  {selected.length} selected
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPickerMolIds(selected.map((m) => m.id))}
+                >
+                  <ListPlus className="mr-1 h-4 w-4" />
+                  Add to Collection
+                </Button>
+              </>
+            )}
             emptyState={
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
                 <h3 className="text-lg font-semibold">No results</h3>
@@ -267,6 +284,15 @@ export function SearchPage() {
                 </p>
               </div>
             }
+          />
+
+          <CollectionPickerDialog
+            open={pickerMolIds.length > 0}
+            onOpenChange={(open) => {
+              if (!open) setPickerMolIds([]);
+            }}
+            moleculeIds={pickerMolIds}
+            onComplete={() => setPickerMolIds([])}
           />
 
           {/* Load more */}
