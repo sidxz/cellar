@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chem_vault.application.shared.search_query_composer import compose_criteria
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import compose_criteria
 
 
 class TestComposeCriteria:

@@ -70,6 +70,11 @@ def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
     return sa.and_(*clauses)
 
 
+def _escape_like(value: str) -> str:
+    """Escape SQL LIKE metacharacters so they match literally."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _text_clause(criterion: dict[str, Any]) -> ColumnElement:
     field = criterion["field"]
     if field not in TEXT_FIELDS:
@@ -81,11 +86,11 @@ def _text_clause(criterion: dict[str, Any]) -> ColumnElement:
     value = criterion["value"]
 
     if operator == "contains":
-        return column.ilike(f"%{value}%")
+        return column.ilike(f"%{_escape_like(value)}%", escape="\\")
     elif operator == "equals":
         return column == value
     elif operator == "starts_with":
-        return column.ilike(f"{value}%")
+        return column.ilike(f"{_escape_like(value)}%", escape="\\")
     else:
         msg = f"Unknown text operator: {operator}"
         raise ValueError(msg)

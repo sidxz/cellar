@@ -7,11 +7,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from returns.result import Failure, Result, Success
-from sqlalchemy import select, text
 
 from chem_vault.application.shared.pagination import PageResult
 from chem_vault.application.shared.query import Query
-from chem_vault.application.shared.search_query_composer import compose_criteria
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
@@ -29,7 +27,11 @@ class ExecuteSearchQuery(Query):
 
 
 class ExecuteSearch:
-    """Execute a compound search -- either by saved_search_id or inline query dict."""
+    """Execute a compound search -- either by saved_search_id or inline query dict.
+
+    Resolves the query dict (from SavedSearch or inline), then delegates
+    the composed query execution to MoleculeRepository.search_by_query().
+    """
 
     def __init__(
         self,
@@ -59,66 +61,17 @@ class ExecuteSearch:
             else:
                 query_dict = input.query  # type: ignore[assignment]
 
-            # Check for similarity criterion -- need to SET threshold before query
-            similarity_threshold: float | None = None
-            for criterion in query_dict.get("criteria", []):
-                if (
-                    criterion.get("type") == "structure"
-                    and criterion.get("search_type") == "similarity"
-                ):
-                    similarity_threshold = float(criterion.get("threshold", 0.7))
-                    break
-
-            # Compose WHERE clause
+            # Delegate to repository — fetch limit + 1 for next_cursor detection
+            fetch_limit = input.limit + 1
             try:
-                where_clause = compose_criteria(query_dict)
+                molecules = await self._mol_repo.search_by_query(
+                    input.workspace_id,
+                    query_dict,
+                    cursor_id=input.cursor_id,
+                    limit=fetch_limit,
+                )
             except ValueError as e:
                 return Failure(ValidationError(str(e)))
-
-            # Build query
-            from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
-                MoleculeModel,
-            )
-
-            stmt = select(MoleculeModel).where(
-                MoleculeModel.workspace_id == input.workspace_id,
-                MoleculeModel.merged_into_id.is_(None),
-            )
-
-            # Require disclosed structure for structure searches
-            has_structure_criterion = any(
-                c.get("type") == "structure" for c in query_dict.get("criteria", [])
-            )
-            if has_structure_criterion:
-                stmt = stmt.where(MoleculeModel.smiles.is_not(None))
-
-            if where_clause is not None:
-                stmt = stmt.where(where_clause)
-
-            # Cursor pagination
-            stmt = stmt.order_by(MoleculeModel.id)
-            if input.cursor_id is not None:
-                stmt = stmt.where(MoleculeModel.id > input.cursor_id)
-
-            # Fetch limit + 1 for next_cursor detection
-            fetch_limit = input.limit + 1
-            stmt = stmt.limit(fetch_limit)
-
-            # Set similarity threshold if needed (session-level GUC)
-            if similarity_threshold is not None:
-                session = self._uow._session  # type: ignore[attr-defined]
-                safe_threshold = float(similarity_threshold)
-                await session.execute(
-                    text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
-                )
-
-            # Execute via the UoW's session
-            session = self._uow._session  # type: ignore[attr-defined]
-            result = await session.execute(stmt)
-
-            # Map to domain models
-            models = list(result.scalars())
-            molecules = [self._mol_repo._to_domain(m) for m in models]  # type: ignore[attr-defined]
 
             # Determine next_cursor
             next_cursor: str | None = None

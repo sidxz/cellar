@@ -59,6 +59,15 @@ class MoleculeRepository(Protocol):
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
     ) -> list[tuple[Molecule, float]]: ...
 
+    async def search_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Molecule]: ...
+
     async def save(self, aggregate: Molecule) -> None: ...
 
 

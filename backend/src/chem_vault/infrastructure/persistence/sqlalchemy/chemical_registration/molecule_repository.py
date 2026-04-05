@@ -426,6 +426,61 @@ class SQLAlchemyMoleculeRepository(
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
 
+    async def search_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Molecule]:
+        """Compound search using a structured query dict (text + property + structure criteria).
+
+        Delegates WHERE clause composition to SearchQueryComposer. Handles
+        similarity threshold GUC and cursor pagination.
+        """
+        from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+            compose_criteria,
+        )
+
+        # Check for similarity criterion — need to SET threshold
+        for criterion in query.get("criteria", []):
+            if (
+                criterion.get("type") == "structure"
+                and criterion.get("search_type") == "similarity"
+            ):
+                safe_threshold = float(criterion.get("threshold", 0.7))
+                await self._session.execute(
+                    text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
+                )
+                break
+
+        where_clause = compose_criteria(query)
+
+        stmt = select(MoleculeModel).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.merged_into_id.is_(None),
+        )
+
+        # Require disclosed structure for structure searches
+        has_structure = any(
+            c.get("type") == "structure" for c in query.get("criteria", [])
+        )
+        if has_structure:
+            stmt = stmt.where(MoleculeModel.smiles.is_not(None))
+
+        if where_clause is not None:
+            stmt = stmt.where(where_clause)
+
+        stmt = stmt.order_by(MoleculeModel.id)
+        if cursor_id is not None:
+            stmt = stmt.where(MoleculeModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars()]
+
     async def search_similarity(
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
     ) -> list[tuple[Molecule, float]]:
