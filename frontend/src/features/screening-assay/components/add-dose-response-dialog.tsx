@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
+import { BatchSelector } from "@/features/inventory/components/batch-selector";
 import { useCreateDoseResponseCurve } from "../hooks/use-dose-response";
 import {
   CURVE_CLASS_LABELS,
@@ -42,8 +44,8 @@ export function AddDoseResponseDialog({
 }: AddDoseResponseDialogProps) {
   const createDoseResponse = useCreateDoseResponseCurve();
 
-  const [moleculeId, setMoleculeId] = useState("");
-  const [batchId, setBatchId] = useState("");
+  const [moleculeId, setMoleculeId] = useState<string | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const [curveType, setCurveType] = useState<string>("ic50");
   const [fittedValue, setFittedValue] = useState("");
   const [fittedUnit, setFittedUnit] = useState("");
@@ -55,8 +57,8 @@ export function AddDoseResponseDialog({
   const [curveClass, setCurveClass] = useState<string>("");
 
   const resetForm = () => {
-    setMoleculeId("");
-    setBatchId("");
+    setMoleculeId(null);
+    setBatchId(null);
     setCurveType("ic50");
     setFittedValue("");
     setFittedUnit("");
@@ -73,8 +75,8 @@ export function AddDoseResponseDialog({
       {
         protocol_id: protocolId,
         run_id: runId,
-        molecule_id: moleculeId,
-        batch_id: batchId,
+        molecule_id: moleculeId!,
+        batch_id: batchId!,
         curve_type: curveType as CurveType,
         fitted_value: parseFloat(fittedValue),
         fitted_unit: fittedUnit,
@@ -95,8 +97,8 @@ export function AddDoseResponseDialog({
   };
 
   const isValid =
-    moleculeId.trim() &&
-    batchId.trim() &&
+    moleculeId &&
+    batchId &&
     fittedValue &&
     fittedUnit.trim() &&
     hillSlope &&
@@ -117,21 +119,27 @@ export function AddDoseResponseDialog({
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label>Molecule ID</Label>
-            <Input
-              placeholder="UUID of the molecule"
-              value={moleculeId}
-              onChange={(e) => setMoleculeId(e.target.value)}
+            <Label>Compound</Label>
+            <MoleculeSelector
+              selectedId={moleculeId}
+              onSelect={(id) => {
+                setMoleculeId(id);
+                setBatchId(null);
+              }}
             />
           </div>
 
           <div className="grid gap-2">
-            <Label>Batch ID</Label>
-            <Input
-              placeholder="UUID of the batch"
-              value={batchId}
-              onChange={(e) => setBatchId(e.target.value)}
-            />
+            <Label>Batch</Label>
+            {moleculeId ? (
+              <BatchSelector
+                moleculeId={moleculeId}
+                selectedId={batchId}
+                onSelect={setBatchId}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Select a compound first</p>
+            )}
           </div>
 
           <div className="grid gap-2">

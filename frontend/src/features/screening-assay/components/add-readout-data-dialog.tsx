@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
+import { BatchSelector } from "@/features/inventory/components/batch-selector";
 import { useProtocol } from "../hooks/use-protocols";
 import { useCreateReadoutData } from "../hooks/use-readout-data";
 
@@ -41,16 +43,16 @@ export function AddReadoutDataDialog({
   const createReadoutData = useCreateReadoutData();
   const { data: protocol } = useProtocol(protocolId);
 
-  const [moleculeId, setMoleculeId] = useState("");
-  const [batchId, setBatchId] = useState("");
+  const [moleculeId, setMoleculeId] = useState<string | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const [readoutDefinitionId, setReadoutDefinitionId] = useState("");
   const [valueNumeric, setValueNumeric] = useState("");
   const [valueQualifier, setValueQualifier] = useState("");
   const [isOutlier, setIsOutlier] = useState(false);
 
   const resetForm = () => {
-    setMoleculeId("");
-    setBatchId("");
+    setMoleculeId(null);
+    setBatchId(null);
     setReadoutDefinitionId("");
     setValueNumeric("");
     setValueQualifier("");
@@ -61,8 +63,8 @@ export function AddReadoutDataDialog({
     createReadoutData.mutate(
       {
         run_id: runId,
-        molecule_id: moleculeId,
-        batch_id: batchId,
+        molecule_id: moleculeId!,
+        batch_id: batchId!,
         readout_definition_id: readoutDefinitionId,
         value_numeric: valueNumeric ? parseFloat(valueNumeric) : undefined,
         value_qualifier: valueQualifier || undefined,
@@ -91,21 +93,27 @@ export function AddReadoutDataDialog({
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label>Molecule ID</Label>
-            <Input
-              placeholder="UUID of the molecule"
-              value={moleculeId}
-              onChange={(e) => setMoleculeId(e.target.value)}
+            <Label>Compound</Label>
+            <MoleculeSelector
+              selectedId={moleculeId}
+              onSelect={(id) => {
+                setMoleculeId(id);
+                setBatchId(null);
+              }}
             />
           </div>
 
           <div className="grid gap-2">
-            <Label>Batch ID</Label>
-            <Input
-              placeholder="UUID of the batch"
-              value={batchId}
-              onChange={(e) => setBatchId(e.target.value)}
-            />
+            <Label>Batch</Label>
+            {moleculeId ? (
+              <BatchSelector
+                moleculeId={moleculeId}
+                selectedId={batchId}
+                onSelect={setBatchId}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Select a compound first</p>
+            )}
           </div>
 
           <div className="grid gap-2">
@@ -164,8 +172,8 @@ export function AddReadoutDataDialog({
           <Button
             onClick={handleSubmit}
             disabled={
-              !moleculeId.trim() ||
-              !batchId.trim() ||
+              !moleculeId ||
+              !batchId ||
               !readoutDefinitionId ||
               createReadoutData.isPending
             }
