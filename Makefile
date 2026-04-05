@@ -20,7 +20,7 @@ endif
 BACKEND  := cd backend
 FRONTEND := cd frontend
 
-.PHONY: help up down dev dev-be dev-fe migrate test lint nuke restart status logs
+.PHONY: help up down install dev dev-be dev-fe migrate test lint nuke restart status logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -45,9 +45,15 @@ status: ## Show container status
 logs: ## Tail container logs
 	docker compose logs -f postgres valkey
 
+# ── Dependencies ──────────────────────────────────────────────
+
+install: ## Install all dependencies (backend + frontend)
+	$(BACKEND) && uv sync
+	$(FRONTEND) && pnpm install
+
 # ── Development Servers ────────────────────────────────────────
 
-dev: ## Start backend + frontend (parallel, requires `make up` first)
+dev: install ## Install deps, then start backend + frontend (requires `make up` first)
 	@echo "Starting backend on :8000 and frontend on :3000..."
 	@trap 'kill 0' INT TERM; \
 		($(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000) & \
