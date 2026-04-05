@@ -753,12 +753,19 @@ function StartDialog({
               ))}
             </SelectContent>
           </Select>
-          {!routesLoading && (!routes || routes.length === 0) && (
-            <p className="text-xs text-muted-foreground">
-              No synthesis routes found for this molecule. You can start without
-              one.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {!routesLoading && (!routes || routes.length === 0)
+              ? "No routes found for this molecule. "
+              : ""}
+            <a
+              href={`/compounds/${request.molecule_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Manage routes on compound page &rarr;
+            </a>
+          </p>
         </div>
         <DialogFooter>
           <Button
