@@ -20,26 +20,31 @@ router = APIRouter(prefix="/api/v1/search", tags=["search"])
 class ExecuteSearchBody(BaseModel):
     query: dict[str, Any] | None = None
     saved_search_id: uuid.UUID | None = None
+    protocol_columns: list[str] | None = None
 
 
-@router.post("/execute", response_model=PaginatedResponse[MoleculeResponse])
+@router.post("/execute")
 async def execute_search(
     body: ExecuteSearchBody,
     auth: AuthDep,
     use_case: ExecuteSearchDep,
     cursor: str | None = None,
     limit: int | None = None,
-) -> PaginatedResponse[MoleculeResponse]:
+) -> dict:
     """Execute a compound search -- inline query or saved search reference."""
     q = ExecuteSearchQuery(
         workspace_id=auth.workspace_id,
         saved_search_id=body.saved_search_id,
         query=body.query,
+        protocol_columns=body.protocol_columns,
         cursor_id=parse_cursor(cursor),
         limit=clamp_limit(limit),
     )
     page = result_to_response(await use_case(q))
-    return PaginatedResponse(
-        items=[MoleculeResponse.from_domain(m) for m in page.items],
-        next_cursor=page.next_cursor,
-    )
+    response: dict = {
+        "items": [MoleculeResponse.from_domain(m) for m in page.items],
+        "next_cursor": page.next_cursor,
+    }
+    if page.activity_data:
+        response["activity_data"] = page.activity_data
+    return response

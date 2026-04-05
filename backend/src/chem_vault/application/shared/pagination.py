@@ -21,3 +21,12 @@ class PageResult(Generic[T]):
     items: list[T]
     next_cursor: str | None = None
     total_count: int | None = None
+
+
+@dataclass(frozen=True)
+class EnrichedPageResult(Generic[T]):
+    """Page result with optional activity enrichment data."""
+
+    items: list[T]
+    next_cursor: str | None = None
+    activity_data: dict | None = None

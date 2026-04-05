@@ -1005,6 +1005,11 @@ def create_container(
             uow,
             SQLAlchemyMoleculeRepository(uow),
             SQLAlchemySavedSearchRepository(uow),
+            activity_service=MoleculeActivityService(
+                readout_repo=SQLAlchemyReadoutDataRepository(uow),
+                curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+                protocol_repo=SQLAlchemyProtocolRepository(uow),
+            ),
         )
 
     container.define(ExecuteSearch, _execute_search)
