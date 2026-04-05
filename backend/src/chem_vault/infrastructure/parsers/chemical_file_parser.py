@@ -46,6 +46,9 @@ _SMILES_ALIASES = {"smiles", "canonical_smiles", "structure", "mol_smiles"}
 _TYPE_ALIASES = {"molecule_type", "mol_type", "type"}
 _CAS_ALIASES = {"cas", "cas_number", "cas_no"}
 _VENDOR_ALIASES = {"vendor_id", "vendor_code", "catalog_number", "catalog_no"}
+_CHEMBL_ALIASES = {"chembl_id", "chembl"}
+_PUBCHEM_ALIASES = {"pubchem_cid", "pubchem", "pubchem_id"}
+_CUSTOM_ID_PREFIX = "custom_id"  # custom_id, custom_id_1, custom_id_2, etc.
 
 
 def _find_column(columns: list[str], aliases: set[str]) -> str | None:
@@ -86,14 +89,19 @@ class SDFParser:
                 if prop_name.startswith("_"):
                     continue
                 prop_lower = prop_name.lower()
+                val = str(mol.GetProp(prop_name)).strip()
+                if not val:
+                    continue
                 if prop_lower in _CAS_ALIASES:
-                    external_ids.append(
-                        {"identifier": str(mol.GetProp(prop_name)), "identifier_type": "cas_number"}
-                    )
+                    external_ids.append({"identifier": val, "identifier_type": "cas_number"})
                 elif prop_lower in _VENDOR_ALIASES:
-                    external_ids.append(
-                        {"identifier": str(mol.GetProp(prop_name)), "identifier_type": "vendor_id"}
-                    )
+                    external_ids.append({"identifier": val, "identifier_type": "vendor_id"})
+                elif prop_lower in _CHEMBL_ALIASES:
+                    external_ids.append({"identifier": val, "identifier_type": "chembl_id"})
+                elif prop_lower in _PUBCHEM_ALIASES:
+                    external_ids.append({"identifier": val, "identifier_type": "pubchem_cid"})
+                elif prop_lower.startswith(_CUSTOM_ID_PREFIX):
+                    external_ids.append({"identifier": val, "identifier_type": "custom"})
 
             items.append(
                 ParsedMoleculeItem(
@@ -146,6 +154,25 @@ class TabularParser:
         type_col = _find_column(columns, _TYPE_ALIASES)
         cas_col = _find_column(columns, _CAS_ALIASES)
         vendor_col = _find_column(columns, _VENDOR_ALIASES)
+        chembl_col = _find_column(columns, _CHEMBL_ALIASES)
+        pubchem_col = _find_column(columns, _PUBCHEM_ALIASES)
+
+        # Detect custom_id columns: custom_id, custom_id_1, custom_id_2, ...
+        lower_map = {c.lower().strip(): c for c in columns}
+        custom_cols = [
+            lower_map[k] for k in sorted(lower_map)
+            if k.startswith(_CUSTOM_ID_PREFIX)
+        ]
+
+        # Map of (column, identifier_type) for all recognized ID columns
+        id_columns: list[tuple[str | None, str]] = [
+            (cas_col, "cas_number"),
+            (vendor_col, "vendor_id"),
+            (chembl_col, "chembl_id"),
+            (pubchem_col, "pubchem_cid"),
+        ]
+        for cc in custom_cols:
+            id_columns.append((cc, "custom"))
 
         items: list[ParsedMoleculeItem] = []
         for idx, row in df.iterrows():
@@ -154,14 +181,11 @@ class TabularParser:
             mol_type = _safe_str(row.get(type_col)) if type_col else "small_molecule"
 
             external_ids: list[dict[str, str]] = []
-            if cas_col and _safe_str(row.get(cas_col)):
-                external_ids.append(
-                    {"identifier": _safe_str(row.get(cas_col)), "identifier_type": "cas_number"}  # type: ignore[arg-type]
-                )
-            if vendor_col and _safe_str(row.get(vendor_col)):
-                external_ids.append(
-                    {"identifier": _safe_str(row.get(vendor_col)), "identifier_type": "vendor_id"}  # type: ignore[arg-type]
-                )
+            for col, id_type in id_columns:
+                if col is not None:
+                    val = _safe_str(row.get(col))
+                    if val:
+                        external_ids.append({"identifier": val, "identifier_type": id_type})
 
             if not name and not smiles:
                 items.append(
