@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 
 from chem_vault.domain.inventory.enums import ShipmentStatus
 from chem_vault.domain.inventory.shipment import Shipment, ShipmentItem
@@ -40,6 +40,13 @@ class SQLAlchemyShipmentRepository(
             self._uow.track(domain)
             shipments.append(domain)
         return shipments
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = sa_delete(ShipmentModel).where(
+            ShipmentModel.workspace_id == workspace_id,
+            ShipmentModel.id == id,
+        )
+        await self._session.execute(stmt)
 
     def _to_domain(self, model: ShipmentModel) -> Shipment:
         items = [

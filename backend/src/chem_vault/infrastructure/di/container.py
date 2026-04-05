@@ -19,11 +19,14 @@ from chem_vault.application.chemical_registration.bulk_registration_service impo
 from chem_vault.application.chemical_registration.synthesis_routes import (
     AddReactionStep,
     CreateSynthesisRoute,
+    DeleteSynthesisRoute,
     DeprecateSynthesisRoute,
     GetSynthesisRoute,
     ListSynthesisRoutesByMolecule,
     RecordStepOutcome,
+    RemoveReactionStep,
     SetPreferredRoute,
+    UpdateSynthesisRoute,
     ValidateSynthesisRoute,
 )
 from chem_vault.application.inventory.create_batch import CreateBatch
@@ -37,16 +40,19 @@ from chem_vault.application.inventory.sample_requests import (
     ListSampleRequests,
     RejectSampleRequest,
     StartPreparingSampleRequest,
+    UpdateSampleRequest,
 )
 from chem_vault.application.inventory.shipments import (
     AddShipmentItem,
     CreateShipment,
+    DeleteShipment,
     DeliverShipment,
     GetShipment,
     ListShipments,
     MarkShipmentInTransit,
     ReturnShipment,
     ShipShipment,
+    UpdateShipment,
 )
 from chem_vault.application.inventory.synthesis_requests import (
     ApproveSynthesisRequest as ApproveSynthReq,
@@ -54,6 +60,7 @@ from chem_vault.application.inventory.synthesis_requests import (
     CancelSynthesisRequest as CancelSynthReq,
     CompleteSynthesis,
     CreateSynthesisRequest as CreateSynthReq,
+    DeleteSynthesisRequest as DeleteSynthReq,
     FailSynthesis,
     FlagInfeasible,
     FulfillSynthesisRequest as FulfillSynthReq,
@@ -62,6 +69,7 @@ from chem_vault.application.inventory.synthesis_requests import (
     RejectSynthesisRequest as RejectSynthReq,
     StartSynthesis,
     SubmitSynthesisRequest as SubmitSynthReq,
+    UpdateSynthesisRequest as UpdateSynthReq,
 )
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
@@ -542,6 +550,9 @@ def create_container(
     container.define(ValidateSynthesisRoute, _synth_route_cmd(ValidateSynthesisRoute))
     container.define(SetPreferredRoute, _synth_route_cmd(SetPreferredRoute))
     container.define(DeprecateSynthesisRoute, _synth_route_cmd(DeprecateSynthesisRoute))
+    container.define(UpdateSynthesisRoute, _synth_route_cmd(UpdateSynthesisRoute))
+    container.define(DeleteSynthesisRoute, _synth_route_cmd(DeleteSynthesisRoute))
+    container.define(RemoveReactionStep, _synth_route_cmd(RemoveReactionStep))
 
     # --- Inventory ---
     def _batch_cmd(c):  # type: ignore[no-untyped-def]
@@ -645,6 +656,7 @@ def create_container(
     container.define(FulfillSampleRequest, _sample_request_cmd(FulfillSampleRequest))
     container.define(CancelSampleRequest, _sample_request_cmd(CancelSampleRequest))
     container.define(StartPreparingSampleRequest, _sample_request_cmd(StartPreparingSampleRequest))
+    container.define(UpdateSampleRequest, _sample_request_cmd(UpdateSampleRequest))
 
     # --- Shipments ---
     def _shipment_cmd(uc_cls):  # type: ignore[no-untyped-def]
@@ -667,6 +679,8 @@ def create_container(
     container.define(DeliverShipment, _shipment_cmd(DeliverShipment))
     container.define(ReturnShipment, _shipment_cmd(ReturnShipment))
     container.define(AddShipmentItem, _shipment_cmd(AddShipmentItem))
+    container.define(UpdateShipment, _shipment_cmd(UpdateShipment))
+    container.define(DeleteShipment, _shipment_cmd(DeleteShipment))
 
     # --- Synthesis Requests ---
     def _synth_req_cmd(uc_cls):  # type: ignore[no-untyped-def]
@@ -694,6 +708,8 @@ def create_container(
     container.define(CancelSynthReq, _synth_req_cmd(CancelSynthReq))
     container.define(GetSynthReq, _synth_req_query(GetSynthReq))
     container.define(ListSynthReqs, _synth_req_query(ListSynthReqs))
+    container.define(UpdateSynthReq, _synth_req_cmd(UpdateSynthReq))
+    container.define(DeleteSynthReq, _synth_req_cmd(DeleteSynthReq))
 
     # --- Screening ---
     def _protocol_cmd(uc_cls):  # type: ignore[no-untyped-def]

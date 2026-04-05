@@ -13,6 +13,8 @@ from chem_vault.application.chemical_registration.synthesis_routes import (
     AddReactionStepCommand,
     CreateSynthesisRoute,
     CreateSynthesisRouteCommand,
+    DeleteSynthesisRoute,
+    DeleteSynthesisRouteCommand,
     DeprecateSynthesisRoute,
     GetSynthesisRoute,
     GetSynthesisRouteQuery,
@@ -20,7 +22,11 @@ from chem_vault.application.chemical_registration.synthesis_routes import (
     ListSynthesisRoutesByMoleculeQuery,
     RecordStepOutcome,
     RecordStepOutcomeCommand,
+    RemoveReactionStep,
+    RemoveReactionStepCommand,
     SetPreferredRoute,
+    UpdateSynthesisRoute,
+    UpdateSynthesisRouteCommand,
     ValidateSynthesisRoute,
 )
 from chem_vault.interface.dependencies import AuthDep, _get_use_case
@@ -217,6 +223,12 @@ class RecordOutcomeRequest(BaseModel):
     batch_id: uuid.UUID | None = None
 
 
+class UpdateSynthesisRouteRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    scale: str | None = None
+
+
 class DeprecateRequest(BaseModel):
     reason: str | None = None
 
@@ -233,6 +245,9 @@ AddReactionStepDep = Annotated[AddReactionStep, Depends(_get_use_case(AddReactio
 RecordStepOutcomeDep = Annotated[RecordStepOutcome, Depends(_get_use_case(RecordStepOutcome))]
 ValidateSynthesisRouteDep = Annotated[ValidateSynthesisRoute, Depends(_get_use_case(ValidateSynthesisRoute))]
 SetPreferredRouteDep = Annotated[SetPreferredRoute, Depends(_get_use_case(SetPreferredRoute))]
+UpdateSynthesisRouteDep = Annotated[UpdateSynthesisRoute, Depends(_get_use_case(UpdateSynthesisRoute))]
+DeleteSynthesisRouteDep = Annotated[DeleteSynthesisRoute, Depends(_get_use_case(DeleteSynthesisRoute))]
+RemoveReactionStepDep = Annotated[RemoveReactionStep, Depends(_get_use_case(RemoveReactionStep))]
 DeprecateSynthesisRouteDep = Annotated[DeprecateSynthesisRoute, Depends(_get_use_case(DeprecateSynthesisRoute))]
 
 
@@ -281,6 +296,34 @@ async def get_synthesis_route(
     result = await uc(GetSynthesisRouteQuery(route_id=route_id), auth=auth)
     route = result_to_response(result)
     return SynthesisRouteResponse.from_domain(route)
+
+
+@router.patch("/synthesis-routes/{route_id}", response_model=SynthesisRouteResponse)
+async def update_synthesis_route(
+    route_id: uuid.UUID,
+    body: UpdateSynthesisRouteRequest,
+    auth: AuthDep,
+    uc: UpdateSynthesisRouteDep,
+) -> SynthesisRouteResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateSynthesisRouteCommand(
+        route_id=route_id,
+        name=body.name if "name" in body.model_fields_set else UNSET,
+        description=body.description if "description" in body.model_fields_set else UNSET,
+        scale=body.scale if "scale" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    route = result_to_response(result)
+    return SynthesisRouteResponse.from_domain(route)
+
+
+@router.delete("/synthesis-routes/{route_id}", status_code=204)
+async def delete_synthesis_route(
+    route_id: uuid.UUID, auth: AuthDep, uc: DeleteSynthesisRouteDep
+) -> None:
+    result = await uc(DeleteSynthesisRouteCommand(route_id=route_id), auth=auth)
+    result_to_response(result)
 
 
 @router.post(
@@ -336,6 +379,24 @@ async def record_step_outcome(
             purification_method=body.purification_method,
             batch_id=body.batch_id,
         ),
+        auth=auth,
+    )
+    route = result_to_response(result)
+    return SynthesisRouteResponse.from_domain(route)
+
+
+@router.delete(
+    "/synthesis-routes/{route_id}/steps/{step_id}",
+    response_model=SynthesisRouteResponse,
+)
+async def remove_reaction_step(
+    route_id: uuid.UUID,
+    step_id: uuid.UUID,
+    auth: AuthDep,
+    uc: RemoveReactionStepDep,
+) -> SynthesisRouteResponse:
+    result = await uc(
+        RemoveReactionStepCommand(route_id=route_id, step_id=step_id),
         auth=auth,
     )
     route = result_to_response(result)

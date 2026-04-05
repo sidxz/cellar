@@ -16,7 +16,9 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import ShipmentRepository
 from chem_vault.domain.inventory.shipment import Shipment, ShipmentItem
 from chem_vault.domain.shared.enums import AmountUnit
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.application.shared.sentinel import UNSET
+from chem_vault.domain.inventory.enums import ShipmentStatus
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import Amount
 
 
@@ -80,6 +82,20 @@ class AddShipmentItemCommand(Command):
     sample_id: uuid.UUID
     amount_value: float
     amount_unit: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateShipmentCommand(Command):
+    shipment_id: uuid.UUID
+    carrier: str | None | object = UNSET
+    expected_arrival_date: date | None | object = UNSET
+    shipping_conditions: str | None | object = UNSET
+    notes: str | None | object = UNSET
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteShipmentCommand(Command):
+    shipment_id: uuid.UUID
 
 
 # ---------------------------------------------------------------------------
@@ -342,3 +358,72 @@ class AddShipmentItem:
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(shipment)
+
+
+class UpdateShipment:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ShipmentRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: UpdateShipmentCommand, auth: AuthContext | None = None
+    ) -> Result[Shipment, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            shipment = await self._repo.find_by_id(input.shipment_id)
+            if shipment is None:
+                return Failure(NotFoundError("Shipment"))
+            require_same_workspace(auth, shipment.workspace_id)
+
+            if shipment.status != ShipmentStatus.PREPARING:
+                return Failure(ValidationError("Can only update shipments in preparing status"))
+
+            if input.carrier is not UNSET:
+                shipment.carrier = input.carrier
+            if input.expected_arrival_date is not UNSET:
+                shipment.expected_arrival_date = input.expected_arrival_date
+            if input.shipping_conditions is not UNSET:
+                shipment.shipping_conditions = input.shipping_conditions
+            if input.notes is not UNSET:
+                shipment.notes = input.notes
+
+            await self._repo.save(shipment)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(shipment)
+
+
+class DeleteShipment:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ShipmentRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: DeleteShipmentCommand, auth: AuthContext | None = None
+    ) -> Result[None, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            shipment = await self._repo.find_by_id(input.shipment_id)
+            if shipment is None:
+                return Failure(NotFoundError("Shipment"))
+            require_same_workspace(auth, shipment.workspace_id)
+
+            if shipment.status != ShipmentStatus.PREPARING:
+                return Failure(ValidationError("Can only delete shipments in preparing status"))
+
+            await self._repo.delete(shipment.workspace_id, shipment.id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(None)

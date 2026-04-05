@@ -25,6 +25,8 @@ from chem_vault.application.inventory.sample_requests import (
     RejectSampleRequestCommand,
     StartPreparingSampleRequest,
     StartPreparingSampleRequestCommand,
+    UpdateSampleRequest,
+    UpdateSampleRequestCommand,
 )
 from chem_vault.interface.dependencies import AuthDep, _get_use_case
 from chem_vault.interface.error_handlers import result_to_response
@@ -99,6 +101,13 @@ class FulfillRequest(BaseModel):
     sample_id: uuid.UUID
 
 
+class UpdateSampleRequestRequest(BaseModel):
+    purpose: str | None = None
+    priority: str | None = None
+    amount_value: float | None = None
+    amount_unit: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -112,6 +121,7 @@ RejectSampleRequestDep = Annotated[RejectSampleRequest, Depends(_get_use_case(Re
 StartPreparingSampleRequestDep = Annotated[StartPreparingSampleRequest, Depends(_get_use_case(StartPreparingSampleRequest))]
 FulfillSampleRequestDep = Annotated[FulfillSampleRequest, Depends(_get_use_case(FulfillSampleRequest))]
 CancelSampleRequestDep = Annotated[CancelSampleRequest, Depends(_get_use_case(CancelSampleRequest))]
+UpdateSampleRequestDep = Annotated[UpdateSampleRequest, Depends(_get_use_case(UpdateSampleRequest))]
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +167,27 @@ async def get_sample_request(
     request_id: uuid.UUID, auth: AuthDep, uc: GetSampleRequestDep
 ) -> SampleRequestResponse:
     result = await uc(GetSampleRequestQuery(request_id=request_id), auth=auth)
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.patch("/sample-requests/{request_id}", response_model=SampleRequestResponse)
+async def update_sample_request(
+    request_id: uuid.UUID,
+    body: UpdateSampleRequestRequest,
+    auth: AuthDep,
+    uc: UpdateSampleRequestDep,
+) -> SampleRequestResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateSampleRequestCommand(
+        request_id=request_id,
+        purpose=body.purpose if "purpose" in body.model_fields_set else UNSET,
+        priority=body.priority if "priority" in body.model_fields_set else UNSET,
+        amount_value=body.amount_value if "amount_value" in body.model_fields_set else UNSET,
+        amount_unit=body.amount_unit if "amount_unit" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
     request = result_to_response(result)
     return SampleRequestResponse.from_domain(request)
 

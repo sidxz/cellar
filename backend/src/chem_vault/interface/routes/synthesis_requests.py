@@ -19,6 +19,8 @@ from chem_vault.application.inventory.synthesis_requests import (
     CompleteSynthesisCommand,
     CreateSynthesisRequest,
     CreateSynthesisRequestCommand,
+    DeleteSynthesisRequest,
+    DeleteSynthesisRequestCommand,
     FailSynthesis,
     FailSynthesisCommand,
     FlagInfeasible,
@@ -35,6 +37,8 @@ from chem_vault.application.inventory.synthesis_requests import (
     StartSynthesisCommand,
     SubmitSynthesisRequest,
     SubmitSynthesisRequestCommand,
+    UpdateSynthesisRequest,
+    UpdateSynthesisRequestCommand,
 )
 from chem_vault.interface.dependencies import AuthDep, _get_use_case
 from chem_vault.interface.error_handlers import result_to_response
@@ -193,6 +197,14 @@ class FailRequest(BaseModel):
     reason: str
 
 
+class UpdateSynthesisRequestRequest(BaseModel):
+    purpose: str | None = None
+    priority: str | None = None
+    amount_value: float | None = None
+    amount_unit: str | None = None
+    target_purity: float | None = None
+
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -210,6 +222,8 @@ FulfillSynthesisRequestDep = Annotated[FulfillSynthesisRequest, Depends(_get_use
 FailSynthesisDep = Annotated[FailSynthesis, Depends(_get_use_case(FailSynthesis))]
 CancelSynthesisRequestDep = Annotated[CancelSynthesisRequest, Depends(_get_use_case(CancelSynthesisRequest))]
 GetSynthesisRequestDep = Annotated[GetSynthesisRequest, Depends(_get_use_case(GetSynthesisRequest))]
+UpdateSynthesisRequestDep = Annotated[UpdateSynthesisRequest, Depends(_get_use_case(UpdateSynthesisRequest))]
+DeleteSynthesisRequestDep = Annotated[DeleteSynthesisRequest, Depends(_get_use_case(DeleteSynthesisRequest))]
 ListSynthesisRequestsDep = Annotated[ListSynthesisRequests, Depends(_get_use_case(ListSynthesisRequests))]
 
 
@@ -265,6 +279,36 @@ async def get_synthesis_request(
     result = await uc(GetSynthesisRequestQuery(request_id=request_id), auth=auth)
     request = result_to_response(result)
     return SynthesisRequestResponse.from_domain(request)
+
+
+@router.patch("/synthesis-requests/{request_id}", response_model=SynthesisRequestResponse)
+async def update_synthesis_request(
+    request_id: uuid.UUID,
+    body: UpdateSynthesisRequestRequest,
+    auth: AuthDep,
+    uc: UpdateSynthesisRequestDep,
+) -> SynthesisRequestResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateSynthesisRequestCommand(
+        request_id=request_id,
+        purpose=body.purpose if "purpose" in body.model_fields_set else UNSET,
+        priority=body.priority if "priority" in body.model_fields_set else UNSET,
+        amount_value=body.amount_value if "amount_value" in body.model_fields_set else UNSET,
+        amount_unit=body.amount_unit if "amount_unit" in body.model_fields_set else UNSET,
+        target_purity=body.target_purity if "target_purity" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    request = result_to_response(result)
+    return SynthesisRequestResponse.from_domain(request)
+
+
+@router.delete("/synthesis-requests/{request_id}", status_code=204)
+async def delete_synthesis_request(
+    request_id: uuid.UUID, auth: AuthDep, uc: DeleteSynthesisRequestDep
+) -> None:
+    result = await uc(DeleteSynthesisRequestCommand(request_id=request_id), auth=auth)
+    result_to_response(result)
 
 
 @router.post("/synthesis-requests/{request_id}/submit", response_model=SynthesisRequestResponse)

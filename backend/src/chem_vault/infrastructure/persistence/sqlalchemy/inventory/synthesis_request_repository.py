@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 
 from chem_vault.domain.inventory.enums import (
     FeasibilityStatus,
@@ -57,6 +57,13 @@ class SQLAlchemySynthesisRequestRepository(
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(row) for row in result.scalars()]
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = sa_delete(SynthesisRequestModel).where(
+            SynthesisRequestModel.workspace_id == workspace_id,
+            SynthesisRequestModel.id == id,
+        )
+        await self._session.execute(stmt)
 
     def _to_domain(self, model: SynthesisRequestModel) -> SynthesisRequest:
         # Reconstruct target_structure VO

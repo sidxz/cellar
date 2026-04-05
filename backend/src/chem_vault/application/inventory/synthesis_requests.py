@@ -12,11 +12,12 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.inventory.enums import FeasibilityStatus, RequestPriority
+from chem_vault.domain.inventory.enums import FeasibilityStatus, RequestPriority, SynthesisRequestStatus
 from chem_vault.domain.inventory.repository import SynthesisRequestRepository
 from chem_vault.domain.inventory.synthesis_request import SynthesisRequest
 from chem_vault.domain.shared.enums import AmountUnit, AssignmentType
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.application.shared.sentinel import UNSET
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import Amount, SynthesisAssignment
 
 
@@ -99,6 +100,21 @@ class FailSynthesisCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class CancelSynthesisRequestCommand(Command):
+    request_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateSynthesisRequestCommand(Command):
+    request_id: uuid.UUID
+    purpose: str | object = UNSET
+    priority: str | object = UNSET
+    amount_value: float | object = UNSET
+    amount_unit: str | object = UNSET
+    target_purity: float | None | object = UNSET
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteSynthesisRequestCommand(Command):
     request_id: uuid.UUID
 
 
@@ -479,3 +495,75 @@ class ListSynthesisRequests:
                     input.workspace_id, status=input.status
                 )
             return Success(requests)
+
+
+class UpdateSynthesisRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SynthesisRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: UpdateSynthesisRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SynthesisRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id(input.request_id)
+            if request is None:
+                return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
+            require_same_workspace(auth, request.workspace_id)
+
+            if request.status != SynthesisRequestStatus.DRAFT:
+                return Failure(ValidationError("Can only update draft synthesis requests"))
+
+            if input.purpose is not UNSET:
+                request.purpose = input.purpose
+            if input.priority is not UNSET:
+                request.priority = RequestPriority(input.priority)
+            if input.target_purity is not UNSET:
+                request.target_purity = input.target_purity
+
+            if input.amount_value is not UNSET or input.amount_unit is not UNSET:
+                new_value = input.amount_value if input.amount_value is not UNSET else request.requested_amount.value
+                new_unit = input.amount_unit if input.amount_unit is not UNSET else request.requested_amount.unit.value
+                request.requested_amount = Amount(value=new_value, unit=AmountUnit(new_unit))
+
+            await self._repo.save(request)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(request)
+
+
+class DeleteSynthesisRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SynthesisRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: DeleteSynthesisRequestCommand, auth: AuthContext | None = None
+    ) -> Result[None, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id(input.request_id)
+            if request is None:
+                return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
+            require_same_workspace(auth, request.workspace_id)
+
+            if request.status != SynthesisRequestStatus.DRAFT:
+                return Failure(ValidationError("Can only delete draft synthesis requests"))
+
+            await self._repo.delete(request.workspace_id, request.id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(None)

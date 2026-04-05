@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 
 from chem_vault.domain.chemical_registration.enums import (
     ReagentRole,
@@ -53,6 +53,13 @@ class SQLAlchemySynthesisRouteRepository(
             self._uow.track(domain)
             routes.append(domain)
         return routes
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = sa_delete(SynthesisRouteModel).where(
+            SynthesisRouteModel.workspace_id == workspace_id,
+            SynthesisRouteModel.id == id,
+        )
+        await self._session.execute(stmt)
 
     async def find_preferred(
         self, target_molecule_id: uuid.UUID

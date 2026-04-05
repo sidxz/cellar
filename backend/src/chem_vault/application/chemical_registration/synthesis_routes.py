@@ -28,7 +28,8 @@ from chem_vault.domain.chemical_registration.synthesis_route import (
     ReactionStep,
     SynthesisRoute,
 )
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.application.shared.sentinel import UNSET
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import ReactionConditions, ReactionOutcome
 
 
@@ -65,6 +66,25 @@ class AddReactionStepCommand(Command):
     reagents: list[dict] = field(default_factory=list)
     preceding_step_ids: list[uuid.UUID] = field(default_factory=list)
     notes: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateSynthesisRouteCommand(Command):
+    route_id: uuid.UUID
+    name: str | object = UNSET
+    description: str | None | object = UNSET
+    scale: str | None | object = UNSET
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteSynthesisRouteCommand(Command):
+    route_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class RemoveReactionStepCommand(Command):
+    route_id: uuid.UUID
+    step_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -346,6 +366,104 @@ class DeprecateSynthesisRoute:
                 return Failure(NotFoundError("SynthesisRoute", str(route_id)))
             require_same_workspace(auth, route.workspace_id)
             route.deprecate(reason=reason)
+            await self._route_repo.save(route)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(route)
+
+
+class UpdateSynthesisRoute:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        route_repo: SynthesisRouteRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._route_repo = route_repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: UpdateSynthesisRouteCommand, auth: AuthContext | None = None
+    ) -> Result[SynthesisRoute, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            route = await self._route_repo.find_by_id(input.route_id)
+            if route is None:
+                return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
+            require_same_workspace(auth, route.workspace_id)
+
+            if route.status != RouteStatus.DRAFT:
+                return Failure(ValidationError("Can only update draft synthesis routes"))
+
+            if input.name is not UNSET:
+                route.name = input.name
+            if input.description is not UNSET:
+                route.description = input.description
+            if input.scale is not UNSET:
+                route.scale = RouteScale(input.scale) if input.scale else None
+
+            await self._route_repo.save(route)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(route)
+
+
+class DeleteSynthesisRoute:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        route_repo: SynthesisRouteRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._route_repo = route_repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: DeleteSynthesisRouteCommand, auth: AuthContext | None = None
+    ) -> Result[None, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            route = await self._route_repo.find_by_id(input.route_id)
+            if route is None:
+                return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
+            require_same_workspace(auth, route.workspace_id)
+
+            if route.status != RouteStatus.DRAFT:
+                return Failure(ValidationError("Can only delete draft synthesis routes"))
+
+            await self._route_repo.delete(route.workspace_id, route.id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
+            return Success(None)
+
+
+class RemoveReactionStep:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        route_repo: SynthesisRouteRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._route_repo = route_repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: RemoveReactionStepCommand, auth: AuthContext | None = None
+    ) -> Result[SynthesisRoute, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            route = await self._route_repo.find_by_id(input.route_id)
+            if route is None:
+                return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
+            require_same_workspace(auth, route.workspace_id)
+
+            if route.status != RouteStatus.DRAFT:
+                return Failure(ValidationError("Can only remove steps from draft synthesis routes"))
+
+            route.remove_step(input.step_id)
             await self._route_repo.save(route)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)

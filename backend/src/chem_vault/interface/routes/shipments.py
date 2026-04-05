@@ -14,6 +14,8 @@ from chem_vault.application.inventory.shipments import (
     AddShipmentItemCommand,
     CreateShipment,
     CreateShipmentCommand,
+    DeleteShipment,
+    DeleteShipmentCommand,
     DeliverShipment,
     DeliverShipmentCommand,
     GetShipment,
@@ -27,6 +29,8 @@ from chem_vault.application.inventory.shipments import (
     ShipmentItemInput,
     ShipShipment,
     ShipShipmentCommand,
+    UpdateShipment,
+    UpdateShipmentCommand,
 )
 from chem_vault.interface.dependencies import AuthDep, _get_use_case
 from chem_vault.interface.error_handlers import result_to_response
@@ -148,6 +152,13 @@ class AddItemRequest(BaseModel):
     amount_unit: str
 
 
+class UpdateShipmentRequest(BaseModel):
+    carrier: str | None = None
+    expected_arrival_date: date | None = None
+    shipping_conditions: str | None = None
+    notes: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -161,6 +172,8 @@ MarkShipmentInTransitDep = Annotated[MarkShipmentInTransit, Depends(_get_use_cas
 DeliverShipmentDep = Annotated[DeliverShipment, Depends(_get_use_case(DeliverShipment))]
 ReturnShipmentDep = Annotated[ReturnShipment, Depends(_get_use_case(ReturnShipment))]
 AddShipmentItemDep = Annotated[AddShipmentItem, Depends(_get_use_case(AddShipmentItem))]
+UpdateShipmentDep = Annotated[UpdateShipment, Depends(_get_use_case(UpdateShipment))]
+DeleteShipmentDep = Annotated[DeleteShipment, Depends(_get_use_case(DeleteShipment))]
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +228,35 @@ async def get_shipment(
     result = await uc(GetShipmentQuery(shipment_id=shipment_id), auth=auth)
     shipment = result_to_response(result)
     return ShipmentResponse.from_domain(shipment)
+
+
+@router.patch("/shipments/{shipment_id}", response_model=ShipmentResponse)
+async def update_shipment(
+    shipment_id: uuid.UUID,
+    body: UpdateShipmentRequest,
+    auth: AuthDep,
+    uc: UpdateShipmentDep,
+) -> ShipmentResponse:
+    from chem_vault.application.shared.sentinel import UNSET
+
+    cmd = UpdateShipmentCommand(
+        shipment_id=shipment_id,
+        carrier=body.carrier if "carrier" in body.model_fields_set else UNSET,
+        expected_arrival_date=body.expected_arrival_date if "expected_arrival_date" in body.model_fields_set else UNSET,
+        shipping_conditions=body.shipping_conditions if "shipping_conditions" in body.model_fields_set else UNSET,
+        notes=body.notes if "notes" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    shipment = result_to_response(result)
+    return ShipmentResponse.from_domain(shipment)
+
+
+@router.delete("/shipments/{shipment_id}", status_code=204)
+async def delete_shipment(
+    shipment_id: uuid.UUID, auth: AuthDep, uc: DeleteShipmentDep
+) -> None:
+    result = await uc(DeleteShipmentCommand(shipment_id=shipment_id), auth=auth)
+    result_to_response(result)
 
 
 @router.post("/shipments/{shipment_id}/ship", response_model=ShipmentResponse)
