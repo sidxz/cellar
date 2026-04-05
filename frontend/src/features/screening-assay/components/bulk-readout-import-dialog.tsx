@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -11,11 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
+import { useProtocol } from "../hooks/use-protocols";
 import { useBulkCreateReadoutData } from "../hooks/use-readout-data";
 import type { CreateReadoutDataInput } from "../types";
 
 interface BulkReadoutImportDialogProps {
   runId: string;
+  protocolId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -26,16 +29,51 @@ interface ParseResult {
   previewRows: string[][];
 }
 
-const EXPECTED_COLUMNS = [
-  "molecule_id",
-  "batch_id",
-  "readout_definition_id",
-  "value_numeric",
-  "value_qualifier",
-  "is_outlier",
+const REQUIRED_COLUMNS = [
+  "compound",
+  "batch",
+  "readout_definition",
 ] as const;
 
-function parseCsv(text: string, runId: string): ParseResult {
+function downloadTemplate() {
+  const header = "compound,batch,readout_definition,value,qualifier,is_outlier";
+  const example1 = "CV-00001,CV-00001-001,% Inhibition,85.2,=,false";
+  const example2 = "CV-00002,CV-00002-001,% Inhibition,12.7,<,false";
+  const csv = [header, example1, example2].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "readout_data_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+interface MoleculeLookup {
+  byRegNumber: Map<string, string>;
+  byName: Map<string, string>;
+}
+
+interface BatchLookup {
+  byBatchNumber: Map<string, string>;
+}
+
+function buildMoleculeLookup(molecules: Array<{ id: string; registration_number: string; name: string }> | undefined): MoleculeLookup {
+  const byRegNumber = new Map<string, string>();
+  const byName = new Map<string, string>();
+  for (const mol of molecules ?? []) {
+    byRegNumber.set(mol.registration_number.toLowerCase(), mol.id);
+    if (mol.name) byName.set(mol.name.toLowerCase(), mol.id);
+  }
+  return { byRegNumber, byName };
+}
+
+function resolveMoleculeId(value: string, lookup: MoleculeLookup): string {
+  const lower = value.toLowerCase();
+  return lookup.byRegNumber.get(lower) ?? lookup.byName.get(lower) ?? value;
+}
+
+function parseCsv(text: string, runId: string, moleculeLookup: MoleculeLookup, readoutDefMap: Map<string, string>): ParseResult {
   const lines = text
     .split("\n")
     .map((l) => l.trim())
@@ -51,24 +89,26 @@ function parseCsv(text: string, runId: string): ParseResult {
 
   const colIndex = (name: string) => headers.indexOf(name);
 
-  const moleculeIdx = colIndex("molecule_id");
-  const batchIdx = colIndex("batch_id");
-  const readoutDefIdx = colIndex("readout_definition_id");
-  const valueIdx = colIndex("value_numeric");
-  const qualifierIdx = colIndex("value_qualifier");
+  const compoundIdx = colIndex("compound");
+  const batchIdx = colIndex("batch");
+  const readoutDefIdx = colIndex("readout_definition");
+  const valueIdx = colIndex("value");
+  const qualifierIdx = colIndex("qualifier");
   const outlierIdx = colIndex("is_outlier");
 
-  if (moleculeIdx === -1 || batchIdx === -1 || readoutDefIdx === -1) {
+  if (compoundIdx === -1 || batchIdx === -1 || readoutDefIdx === -1) {
     return { rows: [], headers, previewRows };
   }
 
   const rows: CreateReadoutDataInput[] = dataLines.map((line) => {
     const cols = line.split(",").map((c) => c.trim());
+    const compoundValue = cols[compoundIdx] ?? "";
+    const readoutDefName = cols[readoutDefIdx] ?? "";
     return {
       run_id: runId,
-      molecule_id: cols[moleculeIdx] ?? "",
+      molecule_id: resolveMoleculeId(compoundValue, moleculeLookup),
       batch_id: cols[batchIdx] ?? "",
-      readout_definition_id: cols[readoutDefIdx] ?? "",
+      readout_definition_id: readoutDefMap.get(readoutDefName.toLowerCase()) ?? readoutDefName,
       value_numeric:
         valueIdx !== -1 && cols[valueIdx] ? parseFloat(cols[valueIdx]) : undefined,
       value_qualifier:
@@ -85,10 +125,19 @@ function parseCsv(text: string, runId: string): ParseResult {
 
 export function BulkReadoutImportDialog({
   runId,
+  protocolId,
   open,
   onOpenChange,
 }: BulkReadoutImportDialogProps) {
   const bulkCreate = useBulkCreateReadoutData();
+  const { data: molecules } = useMolecules();
+  const { data: protocol } = useProtocol(protocolId);
+
+  const moleculeLookup = buildMoleculeLookup(molecules);
+  const readoutDefMap = new Map<string, string>();
+  for (const rd of protocol?.readout_definitions ?? []) {
+    readoutDefMap.set(rd.name.toLowerCase(), rd.id);
+  }
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
@@ -118,7 +167,7 @@ export function BulkReadoutImportDialog({
       reader.onload = (e) => {
         const text = e.target?.result;
         if (typeof text === "string") {
-          setParseResult(parseCsv(text, runId));
+          setParseResult(parseCsv(text, runId, moleculeLookup, readoutDefMap));
         }
       };
       reader.readAsText(file);
@@ -186,8 +235,8 @@ export function BulkReadoutImportDialog({
 
   const missingColumns =
     parseResult && parseResult.headers.length > 0
-      ? EXPECTED_COLUMNS.filter(
-          (col) => ["molecule_id", "batch_id", "readout_definition_id"].includes(col) && !parseResult.headers.includes(col)
+      ? REQUIRED_COLUMNS.filter(
+          (col) => !parseResult.headers.includes(col)
         )
       : [];
 
@@ -197,9 +246,18 @@ export function BulkReadoutImportDialog({
         <DialogHeader>
           <DialogTitle>Import Readout Data (CSV)</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with columns: molecule_id, batch_id,
-            readout_definition_id, value_numeric, value_qualifier, is_outlier
+            Upload a CSV with columns: compound, batch, readout_definition, value, qualifier, is_outlier.
+            Use registration numbers (e.g., CV-00001) and batch numbers (e.g., CV-00001-001).
           </DialogDescription>
+          <Button
+            variant="link"
+            size="sm"
+            className="mt-1 h-auto p-0 text-xs"
+            onClick={downloadTemplate}
+          >
+            <Download className="mr-1 h-3 w-3" />
+            Download CSV template
+          </Button>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">

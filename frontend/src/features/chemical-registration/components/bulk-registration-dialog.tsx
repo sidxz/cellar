@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { FileUp, Upload, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Download, FileUp, Upload, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -25,6 +25,20 @@ import {
   useBulkRegistration,
   type BulkRegistrationResponse,
 } from "../hooks/use-bulk-registration";
+
+function downloadCsvTemplate() {
+  const header = "name,smiles,molecule_type,external_id,external_id_type";
+  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,cas_number";
+  const example2 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,CHEMBL113,chembl_id";
+  const csv = [header, example1, example2].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "bulk_registration_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 interface BulkRegistrationDialogProps {
   open: boolean;
@@ -90,6 +104,15 @@ export function BulkRegistrationDialog({
           <DialogDescription>
             Upload an SDF, CSV, or XLSX file to register molecules in bulk.
           </DialogDescription>
+          <Button
+            variant="link"
+            size="sm"
+            className="mt-1 h-auto p-0 text-xs"
+            onClick={downloadCsvTemplate}
+          >
+            <Download className="mr-1 h-3 w-3" />
+            Download CSV template
+          </Button>
         </DialogHeader>
 
         {!result ? (
