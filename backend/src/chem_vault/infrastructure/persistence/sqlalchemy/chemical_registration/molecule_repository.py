@@ -434,9 +434,12 @@ class SQLAlchemyMoleculeRepository(
         Uses the RDKit cartridge % operator (Tanimoto) which leverages the
         GiST index on morgan_bfp for sub-second search at 500K compounds.
         """
-        # Set Tanimoto threshold for the % operator (session-level GUC)
+        # Set Tanimoto threshold for the % operator (session-level GUC).
+        # SET does not accept parameterised values in PostgreSQL, so we
+        # validate the float and embed it as a literal.
+        safe_threshold = float(threshold)
         await self._session.execute(
-            text("SET rdkit.tanimoto_threshold = :t"), {"t": threshold}
+            text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
         )
 
         # Query using % operator (GiST-indexed) + compute exact score
