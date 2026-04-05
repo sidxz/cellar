@@ -351,13 +351,25 @@ class SQLAlchemyMoleculeRepository(
             if "structure_status" in filters and filters["structure_status"]:
                 stmt = stmt.where(MoleculeModel.structure_status == filters["structure_status"])
 
-        # Free-text search on name and registration_number
+        # Free-text search on name, registration_number, formula, inchi_key,
+        # and external identifiers (ChEMBL, CAS, vendor IDs, etc.)
         if search_term:
             like_pattern = f"%{search_term}%"
+            # Subquery: molecules that have a matching external identifier
+            identifier_subq = (
+                select(MoleculeIdentifierModel.molecule_id)
+                .where(
+                    MoleculeIdentifierModel.workspace_id == workspace_id,
+                    MoleculeIdentifierModel.identifier.ilike(like_pattern),
+                )
+            )
             stmt = stmt.where(
                 sa.or_(
                     MoleculeModel.name.ilike(like_pattern),
                     MoleculeModel.registration_number.ilike(like_pattern),
+                    MoleculeModel.molecular_formula.ilike(like_pattern),
+                    MoleculeModel.inchi_key.ilike(like_pattern),
+                    MoleculeModel.id.in_(identifier_subq),
                 )
             )
 

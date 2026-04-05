@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -21,42 +22,60 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useSearchMolecules } from "../hooks/use-molecules";
+import { useMoleculeSearch, useSearchMolecules } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
   type LifecycleStage,
   type Molecule,
 } from "../types";
 
-type SearchType = "exact" | "substructure" | "similarity";
+type SearchType = "name_id" | "exact" | "substructure" | "similarity";
 
 const SEARCH_TYPE_LABELS: Record<SearchType, string> = {
+  name_id: "By Name / ID",
   exact: "Exact (SMILES)",
   substructure: "Substructure (SMARTS)",
   similarity: "Similarity (Tanimoto)",
 };
 
 export function CompoundSearchBar() {
-  const [searchType, setSearchType] = useState<SearchType>("exact");
+  const router = useRouter();
+  const [searchType, setSearchType] = useState<SearchType>("name_id");
   const [query, setQuery] = useState("");
   const [threshold, setThreshold] = useState("0.7");
-  const [activeSearch, setActiveSearch] = useState<{
+  const [activeTextSearch, setActiveTextSearch] = useState("");
+  const [activeStructSearch, setActiveStructSearch] = useState<{
     search_type: string;
     query: string;
     threshold?: number;
   } | undefined>(undefined);
 
-  const { data: results, isLoading, isError } = useSearchMolecules(activeSearch);
+  const isTextMode = searchType === "name_id";
+
+  // Text search (name/ID) uses the list endpoint with ?q=
+  const { data: textResults, isLoading: textLoading, isError: textError } = useMoleculeSearch(activeTextSearch);
+  // Structure search uses the dedicated search endpoint
+  const { data: structResults, isLoading: structLoading, isError: structError } = useSearchMolecules(activeStructSearch);
+
+  const results = isTextMode ? textResults : structResults;
+  const isLoading = isTextMode ? textLoading : structLoading;
+  const isError = isTextMode ? textError : structError;
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    setActiveSearch({
-      search_type: searchType,
-      query: query.trim(),
-      ...(searchType === "similarity"
-        ? { threshold: parseFloat(threshold) }
-        : {}),
-    });
+    if (isTextMode) {
+      setActiveTextSearch(query.trim());
+      setActiveStructSearch(undefined);
+    } else {
+      setActiveStructSearch({
+        search_type: searchType,
+        query: query.trim(),
+        ...(searchType === "similarity"
+          ? { threshold: parseFloat(threshold) }
+          : {}),
+      });
+      setActiveTextSearch("");
+    }
   };
 
   return (
@@ -85,13 +104,19 @@ export function CompoundSearchBar() {
 
         <div className="grid flex-1 gap-1.5">
           <label className="text-xs font-medium text-muted-foreground">
-            {searchType === "substructure" ? "SMARTS Pattern" : "SMILES"}
+            {isTextMode
+              ? "Name, Reg #, Formula, or Identifier"
+              : searchType === "substructure"
+                ? "SMARTS Pattern"
+                : "SMILES"}
           </label>
           <Input
             placeholder={
-              searchType === "substructure"
-                ? "e.g., c1ccccc1 (aromatic ring)"
-                : "e.g., CC(=O)Oc1ccccc1C(=O)O"
+              isTextMode
+                ? "e.g., CV-00001, Aspirin, C9H8O4, CHEMBL25..."
+                : searchType === "substructure"
+                  ? "e.g., c1ccccc1 (aromatic ring)"
+                  : "e.g., CC(=O)Oc1ccccc1C(=O)O"
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -153,7 +178,11 @@ export function CompoundSearchBar() {
               </TableHeader>
               <TableBody>
                 {results.map((mol: Molecule) => (
-                  <TableRow key={mol.id}>
+                  <TableRow
+                    key={mol.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => router.push(`/compounds/${mol.id}`)}
+                  >
                     <TableCell className="font-mono text-sm">
                       {mol.registration_number}
                     </TableCell>
