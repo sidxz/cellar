@@ -25,6 +25,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useProject, useArchiveProject } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 import { CollectionList } from "./collection-list";
+import { SavedSearchList } from "./saved-search-list";
 import type { ProjectStatus } from "../types";
 
 function statusBadgeVariant(
@@ -158,17 +159,13 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Saved Searches placeholder — wired in Task 5 */}
+      {/* Saved Searches */}
       <Card>
         <CardHeader>
           <CardTitle>Saved Searches</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Saved searches for this project will appear here.
-            </p>
-          </div>
+          <SavedSearchList projectId={projectId} />
         </CardContent>
       </Card>
 

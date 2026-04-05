@@ -6,3 +6,5 @@ export { CollectionListPage, CollectionList } from "./components/collection-list
 export { CollectionDetail } from "./components/collection-detail";
 export { CreateCollectionDialog } from "./components/create-collection-dialog";
 export { AddMoleculesDialog } from "./components/add-molecules-dialog";
+export { SavedSearchListPage, SavedSearchList } from "./components/saved-search-list";
+export { CreateSavedSearchDialog } from "./components/create-saved-search-dialog";

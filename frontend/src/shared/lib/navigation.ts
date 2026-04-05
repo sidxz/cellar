@@ -7,7 +7,9 @@ import {
   FlaskRound,
   FolderKanban,
   LayoutDashboard,
+  Library,
   Package,
+  Search,
   Settings,
   ShieldCheck,
   TestTubes,
@@ -43,7 +45,11 @@ export const navigation: NavGroup[] = [
   },
   {
     label: "Research",
-    items: [{ title: "Projects", href: "/projects", icon: FolderKanban }],
+    items: [
+      { title: "Projects", href: "/projects", icon: FolderKanban },
+      { title: "Collections", href: "/collections", icon: Library },
+      { title: "Saved Searches", href: "/saved-searches", icon: Search },
+    ],
   },
   {
     label: "Administration",
