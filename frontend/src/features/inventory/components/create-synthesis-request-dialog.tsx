@@ -21,6 +21,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useCreateSynthesisRequest } from "../hooks/use-synthesis-requests";
+import { MoleculeSelector } from "./molecule-selector";
 
 interface CreateSynthesisRequestDialogProps {
   open: boolean;
@@ -33,25 +34,24 @@ export function CreateSynthesisRequestDialog({
 }: CreateSynthesisRequestDialogProps) {
   const mutation = useCreateSynthesisRequest();
 
-  const [moleculeId, setMoleculeId] = useState("");
+  const [moleculeId, setMoleculeId] = useState<string | null>(null);
   const [amountValue, setAmountValue] = useState("");
   const [amountUnit, setAmountUnit] = useState("mg");
   const [purpose, setPurpose] = useState("");
   const [priority, setPriority] = useState("routine");
   const [targetPurity, setTargetPurity] = useState("");
-  const [projectId, setProjectId] = useState("");
 
   const resetState = () => {
-    setMoleculeId("");
+    setMoleculeId(null);
     setAmountValue("");
     setAmountUnit("mg");
     setPurpose("");
     setPriority("routine");
     setTargetPurity("");
-    setProjectId("");
   };
 
   const handleSubmit = () => {
+    if (!moleculeId) return;
     mutation.mutate(
       {
         molecule_id: moleculeId,
@@ -60,7 +60,6 @@ export function CreateSynthesisRequestDialog({
         purpose,
         priority,
         target_purity: targetPurity !== "" ? parseFloat(targetPurity) : null,
-        project_id: projectId.trim() !== "" ? projectId.trim() : null,
       },
       {
         onSuccess: () => {
@@ -72,7 +71,7 @@ export function CreateSynthesisRequestDialog({
   };
 
   const isValid =
-    moleculeId.trim() !== "" &&
+    moleculeId !== null &&
     amountValue !== "" &&
     parseFloat(amountValue) > 0 &&
     purpose.trim() !== "";
@@ -90,11 +89,10 @@ export function CreateSynthesisRequestDialog({
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label>Molecule ID</Label>
-            <Input
-              placeholder="UUID of the target molecule"
-              value={moleculeId}
-              onChange={(e) => setMoleculeId(e.target.value)}
+            <Label>Compound</Label>
+            <MoleculeSelector
+              selectedId={moleculeId}
+              onSelect={setMoleculeId}
             />
           </div>
 
@@ -158,15 +156,6 @@ export function CreateSynthesisRequestDialog({
               onChange={(e) => setTargetPurity(e.target.value)}
               min={0}
               max={100}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Project ID (optional)</Label>
-            <Input
-              placeholder="UUID of the associated project"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
             />
           </div>
         </div>

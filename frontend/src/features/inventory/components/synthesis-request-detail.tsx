@@ -38,6 +38,9 @@ import {
   useFailSynthesis,
   useCancelSynthesisRequest,
 } from "../hooks/use-synthesis-requests";
+import { useBatchesByMolecule } from "../hooks/use-batches";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useSynthesisRoutesByMolecule } from "@/features/chemical-registration/hooks/use-synthesis-routes";
 import {
   SYNTHESIS_REQUEST_STATUS_LABELS,
   FEASIBILITY_STATUS_LABELS,
@@ -613,6 +616,8 @@ function AssignDialog({
   const [assignedTo, setAssignedTo] = useState("");
   const [assignedOrgId, setAssignedOrgId] = useState("");
 
+  const { data: organizations, isLoading: orgsLoading } = useOrganizations();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
@@ -637,9 +642,10 @@ function AssignDialog({
           </div>
           {assignmentType === "internal" && (
             <div className="grid gap-2">
-              <Label>Assigned To (user ID)</Label>
+              <Label htmlFor="assign-to">Assignee (name or email)</Label>
               <Input
-                placeholder="User UUID"
+                id="assign-to"
+                placeholder="e.g. dr.smith or dr.smith@lab.org"
                 value={assignedTo}
                 onChange={(e) => setAssignedTo(e.target.value)}
               />
@@ -647,12 +653,27 @@ function AssignDialog({
           )}
           {assignmentType === "cro" && (
             <div className="grid gap-2">
-              <Label>Assigned Org ID</Label>
-              <Input
-                placeholder="Organization UUID"
+              <Label htmlFor="assign-org">CRO Organization</Label>
+              <Select
                 value={assignedOrgId}
-                onChange={(e) => setAssignedOrgId(e.target.value)}
-              />
+                onValueChange={setAssignedOrgId}
+                disabled={orgsLoading}
+              >
+                <SelectTrigger id="assign-org">
+                  <SelectValue
+                    placeholder={
+                      orgsLoading ? "Loading organizations..." : "Select CRO..."
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {organizations?.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>
@@ -697,6 +718,9 @@ function StartDialog({
   const mutation = useStartSynthesis();
   const [proposedRouteId, setProposedRouteId] = useState("");
 
+  const { data: routes, isLoading: routesLoading } =
+    useSynthesisRoutesByMolecule(request.molecule_id);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
@@ -707,12 +731,35 @@ function StartDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
-          <Label>Proposed Route ID (optional)</Label>
-          <Input
-            placeholder="SynthesisRoute UUID"
+          <Label htmlFor="start-route">Proposed Route (optional)</Label>
+          <Select
             value={proposedRouteId}
-            onChange={(e) => setProposedRouteId(e.target.value)}
-          />
+            onValueChange={setProposedRouteId}
+            disabled={routesLoading}
+          >
+            <SelectTrigger id="start-route">
+              <SelectValue
+                placeholder={
+                  routesLoading ? "Loading routes..." : "None — start without a route"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">None</SelectItem>
+              {routes?.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name}
+                  {r.status !== "draft" ? ` (${r.status})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!routesLoading && (!routes || routes.length === 0) && (
+            <p className="text-xs text-muted-foreground">
+              No synthesis routes found for this molecule. You can start without
+              one.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button
@@ -720,7 +767,7 @@ function StartDialog({
               mutation.mutate(
                 {
                   id: request.id,
-                  proposed_route_id: proposedRouteId.trim() || null,
+                  proposed_route_id: proposedRouteId || null,
                 },
                 { onSuccess: () => onOpenChange(false) }
               );
@@ -900,22 +947,48 @@ function FulfillDialog({
   const mutation = useFulfillSynthesisRequest();
   const [batchId, setBatchId] = useState("");
 
+  const { data: batches, isLoading: batchesLoading } = useBatchesByMolecule(
+    request.molecule_id
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Fulfill Request</DialogTitle>
           <DialogDescription>
-            Link the synthesized batch to fulfill this request.
+            Select the synthesized batch to fulfill this request.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
-          <Label>Batch ID</Label>
-          <Input
-            placeholder="UUID of the created batch"
+          <Label htmlFor="fulfill-batch">Batch</Label>
+          <Select
             value={batchId}
-            onChange={(e) => setBatchId(e.target.value)}
-          />
+            onValueChange={setBatchId}
+            disabled={batchesLoading}
+          >
+            <SelectTrigger id="fulfill-batch">
+              <SelectValue
+                placeholder={
+                  batchesLoading ? "Loading batches..." : "Select batch..."
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {batches?.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.batch_number}
+                  {b.purity != null ? ` — ${b.purity}% purity` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!batchesLoading && (!batches || batches.length === 0) && (
+            <p className="text-xs text-muted-foreground">
+              No batches found for this molecule. Register the synthesized batch
+              first.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button
@@ -925,7 +998,7 @@ function FulfillDialog({
                 { onSuccess: () => onOpenChange(false) }
               );
             }}
-            disabled={!batchId.trim() || mutation.isPending}
+            disabled={!batchId || mutation.isPending}
           >
             {mutation.isPending ? "Fulfilling..." : "Fulfill"}
           </Button>

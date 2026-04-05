@@ -21,6 +21,8 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useCreateSampleRequest } from "../hooks/use-sample-requests";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
+import { BatchSelector } from "@/features/inventory/components/batch-selector";
 
 interface CreateSampleRequestDialogProps {
   open: boolean;
@@ -33,16 +35,16 @@ export function CreateSampleRequestDialog({
 }: CreateSampleRequestDialogProps) {
   const mutation = useCreateSampleRequest();
 
-  const [moleculeId, setMoleculeId] = useState("");
-  const [batchId, setBatchId] = useState("");
+  const [moleculeId, setMoleculeId] = useState<string | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const [amountValue, setAmountValue] = useState("");
   const [amountUnit, setAmountUnit] = useState("mg");
   const [purpose, setPurpose] = useState("");
   const [priority, setPriority] = useState("routine");
 
   const resetState = () => {
-    setMoleculeId("");
-    setBatchId("");
+    setMoleculeId(null);
+    setBatchId(null);
     setAmountValue("");
     setAmountUnit("mg");
     setPurpose("");
@@ -52,8 +54,8 @@ export function CreateSampleRequestDialog({
   const handleSubmit = () => {
     mutation.mutate(
       {
-        molecule_id: moleculeId,
-        batch_id: batchId || null,
+        molecule_id: moleculeId!,
+        batch_id: batchId,
         amount_value: parseFloat(amountValue),
         amount_unit: amountUnit,
         purpose,
@@ -69,7 +71,7 @@ export function CreateSampleRequestDialog({
   };
 
   const isValid =
-    moleculeId.trim() !== "" &&
+    moleculeId !== null &&
     amountValue !== "" &&
     parseFloat(amountValue) > 0 &&
     purpose.trim() !== "";
@@ -86,22 +88,26 @@ export function CreateSampleRequestDialog({
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label>Molecule ID</Label>
-            <Input
-              placeholder="UUID of the molecule"
-              value={moleculeId}
-              onChange={(e) => setMoleculeId(e.target.value)}
+            <Label>Molecule</Label>
+            <MoleculeSelector
+              selectedId={moleculeId}
+              onSelect={(id) => {
+                setMoleculeId(id);
+                setBatchId(null);
+              }}
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label>Batch ID (optional)</Label>
-            <Input
-              placeholder="UUID of a specific batch"
-              value={batchId}
-              onChange={(e) => setBatchId(e.target.value)}
-            />
-          </div>
+          {moleculeId && (
+            <div className="grid gap-2">
+              <Label>Batch (optional)</Label>
+              <BatchSelector
+                moleculeId={moleculeId}
+                selectedId={batchId}
+                onSelect={setBatchId}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">

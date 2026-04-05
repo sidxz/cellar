@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useSamplesByBatch } from "../hooks/use-samples";
 import { useCreateShipment } from "../hooks/use-shipments";
 import type { ShipmentItemInput } from "../types/shipment";
 
@@ -29,24 +31,136 @@ interface CreateShipmentDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const EMPTY_ITEM: ShipmentItemInput = {
+interface ItemRowState extends ShipmentItemInput {
+  /** Batch ID used to load the sample list for this row — UI-only, not sent to API */
+  _batch_id: string;
+}
+
+const EMPTY_ITEM: ItemRowState = {
+  _batch_id: "",
   sample_id: "",
   amount_value: 0,
   amount_unit: "mg",
 };
+
+interface ShipmentItemRowProps {
+  item: ItemRowState;
+  index: number;
+  canRemove: boolean;
+  onUpdate: <K extends keyof ItemRowState>(key: K, value: ItemRowState[K]) => void;
+  onRemove: () => void;
+}
+
+function ShipmentItemRow({ item, index, canRemove, onUpdate, onRemove }: ShipmentItemRowProps) {
+  const { data: samples } = useSamplesByBatch(item._batch_id || undefined);
+
+  return (
+    <div className="rounded-md border p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">Item {index + 1}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-destructive"
+          disabled={!canRemove}
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-1">
+          <Label className="text-xs">Batch ID</Label>
+          <Input
+            placeholder="Enter batch ID to load samples"
+            value={item._batch_id}
+            onChange={(e) => {
+              onUpdate("_batch_id", e.target.value);
+              onUpdate("sample_id", "");
+            }}
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label className="text-xs">
+            Sample <span className="text-destructive">*</span>
+          </Label>
+          {samples && samples.length > 0 ? (
+            <Select
+              value={item.sample_id}
+              onValueChange={(val) => onUpdate("sample_id", val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select sample" />
+              </SelectTrigger>
+              <SelectContent>
+                {samples.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.barcode} — {s.amount_value} {s.amount_unit}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              placeholder={item._batch_id ? "No samples found for this batch" : "Sample barcode or ID"}
+              value={item.sample_id}
+              onChange={(e) => onUpdate("sample_id", e.target.value)}
+              disabled={!!item._batch_id && (!samples || samples.length === 0)}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-end gap-2">
+        <div className="flex-1 grid gap-1">
+          <Label className="text-xs">Amount <span className="text-destructive">*</span></Label>
+          <Input
+            type="number"
+            placeholder="0.0"
+            min={0}
+            value={item.amount_value || ""}
+            onChange={(e) =>
+              onUpdate("amount_value", parseFloat(e.target.value) || 0)
+            }
+          />
+        </div>
+        <div className="w-24 grid gap-1">
+          <Label className="text-xs">Unit</Label>
+          <Select
+            value={item.amount_unit}
+            onValueChange={(val) => onUpdate("amount_unit", val)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mg">mg</SelectItem>
+              <SelectItem value="g">g</SelectItem>
+              <SelectItem value="mL">mL</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function CreateShipmentDialog({
   open,
   onOpenChange,
 }: CreateShipmentDialogProps) {
   const mutation = useCreateShipment();
+  const { data: orgs } = useOrganizations();
 
   const [destinationOrgId, setDestinationOrgId] = useState("");
   const [carrier, setCarrier] = useState("");
   const [expectedArrivalDate, setExpectedArrivalDate] = useState("");
   const [shippingConditions, setShippingConditions] = useState("");
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<ShipmentItemInput[]>([
+  const [items, setItems] = useState<ItemRowState[]>([
     { ...EMPTY_ITEM },
   ]);
 
@@ -72,10 +186,10 @@ export function CreateShipmentDialog({
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateItem<K extends keyof ShipmentItemInput>(
+  function updateItem<K extends keyof ItemRowState>(
     index: number,
     key: K,
-    value: ShipmentItemInput[K]
+    value: ItemRowState[K]
   ) {
     setItems((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [key]: value } : item))
@@ -92,6 +206,8 @@ export function CreateShipmentDialog({
     );
 
   function handleSubmit() {
+    // Strip the UI-only _batch_id field before sending to API
+    const apiItems: ShipmentItemInput[] = items.map(({ _batch_id: _, ...rest }) => rest);
     mutation.mutate(
       {
         destination_org_id: destinationOrgId.trim(),
@@ -99,7 +215,7 @@ export function CreateShipmentDialog({
         expected_arrival_date: expectedArrivalDate || null,
         shipping_conditions: shippingConditions.trim() || null,
         notes: notes.trim() || null,
-        items,
+        items: apiItems,
       },
       { onSuccess: () => handleClose(false) }
     );
@@ -119,15 +235,21 @@ export function CreateShipmentDialog({
           {/* Destination */}
           <div className="grid gap-2">
             <Label htmlFor="dest-org">
-              Destination Organization ID{" "}
+              Destination Organization{" "}
               <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="dest-org"
-              placeholder="UUID of destination organization"
-              value={destinationOrgId}
-              onChange={(e) => setDestinationOrgId(e.target.value)}
-            />
+            <Select value={destinationOrgId} onValueChange={setDestinationOrgId}>
+              <SelectTrigger id="dest-org">
+                <SelectValue placeholder="Select destination organization" />
+              </SelectTrigger>
+              <SelectContent>
+                {orgs?.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Carrier + Expected arrival */}
@@ -195,65 +317,14 @@ export function CreateShipmentDialog({
 
             <div className="space-y-2">
               {items.map((item, index) => (
-                <div
+                <ShipmentItemRow
                   key={index}
-                  className="flex items-end gap-2 rounded-md border p-3"
-                >
-                  <div className="flex-1 grid gap-1">
-                    <Label className="text-xs">Sample ID</Label>
-                    <Input
-                      placeholder="Sample UUID"
-                      value={item.sample_id}
-                      onChange={(e) =>
-                        updateItem(index, "sample_id", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="w-28 grid gap-1">
-                    <Label className="text-xs">Amount</Label>
-                    <Input
-                      type="number"
-                      placeholder="0.0"
-                      min={0}
-                      value={item.amount_value || ""}
-                      onChange={(e) =>
-                        updateItem(
-                          index,
-                          "amount_value",
-                          parseFloat(e.target.value) || 0
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="w-24 grid gap-1">
-                    <Label className="text-xs">Unit</Label>
-                    <Select
-                      value={item.amount_unit}
-                      onValueChange={(val) =>
-                        updateItem(index, "amount_unit", val)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mg">mg</SelectItem>
-                        <SelectItem value="g">g</SelectItem>
-                        <SelectItem value="mL">mL</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-destructive"
-                    disabled={items.length === 1}
-                    onClick={() => removeItem(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                  item={item}
+                  index={index}
+                  canRemove={items.length > 1}
+                  onUpdate={(key, value) => updateItem(index, key, value)}
+                  onRemove={() => removeItem(index)}
+                />
               ))}
             </div>
           </div>

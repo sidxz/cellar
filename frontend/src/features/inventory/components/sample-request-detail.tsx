@@ -16,6 +16,13 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   useSampleRequest,
@@ -25,6 +32,7 @@ import {
   useFulfillSampleRequest,
   useCancelSampleRequest,
 } from "../hooks/use-sample-requests";
+import { useSamplesByBatch } from "../hooks/use-samples";
 import {
   SAMPLE_REQUEST_STATUS_LABELS,
   REQUEST_PRIORITY_LABELS,
@@ -299,9 +307,9 @@ function ApproveDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
-          <Label>Assign To (optional — user ID)</Label>
+          <Label>Assignee (name or email, optional)</Label>
           <Input
-            placeholder="User UUID"
+            placeholder="e.g. jane.smith or jane@example.com"
             value={assignedTo}
             onChange={(e) => setAssignedTo(e.target.value)}
           />
@@ -387,22 +395,59 @@ function FulfillDialog({
   const mutation = useFulfillSampleRequest();
   const [sampleId, setSampleId] = useState("");
 
+  // If the request targets a specific batch, offer a select of known samples.
+  const { data: batchSamples, isLoading: samplesLoading } = useSamplesByBatch(
+    request.batch_id ?? undefined
+  );
+  const hasBatchSamples =
+    !!request.batch_id && batchSamples && batchSamples.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Fulfill Request</DialogTitle>
           <DialogDescription>
-            Link the fulfilled sample to this request.
+            Link the dispensed sample to this request.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
-          <Label>Sample ID</Label>
-          <Input
-            placeholder="UUID of the dispensed sample"
-            value={sampleId}
-            onChange={(e) => setSampleId(e.target.value)}
-          />
+          {hasBatchSamples ? (
+            <>
+              <Label htmlFor="fulfill-sample">Sample</Label>
+              <Select value={sampleId} onValueChange={setSampleId}>
+                <SelectTrigger id="fulfill-sample">
+                  <SelectValue placeholder="Select sample..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {batchSamples.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.barcode}
+                      {s.amount_value != null
+                        ? ` — ${s.amount_value} ${s.amount_unit}`
+                        : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          ) : (
+            <>
+              <Label htmlFor="fulfill-sample">Sample Barcode</Label>
+              <Input
+                id="fulfill-sample"
+                placeholder={
+                  samplesLoading ? "Loading samples..." : "e.g. SMP-0042"
+                }
+                value={sampleId}
+                onChange={(e) => setSampleId(e.target.value)}
+                disabled={samplesLoading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the barcode of the sample being dispensed.
+              </p>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button

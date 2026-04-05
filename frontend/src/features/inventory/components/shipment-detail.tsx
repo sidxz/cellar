@@ -373,11 +373,11 @@ function AddItemDialog({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="item-sample">
-              Sample ID <span className="text-destructive">*</span>
+              Sample Barcode <span className="text-destructive">*</span>
             </Label>
             <Input
               id="item-sample"
-              placeholder="Sample UUID"
+              placeholder="e.g. SMP-0042"
               value={sampleId}
               onChange={(e) => setSampleId(e.target.value)}
             />
