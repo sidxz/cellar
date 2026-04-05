@@ -278,7 +278,15 @@ def create_container(
     container.define(CreateVocabulary, _vocab_cmd(CreateVocabulary))
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))
-    container.define(DeleteVocabulary, _vocab_query(DeleteVocabulary))
+    def _delete_vocabulary(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteVocabulary(
+            uow,
+            SQLAlchemyControlledVocabularyRepository(uow),
+            SQLAlchemyWorkspaceSettingsRepository(uow),
+        )
+
+    container.define(DeleteVocabulary, _delete_vocabulary)
 
     # --- Chemical Registration ---
     container.define(StructureProcessor, Singleton(StructureProcessor))
@@ -451,7 +459,11 @@ def create_container(
     def _sample_create(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateSample(
-            uow, SQLAlchemyBatchRepository(uow), SQLAlchemySampleRepository(uow), c[EventDispatcher]
+            uow,
+            SQLAlchemyBatchRepository(uow),
+            SQLAlchemySampleRepository(uow),
+            SQLAlchemyMoleculeRepository(uow),
+            c[EventDispatcher],
         )
 
     def _sample_cmd(uc_cls):  # type: ignore[no-untyped-def]
@@ -470,7 +482,16 @@ def create_container(
     container.define(GetSample, _sample_query(GetSample))
     container.define(ListSamplesByBatch, _sample_query(ListSamplesByBatch))
     container.define(AliquotSample, _sample_cmd(AliquotSample))
-    container.define(MoveSample, _sample_cmd(MoveSample))
+    def _move_sample(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MoveSample(
+            uow,
+            SQLAlchemySampleRepository(uow),
+            SQLAlchemyStorageLocationRepository(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(MoveSample, _move_sample)
     container.define(QuarantineSample, _sample_cmd(QuarantineSample))
     container.define(ClearQuarantineSample, _sample_cmd(ClearQuarantineSample))
     container.define(DisposeSample, _sample_cmd(DisposeSample))
@@ -555,7 +576,16 @@ def create_container(
             return uc_cls(uow, SQLAlchemyRunRepository(uow))
         return _f
 
-    container.define(CreateRun, _run_cmd(CreateRun))
+    def _create_run(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateRun(
+            uow,
+            SQLAlchemyRunRepository(uow),
+            SQLAlchemyProtocolRepository(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(CreateRun, _create_run)
     container.define(GetRun, _run_query(GetRun))
     container.define(ListRunsByProtocol, _run_query(ListRunsByProtocol))
     container.define(StartRun, _run_cmd(StartRun))

@@ -11,11 +11,12 @@ from chem_vault.application.auth import AuthContext, require_editor, require_sam
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.enums import ContainerType
 from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository
 from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from chem_vault.domain.shared.value_objects import Amount, Barcode, Concentration
 
 
@@ -40,11 +41,13 @@ class CreateSample:
         uow: UnitOfWork,
         batch_repo: BatchRepository,
         sample_repo: SampleRepository,
+        molecule_repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._batch_repo = batch_repo
         self._sample_repo = sample_repo
+        self._molecule_repo = molecule_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -57,6 +60,13 @@ class CreateSample:
             if batch is None:
                 return Failure(NotFoundError("Batch"))
             require_same_workspace(auth, batch.workspace_id)
+
+            # Guard: parent molecule must not be tombstoned
+            molecule = await self._molecule_repo.find_by_id(batch.molecule_id)
+            if molecule is not None and molecule.is_tombstone:
+                return Failure(
+                    ConflictError("Cannot create sample — parent molecule has been merged")
+                )
 
             concentration = None
             if input.concentration_value is not None and input.concentration_unit is not None:

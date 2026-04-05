@@ -10,8 +10,11 @@ from returns.result import Failure, Result, Success
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
-from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
+from chem_vault.domain.workspace_config.repository import (
+    ControlledVocabularyRepository,
+    WorkspaceSettingsRepository,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -21,9 +24,15 @@ class DeleteVocabularyCommand(Command):
 
 
 class DeleteVocabulary:
-    def __init__(self, uow: UnitOfWork, repo: ControlledVocabularyRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ControlledVocabularyRepository,
+        settings_repo: WorkspaceSettingsRepository,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._settings_repo = settings_repo
 
     async def __call__(
         self, input: DeleteVocabularyCommand, auth: AuthContext | None = None
@@ -39,6 +48,18 @@ class DeleteVocabulary:
                 return Failure(
                     ValidationError("Cannot delete a locked vocabulary")
                 )
+
+            # Guard: vocabulary must not be referenced by custom field definitions
+            settings = await self._settings_repo.find_by_workspace(input.workspace_id)
+            if settings and settings.custom_field_definitions:
+                for field_def in settings.custom_field_definitions:
+                    if isinstance(field_def, dict) and field_def.get("vocabulary_name") == vocab.name:
+                        return Failure(
+                            ConflictError(
+                                f"Vocabulary '{vocab.name}' is referenced by "
+                                f"custom field '{field_def.get('label', field_def.get('name'))}'"
+                            )
+                        )
 
             await self._repo.delete(input.vocab_id)
             await self._uow.commit()

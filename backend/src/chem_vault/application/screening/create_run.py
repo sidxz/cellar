@@ -13,10 +13,10 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.screening_assay.enums import PlateFormat, RunRelationshipType
-from chem_vault.domain.screening_assay.repository import RunRepository
+from chem_vault.domain.screening_assay.enums import PlateFormat, ProtocolStatus, RunRelationshipType
+from chem_vault.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -37,10 +37,12 @@ class CreateRun:
         self,
         uow: UnitOfWork,
         repo: RunRepository,
+        protocol_repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._protocol_repo = protocol_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -49,6 +51,17 @@ class CreateRun:
         require_editor(auth)
 
         async with self._uow:
+            # Guard: protocol must exist and be ACTIVE
+            protocol = await self._protocol_repo.find_by_id(input.protocol_id)
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+            if protocol.status != ProtocolStatus.ACTIVE:
+                return Failure(
+                    ConflictError(
+                        f"Cannot create runs on a {protocol.status.value} protocol — only active protocols"
+                    )
+                )
+
             run = Run.create(
                 workspace_id=input.workspace_id,
                 protocol_id=input.protocol_id,

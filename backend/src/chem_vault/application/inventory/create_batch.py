@@ -17,7 +17,7 @@ from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from chem_vault.domain.shared.value_objects import Amount, Concentration
 
 
@@ -62,11 +62,15 @@ class CreateBatch:
         require_editor(auth)
 
         async with self._uow:
-            # Validate molecule exists and belongs to this workspace
+            # Validate molecule exists, belongs to workspace, and is not tombstoned
             molecule = await self._molecule_repo.find_by_id(input.molecule_id)
             if molecule is None:
                 return Failure(NotFoundError("Molecule"))
             require_same_workspace(auth, molecule.workspace_id)
+            if molecule.is_tombstone:
+                return Failure(
+                    ConflictError("Cannot create batch for a merged molecule")
+                )
 
             batch_number = await self._repo.next_batch_number(
                 input.workspace_id, input.molecule_id

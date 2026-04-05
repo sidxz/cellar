@@ -9,7 +9,7 @@ from returns.result import Failure, Result, Success
 from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.inventory.repository import SampleRepository
+from chem_vault.domain.inventory.repository import SampleRepository, StorageLocationRepository
 from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 
@@ -46,10 +46,12 @@ class MoveSample:
         self,
         uow: UnitOfWork,
         repo: SampleRepository,
+        location_repo: StorageLocationRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._location_repo = location_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -64,6 +66,10 @@ class MoveSample:
             if sample is None:
                 return Failure(NotFoundError("Sample"))
             require_same_workspace(auth, sample.workspace_id)
+            if location_id is not None:
+                location = await self._location_repo.find_by_id(location_id)
+                if location is None:
+                    return Failure(NotFoundError("StorageLocation", str(location_id)))
             sample.move_to(location_id)
             await self._repo.save(sample)
             events = await self._uow.commit()
