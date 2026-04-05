@@ -174,6 +174,18 @@ class MoleculeResponse(BaseModel):
         )
 
 
+class SimilaritySearchResult(BaseModel):
+    molecule: MoleculeResponse
+    similarity: float
+
+    @classmethod
+    def from_domain(cls, molecule: Molecule, similarity: float) -> SimilaritySearchResult:
+        return cls(
+            molecule=MoleculeResponse.from_domain(molecule),
+            similarity=round(similarity, 4),
+        )
+
+
 class RegistrationResponse(BaseModel):
     molecule: MoleculeResponse
     is_new: bool
@@ -333,14 +345,14 @@ async def list_molecules(
     )
 
 
-@router.get("/search", response_model=list[MoleculeResponse])
+@router.get("/search")
 async def search_molecules(
     auth: AuthDep,
     use_case: SearchMoleculesDep,
     search_type: str,
     query: str,
     threshold: float = 0.7,
-) -> list[MoleculeResponse]:
+) -> list[MoleculeResponse] | list[SimilaritySearchResult]:
     """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES)."""
     q = SearchMoleculesQuery(
         workspace_id=auth.workspace_id,
@@ -348,8 +360,16 @@ async def search_molecules(
         query=query,
         threshold=threshold,
     )
-    mols = result_to_response(await use_case(q))
-    return [MoleculeResponse.from_domain(m) for m in mols]
+    results = result_to_response(await use_case(q))
+
+    if search_type == "similarity":
+        from chem_vault.application.chemical_registration.search_molecules import SimilarityResult
+
+        return [
+            SimilaritySearchResult.from_domain(r.molecule, r.similarity)
+            for r in results
+        ]
+    return [MoleculeResponse.from_domain(m) for m in results]
 
 
 @router.get("/by-identifier/{identifier}", response_model=MoleculeResponse)

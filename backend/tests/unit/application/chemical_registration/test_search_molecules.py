@@ -17,6 +17,7 @@ from chem_vault.application.chemical_registration.protocols import (
 from chem_vault.application.chemical_registration.search_molecules import (
     SearchMolecules,
     SearchMoleculesQuery,
+    SimilarityResult,
 )
 from chem_vault.domain.chemical_registration.enums import MoleculeType
 from chem_vault.domain.chemical_registration.molecule import Molecule
@@ -120,8 +121,10 @@ class FakeMoleculeRepository:
 
     async def search_similarity(
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
-    ) -> list[Molecule]:
-        return [m for m in self._store.values() if m.workspace_id == workspace_id]
+    ) -> list[tuple[Molecule, float]]:
+        return [
+            (m, 0.85) for m in self._store.values() if m.workspace_id == workspace_id
+        ]
 
 
 class FakeStructureProcessor:
@@ -227,7 +230,7 @@ class TestSubstructureSearch:
 
 class TestSimilaritySearch:
     @pytest.mark.asyncio
-    async def test_similarity_returns_matches(self, _deps: dict) -> None:
+    async def test_similarity_returns_scored_results(self, _deps: dict) -> None:
         mol = _make_mol()
         _deps["repo"].add(mol)
 
@@ -240,7 +243,11 @@ class TestSimilaritySearch:
         result = await _deps["uc"](query)
 
         assert isinstance(result, Success)
-        assert len(result.unwrap()) == 1
+        items = result.unwrap()
+        assert len(items) == 1
+        assert isinstance(items[0], SimilarityResult)
+        assert items[0].molecule.id == mol.id
+        assert items[0].similarity == 0.85
 
 
 class TestValidation:

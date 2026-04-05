@@ -428,25 +428,36 @@ class SQLAlchemyMoleculeRepository(
 
     async def search_similarity(
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
-    ) -> list[Molecule]:
-        """Similarity search using RDKit cartridge Tanimoto similarity.
+    ) -> list[tuple[Molecule, float]]:
+        """Similarity search using pre-computed morgan_bfp with GiST index.
 
-        Uses Morgan fingerprints computed by the cartridge at query time.
+        Uses the RDKit cartridge % operator (Tanimoto) which leverages the
+        GiST index on morgan_bfp for sub-second search at 500K compounds.
         """
+        # Set Tanimoto threshold for the % operator (session-level GUC)
+        await self._session.execute(
+            text("SET rdkit.tanimoto_threshold = :t"), {"t": threshold}
+        )
+
+        # Query using % operator (GiST-indexed) + compute exact score
         stmt = (
-            select(MoleculeModel)
+            select(
+                MoleculeModel,
+                text(
+                    "tanimoto_sml(morgan_bfp, morganbv_fp(mol_from_smiles(:q))) AS similarity"
+                ),
+            )
             .where(
                 MoleculeModel.workspace_id == workspace_id,
                 MoleculeModel.merged_into_id.is_(None),
-                MoleculeModel.smiles.is_not(None),
-                text(
-                    "tanimoto_sml("
-                    "morganbv_fp(mol_from_smiles(smiles)), "
-                    "morganbv_fp(mol_from_smiles(:query_smiles))"
-                    ") > :threshold"
-                ),
+                text("morgan_bfp % morganbv_fp(mol_from_smiles(:q))"),
             )
-            .params(query_smiles=smiles, threshold=threshold)
+            .params(q=smiles)
+            .order_by(text("similarity DESC"))
+            .limit(100)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [
+            (self._to_domain(row[0]), float(row[1]))
+            for row in result.all()
+        ]

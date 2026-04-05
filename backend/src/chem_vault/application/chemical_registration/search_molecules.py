@@ -30,6 +30,18 @@ class SearchMoleculesQuery(Query):
     threshold: float = 0.7
 
 
+@dataclass(frozen=True)
+class SimilarityResult:
+    """A molecule with its Tanimoto similarity score."""
+
+    molecule: Molecule
+    similarity: float
+
+
+# Union return type: plain molecules for exact/substructure, scored for similarity
+SearchResults = list[Molecule] | list[SimilarityResult]
+
+
 class SearchMolecules:
     """Query use case: search molecules by structure.
 
@@ -50,7 +62,7 @@ class SearchMolecules:
 
     async def __call__(
         self, input: SearchMoleculesQuery
-    ) -> Result[list[Molecule], DomainError]:
+    ) -> Result[SearchResults, DomainError]:
         try:
             search_type = SearchType(input.search_type)
         except ValueError:
@@ -73,12 +85,14 @@ class SearchMolecules:
                 )
                 return Success(results)
             else:
-                results = await self._repo.search_similarity(
+                scored = await self._repo.search_similarity(
                     input.workspace_id,
                     input.query.strip(),
                     threshold=input.threshold,
                 )
-                return Success(results)
+                return Success(
+                    [SimilarityResult(mol, sim) for mol, sim in scored]
+                )
 
     async def _exact_search(
         self, input: SearchMoleculesQuery
