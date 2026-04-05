@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
 from chem_vault.domain.research_organization.events import SavedSearchCreated
 from chem_vault.domain.shared.entity import AggregateRoot
@@ -30,8 +31,8 @@ class SavedSearch(AggregateRoot):
         id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         name: str,
-        query: dict,
-        columns: list[str] | None = None,
+        query: dict[str, Any],
+        columns: dict[str, Any] | None = None,
         visibility: SearchVisibility = SearchVisibility.PRIVATE,
         project_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
@@ -45,7 +46,7 @@ class SavedSearch(AggregateRoot):
         self.workspace_id = workspace_id
         self.name = name.strip()
         self.query = dict(query)
-        self.columns = list(columns) if columns else None
+        self.columns = dict(columns) if columns else None
         self.visibility = visibility
         self.project_id = project_id
         self.created_by = created_by
@@ -63,8 +64,8 @@ class SavedSearch(AggregateRoot):
         *,
         workspace_id: uuid.UUID,
         name: str,
-        query: dict,
-        columns: list[str] | None = None,
+        query: dict[str, Any],
+        columns: dict[str, Any] | None = None,
         visibility: SearchVisibility = SearchVisibility.PRIVATE,
         project_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
@@ -93,7 +94,7 @@ class SavedSearch(AggregateRoot):
         *,
         name: str | None = None,
         query: dict | None = None,
-        columns: list[str] | None = ...,  # type: ignore[assignment]
+        columns: dict[str, Any] | None = ...,  # type: ignore[assignment]
         visibility: SearchVisibility | None = None,
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
     ) -> None:
@@ -109,7 +110,7 @@ class SavedSearch(AggregateRoot):
         if query is not None:
             self.query = dict(query)
         if columns is not ...:
-            self.columns = list(columns) if columns else None
+            self.columns = dict(columns) if columns else None
         if visibility is not None:
             self.visibility = visibility
         if project_id is not ...:

@@ -49,11 +49,11 @@ class CollectionRepository(Protocol):
 
     async def add_molecules(
         self, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
-    ) -> None: ...
+    ) -> int: ...
 
     async def remove_molecules(
         self, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
-    ) -> None: ...
+    ) -> int: ...
 
     async def get_molecule_ids(
         self,

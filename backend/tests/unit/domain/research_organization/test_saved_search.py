@@ -35,14 +35,14 @@ class TestSavedSearchCreate:
             workspace_id=ws_id,
             name="Benzene analogs",
             query=sample_query,
-            columns=["name", "smiles", "mw"],
+            columns={"visible": ["name", "smiles", "mw"]},
             visibility=SearchVisibility.PRIVATE,
             created_by=user_id,
         )
         assert search.workspace_id == ws_id
         assert search.name == "Benzene analogs"
         assert search.query == sample_query
-        assert search.columns == ["name", "smiles", "mw"]
+        assert search.columns == {"visible": ["name", "smiles", "mw"]}
         assert search.visibility == SearchVisibility.PRIVATE
         assert search.project_id is None
         assert search.created_by == user_id
@@ -176,7 +176,7 @@ class TestSavedSearchUpdate:
             workspace_id=ws_id,
             name="S1",
             query=sample_query,
-            columns=["a", "b"],
+            columns={"visible": ["a", "b"]},
             created_by=user_id,
         )
         search.update(columns=None)
