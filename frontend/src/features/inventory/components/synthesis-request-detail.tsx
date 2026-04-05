@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, FlaskRound } from "lucide-react";
+import { ArrowLeft, FlaskRound, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { MemberSelector } from "@/shared/components/member-selector";
@@ -717,7 +717,7 @@ function StartDialog({
   const mutation = useStartSynthesis();
   const [proposedRouteId, setProposedRouteId] = useState("");
 
-  const { data: routes, isLoading: routesLoading } =
+  const { data: routes, isLoading: routesLoading, refetch: refetchRoutes } =
     useSynthesisRoutesByMolecule(request.molecule_id);
 
   return (
@@ -731,12 +731,13 @@ function StartDialog({
         </DialogHeader>
         <div className="grid gap-2 py-4">
           <Label htmlFor="start-route">Proposed Route (optional)</Label>
+          <div className="flex gap-2">
           <Select
             value={proposedRouteId}
             onValueChange={setProposedRouteId}
             disabled={routesLoading}
           >
-            <SelectTrigger id="start-route">
+            <SelectTrigger id="start-route" className="flex-1">
               <SelectValue
                 placeholder={
                   routesLoading ? "Loading routes..." : "None — start without a route"
@@ -753,6 +754,17 @@ function StartDialog({
               ))}
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => refetchRoutes()}
+            disabled={routesLoading}
+            title="Refresh routes"
+          >
+            <RefreshCw className={`h-4 w-4 ${routesLoading ? "animate-spin" : ""}`} />
+          </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             {!routesLoading && (!routes || routes.length === 0)
               ? "No routes found for this molecule. "
