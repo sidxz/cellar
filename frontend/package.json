@@ -10,7 +10,8 @@
     "lint:fix": "biome check --write src/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:api": "orval"
+    "generate:api": "orval",
+    "postinstall": "cp node_modules/@rdkit/rdkit/dist/RDKit_minimal.wasm public/RDKit_minimal.wasm 2>/dev/null || true"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.0",

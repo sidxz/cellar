@@ -17,9 +17,14 @@ export function getRDKit(): Promise<RDKitModule> {
   rdkitPromise = (async () => {
     // Dynamic import — the main export IS the loader function
     const initRDKitModule = (
-      (await import("@rdkit/rdkit")) as unknown as { default: () => Promise<RDKitModule> }
+      (await import("@rdkit/rdkit")) as unknown as {
+        default: (opts?: { locateFile?: () => string }) => Promise<RDKitModule>;
+      }
     ).default;
-    const rdkit = await initRDKitModule();
+    const rdkit = await initRDKitModule({
+      // WASM binary is copied to public/ so it's served as a static asset
+      locateFile: () => "/RDKit_minimal.wasm",
+    });
     return rdkit;
   })();
 
