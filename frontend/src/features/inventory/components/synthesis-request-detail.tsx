@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { ArrowLeft, FlaskRound } from "lucide-react";
 import Link from "next/link";
-import { useAuthz } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
+import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import {
@@ -616,15 +616,19 @@ function AssignDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useAssignSynthesisRequest();
-  const { user } = useAuthz();
   const [assignmentType, setAssignmentType] = useState("internal");
+  const [assignedToId, setAssignedToId] = useState<string | null>(null);
   const [assignedOrgId, setAssignedOrgId] = useState("");
 
   const { data: organizations, isLoading: orgsLoading } = useOrganizations();
 
+  const isValid =
+    (assignmentType === "internal" && assignedToId !== null) ||
+    (assignmentType === "cro" && assignedOrgId.trim() !== "");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Assign Request</DialogTitle>
           <DialogDescription>
@@ -634,21 +638,24 @@ function AssignDialog({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label>Assignment Type</Label>
-            <Select value={assignmentType} onValueChange={setAssignmentType}>
+            <Select value={assignmentType} onValueChange={(v) => { setAssignmentType(v); setAssignedToId(null); setAssignedOrgId(""); }}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="internal">Internal</SelectItem>
-                <SelectItem value="cro">CRO</SelectItem>
+                <SelectItem value="internal">Internal Chemist</SelectItem>
+                <SelectItem value="cro">External CRO</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {assignmentType === "internal" && (
-            <div className="rounded-md border border-border bg-muted/50 p-3">
-              <p className="text-sm text-muted-foreground">
-                Will be assigned to you ({user?.name ?? user?.email ?? "current user"})
-              </p>
+            <div className="grid gap-2">
+              <Label>Assignee</Label>
+              <MemberSelector
+                selectedId={assignedToId}
+                onSelect={setAssignedToId}
+                placeholder="Search team members..."
+              />
             </div>
           )}
           {assignmentType === "cro" && (
@@ -685,9 +692,7 @@ function AssignDialog({
                   id: request.id,
                   assignment_type: assignmentType,
                   assigned_to:
-                    assignmentType === "internal" && user?.userId
-                      ? user.userId
-                      : null,
+                    assignmentType === "internal" ? assignedToId : null,
                   assigned_org_id:
                     assignmentType === "cro" && assignedOrgId.trim()
                       ? assignedOrgId.trim()
@@ -696,7 +701,7 @@ function AssignDialog({
                 { onSuccess: () => onOpenChange(false) }
               );
             }}
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || !isValid}
           >
             {mutation.isPending ? "Assigning..." : "Assign"}
           </Button>

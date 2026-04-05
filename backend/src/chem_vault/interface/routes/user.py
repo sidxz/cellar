@@ -1,6 +1,8 @@
-"""User preferences endpoints — thin route resolving use cases from DI."""
+"""User preferences + workspace member endpoints."""
 
 from __future__ import annotations
+
+import uuid
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -50,3 +52,28 @@ async def update_preferences(
     result = await use_case(command)
     prefs = result_to_response(result)
     return PreferencesResponse(theme=prefs.theme, sidebar_collapsed=prefs.sidebar_collapsed)
+
+
+# ---------------------------------------------------------------------------
+# Workspace members (proxy to Sentinel)
+# ---------------------------------------------------------------------------
+
+
+class WorkspaceMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    name: str
+    avatar_url: str | None = None
+    role: str
+
+
+@router.get("/workspace-members", response_model=list[WorkspaceMemberResponse])
+async def list_workspace_members(
+    auth: AuthDep, q: str | None = None
+) -> list[WorkspaceMemberResponse]:
+    """List members of the current workspace. Proxies to Sentinel."""
+    if q:
+        members = await auth.search_workspace_members(q, limit=20)
+    else:
+        members = await auth.list_members(limit=50)
+    return [WorkspaceMemberResponse(**m) for m in members]
