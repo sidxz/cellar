@@ -37,7 +37,7 @@ function statusBadgeVariant(
 }
 
 export function ProtocolList({ onSelect }: ProtocolListProps) {
-  const { data: protocols, isLoading } = useProtocols();
+  const { data: protocols, isLoading, error } = useProtocols();
 
   if (isLoading) {
     return (
@@ -45,6 +45,15 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
+        <p className="text-sm text-destructive">Failed to load protocols. Is the backend running?</p>
+        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
       </div>
     );
   }

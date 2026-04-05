@@ -19,7 +19,7 @@ import {
 } from "../types";
 
 export function TargetList() {
-  const { data: targets, isLoading } = useTargets();
+  const { data: targets, isLoading, error } = useTargets();
 
   if (isLoading) {
     return (
@@ -27,6 +27,15 @@ export function TargetList() {
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
+        <p className="text-sm text-destructive">Failed to load targets. Is the backend running?</p>
+        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
       </div>
     );
   }

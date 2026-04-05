@@ -48,7 +48,7 @@ function lifecycleBadgeVariant(
 }
 
 export function MoleculeList() {
-  const { data: molecules, isLoading } = useMolecules();
+  const { data: molecules, isLoading, error } = useMolecules();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
@@ -60,6 +60,19 @@ export function MoleculeList() {
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-destructive/50 p-12 text-center">
+        <p className="text-sm text-destructive">
+          Failed to load compounds. Is the backend running?
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {error.message}
+        </p>
       </div>
     );
   }
