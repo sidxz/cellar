@@ -5,6 +5,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import type {
   CreateShipmentInput,
+  ImportPreviewResponse,
   Shipment,
   ShipmentItem,
   ShipmentSummary,
@@ -191,5 +192,23 @@ export function useDeleteShipment() {
       qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
       showSuccess("Shipment deleted");
     },
+  });
+}
+
+export function usePreviewShipmentImport() {
+  return useMutation({
+    mutationFn: (
+      rows: Array<{
+        compound: string;
+        batch: string;
+        sample: string;
+        amount: string;
+      }>
+    ) =>
+      customInstance<ImportPreviewResponse>({
+        url: "/api/v1/shipments/import/preview",
+        method: "POST",
+        data: { rows },
+      }),
   });
 }

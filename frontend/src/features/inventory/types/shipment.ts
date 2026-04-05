@@ -60,3 +60,43 @@ export interface CreateShipmentInput {
   notes?: string | null;
   items: ShipmentItemInput[];
 }
+
+// --- CSV Import preview types ---
+
+export interface ImportFieldCorrection {
+  field: string;
+  original: string;
+  corrected: string;
+  reason: string;
+}
+
+export interface ImportOriginalRow {
+  compound: string;
+  batch: string;
+  sample: string;
+  amount: string;
+}
+
+export interface ImportResolvedRow {
+  row_number: number;
+  status: "valid" | "corrected" | "error";
+  original: ImportOriginalRow;
+  compound_id: string | null;
+  compound_display: string | null;
+  batch_id: string | null;
+  batch_display: string | null;
+  sample_id: string | null;
+  sample_display: string | null;
+  amount_value: number | null;
+  amount_unit: string | null;
+  corrections: ImportFieldCorrection[];
+  errors: string[];
+}
+
+export interface ImportPreviewResponse {
+  rows: ImportResolvedRow[];
+  total: number;
+  valid_count: number;
+  corrected_count: number;
+  error_count: number;
+}

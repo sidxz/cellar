@@ -42,6 +42,7 @@ from chem_vault.application.inventory.sample_requests import (
     StartPreparingSampleRequest,
     UpdateSampleRequest,
 )
+from chem_vault.application.inventory.preview_shipment_import import PreviewShipmentImport
 from chem_vault.application.inventory.shipments import (
     AddShipmentItem,
     CreateShipment,
@@ -681,6 +682,17 @@ def create_container(
     container.define(AddShipmentItem, _shipment_cmd(AddShipmentItem))
     container.define(UpdateShipment, _shipment_cmd(UpdateShipment))
     container.define(DeleteShipment, _shipment_cmd(DeleteShipment))
+
+    def _preview_import(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewShipmentImport(
+            uow,
+            SQLAlchemyMoleculeRepository(uow),
+            SQLAlchemyBatchRepository(uow),
+            SQLAlchemySampleRepository(uow),
+        )
+
+    container.define(PreviewShipmentImport, _preview_import)
 
     # --- Synthesis Requests ---
     def _synth_req_cmd(uc_cls):  # type: ignore[no-untyped-def]
