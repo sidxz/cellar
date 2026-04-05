@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from chem_vault.domain.screening_assay.enums import CurveClass, CurveType
@@ -40,6 +40,73 @@ class SQLAlchemyDoseResponseCurveRepository:
         )
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def find_by_molecule(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+    ) -> list[DoseResponseCurve]:
+        """All dose-response curves for a molecule, ordered by r_squared desc."""
+        stmt = (
+            select(DoseResponseCurveModel)
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.molecule_id == molecule_id,
+            )
+            .order_by(DoseResponseCurveModel.r_squared.desc())
+        )
+        result = await self._uow.session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def find_best_curves_for_molecules(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        protocol_ids: list[uuid.UUID] | None = None,
+    ) -> dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]]:
+        """Batch query: molecule_id -> protocol_id -> best curve (highest r_squared)."""
+        if not molecule_ids:
+            return {}
+
+        # Subquery: best r_squared per (molecule_id, protocol_id)
+        best_sq = (
+            select(
+                DoseResponseCurveModel.molecule_id,
+                DoseResponseCurveModel.protocol_id,
+                func.max(DoseResponseCurveModel.r_squared).label("best_r2"),
+            )
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.molecule_id.in_(molecule_ids),
+            )
+            .group_by(
+                DoseResponseCurveModel.molecule_id,
+                DoseResponseCurveModel.protocol_id,
+            )
+        )
+
+        if protocol_ids:
+            best_sq = best_sq.where(DoseResponseCurveModel.protocol_id.in_(protocol_ids))
+
+        best_sq = best_sq.subquery()
+
+        stmt = (
+            select(DoseResponseCurveModel)
+            .join(
+                best_sq,
+                (DoseResponseCurveModel.molecule_id == best_sq.c.molecule_id)
+                & (DoseResponseCurveModel.protocol_id == best_sq.c.protocol_id)
+                & (DoseResponseCurveModel.r_squared == best_sq.c.best_r2),
+            )
+            .where(DoseResponseCurveModel.workspace_id == workspace_id)
+        )
+
+        result = await self._uow.session.execute(stmt)
+        curves = [self._to_domain(m) for m in result.scalars().all()]
+
+        out: dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]] = {}
+        for curve in curves:
+            out.setdefault(curve.molecule_id, {})[curve.protocol_id] = curve
+
+        return out
 
     async def save(self, entity: DoseResponseCurve) -> None:
         model = self._to_model(entity)
