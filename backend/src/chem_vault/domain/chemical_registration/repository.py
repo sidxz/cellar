@@ -11,6 +11,7 @@ from chem_vault.domain.chemical_registration.disclosure_request import Disclosur
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_relationship import MoleculeRelationship
+from chem_vault.domain.chemical_registration.synthesis_route import SynthesisRoute
 from chem_vault.domain.shared.value_objects import RegistrationNumber
 
 
@@ -121,3 +122,17 @@ class BulkRegistrationRepository(Protocol):
         self, workspace_id: uuid.UUID
     ) -> list[BulkRegistration]: ...
     async def save(self, aggregate: BulkRegistration) -> None: ...
+
+
+@runtime_checkable
+class SynthesisRouteRepository(Protocol):
+    """Repository for SynthesisRoute aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> SynthesisRoute | None: ...
+    async def find_by_target_molecule(
+        self, target_molecule_id: uuid.UUID
+    ) -> list[SynthesisRoute]: ...
+    async def find_preferred(
+        self, target_molecule_id: uuid.UUID
+    ) -> SynthesisRoute | None: ...
+    async def save(self, aggregate: SynthesisRoute) -> None: ...

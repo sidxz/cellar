@@ -88,3 +88,39 @@ class BulkRegistrationCompleted(DomainEvent):
     registered_count: int
     duplicate_count: int
     error_count: int
+
+
+# ---------------------------------------------------------------------------
+# Synthesis Route events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRouteCreated(DomainEvent):
+    target_molecule_id: uuid.UUID
+    route_type: str
+    source: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRouteValidated(DomainEvent):
+    total_steps: int
+    overall_yield: float | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRoutePreferred(DomainEvent):
+    target_molecule_id: uuid.UUID
+    previous_preferred_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRouteDeprecated(DomainEvent):
+    reason: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReactionStepOutcomeRecorded(DomainEvent):
+    step_id: uuid.UUID
+    yield_percent: float | None = None
+    batch_id: uuid.UUID | None = None

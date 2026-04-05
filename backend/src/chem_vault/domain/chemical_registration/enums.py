@@ -144,3 +144,54 @@ class BulkRegistrationFileFormat(StrEnum):
     SDF = "sdf"
     CSV = "csv"
     XLSX = "xlsx"
+
+
+# ---------------------------------------------------------------------------
+# Synthesis Route enums
+# ---------------------------------------------------------------------------
+
+
+class RouteType(StrEnum):
+    """Topology of a synthesis route."""
+
+    LINEAR = "linear"
+    CONVERGENT = "convergent"
+
+
+class RouteStatus(StrEnum):
+    """Lifecycle status of a synthesis route."""
+
+    DRAFT = "draft"
+    VALIDATED = "validated"
+    PREFERRED = "preferred"
+    DEPRECATED = "deprecated"
+
+
+class RouteScale(StrEnum):
+    """Scale of a synthesis route."""
+
+    MILLIGRAM = "milligram"
+    GRAM = "gram"
+    KILOGRAM = "kilogram"
+    PILOT = "pilot"
+    PROCESS = "process"
+
+
+class RouteSource(StrEnum):
+    """Origin of a synthesis route."""
+
+    MANUAL = "manual"
+    RETROSYNTHETIC_ANALYSIS = "retrosynthetic_analysis"
+    LITERATURE = "literature"
+    AI_PREDICTED = "ai_predicted"
+
+
+class ReagentRole(StrEnum):
+    """Role of a reagent in a reaction step."""
+
+    REACTANT = "reactant"
+    REAGENT = "reagent"
+    CATALYST = "catalyst"
+    SOLVENT = "solvent"
+    BASE = "base"
+    LIGAND = "ligand"

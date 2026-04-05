@@ -82,7 +82,7 @@ from chem_vault.application.workspace_config.update_organization import UpdateOr
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
-from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository
+from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository, SynthesisRouteRepository
 from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, StorageLocationRepository
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.repository import (
@@ -154,6 +154,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mole
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_repository import (
+    SQLAlchemySynthesisRouteRepository,
 )
 from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
 from chem_vault.infrastructure.rdkit.structure_processor import StructureProcessor
@@ -454,6 +457,12 @@ def create_container(
         )
 
     container.define(BulkRegistrationService, _bulk_registration_service)
+
+    # --- Synthesis Routes (repo only — use cases in S19b) ---
+    container.define(
+        SynthesisRouteRepository,
+        lambda c: SQLAlchemySynthesisRouteRepository(AsyncUnitOfWork(c[async_sessionmaker])),
+    )
 
     # --- Inventory ---
     def _batch_cmd(c):  # type: ignore[no-untyped-def]
