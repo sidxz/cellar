@@ -198,3 +198,18 @@ export function useCreateRelationship(moleculeId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
   });
 }
+
+export function useDeleteRelationship(moleculeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (relationshipId: string) =>
+      customInstance<void>({
+        url: `/api/v1/molecules/${moleculeId}/relationships/${relationshipId}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Relationship removed");
+    },
+  });
+}

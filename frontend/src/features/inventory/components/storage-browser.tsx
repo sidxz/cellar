@@ -8,11 +8,27 @@ import {
   Snowflake,
   Refrigerator,
   ChevronRight,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useStorageLocations } from "../hooks/use-storage-locations";
+import {
+  useDeleteStorageLocation,
+  useStorageLocations,
+  useUpdateStorageLocation,
+} from "../hooks/use-storage-locations";
 import type { StorageLocation, StorageLocationType } from "../types";
 
 const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
@@ -44,6 +60,8 @@ function LocationNode({
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
+  const [editOpen, setEditOpen] = useState(false);
+  const deleteMutation = useDeleteStorageLocation();
   const children = getChildren(allLocations, location.id);
   const hasChildren = children.length > 0;
   const icon = TYPE_ICONS[location.type] ?? <MapPin className="h-4 w-4" />;
@@ -51,7 +69,7 @@ function LocationNode({
   return (
     <div>
       <div
-        className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
+        className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
       >
         {hasChildren ? (
@@ -78,6 +96,27 @@ function LocationNode({
             {location.temperature}
           </span>
         )}
+        <div className="hidden gap-1 group-hover:flex">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          {!hasChildren && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+              onClick={() => deleteMutation.mutate(location.id)}
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
       </div>
       {expanded &&
         children.map((child) => (
@@ -88,7 +127,79 @@ function LocationNode({
             depth={depth + 1}
           />
         ))}
+      <EditStorageLocationDialog
+        location={location}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
     </div>
+  );
+}
+
+function EditStorageLocationDialog({
+  location,
+  open,
+  onOpenChange,
+}: {
+  location: StorageLocation;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const mutation = useUpdateStorageLocation(location.id);
+  const [name, setName] = useState(location.name);
+  const [barcode, setBarcode] = useState(location.barcode ?? "");
+  const [temperature, setTemperature] = useState(location.temperature ?? "");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Location</DialogTitle>
+          <DialogDescription>
+            Update {location.name} ({location.type}).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label>Barcode</Label>
+            <Input
+              placeholder="Optional barcode"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>Temperature</Label>
+            <Input
+              placeholder="e.g. -20°C"
+              value={temperature}
+              onChange={(e) => setTemperature(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={() => {
+              mutation.mutate(
+                {
+                  name: name || null,
+                  barcode: barcode || null,
+                  temperature: temperature || null,
+                },
+                { onSuccess: () => onOpenChange(false) }
+              );
+            }}
+            disabled={!name.trim() || mutation.isPending}
+          >
+            {mutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

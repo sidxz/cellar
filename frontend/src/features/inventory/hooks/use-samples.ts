@@ -94,3 +94,34 @@ export function useDisposeSample() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample disposed"); },
   });
 }
+
+export function useQuarantineSample() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      sampleId,
+      reason,
+    }: {
+      sampleId: string;
+      reason: string;
+    }) =>
+      customInstance<Sample>({
+        url: `/api/v1/samples/${sampleId}/quarantine`,
+        method: "POST",
+        data: { reason },
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample quarantined"); },
+  });
+}
+
+export function useClearQuarantine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sampleId: string) =>
+      customInstance<Sample>({
+        url: `/api/v1/samples/${sampleId}/clear-quarantine`,
+        method: "POST",
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Quarantine cleared"); },
+  });
+}

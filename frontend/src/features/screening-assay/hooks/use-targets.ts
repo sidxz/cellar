@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import type { CreateTargetInput, Target } from "../types";
+import { showSuccess } from "@/shared/lib/toast";
+import type { CreateTargetInput, Target, UpdateTargetInput } from "../types";
 
 const TARGETS_KEY = ["targets"];
 
@@ -38,6 +39,31 @@ export function useCreateTarget() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TARGETS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: TARGETS_KEY }); showSuccess("Target created"); },
+  });
+}
+
+export function useUpdateTarget(targetId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateTargetInput) =>
+      customInstance<Target>({
+        url: `/api/v1/targets/${targetId}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: TARGETS_KEY }); showSuccess("Target updated"); },
+  });
+}
+
+export function useDeleteTarget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (targetId: string) =>
+      customInstance<void>({
+        url: `/api/v1/targets/${targetId}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: TARGETS_KEY }); showSuccess("Target deleted"); },
   });
 }

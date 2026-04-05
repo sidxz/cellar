@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { StructureRenderer } from "@/shared/components/chemistry";
+import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -39,7 +40,13 @@ import {
 } from "@/shared/components/ui/select";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useMolecule, useAddIdentifier, useRemoveIdentifier } from "../hooks/use-molecules";
+import {
+  useMolecule,
+  useAddIdentifier,
+  useRemoveIdentifier,
+  useRelationships,
+  useDeleteRelationship,
+} from "../hooks/use-molecules";
 import { useDisclosuresForMolecule, useMergeHistory } from "../hooks/use-disclosures";
 import { BatchList } from "@/features/inventory/components/batch-list";
 import {
@@ -234,7 +241,9 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
   const { data: mol, isLoading } = useMolecule(compoundId);
   const { data: disclosures } = useDisclosuresForMolecule(compoundId);
   const { data: mergeHistory } = useMergeHistory(compoundId);
+  const { data: relationships } = useRelationships(compoundId);
   const removeMutation = useRemoveIdentifier(compoundId);
+  const deleteRelMutation = useDeleteRelationship(compoundId);
 
   const [showAddId, setShowAddId] = useState(false);
   const [disclosuresOpen, setDisclosuresOpen] = useState(false);
@@ -471,6 +480,72 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
           <BatchList moleculeId={compoundId} />
         </CardContent>
       </Card>
+
+      {/* Relationships Section */}
+      {relationships && relationships.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Relationships
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                ({relationships.length})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Related Compound</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead className="w-12" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {relationships.map((rel) => {
+                    const relatedId =
+                      rel.source_molecule_id === compoundId
+                        ? rel.target_molecule_id
+                        : rel.source_molecule_id;
+                    return (
+                      <TableRow key={rel.id}>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {rel.relationship_type.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <EntityLink
+                            type="compound"
+                            id={relatedId}
+                            label={relatedId.slice(0, 8)}
+                          />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {rel.notes ?? "\u2014"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => deleteRelMutation.mutate(rel.id)}
+                            disabled={deleteRelMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Separator />
 

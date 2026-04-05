@@ -309,6 +309,17 @@ export interface CreateTargetInput {
   target_class?: string | null;
 }
 
+export interface UpdateTargetInput {
+  name?: string | null;
+  target_type?: string | null;
+  organism?: string | null;
+  gene_name?: string | null;
+  uniprot_id?: string | null;
+  ncbi_gene_id?: string | null;
+  description?: string | null;
+  target_class?: string | null;
+}
+
 export interface CreateRunInput {
   protocol_id: string;
   run_date: string;

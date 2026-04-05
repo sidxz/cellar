@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Package, Pipette, Move, Trash2 } from "lucide-react";
+import { ArrowLeft, Package, Pipette, Move, Trash2, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -21,8 +21,10 @@ import { EntityLink } from "@/shared/components/entity-link";
 import { useBatch } from "../hooks/use-batches";
 import {
   useAliquotSample,
+  useClearQuarantine,
   useDisposeSample,
   useMoveSample,
+  useQuarantineSample,
   useSample,
 } from "../hooks/use-samples";
 import { useStorageLocations } from "../hooks/use-storage-locations";
@@ -65,6 +67,8 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
   const [aliquotOpen, setAliquotOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [disposeOpen, setDisposeOpen] = useState(false);
+  const [quarantineOpen, setQuarantineOpen] = useState(false);
+  const clearQuarantine = useClearQuarantine();
 
   if (isLoading) {
     return (
@@ -125,22 +129,44 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
         </div>
         {!isTerminal && (
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAliquotOpen(true)}
-            >
-              <Pipette className="mr-2 h-4 w-4" />
-              Aliquot
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMoveOpen(true)}
-            >
-              <Move className="mr-2 h-4 w-4" />
-              Move
-            </Button>
+            {sample.status === "quarantined" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => clearQuarantine.mutate(sample.id)}
+                disabled={clearQuarantine.isPending}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                {clearQuarantine.isPending ? "Clearing..." : "Clear Quarantine"}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAliquotOpen(true)}
+                >
+                  <Pipette className="mr-2 h-4 w-4" />
+                  Aliquot
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMoveOpen(true)}
+                >
+                  <Move className="mr-2 h-4 w-4" />
+                  Move
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setQuarantineOpen(true)}
+                >
+                  <ShieldAlert className="mr-2 h-4 w-4" />
+                  Quarantine
+                </Button>
+              </>
+            )}
             <Button
               variant="destructive"
               size="sm"
@@ -238,6 +264,11 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
             sample={sample}
             open={disposeOpen}
             onOpenChange={setDisposeOpen}
+          />
+          <QuarantineDialog
+            sample={sample}
+            open={quarantineOpen}
+            onOpenChange={setQuarantineOpen}
           />
         </>
       )}
@@ -403,6 +434,59 @@ function DisposeDialog({
             disabled={mutation.isPending}
           >
             {mutation.isPending ? "Disposing..." : "Dispose"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function QuarantineDialog({
+  sample,
+  open,
+  onOpenChange,
+}: {
+  sample: { id: string; barcode: string };
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const mutation = useQuarantineSample();
+  const [reason, setReason] = useState("");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Quarantine Sample</DialogTitle>
+          <DialogDescription>
+            Mark {sample.barcode} as quarantined. It will be unavailable until
+            the quarantine is cleared.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2 py-4">
+          <Label>Reason</Label>
+          <Input
+            placeholder="e.g., failed QC, contamination suspected"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={() => {
+              mutation.mutate(
+                { sampleId: sample.id, reason },
+                {
+                  onSuccess: () => {
+                    onOpenChange(false);
+                    setReason("");
+                  },
+                }
+              );
+            }}
+            disabled={!reason.trim() || mutation.isPending}
+          >
+            {mutation.isPending ? "Quarantining..." : "Quarantine"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,7 +1,9 @@
 "use client";
 
-import { Crosshair } from "lucide-react";
+import { useState } from "react";
+import { Crosshair, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
 import {
   Table,
   TableBody,
@@ -11,7 +13,8 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useTargets } from "../hooks/use-targets";
+import { useDeleteTarget, useTargets } from "../hooks/use-targets";
+import { EditTargetDialog } from "./edit-target-dialog";
 import {
   TARGET_TYPE_LABELS,
   type Target,
@@ -20,6 +23,8 @@ import {
 
 export function TargetList() {
   const { data: targets, isLoading, error } = useTargets();
+  const deleteMutation = useDeleteTarget();
+  const [editTarget, setEditTarget] = useState<Target | null>(null);
 
   if (isLoading) {
     return (
@@ -62,6 +67,7 @@ export function TargetList() {
             <TableHead>Organism</TableHead>
             <TableHead>Gene</TableHead>
             <TableHead>UniProt</TableHead>
+            <TableHead className="w-20" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -79,10 +85,38 @@ export function TargetList() {
               <TableCell className="font-mono text-sm">
                 {target.uniprot_id ?? "\u2014"}
               </TableCell>
+              <TableCell>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setEditTarget(target)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteMutation.mutate(target.id)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      {editTarget && (
+        <EditTargetDialog
+          target={editTarget}
+          open={!!editTarget}
+          onOpenChange={(open) => { if (!open) setEditTarget(null); }}
+        />
+      )}
     </div>
   );
 }

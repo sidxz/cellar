@@ -73,6 +73,17 @@ export interface CreateBatchInput {
   appearance?: string | null;
 }
 
+export interface UpdateBatchInput {
+  salt_form?: string | null;
+  purity?: number | null;
+  amount_value?: number | null;
+  amount_unit?: string | null;
+  appearance?: string | null;
+  expiry_date?: string | null;
+  notebook_reference?: string | null;
+  storage_conditions_notes?: string | null;
+}
+
 export interface Sample {
   id: string;
   workspace_id: string;
@@ -116,6 +127,15 @@ export interface CreateStorageLocationInput {
   name: string;
   type: string;
   parent_id?: string | null;
+  barcode?: string | null;
+  temperature?: string | null;
+  rows?: number | null;
+  columns?: number | null;
+  capacity?: number | null;
+}
+
+export interface UpdateStorageLocationInput {
+  name?: string | null;
   barcode?: string | null;
   temperature?: string | null;
   rows?: number | null;

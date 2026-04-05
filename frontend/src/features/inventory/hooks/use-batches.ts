@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import type { Batch, CreateBatchInput } from "../types";
+import type { Batch, CreateBatchInput, UpdateBatchInput } from "../types";
 
 const BATCHES_KEY = ["batches"];
 
@@ -41,5 +41,18 @@ export function useCreateBatch() {
         data,
       }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: BATCHES_KEY }); showSuccess("Batch created"); },
+  });
+}
+
+export function useUpdateBatch(batchId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateBatchInput) =>
+      customInstance<Batch>({
+        url: `/api/v1/batches/${batchId}`,
+        method: "PATCH",
+        data,
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: BATCHES_KEY }); showSuccess("Batch updated"); },
   });
 }
