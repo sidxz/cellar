@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type {
   DisclosureOutcome,
   DisclosureRequest,
@@ -12,6 +13,22 @@ import type {
 
 const DISCLOSURES_KEY = ["disclosures"];
 const MOLECULES_KEY = ["molecules"];
+
+export function useDisclosures(status?: string) {
+  return useQuery({
+    queryKey: [...DISCLOSURES_KEY, { status }],
+    queryFn: () =>
+      customInstance<DisclosureRequest[]>({
+        url: "/api/v1/disclosures",
+        method: "GET",
+        params: status ? { status } : undefined,
+      }),
+  });
+}
+
+export function useConflictDisclosures() {
+  return useDisclosures("conflict");
+}
 
 export function useDisclosuresForMolecule(moleculeId: string | undefined) {
   return useQuery({
@@ -37,6 +54,7 @@ export function useSubmitDisclosure() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: DISCLOSURES_KEY });
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Disclosure submitted");
     },
   });
 }
@@ -52,6 +70,7 @@ export function useMergeMolecules(sourceMoleculeId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Compounds merged");
     },
   });
 }
@@ -68,6 +87,7 @@ export function useResolveDisclosureConflict(disclosureId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: DISCLOSURES_KEY });
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Conflict resolved");
     },
   });
 }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import type {
   Molecule,
@@ -52,7 +53,10 @@ export function useRegisterMolecule() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Compound registered");
+    },
   });
 }
 

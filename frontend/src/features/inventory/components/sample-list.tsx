@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Package, Pipette, Move, Trash2 } from "lucide-react";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -14,15 +15,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import {
   useAliquotSample,
   useDisposeSample,
@@ -68,15 +61,95 @@ export function SampleList({ batchId }: SampleListProps) {
   const [moveSample, setMoveSample] = useState<Sample | null>(null);
   const [disposeSample, setDisposeSample] = useState<Sample | null>(null);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
+  const columnDefs = useMemo<ColDef<Sample>[]>(
+    () => [
+      {
+        headerName: "Barcode",
+        field: "barcode",
+        cellClass: "font-mono text-sm",
+        flex: 1,
+        minWidth: 120,
+      },
+      {
+        headerName: "Container",
+        field: "container_type",
+        width: 120,
+        valueFormatter: (p) =>
+          CONTAINER_TYPE_LABELS[p.value as ContainerType] ?? p.value,
+      },
+      {
+        headerName: "Amount",
+        width: 110,
+        valueGetter: (p) =>
+          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+      },
+      {
+        headerName: "Status",
+        field: "status",
+        width: 110,
+        cellRenderer: (params: ICellRendererParams<Sample>) => (
+          <Badge variant={statusBadgeVariant(params.value as SampleStatus)}>
+            {SAMPLE_STATUS_LABELS[params.value as SampleStatus] ?? params.value}
+          </Badge>
+        ),
+      },
+      {
+        headerName: "Solvent",
+        field: "solvent",
+        width: 100,
+        valueFormatter: (p) => p.value ?? "\u2014",
+      },
+      {
+        headerName: "F/T",
+        field: "freeze_thaw_count",
+        width: 60,
+      },
+      {
+        headerName: "",
+        field: "id",
+        width: 120,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (params: ICellRendererParams<Sample>) => {
+          const sample = params.data;
+          if (!sample || TERMINAL_STATUSES.has(sample.status)) return null;
+          return (
+            <div className="flex justify-end gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Aliquot"
+                onClick={() => setAliquotSample(sample)}
+              >
+                <Pipette className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Move"
+                onClick={() => setMoveSample(sample)}
+              >
+                <Move className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive"
+                title="Dispose"
+                onClick={() => setDisposeSample(sample)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        },
+      },
+    ],
+    []
+  );
 
   if (!batchId) {
     return (
@@ -90,100 +163,24 @@ export function SampleList({ batchId }: SampleListProps) {
     );
   }
 
-  if (!samples?.length) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <Package className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">No samples</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          No samples have been created for this batch yet.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <>
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Barcode</TableHead>
-              <TableHead>Container</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Solvent</TableHead>
-              <TableHead>F/T</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {samples.map((sample: Sample) => {
-              const isTerminal = TERMINAL_STATUSES.has(sample.status);
-              return (
-                <TableRow key={sample.id}>
-                  <TableCell className="font-mono text-sm">
-                    {sample.barcode}
-                  </TableCell>
-                  <TableCell>
-                    {CONTAINER_TYPE_LABELS[
-                      sample.container_type as ContainerType
-                    ] ?? sample.container_type}
-                  </TableCell>
-                  <TableCell>
-                    {sample.amount_value} {sample.amount_unit}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={statusBadgeVariant(
-                        sample.status as SampleStatus
-                      )}
-                    >
-                      {SAMPLE_STATUS_LABELS[sample.status as SampleStatus] ??
-                        sample.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{sample.solvent ?? "—"}</TableCell>
-                  <TableCell>{sample.freeze_thaw_count}</TableCell>
-                  <TableCell className="text-right">
-                    {!isTerminal && (
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Aliquot"
-                          onClick={() => setAliquotSample(sample)}
-                        >
-                          <Pipette className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Move"
-                          onClick={() => setMoveSample(sample)}
-                        >
-                          <Move className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          title="Dispose"
-                          onClick={() => setDisposeSample(sample)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      <DataGrid<Sample>
+        rowData={samples}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="300px"
+        suppressFilters
+        emptyState={
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+            <Package className="h-12 w-12 text-muted-foreground/40" />
+            <h3 className="mt-4 text-lg font-semibold">No samples</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              No samples have been created for this batch yet.
+            </p>
+          </div>
+        }
+      />
 
       {aliquotSample && (
         <AliquotDialog
@@ -210,7 +207,7 @@ export function SampleList({ batchId }: SampleListProps) {
   );
 }
 
-// --- Inline action dialogs ---
+// --- Inline action dialogs (unchanged) ---
 
 function AliquotDialog({
   sample,

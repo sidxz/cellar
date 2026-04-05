@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Switch } from "@/shared/components/ui/switch";
 import {
   useCreateOrganization,
   useUpdateOrganization,
@@ -38,6 +39,7 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [isActive, setIsActive] = useState(true);
 
   const create = useCreateOrganization();
   const update = useUpdateOrganization(organization?.id ?? "");
@@ -50,12 +52,14 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
       setContactName(organization.contact_name ?? "");
       setContactEmail(organization.contact_email ?? "");
       setNotes(organization.notes ?? "");
+      setIsActive(organization.is_active);
     } else {
       setName("");
       setOrgType("internal");
       setContactName("");
       setContactEmail("");
       setNotes("");
+      setIsActive(true);
     }
   }, [organization, open]);
 
@@ -68,7 +72,7 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
       notes: notes || null,
     };
     if (isEdit) {
-      await update.mutateAsync(data);
+      await update.mutateAsync({ ...data, is_active: isActive });
     } else {
       await create.mutateAsync(data);
     }
@@ -133,6 +137,17 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+
+          {isEdit && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id="is-active"
+                checked={isActive}
+                onCheckedChange={setIsActive}
+              />
+              <Label htmlFor="is-active">Active</Label>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

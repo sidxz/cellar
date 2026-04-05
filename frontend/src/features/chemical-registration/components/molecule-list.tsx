@@ -1,19 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FlaskConical, Plus, Upload } from "lucide-react";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useMolecules } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
@@ -54,15 +47,109 @@ export function MoleculeList() {
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
+  const columnDefs = useMemo<ColDef<Molecule>[]>(
+    () => [
+      {
+        headerName: "Structure",
+        field: "structure",
+        width: 72,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (params: ICellRendererParams<Molecule>) => {
+          const mol = params.data;
+          if (!mol) return null;
+          if (mol.structure_status === "disclosed" && mol.structure?.smiles) {
+            return <StructureThumbnail smiles={mol.structure.smiles} size={40} />;
+          }
+          return (
+            <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+              N/A
+            </div>
+          );
+        },
+      },
+      {
+        headerName: "Reg #",
+        field: "registration_number",
+        width: 120,
+        cellClass: "font-mono text-sm",
+      },
+      { headerName: "Name", field: "name", flex: 1, minWidth: 150 },
+      {
+        headerName: "Type",
+        field: "molecule_type",
+        width: 130,
+        valueFormatter: (p) =>
+          MOLECULE_TYPE_LABELS[p.value as MoleculeType] ?? p.value,
+      },
+      {
+        headerName: "Formula",
+        field: "molecular_formula",
+        width: 140,
+        cellClass: "font-mono text-sm text-muted-foreground",
+        valueFormatter: (p) => p.value ?? "\u2014",
+      },
+      {
+        headerName: "Stage",
+        field: "lifecycle_stage",
+        width: 130,
+        cellRenderer: (params: ICellRendererParams<Molecule>) => {
+          const stage = params.value as LifecycleStage;
+          return (
+            <Badge variant={lifecycleBadgeVariant(stage)}>
+              {LIFECYCLE_LABELS[stage] ?? stage}
+            </Badge>
+          );
+        },
+      },
+      {
+        headerName: "Status",
+        field: "structure_status",
+        width: 110,
+        cellRenderer: (params: ICellRendererParams<Molecule>) => (
+          <Badge variant="outline">
+            {params.value === "disclosed" ? "Disclosed" : "Undisclosed"}
+          </Badge>
+        ),
+      },
+      {
+        headerName: "",
+        field: "id",
+        width: 160,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (params: ICellRendererParams<Molecule>) => {
+          const mol = params.data;
+          if (!mol) return null;
+          return (
+            <div className="flex justify-end gap-2">
+              {mol.structure_status === "undisclosed" && !mol.merged_into_id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDiscloseMol(mol)}
+                >
+                  Disclose
+                </Button>
+              )}
+              {!mol.merged_into_id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMergeMol(mol)}
+                >
+                  Merge
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    []
+  );
 
   if (error) {
     return (
@@ -70,9 +157,7 @@ export function MoleculeList() {
         <p className="text-sm text-destructive">
           Failed to load compounds. Is the backend running?
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {error.message}
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
       </div>
     );
   }
@@ -102,122 +187,38 @@ export function MoleculeList() {
         <CompoundSearchBar />
       </div>
 
-      {!molecules?.length ? (
-        <div className="mt-8 flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No compounds registered</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Register your first compound to get started.
-          </p>
-          <Button className="mt-4" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Register Compound
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-4 rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[56px]">Structure</TableHead>
-                <TableHead>Reg #</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Formula</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {molecules.map((mol: Molecule) => (
-                <TableRow
-                  key={mol.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => {
-                    window.location.href = `/compounds/${mol.id}`;
-                  }}
-                >
-                  <TableCell>
-                    {mol.structure_status === "disclosed" && mol.structure?.smiles ? (
-                      <StructureThumbnail smiles={mol.structure.smiles} size={40} />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
-                        N/A
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {mol.registration_number}
-                  </TableCell>
-                  <TableCell className="font-medium">{mol.name}</TableCell>
-                  <TableCell>
-                    {MOLECULE_TYPE_LABELS[mol.molecule_type as MoleculeType] ??
-                      mol.molecule_type}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm text-muted-foreground">
-                    {mol.molecular_formula ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={lifecycleBadgeVariant(
-                        mol.lifecycle_stage as LifecycleStage
-                      )}
-                    >
-                      {LIFECYCLE_LABELS[mol.lifecycle_stage as LifecycleStage] ??
-                        mol.lifecycle_stage}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {mol.structure_status === "disclosed"
-                        ? "Disclosed"
-                        : "Undisclosed"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {mol.structure_status === "undisclosed" &&
-                        !mol.merged_into_id && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDiscloseMol(mol);
-                            }}
-                          >
-                            Disclose
-                          </Button>
-                        )}
-                      {!mol.merged_into_id && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMergeMol(mol);
-                          }}
-                        >
-                          Merge
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <div className="mt-4">
+        <DataGrid<Molecule>
+          rowData={molecules}
+          columnDefs={columnDefs}
+          loading={isLoading}
+          height="calc(100vh - 280px)"
+          onRowClick={(mol) => {
+            window.location.href = `/compounds/${mol.id}`;
+          }}
+          emptyState={
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+              <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
+              <h3 className="mt-4 text-lg font-semibold">
+                No compounds registered
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Register your first compound to get started.
+              </p>
+              <Button className="mt-4" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Register Compound
+              </Button>
+            </div>
+          }
+        />
+      </div>
 
       <MoleculeRegistrationDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
       />
-
       <BulkRegistrationDialog open={bulkOpen} onOpenChange={setBulkOpen} />
-
       {discloseMol && (
         <DisclosureDialog
           molecule={discloseMol}
@@ -225,7 +226,6 @@ export function MoleculeList() {
           onOpenChange={(open) => !open && setDiscloseMol(null)}
         />
       )}
-
       {mergeMol && (
         <MergeConfirmationDialog
           sourceMolecule={mergeMol}

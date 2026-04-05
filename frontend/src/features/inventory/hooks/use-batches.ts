@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type { Batch, CreateBatchInput } from "../types";
 
 const BATCHES_KEY = ["batches"];
@@ -39,6 +40,6 @@ export function useCreateBatch() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: BATCHES_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: BATCHES_KEY }); showSuccess("Batch created"); },
   });
 }

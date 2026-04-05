@@ -17,6 +17,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models import (
     DisclosureRequestModel,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_models import (
+    MoleculeModel,
+)
 
 
 class SQLAlchemyDisclosureRequestRepository(
@@ -122,6 +125,22 @@ class SQLAlchemyDisclosureRequestRepository(
         stmt = select(DisclosureRequestModel).where(
             DisclosureRequestModel.bulk_disclosure_id == bulk_disclosure_id,
         )
+        result = await self._session.execute(stmt)
+        entities = [self._to_domain(m) for m in result.scalars()]
+        for entity in entities:
+            self._uow.track(entity)
+        return entities
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, status: str | None = None
+    ) -> list[DisclosureRequest]:
+        stmt = (
+            select(DisclosureRequestModel)
+            .join(MoleculeModel, DisclosureRequestModel.molecule_id == MoleculeModel.id)
+            .where(MoleculeModel.workspace_id == workspace_id)
+        )
+        if status:
+            stmt = stmt.where(DisclosureRequestModel.status == status)
         result = await self._session.execute(stmt)
         entities = [self._to_domain(m) for m in result.scalars()]
         for entity in entities:

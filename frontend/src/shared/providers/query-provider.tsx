@@ -1,7 +1,8 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { showError } from "@/shared/lib/toast";
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -13,6 +14,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             retry: 1,
           },
         },
+        mutationCache: new MutationCache({
+          onError: (error) => {
+            const message =
+              error instanceof Error ? error.message : "Operation failed";
+            showError(message);
+          },
+        }),
       }),
   );
 

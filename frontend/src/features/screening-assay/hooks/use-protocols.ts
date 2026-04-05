@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type { CreateProtocolInput, Protocol } from "../types";
 
 const PROTOCOLS_KEY = ["protocols"];
@@ -38,7 +39,7 @@ export function useCreateProtocol() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol created"); },
   });
 }
 
@@ -50,7 +51,7 @@ export function usePublishProtocol() {
         url: `/api/v1/protocols/${id}/publish`,
         method: "POST",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol published"); },
   });
 }
 
@@ -63,7 +64,7 @@ export function useRetireProtocol() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol retired"); },
   });
 }
 
@@ -75,7 +76,7 @@ export function useVersionProtocol() {
         url: `/api/v1/protocols/${id}/version`,
         method: "POST",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("New version created"); },
   });
 }
 
@@ -88,7 +89,7 @@ export function useUpdateProtocol(id: string) {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol updated"); },
   });
 }
 
@@ -100,7 +101,7 @@ export function useDeleteProtocol() {
         url: `/api/v1/protocols/${id}`,
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol deleted"); },
   });
 }
 
@@ -122,7 +123,7 @@ export function useAddReadoutDefinition(protocolId: string) {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Readout definition added"); },
   });
 }
 
@@ -134,6 +135,6 @@ export function useRemoveReadoutDefinition(protocolId: string) {
         url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Readout definition removed"); },
   });
 }

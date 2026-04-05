@@ -60,6 +60,7 @@ from chem_vault.application.chemical_registration.get_molecule import GetMolecul
 from chem_vault.application.chemical_registration.get_molecule_by_identifier import GetMoleculeByIdentifier
 from chem_vault.application.chemical_registration.list_relationships import ListRelationships
 from chem_vault.application.chemical_registration.list_disclosures import ListDisclosures
+from chem_vault.application.chemical_registration.list_disclosures_by_workspace import ListDisclosuresByWorkspace
 from chem_vault.application.chemical_registration.list_molecules import ListMolecules
 from chem_vault.application.chemical_registration.merge_service import MergeService
 from chem_vault.application.chemical_registration.merge_side_effect_registry import MergeSideEffectRegistry
@@ -386,6 +387,15 @@ def create_container(
 
     container.define(GetDisclosure, _disclosure_query(GetDisclosure))
     container.define(ListDisclosures, _disclosure_query(ListDisclosures))
+
+    def _list_disclosures_by_workspace(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListDisclosuresByWorkspace(
+            uow=uow,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+        )
+
+    container.define(ListDisclosuresByWorkspace, _list_disclosures_by_workspace)
 
     def _resolve_conflict(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])

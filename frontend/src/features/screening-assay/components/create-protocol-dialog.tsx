@@ -26,6 +26,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Separator } from "@/shared/components/ui/separator";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
 import { useCreateProtocol } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
 import {
@@ -68,6 +69,9 @@ export function CreateProtocolDialog({
 }: CreateProtocolDialogProps) {
   const createMutation = useCreateProtocol();
   const { data: targets } = useTargets();
+  const { data: vocabularies } = useVocabularies();
+  const categoryTerms =
+    vocabularies?.find((v) => v.name === "Protocol Categories")?.terms ?? [];
 
   const [name, setName] = useState("");
   const [protocolType, setProtocolType] = useState<string>("biochemical");
@@ -199,11 +203,26 @@ export function CreateProtocolDialog({
 
           <div className="grid gap-2">
             <Label>Category (optional)</Label>
-            <Input
-              placeholder="e.g., Primary Screen, Counter Screen"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
+            {categoryTerms.length > 0 ? (
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryTerms.map((term) => (
+                    <SelectItem key={term} value={term}>
+                      {term}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                placeholder="e.g., Primary Screen, Counter Screen"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+            )}
           </div>
 
           <div className="grid gap-2">

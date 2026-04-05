@@ -29,6 +29,7 @@ import {
 import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { EntityLink } from "@/shared/components/entity-link";
 import {
   useRun,
   useStartRun,
@@ -251,6 +252,14 @@ export function RunDetail({ runId }: RunDetailProps) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Protocol</p>
+              <EntityLink
+                type="protocol"
+                id={run.protocol_id}
+                label={run.protocol_id.slice(0, 8)}
+              />
+            </div>
             <div>
               <p className="text-sm text-muted-foreground">Run Date</p>
               <p className="font-medium font-mono">{run.run_date}</p>

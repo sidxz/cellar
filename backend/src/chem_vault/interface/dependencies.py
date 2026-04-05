@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, Request
 from lagom import Container
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
@@ -35,6 +36,7 @@ from chem_vault.application.chemical_registration.get_merge_history import GetMe
 from chem_vault.application.chemical_registration.list_relationships import ListRelationships
 from chem_vault.application.chemical_registration.resolve_disclosure_conflict import ResolveDisclosureConflict
 from chem_vault.application.chemical_registration.list_disclosures import ListDisclosures
+from chem_vault.application.chemical_registration.list_disclosures_by_workspace import ListDisclosuresByWorkspace
 from chem_vault.application.chemical_registration.list_molecules import ListMolecules
 from chem_vault.application.chemical_registration.merge_service import MergeService
 from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
@@ -87,6 +89,13 @@ def get_uow(
     return container[AsyncUnitOfWork]
 
 
+def get_session_factory(
+    container: Annotated[Container, Depends(get_container)],
+) -> async_sessionmaker:
+    """Async session factory."""
+    return container[async_sessionmaker]
+
+
 def get_event_dispatcher(
     container: Annotated[Container, Depends(get_container)],
 ) -> EventDispatcher:
@@ -129,6 +138,7 @@ async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
 # Convenience type aliases for route handler signatures
 AuthDep = Annotated[Any, Depends(get_auth)]
 UoWDep = Annotated[UnitOfWork, Depends(get_uow)]
+SessionFactoryDep = Annotated[async_sessionmaker, Depends(get_session_factory)]
 EventDispatcherDep = Annotated[EventDispatcher, Depends(get_event_dispatcher)]
 AuditServiceDep = Annotated[AuditRecordingService, Depends(get_audit_service)]
 GetPreferencesDep = Annotated[GetPreferences, Depends(get_preferences_query)]
@@ -177,6 +187,7 @@ DisclosureServiceDep = Annotated[DisclosureService, Depends(_get_use_case(Disclo
 MergeServiceDep = Annotated[MergeService, Depends(_get_use_case(MergeService))]
 GetDisclosureDep = Annotated[GetDisclosure, Depends(_get_use_case(GetDisclosure))]
 ListDisclosuresDep = Annotated[ListDisclosures, Depends(_get_use_case(ListDisclosures))]
+ListDisclosuresByWorkspaceDep = Annotated[ListDisclosuresByWorkspace, Depends(_get_use_case(ListDisclosuresByWorkspace))]
 ResolveDisclosureConflictDep = Annotated[ResolveDisclosureConflict, Depends(_get_use_case(ResolveDisclosureConflict))]
 GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHistory))]
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]

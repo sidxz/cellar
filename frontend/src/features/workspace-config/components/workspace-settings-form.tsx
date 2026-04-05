@@ -5,11 +5,37 @@ import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
+import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { MOLECULE_TYPE_LABELS } from "@/features/chemical-registration/types";
 import {
   useUpdateWorkspaceSettings,
   useWorkspaceSettings,
 } from "../hooks/use-workspace-settings";
+import type { AuditReasonPolicy, CustomFieldDefinition } from "../types";
+import { CustomFieldBuilder } from "./custom-field-builder";
+
+const AUDIT_REASON_OPTIONS: { value: AuditReasonPolicy; label: string }[] = [
+  { value: "always", label: "Always require reason" },
+  { value: "never", label: "Never require reason" },
+  { value: "configurable", label: "Configurable per operation" },
+];
+
+const SIGNATURE_OPERATIONS = [
+  "registration",
+  "disclosure",
+  "merge",
+  "data_lock",
+  "batch_creation",
+  "sample_disposal",
+];
 
 export function WorkspaceSettingsForm() {
   const { data: settings, isLoading } = useWorkspaceSettings();
@@ -17,13 +43,26 @@ export function WorkspaceSettingsForm() {
 
   const [defaultMolType, setDefaultMolType] = useState("");
   const [retentionDays, setRetentionDays] = useState("");
-  const [sigRequired, setSigRequired] = useState("");
+  const [auditReasonPolicy, setAuditReasonPolicy] =
+    useState<AuditReasonPolicy>("never");
+  const [sigRequired, setSigRequired] = useState<string[]>([]);
+  const [formulationScheme, setFormulationScheme] = useState("");
+  const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
 
   useEffect(() => {
     if (settings) {
       setDefaultMolType(settings.default_molecule_type ?? "");
       setRetentionDays(settings.audit_retention_days?.toString() ?? "");
-      setSigRequired(settings.signature_required_for.join(", "));
+      setAuditReasonPolicy(
+        (settings.audit_reason_policy as AuditReasonPolicy) ?? "never"
+      );
+      setSigRequired(settings.signature_required_for ?? []);
+      setFormulationScheme(settings.formulation_number_scheme ?? "");
+      setCustomFields(
+        Array.isArray(settings.custom_field_definitions)
+          ? settings.custom_field_definitions
+          : []
+      );
     }
   }, [settings]);
 
@@ -40,68 +79,152 @@ export function WorkspaceSettingsForm() {
     await update.mutateAsync({
       default_molecule_type: defaultMolType || null,
       audit_retention_days: retentionDays ? parseInt(retentionDays, 10) : null,
-      signature_required_for: sigRequired
-        ? sigRequired.split(",").map((s) => s.trim()).filter(Boolean)
-        : [],
+      audit_reason_policy: auditReasonPolicy,
+      signature_required_for: sigRequired,
+      formulation_number_scheme: formulationScheme || null,
+      custom_field_definitions: customFields.filter((f) => f.name.trim()),
     });
+  };
+
+  const toggleSigRequired = (op: string) => {
+    setSigRequired((prev) =>
+      prev.includes(op) ? prev.filter((o) => o !== op) : [...prev, op]
+    );
   };
 
   return (
     <div>
       <h1 className="text-2xl font-bold tracking-tight">Workspace Settings</h1>
       <p className="mt-1 text-muted-foreground">
-        Configure registration rules, audit policies, and workspace-level defaults.
+        Configure registration rules, audit policies, and workspace-level
+        defaults.
       </p>
 
-      <Card className="mt-6 p-6">
-        <div className="grid gap-6 max-w-lg">
-          <div className="grid gap-2">
-            <Label htmlFor="mol-type">Default Molecule Type</Label>
-            <Input
-              id="mol-type"
-              value={defaultMolType}
-              onChange={(e) => setDefaultMolType(e.target.value)}
-              placeholder="e.g., small_molecule"
-            />
-            <p className="text-xs text-muted-foreground">
-              Default molecule type for new registrations.
-            </p>
-          </div>
+      <div className="mt-6 space-y-6">
+        {/* General */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">General</h2>
+          <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="grid gap-2">
+              <Label>Default Molecule Type</Label>
+              <Select value={defaultMolType} onValueChange={setDefaultMolType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select default type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(MOLECULE_TYPE_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Default molecule type for new registrations.
+              </p>
+            </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="retention">Audit Retention (days)</Label>
-            <Input
-              id="retention"
-              type="number"
-              value={retentionDays}
-              onChange={(e) => setRetentionDays(e.target.value)}
-              placeholder="Unlimited"
-            />
-            <p className="text-xs text-muted-foreground">
-              Leave empty for unlimited retention.
-            </p>
+            <div className="grid gap-2">
+              <Label>Formulation Number Scheme</Label>
+              <Input
+                value={formulationScheme}
+                onChange={(e) => setFormulationScheme(e.target.value)}
+                placeholder="e.g., FRM-{YYYY}-{SEQ:4}"
+              />
+              <p className="text-xs text-muted-foreground">
+                Pattern for auto-generated formulation numbers.
+              </p>
+            </div>
           </div>
+        </Card>
 
-          <div className="grid gap-2">
-            <Label htmlFor="sig-required">Signature Required For</Label>
-            <Input
-              id="sig-required"
-              value={sigRequired}
-              onChange={(e) => setSigRequired(e.target.value)}
-              placeholder="e.g., registration, disclosure"
-            />
-            <p className="text-xs text-muted-foreground">
-              Comma-separated operation types requiring electronic signature.
-            </p>
-          </div>
+        {/* Audit & Compliance */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Audit & Compliance</h2>
+          <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="grid gap-2">
+              <Label>Audit Reason Policy</Label>
+              <Select
+                value={auditReasonPolicy}
+                onValueChange={(v) =>
+                  setAuditReasonPolicy(v as AuditReasonPolicy)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AUDIT_REASON_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Whether users must provide a reason for audit-tracked
+                operations.
+              </p>
+            </div>
 
-          <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={update.isPending}>
-              {update.isPending ? "Saving..." : "Save Settings"}
-            </Button>
+            <div className="grid gap-2">
+              <Label>Audit Retention (days)</Label>
+              <Input
+                type="number"
+                value={retentionDays}
+                onChange={(e) => setRetentionDays(e.target.value)}
+                placeholder="Unlimited"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty for unlimited retention.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Signature Required For</Label>
+              <div className="flex flex-wrap gap-2">
+                {SIGNATURE_OPERATIONS.map((op) => (
+                  <Button
+                    key={op}
+                    type="button"
+                    variant={sigRequired.includes(op) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggleSigRequired(op)}
+                  >
+                    {op.replace(/_/g, " ")}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Operations requiring electronic signature (21 CFR Part 11).
+              </p>
+            </div>
           </div>
+        </Card>
+
+        {/* Custom Fields */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Custom Field Definitions</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Define additional fields that appear on the compound registration
+            form. Select-type fields can reference controlled vocabularies.
+          </p>
+          <Separator className="my-4" />
+          <CustomFieldBuilder
+            fields={customFields}
+            onChange={setCustomFields}
+          />
+        </Card>
+
+        {/* Save */}
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={update.isPending}>
+            {update.isPending ? "Saving..." : "Save Settings"}
+          </Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

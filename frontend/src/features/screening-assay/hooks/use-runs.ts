@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type { CreateRunInput, Run } from "../types";
 
 const RUNS_KEY = ["runs"];
@@ -39,7 +40,7 @@ export function useCreateRun() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run created"); },
   });
 }
 
@@ -51,7 +52,7 @@ export function useStartRun() {
         url: `/api/v1/runs/${id}/start`,
         method: "POST",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run started"); },
   });
 }
 
@@ -72,7 +73,7 @@ export function useCompleteRun() {
         method: "POST",
         data: { plate_count, data_point_count },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run completed"); },
   });
 }
 
@@ -84,7 +85,7 @@ export function useApproveRun() {
         url: `/api/v1/runs/${id}/approve`,
         method: "POST",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run approved"); },
   });
 }
 
@@ -97,7 +98,7 @@ export function useRejectRun() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run rejected"); },
   });
 }
 
@@ -110,7 +111,7 @@ export function useLockRun() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run locked"); },
   });
 }
 
@@ -123,7 +124,7 @@ export function useUnlockRun() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run unlocked"); },
   });
 }
 
@@ -145,6 +146,6 @@ export function useUpdateRun() {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run updated"); },
   });
 }

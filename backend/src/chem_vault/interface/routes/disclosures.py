@@ -11,12 +11,14 @@ from pydantic import BaseModel
 from chem_vault.application.chemical_registration.disclosure_service import SubmitDisclosureCommand
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosureQuery
 from chem_vault.application.chemical_registration.list_disclosures import ListDisclosuresQuery
+from chem_vault.application.chemical_registration.list_disclosures_by_workspace import ListDisclosuresByWorkspaceQuery
 from chem_vault.application.chemical_registration.resolve_disclosure_conflict import ResolveConflictCommand
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.interface.dependencies import (
     AuthDep,
     DisclosureServiceDep,
     GetDisclosureDep,
+    ListDisclosuresByWorkspaceDep,
     ListDisclosuresDep,
     ResolveDisclosureConflictDep,
 )
@@ -120,6 +122,20 @@ async def submit_disclosure(
         was_merged=outcome.was_merged,
         merged_into_molecule_id=outcome.merged_into_molecule_id,
     )
+
+
+@router.get("", response_model=list[DisclosureRequestResponse])
+async def list_disclosures(
+    auth: AuthDep,
+    use_case: ListDisclosuresByWorkspaceDep,
+    status: str | None = None,
+) -> list[DisclosureRequestResponse]:
+    """List all disclosure requests in workspace, optionally filtered by status."""
+    query = ListDisclosuresByWorkspaceQuery(
+        workspace_id=auth.workspace_id, status=status
+    )
+    disclosures = result_to_response(await use_case(query))
+    return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
 
 
 @router.get("/{disclosure_id}", response_model=DisclosureRequestResponse)

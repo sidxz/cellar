@@ -1,16 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { TestTubes } from "lucide-react";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useProtocols } from "../hooks/use-protocols";
 import {
   PROTOCOL_TYPE_LABELS,
@@ -39,79 +33,70 @@ function statusBadgeVariant(
 export function ProtocolList({ onSelect }: ProtocolListProps) {
   const { data: protocols, isLoading, error } = useProtocols();
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
+  const columnDefs = useMemo<ColDef<Protocol>[]>(
+    () => [
+      { headerName: "Name", field: "name", flex: 1, minWidth: 180 },
+      {
+        headerName: "Type",
+        field: "protocol_type",
+        width: 140,
+        valueFormatter: (p) =>
+          PROTOCOL_TYPE_LABELS[p.value as ProtocolType] ?? p.value,
+      },
+      {
+        headerName: "Version",
+        field: "protocol_version",
+        width: 90,
+        cellClass: "font-mono text-sm",
+        valueFormatter: (p) => `v${p.value}`,
+      },
+      {
+        headerName: "Readouts",
+        width: 100,
+        valueGetter: (p) => p.data?.readout_definitions.length ?? 0,
+      },
+      {
+        headerName: "Status",
+        field: "status",
+        width: 100,
+        cellRenderer: (params: ICellRendererParams<Protocol>) => (
+          <Badge variant={statusBadgeVariant(params.value as ProtocolStatus)}>
+            {params.value}
+          </Badge>
+        ),
+      },
+    ],
+    []
+  );
 
   if (error) {
     return (
       <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-        <p className="text-sm text-destructive">Failed to load protocols. Is the backend running?</p>
+        <p className="text-sm text-destructive">
+          Failed to load protocols. Is the backend running?
+        </p>
         <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
       </div>
     );
   }
 
-  if (!protocols?.length) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <TestTubes className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">No protocols</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Create your first screening protocol to get started.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Version</TableHead>
-            <TableHead>Readouts</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {protocols.map((protocol: Protocol) => (
-            <TableRow
-              key={protocol.id}
-              className={onSelect ? "cursor-pointer hover:bg-muted/50" : ""}
-              onClick={() => onSelect?.(protocol.id)}
-            >
-              <TableCell className="font-medium">{protocol.name}</TableCell>
-              <TableCell>
-                {PROTOCOL_TYPE_LABELS[
-                  protocol.protocol_type as ProtocolType
-                ] ?? protocol.protocol_type}
-              </TableCell>
-              <TableCell className="font-mono text-sm">
-                v{protocol.protocol_version}
-              </TableCell>
-              <TableCell>{protocol.readout_definitions.length}</TableCell>
-              <TableCell>
-                <Badge
-                  variant={statusBadgeVariant(
-                    protocol.status as ProtocolStatus
-                  )}
-                >
-                  {protocol.status}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <DataGrid<Protocol>
+      rowData={protocols}
+      columnDefs={columnDefs}
+      loading={isLoading}
+      height="400px"
+      suppressFilters
+      onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
+      emptyState={
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+          <TestTubes className="h-12 w-12 text-muted-foreground/40" />
+          <h3 className="mt-4 text-lg font-semibold">No protocols</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Create your first screening protocol to get started.
+          </p>
+        </div>
+      }
+    />
   );
 }

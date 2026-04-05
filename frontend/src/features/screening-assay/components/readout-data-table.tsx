@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EntityLink } from "@/shared/components/entity-link";
 import { cn } from "@/shared/lib/utils";
 import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { useProtocol } from "../hooks/use-protocols";
@@ -14,39 +16,35 @@ interface ReadoutDataTableProps {
   className?: string;
 }
 
+interface PivotRow {
+  key: string;
+  label: string;
+  moleculeId: string;
+  batchId: string;
+  values: Map<string, ReadoutData>;
+}
+
 /** Format a value with qualifier prefix: "85.2", "<12.7", ">1000" */
 function formatValue(row: ReadoutData): string {
   if (row.value_numeric === null || row.value_numeric === undefined) {
-    return row.value_text ?? "—";
+    return row.value_text ?? "\u2014";
   }
   const prefix =
     row.value_qualifier && row.value_qualifier !== "=" ? row.value_qualifier : "";
   return `${prefix}${row.value_numeric.toFixed(3)}`;
 }
 
-/**
- * Pivoted readout data table.
- *
- * Readout definitions become column headers. One row per compound-batch pair.
- * Outlier values are highlighted. Qualifiers are shown as value prefixes.
- */
 export function ReadoutDataTable({
   runId,
   protocolId,
   className,
 }: ReadoutDataTableProps) {
   const { data, isLoading } = useReadoutDataByRun(runId);
-  // TODO: This loads ALL molecules to build a name lookup for the pivot table.
-  // Ideally we'd only fetch the molecules that appear in the readout data, but
-  // there's no batch-fetch-by-ids endpoint yet. Acceptable for now — the table
-  // only needs names for molecules present in the data, not the full catalog.
-  // Revisit when a GET /api/v1/molecules?ids=... endpoint is available.
   const { data: molecules } = useMolecules();
   const { data: protocol } = useProtocol(protocolId);
 
   const readoutDefs = protocol?.readout_definitions ?? [];
 
-  // Build molecule lookup
   const molMap = useMemo(() => {
     const m = new Map<string, { reg: string; name: string }>();
     for (const mol of molecules ?? []) {
@@ -55,24 +53,19 @@ export function ReadoutDataTable({
     return m;
   }, [molecules]);
 
-  // Pivot: group readout data by (molecule_id, batch_id), then index by readout_definition_id
-  const pivoted = useMemo(() => {
+  // Pivot readout data into rows
+  const pivotRows = useMemo<PivotRow[]>(() => {
     if (!data) return [];
 
-    const groups = new Map<
-      string,
-      {
-        moleculeId: string;
-        batchId: string;
-        values: Map<string, ReadoutData>;
-      }
-    >();
-
+    const groups = new Map<string, PivotRow>();
     for (const row of data) {
       const key = `${row.molecule_id}::${row.batch_id}`;
       let group = groups.get(key);
       if (!group) {
+        const mol = molMap.get(row.molecule_id);
         group = {
+          key,
+          label: mol ? `${mol.reg} \u2014 ${mol.name}` : row.molecule_id.slice(0, 8),
           moleculeId: row.molecule_id,
           batchId: row.batch_id,
           values: new Map(),
@@ -81,100 +74,80 @@ export function ReadoutDataTable({
       }
       group.values.set(row.readout_definition_id, row);
     }
-
     return Array.from(groups.values());
-  }, [data]);
+  }, [data, molMap]);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 5 }, (_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
-      </div>
-    );
-  }
+  // Dynamic columns: Compound + one per readout definition
+  const columnDefs = useMemo<ColDef<PivotRow>[]>(() => {
+    const cols: ColDef<PivotRow>[] = [
+      {
+        headerName: "Compound",
+        field: "label",
+        pinned: "left",
+        minWidth: 180,
+        flex: 1,
+        cellRenderer: (params: ICellRendererParams<PivotRow>) => {
+          const row = params.data;
+          if (!row) return null;
+          return (
+            <EntityLink
+              type="compound"
+              id={row.moleculeId}
+              label={row.label}
+              className="text-xs"
+            />
+          );
+        },
+      },
+    ];
 
-  if (!data || data.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        No readout data recorded for this run.
-      </p>
-    );
-  }
+    for (const rd of readoutDefs) {
+      cols.push({
+        headerName: rd.unit ? `${rd.name} (${rd.unit})` : rd.name,
+        colId: rd.id,
+        width: 130,
+        cellClass: "text-right tabular-nums",
+        headerClass: "ag-right-aligned-header",
+        valueGetter: (p) => {
+          const row = p.data?.values.get(rd.id);
+          if (!row) return null;
+          return row.value_numeric ?? row.value_text ?? null;
+        },
+        cellRenderer: (params: { data: PivotRow | undefined }) => {
+          const row = params.data?.values.get(rd.id);
+          if (!row) return <span className="text-muted-foreground">{"\u2014"}</span>;
+          return (
+            <span
+              className={cn(
+                row.is_outlier &&
+                  "text-destructive line-through decoration-destructive/50"
+              )}
+              title={row.is_outlier ? "Flagged as outlier" : undefined}
+            >
+              {formatValue(row)}
+            </span>
+          );
+        },
+      });
+    }
+    return cols;
+  }, [readoutDefs]);
 
   return (
-    <div
-      className={cn(
-        "max-h-[500px] overflow-auto rounded-md border",
-        className
-      )}
-    >
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-background">
-          <tr className="border-b">
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-              Compound
-            </th>
-            {readoutDefs.map((rd) => (
-              <th
-                key={rd.id}
-                className="px-3 py-2 text-right font-medium text-muted-foreground"
-              >
-                <div>{rd.name}</div>
-                {rd.unit && (
-                  <div className="text-xs font-normal">({rd.unit})</div>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {pivoted.map((group) => {
-            const mol = molMap.get(group.moleculeId);
-            const label = mol
-              ? `${mol.reg} — ${mol.name}`
-              : group.moleculeId.slice(0, 8);
-
-            return (
-              <tr
-                key={`${group.moleculeId}::${group.batchId}`}
-                className="border-b last:border-b-0 hover:bg-muted/50"
-              >
-                <td className="px-3 py-2 text-xs whitespace-nowrap">
-                  {label}
-                </td>
-                {readoutDefs.map((rd) => {
-                  const row = group.values.get(rd.id);
-                  if (!row) {
-                    return (
-                      <td
-                        key={rd.id}
-                        className="px-3 py-2 text-right text-muted-foreground"
-                      >
-                        —
-                      </td>
-                    );
-                  }
-                  return (
-                    <td
-                      key={rd.id}
-                      className={cn(
-                        "px-3 py-2 text-right tabular-nums",
-                        row.is_outlier &&
-                          "text-destructive line-through decoration-destructive/50"
-                      )}
-                      title={row.is_outlier ? "Flagged as outlier" : undefined}
-                    >
-                      {formatValue(row)}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className={className}>
+      <DataGrid<PivotRow>
+        rowData={pivotRows}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="500px"
+        suppressFilters
+        getRowId={(params) => params.data.key}
+        emptyState={
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No readout data recorded for this run.
+          </p>
+        }
+      />
     </div>
   );
 }

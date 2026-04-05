@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type { CreateSampleInput, Sample } from "../types";
 
 const SAMPLES_KEY = ["samples"];
@@ -39,7 +40,7 @@ export function useCreateSample() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: SAMPLES_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample created"); },
   });
 }
 
@@ -52,7 +53,7 @@ export function useAliquotSample() {
         method: "POST",
         data: { amount },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: SAMPLES_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Aliquot complete"); },
   });
 }
 
@@ -71,7 +72,7 @@ export function useMoveSample() {
         method: "POST",
         data: { location_id: locationId },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: SAMPLES_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample moved"); },
   });
 }
 
@@ -90,6 +91,6 @@ export function useDisposeSample() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: SAMPLES_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample disposed"); },
   });
 }

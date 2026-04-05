@@ -35,23 +35,34 @@ export interface CreateOrganizationInput {
   notes?: string | null;
 }
 
+export type AuditReasonPolicy = "always" | "never" | "configurable";
+
+export interface CustomFieldDefinition {
+  name: string;
+  label: string;
+  data_type: "text" | "number" | "date" | "select";
+  required: boolean;
+  vocabulary_name?: string | null;
+}
+
+export interface WorkspaceSettings {
+  registration_rules: Record<string, unknown>;
+  custom_field_definitions: CustomFieldDefinition[];
+  default_molecule_type: string | null;
+  audit_reason_policy: AuditReasonPolicy;
+  signature_required_for: string[];
+  audit_retention_days: number | null;
+  formulation_number_scheme: string | null;
+  version: number;
+}
+
 export interface UpdateOrganizationInput {
   name?: string;
   org_type?: OrganizationType;
   contact_name?: string | null;
   contact_email?: string | null;
   notes?: string | null;
-}
-
-export interface WorkspaceSettings {
-  registration_rules: Record<string, unknown>;
-  custom_field_definitions: Record<string, unknown>;
-  default_molecule_type: string | null;
-  audit_reason_policy: Record<string, unknown>;
-  signature_required_for: string[];
-  audit_retention_days: number | null;
-  formulation_number_scheme: Record<string, unknown>;
-  version: number;
+  is_active?: boolean;
 }
 
 export interface Vocabulary {

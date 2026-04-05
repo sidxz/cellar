@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type {
   CreateVocabularyInput,
   UpdateVocabularyInput,
@@ -30,7 +31,7 @@ export function useCreateVocabulary() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: VOCAB_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: VOCAB_KEY }); showSuccess("Vocabulary created"); },
   });
 }
 
@@ -43,7 +44,7 @@ export function useUpdateVocabulary(vocabId: string) {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: VOCAB_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: VOCAB_KEY }); showSuccess("Vocabulary updated"); },
   });
 }
 
@@ -55,6 +56,13 @@ export function useDeleteVocabulary() {
         url: `/api/v1/vocabularies/${vocabId}`,
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: VOCAB_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: VOCAB_KEY }); showSuccess("Vocabulary deleted"); },
   });
+}
+
+/** Fetch a single vocabulary by name and return its terms. */
+export function useVocabularyTerms(name: string | null | undefined) {
+  const { data: vocabularies } = useVocabularies();
+  const vocab = vocabularies?.find((v) => v.name === name);
+  return vocab?.terms ?? [];
 }

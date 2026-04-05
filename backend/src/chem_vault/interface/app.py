@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from chem_vault.infrastructure.di.container import create_container
+from chem_vault.infrastructure.logging import configure_logging
 from chem_vault.infrastructure.sentinel.auth import get_sentinel
 from chem_vault.interface.error_handlers import register_error_handlers
 
@@ -18,6 +19,13 @@ sentinel = get_sentinel()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """App lifespan — initialize container, register Sentinel actions, cleanup."""
+    # Structured logging
+    import os
+    configure_logging(
+        json_output=os.getenv("LOG_FORMAT", "json") == "json",
+        log_level=os.getenv("LOG_LEVEL", "INFO"),
+    )
+
     # Initialize DI container and attach to app state
     container = create_container()
     app.state.container = container
@@ -95,6 +103,9 @@ def create_app() -> FastAPI:
     app.include_router(run_router)
     app.include_router(readout_data_router)
     app.include_router(audit_router)
+
+    from chem_vault.interface.routes.dashboard import router as dashboard_router
+    app.include_router(dashboard_router)
 
     # Health check (unauthenticated)
     @app.get("/health")

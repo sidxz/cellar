@@ -22,6 +22,9 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Switch } from "@/shared/components/ui/switch";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
+import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
+import type { CustomFieldDefinition } from "@/features/workspace-config/types";
 import { useRegisterMolecule } from "../hooks/use-molecules";
 import { MOLECULE_TYPE_LABELS, type MoleculeType } from "../types";
 
@@ -35,22 +38,41 @@ export function MoleculeRegistrationDialog({
   onOpenChange,
 }: MoleculeRegistrationDialogProps) {
   const { data: orgs } = useOrganizations();
+  const { data: settings } = useWorkspaceSettings();
+  const { data: vocabularies } = useVocabularies();
   const registerMutation = useRegisterMolecule();
 
   const [name, setName] = useState("");
   const [smiles, setSmiles] = useState("");
-  const [moleculeType, setMoleculeType] = useState<string>("small_molecule");
+  const [moleculeType, setMoleculeType] = useState<string>(
+    settings?.default_molecule_type ?? "small_molecule"
+  );
   const [orgId, setOrgId] = useState<string>("");
   const [isUndisclosed, setIsUndisclosed] = useState(false);
+  const [customFieldValues, setCustomFieldValues] = useState<
+    Record<string, string>
+  >({});
   const [error, setError] = useState<string | null>(null);
+
+  const customFields: CustomFieldDefinition[] = Array.isArray(
+    settings?.custom_field_definitions
+  )
+    ? settings.custom_field_definitions
+    : [];
 
   const reset = () => {
     setName("");
     setSmiles("");
-    setMoleculeType("small_molecule");
+    setMoleculeType(settings?.default_molecule_type ?? "small_molecule");
     setOrgId("");
     setIsUndisclosed(false);
+    setCustomFieldValues({});
     setError(null);
+  };
+
+  const getVocabTerms = (vocabName: string | null | undefined): string[] => {
+    if (!vocabName || !vocabularies) return [];
+    return vocabularies.find((v) => v.name === vocabName)?.terms ?? [];
   };
 
   const handleSubmit = async () => {
@@ -68,12 +90,23 @@ export function MoleculeRegistrationDialog({
       return;
     }
 
+    // Validate required custom fields
+    for (const field of customFields) {
+      if (field.required && !customFieldValues[field.name]?.trim()) {
+        setError(`${field.label} is required`);
+        return;
+      }
+    }
+
     try {
       await registerMutation.mutateAsync({
         name: name.trim(),
         smiles: isUndisclosed ? null : smiles.trim(),
         molecule_type: moleculeType,
         originating_org_id: orgId,
+        custom_fields: Object.keys(customFieldValues).length
+          ? customFieldValues
+          : undefined,
       });
       reset();
       onOpenChange(false);
@@ -92,7 +125,7 @@ export function MoleculeRegistrationDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Register Compound</DialogTitle>
           <DialogDescription>
@@ -166,9 +199,52 @@ export function MoleculeRegistrationDialog({
             </Select>
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {/* Custom fields from workspace settings */}
+          {customFields.map((field) => (
+            <div key={field.name} className="grid gap-2">
+              <Label>
+                {field.label}
+                {field.required && (
+                  <span className="ml-1 text-destructive">*</span>
+                )}
+              </Label>
+              {field.data_type === "select" ? (
+                <Select
+                  value={customFieldValues[field.name] ?? ""}
+                  onValueChange={(v) =>
+                    setCustomFieldValues((prev) => ({
+                      ...prev,
+                      [field.name]: v,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={`Select ${field.label}...`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getVocabTerms(field.vocabulary_name).map((term) => (
+                      <SelectItem key={term} value={term}>
+                        {term}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  type={field.data_type === "number" ? "number" : field.data_type === "date" ? "date" : "text"}
+                  value={customFieldValues[field.name] ?? ""}
+                  onChange={(e) =>
+                    setCustomFieldValues((prev) => ({
+                      ...prev,
+                      [field.name]: e.target.value,
+                    }))
+                  }
+                />
+              )}
+            </div>
+          ))}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
         <DialogFooter>

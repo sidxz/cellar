@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showSuccess } from "@/shared/lib/toast";
 import type {
   CreateOrganizationInput,
   Organization,
@@ -31,7 +32,7 @@ export function useCreateOrganization() {
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ORGS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ORGS_KEY }); showSuccess("Organization created"); },
   });
 }
 
@@ -44,6 +45,6 @@ export function useUpdateOrganization(orgId: string) {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ORGS_KEY }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ORGS_KEY }); showSuccess("Organization updated"); },
   });
 }
