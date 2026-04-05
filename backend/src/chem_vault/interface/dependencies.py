@@ -55,6 +55,23 @@ from chem_vault.application.workspace_config.update_organization import UpdateOr
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
 from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
 from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
+from chem_vault.application.research_organization.archive_project import ArchiveProject
+from chem_vault.application.research_organization.collection_membership import (
+    AddMoleculesToCollection,
+    ListCollectionMolecules,
+    RemoveMoleculesFromCollection,
+)
+from chem_vault.application.research_organization.create_collection import CreateCollection
+from chem_vault.application.research_organization.create_project import CreateProject
+from chem_vault.application.research_organization.create_saved_search import CreateSavedSearch
+from chem_vault.application.research_organization.delete_collection import DeleteCollection
+from chem_vault.application.research_organization.delete_saved_search import DeleteSavedSearch
+from chem_vault.application.research_organization.get_collection import GetCollection, ListCollections
+from chem_vault.application.research_organization.get_project import GetProject, ListProjects
+from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
+from chem_vault.application.research_organization.update_collection import UpdateCollection
+from chem_vault.application.research_organization.update_project import UpdateProject
+from chem_vault.application.research_organization.update_saved_search import UpdateSavedSearch
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
@@ -238,3 +255,23 @@ BulkCreateReadoutDataDep = Annotated[BulkCreateReadoutData, Depends(_get_use_cas
 ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(ListReadoutDataByRun))]
 CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
 ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]
+
+# --- Research Organization dependencies ---
+CreateProjectDep = Annotated[CreateProject, Depends(_get_use_case(CreateProject))]
+UpdateProjectDep = Annotated[UpdateProject, Depends(_get_use_case(UpdateProject))]
+ArchiveProjectDep = Annotated[ArchiveProject, Depends(_get_use_case(ArchiveProject))]
+GetProjectDep = Annotated[GetProject, Depends(_get_use_case(GetProject))]
+ListProjectsDep = Annotated[ListProjects, Depends(_get_use_case(ListProjects))]
+CreateCollectionDep = Annotated[CreateCollection, Depends(_get_use_case(CreateCollection))]
+UpdateCollectionDep = Annotated[UpdateCollection, Depends(_get_use_case(UpdateCollection))]
+DeleteCollectionDep = Annotated[DeleteCollection, Depends(_get_use_case(DeleteCollection))]
+GetCollectionDep = Annotated[GetCollection, Depends(_get_use_case(GetCollection))]
+ListCollectionsDep = Annotated[ListCollections, Depends(_get_use_case(ListCollections))]
+AddMoleculesToCollectionDep = Annotated[AddMoleculesToCollection, Depends(_get_use_case(AddMoleculesToCollection))]
+RemoveMoleculesFromCollectionDep = Annotated[RemoveMoleculesFromCollection, Depends(_get_use_case(RemoveMoleculesFromCollection))]
+ListCollectionMoleculesDep = Annotated[ListCollectionMolecules, Depends(_get_use_case(ListCollectionMolecules))]
+CreateSavedSearchDep = Annotated[CreateSavedSearch, Depends(_get_use_case(CreateSavedSearch))]
+UpdateSavedSearchDep = Annotated[UpdateSavedSearch, Depends(_get_use_case(UpdateSavedSearch))]
+DeleteSavedSearchDep = Annotated[DeleteSavedSearch, Depends(_get_use_case(DeleteSavedSearch))]
+GetSavedSearchDep = Annotated[GetSavedSearch, Depends(_get_use_case(GetSavedSearch))]
+ListSavedSearchesDep = Annotated[ListSavedSearches, Depends(_get_use_case(ListSavedSearches))]

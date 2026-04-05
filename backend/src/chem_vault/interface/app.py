@@ -123,6 +123,14 @@ def create_app() -> FastAPI:
     app.include_router(shipment_router)
     app.include_router(synth_req_router)
 
+    from chem_vault.interface.routes.projects import router as project_router
+    from chem_vault.interface.routes.collections import router as collection_router
+    from chem_vault.interface.routes.saved_searches import router as saved_search_router
+
+    app.include_router(project_router)
+    app.include_router(collection_router)
+    app.include_router(saved_search_router)
+
     from chem_vault.interface.routes.dashboard import router as dashboard_router
     app.include_router(dashboard_router)
 

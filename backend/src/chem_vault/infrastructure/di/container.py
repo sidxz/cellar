@@ -153,7 +153,25 @@ from chem_vault.domain.workspace_config.repository import (
     WorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.application.research_organization.archive_project import ArchiveProject
+from chem_vault.application.research_organization.collection_membership import (
+    AddMoleculesToCollection,
+    ListCollectionMolecules,
+    RemoveMoleculesFromCollection,
+)
 from chem_vault.application.research_organization.collection_merge_side_effect import CollectionMergeSideEffect
+from chem_vault.application.research_organization.create_collection import CreateCollection
+from chem_vault.application.research_organization.create_project import CreateProject
+from chem_vault.application.research_organization.create_saved_search import CreateSavedSearch
+from chem_vault.application.research_organization.delete_collection import DeleteCollection
+from chem_vault.application.research_organization.delete_saved_search import DeleteSavedSearch
+from chem_vault.application.research_organization.get_collection import GetCollection, ListCollections
+from chem_vault.application.research_organization.get_project import GetProject, ListProjects
+from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
+from chem_vault.application.research_organization.update_collection import UpdateCollection
+from chem_vault.application.research_organization.update_project import UpdateProject
+from chem_vault.application.research_organization.update_saved_search import UpdateSavedSearch
+from chem_vault.application.shared.molecule_resolver import MoleculeResolver
 from chem_vault.infrastructure.messaging.merge_handlers import (
     BatchMergeSideEffect,
     DoseResponseCurveMergeSideEffect,
@@ -168,6 +186,15 @@ from chem_vault.infrastructure.persistence.database import (
 from chem_vault.infrastructure.persistence.settings import DatabaseSettings
 from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
     SQLAlchemyAuditRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+    SQLAlchemyCollectionRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
+    SQLAlchemyProjectRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
+    SQLAlchemySavedSearchRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_disclosure_repository import (
     SQLAlchemyBulkDisclosureRepository,
@@ -844,5 +871,85 @@ def create_container(
 
     container.define(CreateDoseResponseCurve, _dose_response_create)
     container.define(ListDoseResponseByRun, _dose_response_query(ListDoseResponseByRun))
+
+    # --- Research Organization ---
+    def _project_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProjectRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _project_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProjectRepository(uow))
+        return _f
+
+    container.define(CreateProject, _project_cmd(CreateProject))
+    container.define(UpdateProject, _project_cmd(UpdateProject))
+    container.define(ArchiveProject, _project_cmd(ArchiveProject))
+    container.define(GetProject, _project_query(GetProject))
+    container.define(ListProjects, _project_query(ListProjects))
+
+    def _collection_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _collection_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyCollectionRepository(uow))
+        return _f
+
+    def _delete_collection(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow))
+
+    container.define(CreateCollection, _collection_cmd(CreateCollection))
+    container.define(UpdateCollection, _collection_cmd(UpdateCollection))
+    container.define(DeleteCollection, _delete_collection)
+    container.define(GetCollection, _collection_query(GetCollection))
+    container.define(ListCollections, _collection_query(ListCollections))
+    container.define(ListCollectionMolecules, _collection_query(ListCollectionMolecules))
+
+    def _add_molecules(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        resolver = MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
+        return AddMoleculesToCollection(
+            uow, SQLAlchemyCollectionRepository(uow), resolver, c[EventDispatcher],
+        )
+
+    def _remove_molecules(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveMoleculesFromCollection(
+            uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher],
+        )
+
+    container.define(AddMoleculesToCollection, _add_molecules)
+    container.define(RemoveMoleculesFromCollection, _remove_molecules)
+
+    def _ss_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySavedSearchRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _ss_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySavedSearchRepository(uow))
+        return _f
+
+    def _delete_saved_search(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteSavedSearch(uow, SQLAlchemySavedSearchRepository(uow))
+
+    container.define(CreateSavedSearch, _ss_cmd(CreateSavedSearch))
+    container.define(UpdateSavedSearch, _ss_cmd(UpdateSavedSearch))
+    container.define(DeleteSavedSearch, _delete_saved_search)
+    container.define(GetSavedSearch, _ss_query(GetSavedSearch))
+    container.define(ListSavedSearches, _ss_query(ListSavedSearches))
 
     return container
