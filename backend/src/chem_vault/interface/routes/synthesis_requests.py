@@ -309,11 +309,15 @@ async def reject_synthesis_request(
 async def assign_synthesis_request(
     request_id: uuid.UUID, body: AssignRequest, auth: AuthDep, uc: AssignSynthesisRequestDep
 ) -> SynthesisRequestResponse:
+    # Auto-fill assigned_to with current user for internal assignments
+    assigned_to = body.assigned_to
+    if body.assignment_type == "internal" and assigned_to is None:
+        assigned_to = auth.user_id
     result = await uc(
         AssignSynthesisRequestCommand(
             request_id=request_id,
             assignment_type=body.assignment_type,
-            assigned_to=body.assigned_to,
+            assigned_to=assigned_to,
             assigned_org_id=body.assigned_org_id,
         ),
         auth=auth,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, FlaskRound } from "lucide-react";
 import Link from "next/link";
+import { useAuthz } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
@@ -25,6 +26,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { MoleculeName, OrgName } from "@/shared/components/entity-name";
 import {
   useSynthesisRequest,
   useSubmitSynthesisRequest,
@@ -150,8 +152,8 @@ export function SynthesisRequestDetail({
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight font-mono">
-              {request.id.slice(0, 8)}&hellip;
+            <h1 className="text-2xl font-bold tracking-tight">
+              Synthesis Request{request.purpose ? ` \u2014 ${request.purpose.length > 40 ? request.purpose.slice(0, 40) + "\u2026" : request.purpose}` : ""}
             </h1>
             <Badge variant={statusVariant(request.status)}>
               {SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
@@ -286,8 +288,10 @@ export function SynthesisRequestDetail({
         <h2 className="text-lg font-semibold">Request Details</h2>
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
-            <p className="text-xs text-muted-foreground">Molecule ID</p>
-            <p className="font-mono text-sm break-all">{request.molecule_id}</p>
+            <p className="text-xs text-muted-foreground">Compound</p>
+            <p className="font-medium text-sm">
+              <MoleculeName id={request.molecule_id} />
+            </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Amount</p>
@@ -407,8 +411,8 @@ export function SynthesisRequestDetail({
             {request.assigned_org_id && (
               <div>
                 <p className="text-xs text-muted-foreground">Assigned Org</p>
-                <p className="font-mono text-sm">
-                  {request.assigned_org_id.slice(0, 8)}&hellip;
+                <p className="font-medium text-sm">
+                  <OrgName id={request.assigned_org_id} />
                 </p>
               </div>
             )}
@@ -612,8 +616,8 @@ function AssignDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useAssignSynthesisRequest();
+  const { user } = useAuthz();
   const [assignmentType, setAssignmentType] = useState("internal");
-  const [assignedTo, setAssignedTo] = useState("");
   const [assignedOrgId, setAssignedOrgId] = useState("");
 
   const { data: organizations, isLoading: orgsLoading } = useOrganizations();
@@ -641,14 +645,10 @@ function AssignDialog({
             </Select>
           </div>
           {assignmentType === "internal" && (
-            <div className="grid gap-2">
-              <Label htmlFor="assign-to">Assignee (name or email)</Label>
-              <Input
-                id="assign-to"
-                placeholder="e.g. dr.smith or dr.smith@lab.org"
-                value={assignedTo}
-                onChange={(e) => setAssignedTo(e.target.value)}
-              />
+            <div className="rounded-md border border-border bg-muted/50 p-3">
+              <p className="text-sm text-muted-foreground">
+                Will be assigned to you ({user?.name ?? user?.email ?? "current user"})
+              </p>
             </div>
           )}
           {assignmentType === "cro" && (
@@ -685,8 +685,8 @@ function AssignDialog({
                   id: request.id,
                   assignment_type: assignmentType,
                   assigned_to:
-                    assignmentType === "internal" && assignedTo.trim()
-                      ? assignedTo.trim()
+                    assignmentType === "internal" && user?.userId
+                      ? user.userId
                       : null,
                   assigned_org_id:
                     assignmentType === "cro" && assignedOrgId.trim()

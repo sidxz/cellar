@@ -165,8 +165,10 @@ async def get_sample_request(
 async def approve_sample_request(
     request_id: uuid.UUID, body: ApproveRequest, auth: AuthDep, uc: ApproveSampleRequestDep
 ) -> SampleRequestResponse:
+    # Auto-fill assigned_to with current user when not specified
+    assigned_to = body.assigned_to if body.assigned_to is not None else auth.user_id
     result = await uc(
-        ApproveSampleRequestCommand(request_id=request_id, assigned_to=body.assigned_to),
+        ApproveSampleRequestCommand(request_id=request_id, assigned_to=assigned_to),
         auth=auth,
     )
     request = result_to_response(result)

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, ClipboardList } from "lucide-react";
 import Link from "next/link";
+import { useAuthz } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { MoleculeName } from "@/shared/components/entity-name";
 import {
   useSampleRequest,
   useApproveSampleRequest,
@@ -121,8 +123,8 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight font-mono">
-              {request.id.slice(0, 8)}&hellip;
+            <h1 className="text-2xl font-bold tracking-tight">
+              Sample Request{request.purpose ? ` \u2014 ${request.purpose.length > 40 ? request.purpose.slice(0, 40) + "\u2026" : request.purpose}` : ""}
             </h1>
             <Badge variant={statusVariant(request.status)}>
               {SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
@@ -199,8 +201,10 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
         <h2 className="text-lg font-semibold">Request Details</h2>
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
-            <p className="text-xs text-muted-foreground">Molecule ID</p>
-            <p className="font-mono text-sm break-all">{request.molecule_id}</p>
+            <p className="text-xs text-muted-foreground">Compound</p>
+            <p className="font-medium text-sm">
+              <MoleculeName id={request.molecule_id} />
+            </p>
           </div>
           {request.batch_id && (
             <div>
@@ -295,7 +299,7 @@ function ApproveDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useApproveSampleRequest();
-  const [assignedTo, setAssignedTo] = useState("");
+  const { user } = useAuthz();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -303,16 +307,15 @@ function ApproveDialog({
         <DialogHeader>
           <DialogTitle>Approve Request</DialogTitle>
           <DialogDescription>
-            Approve this sample request. Optionally assign it to a user.
+            Approve this sample request and assign it to yourself.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-2 py-4">
-          <Label>Assignee (name or email, optional)</Label>
-          <Input
-            placeholder="e.g. jane.smith or jane@example.com"
-            value={assignedTo}
-            onChange={(e) => setAssignedTo(e.target.value)}
-          />
+        <div className="py-4">
+          <div className="rounded-md border border-border bg-muted/50 p-3">
+            <p className="text-sm text-muted-foreground">
+              Will be assigned to you ({user?.name ?? user?.email ?? "current user"})
+            </p>
+          </div>
         </div>
         <DialogFooter>
           <Button
@@ -320,7 +323,7 @@ function ApproveDialog({
               mutation.mutate(
                 {
                   id: request.id,
-                  assigned_to: assignedTo || undefined,
+                  assigned_to: user?.userId ?? undefined,
                 },
                 { onSuccess: () => onOpenChange(false) }
               );

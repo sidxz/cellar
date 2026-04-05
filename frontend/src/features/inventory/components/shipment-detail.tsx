@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
+import { OrgName } from "@/shared/components/entity-name";
 import {
   Dialog,
   DialogContent,
@@ -94,18 +95,16 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight font-mono">
-              {shipment.id.slice(0, 8).toUpperCase()}
+            <h1 className="text-2xl font-bold tracking-tight">
+              Shipment to <OrgName id={shipment.destination_org_id} />
             </h1>
             <Badge variant={statusBadgeVariant(shipment.status)}>
               {SHIPMENT_STATUS_LABELS[shipment.status]}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Shipment to organization{" "}
-            <span className="font-mono">
-              {shipment.destination_org_id.slice(0, 8)}...
-            </span>
+            {SHIPMENT_STATUS_LABELS[shipment.status]} &middot;{" "}
+            {shipment.tracking_number ?? "No tracking number"}
           </p>
         </div>
 

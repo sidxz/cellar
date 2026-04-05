@@ -6,6 +6,7 @@ import { Truck } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { OrgName } from "@/shared/components/entity-name";
 import {
   Select,
   SelectContent,
@@ -51,15 +52,12 @@ export function ShipmentListPage() {
   const columnDefs = useMemo<ColDef<ShipmentSummary>[]>(
     () => [
       {
-        headerName: "Destination Org",
+        headerName: "Destination",
         field: "destination_org_id",
         flex: 1,
         minWidth: 160,
-        cellClass: "font-mono text-sm",
-        valueFormatter: (p) =>
-          p.value
-            ? `${String(p.value).slice(0, 8)}...`
-            : "\u2014",
+        cellRenderer: (params: ICellRendererParams<ShipmentSummary>) =>
+          params.value ? <OrgName id={params.value as string} /> : "\u2014",
       },
       {
         headerName: "Carrier",

@@ -6,6 +6,7 @@ import { ClipboardList, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { MoleculeName } from "@/shared/components/entity-name";
 import {
   Select,
   SelectContent,
@@ -77,13 +78,12 @@ export function SampleRequestListPage() {
         ),
       },
       {
-        headerName: "Molecule ID",
+        headerName: "Compound",
         field: "molecule_id",
         flex: 1,
         minWidth: 160,
-        cellClass: "font-mono text-sm",
-        valueFormatter: (p) =>
-          p.value ? `${String(p.value).slice(0, 8)}\u2026` : "\u2014",
+        cellRenderer: (params: ICellRendererParams<SampleRequest>) =>
+          params.value ? <MoleculeName id={params.value as string} /> : "\u2014",
       },
       {
         headerName: "Amount",
