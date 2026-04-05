@@ -21,7 +21,9 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { MoleculeSelector } from "./molecule-selector";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useBatchesByMolecule } from "../hooks/use-batches";
 import { useSamplesByBatch } from "../hooks/use-samples";
 import { useCreateShipment } from "../hooks/use-shipments";
 import type { ShipmentItemInput } from "../types/shipment";
@@ -31,33 +33,53 @@ interface CreateShipmentDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface ItemRowState extends ShipmentItemInput {
-  /** Batch ID used to load the sample list for this row — UI-only, not sent to API */
-  _batch_id: string;
+/** One item row with cascading selectors: compound → batch → sample */
+interface ItemRowState {
+  _moleculeId: string | null;
+  _batchId: string;
+  sample_id: string;
+  amount_value: number;
+  amount_unit: string;
 }
 
 const EMPTY_ITEM: ItemRowState = {
-  _batch_id: "",
+  _moleculeId: null,
+  _batchId: "",
   sample_id: "",
   amount_value: 0,
   amount_unit: "mg",
 };
 
-interface ShipmentItemRowProps {
+// ---------------------------------------------------------------------------
+// Cascading item row: Compound → Batch → Sample
+// ---------------------------------------------------------------------------
+
+function ShipmentItemRow({
+  item,
+  index,
+  canRemove,
+  onUpdate,
+  onRemove,
+}: {
   item: ItemRowState;
   index: number;
   canRemove: boolean;
   onUpdate: <K extends keyof ItemRowState>(key: K, value: ItemRowState[K]) => void;
   onRemove: () => void;
-}
-
-function ShipmentItemRow({ item, index, canRemove, onUpdate, onRemove }: ShipmentItemRowProps) {
-  const { data: samples } = useSamplesByBatch(item._batch_id || undefined);
+}) {
+  const { data: batches, isLoading: batchesLoading } = useBatchesByMolecule(
+    item._moleculeId ?? undefined
+  );
+  const { data: samples, isLoading: samplesLoading } = useSamplesByBatch(
+    item._batchId || undefined
+  );
 
   return (
-    <div className="rounded-md border p-3 space-y-2">
+    <div className="rounded-md border p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">Item {index + 1}</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          Item {index + 1}
+        </span>
         <Button
           type="button"
           variant="ghost"
@@ -70,14 +92,17 @@ function ShipmentItemRow({ item, index, canRemove, onUpdate, onRemove }: Shipmen
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      {/* Row 1: Compound → Batch */}
+      <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1">
-          <Label className="text-xs">Batch ID</Label>
-          <Input
-            placeholder="Enter batch ID to load samples"
-            value={item._batch_id}
-            onChange={(e) => {
-              onUpdate("_batch_id", e.target.value);
+          <Label className="text-xs">
+            Compound <span className="text-destructive">*</span>
+          </Label>
+          <MoleculeSelector
+            selectedId={item._moleculeId}
+            onSelect={(id) => {
+              onUpdate("_moleculeId", id);
+              onUpdate("_batchId", "");
               onUpdate("sample_id", "");
             }}
           />
@@ -85,38 +110,97 @@ function ShipmentItemRow({ item, index, canRemove, onUpdate, onRemove }: Shipmen
 
         <div className="grid gap-1">
           <Label className="text-xs">
-            Sample <span className="text-destructive">*</span>
+            Batch <span className="text-destructive">*</span>
           </Label>
-          {samples && samples.length > 0 ? (
+          {item._moleculeId ? (
             <Select
-              value={item.sample_id}
-              onValueChange={(val) => onUpdate("sample_id", val)}
+              value={item._batchId}
+              onValueChange={(val) => {
+                onUpdate("_batchId", val);
+                onUpdate("sample_id", "");
+              }}
+              disabled={batchesLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select sample" />
+                <SelectValue
+                  placeholder={
+                    batchesLoading
+                      ? "Loading batches..."
+                      : batches && batches.length === 0
+                        ? "No batches found"
+                        : "Select batch"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {samples.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.barcode} — {s.amount_value} {s.amount_unit}
+                {batches?.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.batch_number}
+                    {b.purity ? ` (${b.purity}% pure)` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           ) : (
-            <Input
-              placeholder={item._batch_id ? "No samples found for this batch" : "Sample barcode or ID"}
-              value={item.sample_id}
-              onChange={(e) => onUpdate("sample_id", e.target.value)}
-              disabled={!!item._batch_id && (!samples || samples.length === 0)}
-            />
+            <Select disabled>
+              <SelectTrigger>
+                <SelectValue placeholder="Select compound first" />
+              </SelectTrigger>
+              <SelectContent />
+            </Select>
           )}
         </div>
       </div>
 
-      <div className="flex items-end gap-2">
-        <div className="flex-1 grid gap-1">
-          <Label className="text-xs">Amount <span className="text-destructive">*</span></Label>
+      {/* Row 2: Sample → Amount */}
+      <div className="grid grid-cols-[1fr_auto_auto] gap-3 items-end">
+        <div className="grid gap-1">
+          <Label className="text-xs">
+            Sample <span className="text-destructive">*</span>
+          </Label>
+          {item._batchId && samples && samples.length > 0 ? (
+            <Select
+              value={item.sample_id}
+              onValueChange={(val) => onUpdate("sample_id", val)}
+              disabled={samplesLoading}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    samplesLoading ? "Loading samples..." : "Select sample"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {samples.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.barcode} — {s.amount_value} {s.amount_unit} available
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select disabled>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    !item._batchId
+                      ? "Select batch first"
+                      : samplesLoading
+                        ? "Loading..."
+                        : "No samples in this batch"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent />
+            </Select>
+          )}
+        </div>
+
+        <div className="grid gap-1 w-24">
+          <Label className="text-xs">
+            Amount <span className="text-destructive">*</span>
+          </Label>
           <Input
             type="number"
             placeholder="0.0"
@@ -127,7 +211,8 @@ function ShipmentItemRow({ item, index, canRemove, onUpdate, onRemove }: Shipmen
             }
           />
         </div>
-        <div className="w-24 grid gap-1">
+
+        <div className="grid gap-1 w-20">
           <Label className="text-xs">Unit</Label>
           <Select
             value={item.amount_unit}
@@ -148,6 +233,10 @@ function ShipmentItemRow({ item, index, canRemove, onUpdate, onRemove }: Shipmen
   );
 }
 
+// ---------------------------------------------------------------------------
+// Main dialog
+// ---------------------------------------------------------------------------
+
 export function CreateShipmentDialog({
   open,
   onOpenChange,
@@ -160,9 +249,7 @@ export function CreateShipmentDialog({
   const [expectedArrivalDate, setExpectedArrivalDate] = useState("");
   const [shippingConditions, setShippingConditions] = useState("");
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<ItemRowState[]>([
-    { ...EMPTY_ITEM },
-  ]);
+  const [items, setItems] = useState<ItemRowState[]>([{ ...EMPTY_ITEM }]);
 
   function resetForm() {
     setDestinationOrgId("");
@@ -173,9 +260,9 @@ export function CreateShipmentDialog({
     setItems([{ ...EMPTY_ITEM }]);
   }
 
-  function handleClose(open: boolean) {
-    if (!open) resetForm();
-    onOpenChange(open);
+  function handleClose(v: boolean) {
+    if (!v) resetForm();
+    onOpenChange(v);
   }
 
   function addItem() {
@@ -198,6 +285,7 @@ export function CreateShipmentDialog({
 
   const isValid =
     destinationOrgId.trim().length > 0 &&
+    items.length > 0 &&
     items.every(
       (it) =>
         it.sample_id.trim().length > 0 &&
@@ -206,8 +294,11 @@ export function CreateShipmentDialog({
     );
 
   function handleSubmit() {
-    // Strip the UI-only _batch_id field before sending to API
-    const apiItems: ShipmentItemInput[] = items.map(({ _batch_id: _, ...rest }) => rest);
+    const apiItems: ShipmentItemInput[] = items.map((it) => ({
+      sample_id: it.sample_id,
+      amount_value: it.amount_value,
+      amount_unit: it.amount_unit,
+    }));
     mutation.mutate(
       {
         destination_org_id: destinationOrgId.trim(),
@@ -223,23 +314,23 @@ export function CreateShipmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New Shipment</DialogTitle>
           <DialogDescription>
-            Create an outbound shipment and specify the samples to include.
+            Select compounds, then pick batches and samples to ship.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           {/* Destination */}
           <div className="grid gap-2">
-            <Label htmlFor="dest-org">
+            <Label>
               Destination Organization{" "}
               <span className="text-destructive">*</span>
             </Label>
             <Select value={destinationOrgId} onValueChange={setDestinationOrgId}>
-              <SelectTrigger id="dest-org">
+              <SelectTrigger>
                 <SelectValue placeholder="Select destination organization" />
               </SelectTrigger>
               <SelectContent>
@@ -255,18 +346,16 @@ export function CreateShipmentDialog({
           {/* Carrier + Expected arrival */}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="carrier">Carrier</Label>
+              <Label>Carrier</Label>
               <Input
-                id="carrier"
                 placeholder="e.g. FedEx, DHL"
                 value={carrier}
                 onChange={(e) => setCarrier(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="arrival-date">Expected Arrival</Label>
+              <Label>Expected Arrival</Label>
               <Input
-                id="arrival-date"
                 type="date"
                 value={expectedArrivalDate}
                 onChange={(e) => setExpectedArrivalDate(e.target.value)}
@@ -276,46 +365,27 @@ export function CreateShipmentDialog({
 
           {/* Shipping conditions */}
           <div className="grid gap-2">
-            <Label htmlFor="shipping-cond">Shipping Conditions</Label>
-            <Textarea
-              id="shipping-cond"
+            <Label>Shipping Conditions</Label>
+            <Input
               placeholder="e.g. Keep refrigerated at 2-8°C"
-              rows={2}
               value={shippingConditions}
               onChange={(e) => setShippingConditions(e.target.value)}
             />
           </div>
 
-          {/* Notes */}
-          <div className="grid gap-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              placeholder="Additional notes..."
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-
-          {/* Items */}
+          {/* Items — compound-first cascade */}
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label>
-                Items <span className="text-destructive">*</span>
+                Samples to Ship <span className="text-destructive">*</span>
               </Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addItem}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={addItem}>
                 <Plus className="mr-1 h-3 w-3" />
-                Add Item
+                Add Another Compound
               </Button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {items.map((item, index) => (
                 <ShipmentItemRow
                   key={index}
@@ -328,16 +398,24 @@ export function CreateShipmentDialog({
               ))}
             </div>
           </div>
+
+          {/* Notes */}
+          <div className="grid gap-2">
+            <Label>Notes</Label>
+            <Textarea
+              placeholder="Additional notes..."
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleClose(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!isValid || mutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!isValid || mutation.isPending}>
             {mutation.isPending ? "Creating..." : "Create Shipment"}
           </Button>
         </DialogFooter>
