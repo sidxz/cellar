@@ -13,15 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { StructureRenderer } from "@/shared/components/chemistry";
 import { useMoleculeSearch, useSearchMolecules, type SearchResult } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
@@ -168,51 +161,51 @@ export function CompoundSearchBar() {
             {results.length} result{results.length !== 1 ? "s" : ""} found
           </div>
           {results.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Reg #</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Formula</TableHead>
-                  {showSimilarity && <TableHead className="w-[100px]">Similarity</TableHead>}
-                  <TableHead>Stage</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {results.map((r) => (
-                  <TableRow
-                    key={r.molecule.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/compounds/${r.molecule.id}`)}
-                  >
-                    <TableCell className="font-mono text-sm">
-                      {r.molecule.registration_number}
-                    </TableCell>
-                    <TableCell className="font-medium">{r.molecule.name}</TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {r.molecule.molecular_formula ?? "—"}
-                    </TableCell>
-                    {showSimilarity && r.similarity != null && (
-                      <TableCell>
+            <div className="divide-y">
+              {results.map((r) => (
+                <div
+                  key={r.molecule.id}
+                  className="flex gap-4 p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => router.push(`/compounds/${r.molecule.id}`)}
+                >
+                  {/* Structure */}
+                  <div className="shrink-0">
+                    {r.molecule.structure?.smiles ? (
+                      <StructureRenderer
+                        smiles={r.molecule.structure.smiles}
+                        width={200}
+                        height={160}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center rounded border border-dashed text-xs text-muted-foreground" style={{ width: 200, height: 160 }}>
+                        Undisclosed
+                      </div>
+                    )}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-medium">{r.molecule.registration_number}</span>
+                      <Badge variant="outline">
+                        {LIFECYCLE_LABELS[r.molecule.lifecycle_stage as LifecycleStage] ?? r.molecule.lifecycle_stage}
+                      </Badge>
+                      {showSimilarity && r.similarity != null && (
                         <span className={
-                          r.similarity > 0.8 ? "text-green-400 font-medium" :
-                          r.similarity > 0.6 ? "text-yellow-400" : "text-muted-foreground"
+                          r.similarity > 0.8 ? "text-emerald-400 font-medium text-sm" :
+                          r.similarity > 0.6 ? "text-yellow-400 text-sm" : "text-muted-foreground text-sm"
                         }>
                           {(r.similarity * 100).toFixed(1)}%
                         </span>
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <Badge variant="outline">
-                        {LIFECYCLE_LABELS[
-                          r.molecule.lifecycle_stage as LifecycleStage
-                        ] ?? r.molecule.lifecycle_stage}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium truncate">{r.molecule.name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      {r.molecule.molecular_formula ?? "—"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
