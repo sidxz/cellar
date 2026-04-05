@@ -38,6 +38,7 @@ from chem_vault.interface.dependencies import (
     GetMoleculeDep,
     ListIdentifiersDep,
     ListMoleculesDep,
+    MoleculeActivityServiceDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
     SearchMoleculesDep,
@@ -183,6 +184,44 @@ class SimilaritySearchResult(BaseModel):
         return cls(
             molecule=MoleculeResponse.from_domain(molecule),
             similarity=round(similarity, 4),
+        )
+
+
+class ActivityValueResponse(BaseModel):
+    value: float | None = None
+    qualifier: str | None = None
+    unit: str | None = None
+    source: str
+    curve_type: str | None = None
+    r_squared: float | None = None
+    data_point_count: int = 1
+
+
+class ProtocolActivityResponse(BaseModel):
+    protocol_id: uuid.UUID
+    protocol_name: str
+    protocol_type: str
+    readouts: list[ActivityValueResponse] = []
+    best_curves: list[dict] = []
+
+
+class ActivitySummaryResponse(BaseModel):
+    molecule_id: uuid.UUID
+    protocols: list[ProtocolActivityResponse] = []
+
+    @classmethod
+    def from_domain(cls, summary) -> ActivitySummaryResponse:
+        return cls(
+            molecule_id=summary.molecule_id,
+            protocols=[
+                ProtocolActivityResponse(
+                    protocol_id=p.protocol_id,
+                    protocol_name=p.protocol_name,
+                    protocol_type=p.protocol_type,
+                    best_curves=p.best_curves,
+                )
+                for p in summary.protocols
+            ],
         )
 
 
@@ -417,6 +456,19 @@ async def update_molecule(
     )
     mol = result_to_response(await use_case(command, auth=auth))
     return MoleculeResponse.from_domain(mol)
+
+
+@router.get("/{molecule_id}/activity", response_model=ActivitySummaryResponse)
+async def get_molecule_activity(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    activity_service: MoleculeActivityServiceDep,
+) -> ActivitySummaryResponse:
+    """Get activity summary for a molecule across all protocols."""
+    summary = await activity_service.get_activity_summary(
+        auth.workspace_id, molecule_id
+    )
+    return ActivitySummaryResponse.from_domain(summary)
 
 
 # ---------------------------------------------------------------------------

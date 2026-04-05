@@ -96,6 +96,7 @@ from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
+from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -265,6 +266,7 @@ BulkCreateReadoutDataDep = Annotated[BulkCreateReadoutData, Depends(_get_use_cas
 ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(ListReadoutDataByRun))]
 CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
 ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]
+MoleculeActivityServiceDep = Annotated[MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))]
 
 # --- Plate Template dependencies ---
 CreatePlateTemplateDep = Annotated[CreatePlateTemplate, Depends(_get_use_case(CreatePlateTemplate))]
