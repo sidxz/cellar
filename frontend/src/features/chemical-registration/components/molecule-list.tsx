@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FlaskConical, Plus, Upload } from "lucide-react";
+import { Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   type Molecule,
   type MoleculeType,
 } from "../types";
+import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
 import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
 import { BulkRegistrationDialog } from "./bulk-registration-dialog";
 import { CompoundSearchBar } from "./compound-search-bar";
@@ -49,6 +50,7 @@ export function MoleculeList() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
+  const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
   const handleSdfExport = useCallback(() => {
     if (!molecules?.length) return;
@@ -213,6 +215,21 @@ export function MoleculeList() {
           onRowClick={(mol) => {
             router.push(`/compounds/${mol.id}`);
           }}
+          selectionToolbar={(selected) => (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {selected.length} selected
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPickerMolIds(selected.map((m) => m.id))}
+              >
+                <ListPlus className="mr-1 h-4 w-4" />
+                Add to Collection
+              </Button>
+            </>
+          )}
           emptyState={
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
               <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
@@ -250,6 +267,14 @@ export function MoleculeList() {
           onOpenChange={(open) => !open && setMergeMol(null)}
         />
       )}
+      <CollectionPickerDialog
+        open={pickerMolIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setPickerMolIds([]);
+        }}
+        moleculeIds={pickerMolIds}
+        onComplete={() => setPickerMolIds([])}
+      />
     </>
   );
 }
