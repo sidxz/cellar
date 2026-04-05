@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, Pencil } from "lucide-react";
+import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -43,6 +44,7 @@ export function CompoundSearchBar() {
   } | undefined>(undefined);
 
   const isTextMode = searchType === "name_id";
+  const [editorOpen, setEditorOpen] = useState(false);
 
   // Text search (name/ID) uses the list endpoint with ?q=
   const { data: textResults, isLoading: textLoading, isError: textError } = useMoleculeSearch(activeTextSearch);
@@ -135,6 +137,17 @@ export function CompoundSearchBar() {
           </div>
         )}
 
+        {!isTextMode && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setEditorOpen(true)}
+            title="Draw structure"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+
         <Button onClick={handleSearch} disabled={!query.trim()}>
           <Search className="mr-2 h-4 w-4" />
           Search
@@ -208,6 +221,15 @@ export function CompoundSearchBar() {
             </div>
           )}
         </div>
+      )}
+      {!isTextMode && (
+        <StructureEditorDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          initialStructure={query}
+          onApply={(s) => setQuery(s)}
+          outputFormat={searchType === "substructure" ? "smarts" : "smiles"}
+        />
       )}
     </div>
   );

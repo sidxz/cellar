@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil } from "lucide-react";
+import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -61,6 +63,7 @@ export function MoleculeRegistrationDialog({
     Record<string, string>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const customFields: CustomFieldDefinition[] = Array.isArray(
     settings?.custom_field_definitions
@@ -187,7 +190,18 @@ export function MoleculeRegistrationDialog({
 
           {!isUndisclosed && (
             <div className="grid gap-2">
-              <Label htmlFor="smiles">SMILES</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="smiles">SMILES</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditorOpen(true)}
+                >
+                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                  Draw
+                </Button>
+              </div>
               <Textarea
                 id="smiles"
                 placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O"
@@ -195,6 +209,14 @@ export function MoleculeRegistrationDialog({
                 onChange={(e) => setSmiles(e.target.value)}
                 rows={2}
                 className="font-mono text-sm"
+              />
+
+              <StructureEditorDialog
+                open={editorOpen}
+                onOpenChange={setEditorOpen}
+                initialStructure={smiles}
+                onApply={(s) => setSmiles(s)}
+                outputFormat="smiles"
               />
             </div>
           )}
