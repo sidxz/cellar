@@ -86,10 +86,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             protocols.append(domain)
         return protocols
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a protocol by ID (only for DRAFT protocols)."""
         model = await self._session.get(ProtocolModel, id)
-        if model is not None:
+        if model is not None and model.workspace_id == workspace_id:
             await self._session.delete(model)
 
     # ------------------------------------------------------------------

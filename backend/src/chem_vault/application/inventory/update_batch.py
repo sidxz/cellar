@@ -15,6 +15,7 @@ from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.repository import BatchRepository
+from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 from chem_vault.domain.shared.value_objects import Amount, Concentration, StorageCondition
 
@@ -63,15 +64,11 @@ class UpdateBatch:
             if input.purity is not UNSET:
                 fields["purity"] = input.purity
             if input.amount_value is not None and input.amount_unit is not None:
-                from chem_vault.domain.shared.enums import AmountUnit
-
                 fields["amount"] = Amount(value=input.amount_value, unit=AmountUnit(input.amount_unit))
             if input.concentration_value is not UNSET:
                 if input.concentration_value is None:
                     fields["concentration"] = None
                 elif input.concentration_unit is not UNSET and input.concentration_unit is not None:
-                    from chem_vault.domain.shared.enums import ConcentrationUnit
-
                     fields["concentration"] = Concentration(
                         value=input.concentration_value, unit=ConcentrationUnit(input.concentration_unit)
                     )

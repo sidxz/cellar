@@ -107,6 +107,6 @@ async def get_audit_operation(
     auth: AuthDep,
     use_case: GetAuditOperationDep,
 ) -> AuditOperationResponse:
-    query = GetAuditOperationQuery(operation_id=operation_id)
+    query = GetAuditOperationQuery(workspace_id=auth.workspace_id, operation_id=operation_id)
     operation = result_to_response(await use_case(query))
     return AuditOperationResponse.from_domain(operation)

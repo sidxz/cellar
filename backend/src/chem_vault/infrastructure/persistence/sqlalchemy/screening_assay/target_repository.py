@@ -42,9 +42,9 @@ class SQLAlchemyTargetRepository:
         model = self._to_model(entity)
         await self._uow.session.merge(model)
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._uow.session.get(TargetModel, id)
-        if model is not None:
+        if model is not None and model.workspace_id == workspace_id:
             await self._uow.session.delete(model)
 
     # ------------------------------------------------------------------

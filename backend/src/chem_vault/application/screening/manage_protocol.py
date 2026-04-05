@@ -186,13 +186,14 @@ class DeleteProtocol:
             protocol = await self._repo.find_by_id(protocol_id)
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(protocol_id)))
+            require_same_workspace(auth, protocol.workspace_id)
 
             if protocol.status != ProtocolStatus.DRAFT:
                 return Failure(
                     ConflictError(f"Cannot delete protocol in '{protocol.status}' status — only DRAFT protocols can be deleted")
                 )
 
-            await self._repo.delete(protocol_id)
+            await self._repo.delete(protocol.workspace_id, protocol_id)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(None)

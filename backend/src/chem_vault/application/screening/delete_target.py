@@ -42,7 +42,7 @@ class DeleteTarget:
             if target is None or target.workspace_id != input.workspace_id:
                 return Failure(NotFoundError("Target", str(input.target_id)))
 
-            await self._repo.delete(input.target_id)
+            await self._repo.delete(input.workspace_id, input.target_id)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(None)

@@ -48,6 +48,7 @@ class ListAuditOperations:
 
 @dataclass(frozen=True, kw_only=True)
 class GetAuditOperationQuery(Query):
+    workspace_id: uuid.UUID
     operation_id: uuid.UUID
 
 
@@ -61,7 +62,7 @@ class GetAuditOperation:
         self, input: GetAuditOperationQuery
     ) -> Result[AuditOperation, DomainError]:
         operation = await self._repo.find_by_id(input.operation_id)
-        if operation is None:
+        if operation is None or operation.workspace_id != input.workspace_id:
             return Failure(
                 NotFoundError("AuditOperation", str(input.operation_id))
             )

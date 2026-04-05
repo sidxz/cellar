@@ -331,7 +331,7 @@ async def version_protocol(
 class UpdateProtocolRequest(BaseModel):
     name: str | None = None
     description: str | None = None
-    target_id: str | None = None
+    target_id: uuid.UUID | None = None
     category: str | None = None
 
 
@@ -349,7 +349,7 @@ async def update_protocol(
         protocol_id=protocol_id,
         name=body.name,
         description=body.description if "description" in body.model_fields_set else UNSET,
-        target_id=uuid.UUID(body.target_id) if body.target_id and "target_id" in body.model_fields_set else (UNSET if "target_id" not in body.model_fields_set else None),
+        target_id=body.target_id if "target_id" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
     )
     result = await uc(cmd, auth=auth)

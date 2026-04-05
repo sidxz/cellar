@@ -82,82 +82,82 @@ class BulkCreateReadoutData:
         workspace_id: uuid.UUID,
         item: ReadoutDataItem,
         idx: int,
-    ) -> uuid.UUID:
+    ) -> Result[uuid.UUID, DomainError]:
         """Resolve molecule_id from the item, looking up by registration_number if needed."""
         if item.molecule_id is not None:
-            return item.molecule_id
+            return Success(item.molecule_id)
         if item.registration_number is not None:
             if self._molecule_repo is None:
-                raise ValidationError(
+                return Failure(ValidationError(
                     f"Item {idx}: registration_number provided but molecule resolver not available"
-                )
+                ))
             mol = await self._molecule_repo.find_by_registration_number(
                 workspace_id, item.registration_number
             )
             if mol is None:
-                raise ValidationError(
+                return Failure(ValidationError(
                     f"Item {idx}: molecule with registration_number "
                     f"'{item.registration_number}' not found"
-                )
-            return mol.id
-        raise ValidationError(
+                ))
+            return Success(mol.id)
+        return Failure(ValidationError(
             f"Item {idx}: either molecule_id or registration_number is required"
-        )
+        ))
 
     async def _resolve_batch_id(
         self,
         workspace_id: uuid.UUID,
         item: ReadoutDataItem,
         idx: int,
-    ) -> uuid.UUID:
+    ) -> Result[uuid.UUID, DomainError]:
         """Resolve batch_id from the item, looking up by batch_number if needed."""
         if item.batch_id is not None:
-            return item.batch_id
+            return Success(item.batch_id)
         if item.batch_number is not None:
             if self._batch_repo is None:
-                raise ValidationError(
+                return Failure(ValidationError(
                     f"Item {idx}: batch_number provided but batch resolver not available"
-                )
+                ))
             batch = await self._batch_repo.find_by_batch_number(
                 workspace_id, item.batch_number
             )
             if batch is None:
-                raise ValidationError(
+                return Failure(ValidationError(
                     f"Item {idx}: batch with batch_number "
                     f"'{item.batch_number}' not found"
-                )
-            return batch.id
-        raise ValidationError(
+                ))
+            return Success(batch.id)
+        return Failure(ValidationError(
             f"Item {idx}: either batch_id or batch_number is required"
-        )
+        ))
 
     async def _resolve_readout_definition_id(
         self,
         item: ReadoutDataItem,
         idx: int,
         run_protocol_cache: dict[uuid.UUID, dict],
-    ) -> uuid.UUID:
+    ) -> Result[uuid.UUID, DomainError]:
         """Resolve readout_definition_id, looking up by name from the run's protocol if needed."""
         if item.readout_definition_id is not None:
-            return item.readout_definition_id
+            return Success(item.readout_definition_id)
         if item.readout_definition_name is not None:
             if self._run_repo is None or self._protocol_repo is None:
-                raise ValidationError(
+                return Failure(ValidationError(
                     f"Item {idx}: readout_definition_name provided but "
                     f"run/protocol resolver not available"
-                )
+                ))
             # Cache protocol readout definitions per run to avoid repeated lookups
             if item.run_id not in run_protocol_cache:
                 run = await self._run_repo.find_by_id(item.run_id)
                 if run is None:
-                    raise ValidationError(
+                    return Failure(ValidationError(
                         f"Item {idx}: run '{item.run_id}' not found"
-                    )
+                    ))
                 protocol = await self._protocol_repo.find_by_id(run.protocol_id)
                 if protocol is None:
-                    raise ValidationError(
+                    return Failure(ValidationError(
                         f"Item {idx}: protocol for run '{item.run_id}' not found"
-                    )
+                    ))
                 run_protocol_cache[item.run_id] = {
                     "definitions": protocol.readout_definitions,
                 }
@@ -165,14 +165,14 @@ class BulkCreateReadoutData:
             definitions = run_protocol_cache[item.run_id]["definitions"]
             for rd in definitions:
                 if rd.name == item.readout_definition_name:
-                    return rd.id
-            raise ValidationError(
+                    return Success(rd.id)
+            return Failure(ValidationError(
                 f"Item {idx}: readout definition '{item.readout_definition_name}' "
                 f"not found in protocol"
-            )
-        raise ValidationError(
+            ))
+        return Failure(ValidationError(
             f"Item {idx}: either readout_definition_id or readout_definition_name is required"
-        )
+        ))
 
     async def __call__(
         self, input: BulkCreateReadoutDataCommand, auth: AuthContext | None = None
@@ -195,18 +195,32 @@ class BulkCreateReadoutData:
             run_protocol_cache: dict[uuid.UUID, dict] = {}
 
             for idx, item in enumerate(input.items):
-                try:
-                    # Resolve human-readable identifiers to UUIDs
-                    molecule_id = await self._resolve_molecule_id(
-                        input.workspace_id, item, idx
-                    )
-                    batch_id = await self._resolve_batch_id(
-                        input.workspace_id, item, idx
-                    )
-                    readout_definition_id = await self._resolve_readout_definition_id(
-                        item, idx, run_protocol_cache
-                    )
+                # Resolve human-readable identifiers to UUIDs
+                molecule_result = await self._resolve_molecule_id(
+                    input.workspace_id, item, idx
+                )
+                if isinstance(molecule_result, Failure):
+                    result.error_count += 1
+                    result.errors.append({"index": idx, "error": str(molecule_result.failure())})
+                    continue
 
+                batch_result = await self._resolve_batch_id(
+                    input.workspace_id, item, idx
+                )
+                if isinstance(batch_result, Failure):
+                    result.error_count += 1
+                    result.errors.append({"index": idx, "error": str(batch_result.failure())})
+                    continue
+
+                readout_def_result = await self._resolve_readout_definition_id(
+                    item, idx, run_protocol_cache
+                )
+                if isinstance(readout_def_result, Failure):
+                    result.error_count += 1
+                    result.errors.append({"index": idx, "error": str(readout_def_result.failure())})
+                    continue
+
+                try:
                     value: QualifiedValue | None = None
                     if item.value_numeric is not None:
                         qualifier = (
@@ -222,9 +236,9 @@ class BulkCreateReadoutData:
                         workspace_id=input.workspace_id,
                         run_id=item.run_id,
                         well_id=item.well_id,
-                        molecule_id=molecule_id,
-                        batch_id=batch_id,
-                        readout_definition_id=readout_definition_id,
+                        molecule_id=molecule_result.unwrap(),
+                        batch_id=batch_result.unwrap(),
+                        readout_definition_id=readout_def_result.unwrap(),
                         value=value,
                         value_text=item.value_text,
                         is_outlier=item.is_outlier,
