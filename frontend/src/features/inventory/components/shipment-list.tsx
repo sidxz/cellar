@@ -41,11 +41,11 @@ function statusBadgeVariant(
 
 export function ShipmentListPage() {
   const router = useRouter();
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: shipments, isLoading } = useShipments(
-    statusFilter || undefined
+    statusFilter !== "all" ? statusFilter : undefined
   );
 
   const columnDefs = useMemo<ColDef<ShipmentSummary>[]>(
@@ -119,7 +119,7 @@ export function ShipmentListPage() {
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All statuses</SelectItem>
+            <SelectItem value="all">All statuses</SelectItem>
             {(Object.keys(SHIPMENT_STATUS_LABELS) as ShipmentStatus[]).map(
               (s) => (
                 <SelectItem key={s} value={s}>

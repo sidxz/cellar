@@ -745,7 +745,7 @@ function StartDialog({
               />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {routes?.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
                   {r.name}
@@ -767,7 +767,7 @@ function StartDialog({
               mutation.mutate(
                 {
                   id: request.id,
-                  proposed_route_id: proposedRouteId || null,
+                  proposed_route_id: proposedRouteId && proposedRouteId !== "none" ? proposedRouteId : null,
                 },
                 { onSuccess: () => onOpenChange(false) }
               );
