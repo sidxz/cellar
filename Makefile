@@ -3,7 +3,8 @@
 # ============================================================================
 # Quick reference:
 #   make up        — start Postgres + Valkey, run migrations
-#   make dev       — start backend + frontend (requires `make up` first)
+#   make dev       — install deps, start backend + frontend in background
+#   make stop      — stop backend + frontend dev servers
 #   make test      — run all backend unit tests + import-linter
 #   make nuke      — destroy everything (volumes, containers) and start fresh
 #   make restart   — nuke + up + dev
@@ -19,8 +20,9 @@ endif
 
 BACKEND  := cd backend
 FRONTEND := cd frontend
+LOGDIR   := .logs
 
-.PHONY: help up down install dev dev-be dev-fe migrate test lint nuke restart status logs
+.PHONY: help up down install dev dev-be dev-fe stop migrate test test-api test-all lint nuke restart status logs logs-dev
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -53,18 +55,50 @@ install: ## Install all dependencies (backend + frontend)
 
 # ── Development Servers ────────────────────────────────────────
 
-dev: install ## Install deps, then start backend + frontend (requires `make up` first)
-	@echo "Starting backend on :8000 and frontend on :3000..."
-	@trap 'kill 0' INT TERM; \
-		($(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000) & \
-		($(FRONTEND) && pnpm dev) & \
-		wait
+dev: install stop ## Install deps, stop old instances, start backend + frontend
+	@mkdir -p $(LOGDIR)
+	@echo "Starting backend on :8000..."
+	@nohup sh -c '$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000' \
+		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
+	@echo "Starting frontend on :3000..."
+	@nohup sh -c '$(FRONTEND) && pnpm dev' \
+		> $(LOGDIR)/frontend.log 2>&1 & echo "$$!" > $(LOGDIR)/frontend.pid
+	@sleep 1
+	@echo ""
+	@echo "  Backend:  http://localhost:8000  (PID $$(cat $(LOGDIR)/backend.pid))"
+	@echo "  Frontend: http://localhost:3000  (PID $$(cat $(LOGDIR)/frontend.pid))"
+	@echo ""
+	@echo "  make logs-dev  — tail server output"
+	@echo "  make stop      — stop both servers"
 
 dev-be: ## Start backend only
-	$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000
+	@mkdir -p $(LOGDIR)
+	@nohup sh -c '$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000' \
+		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
+	@echo "Backend started on :8000 (PID $$(cat $(LOGDIR)/backend.pid))"
 
 dev-fe: ## Start frontend only
-	$(FRONTEND) && pnpm dev
+	@mkdir -p $(LOGDIR)
+	@nohup sh -c '$(FRONTEND) && pnpm dev' \
+		> $(LOGDIR)/frontend.log 2>&1 & echo "$$!" > $(LOGDIR)/frontend.pid
+	@echo "Frontend started on :3000 (PID $$(cat $(LOGDIR)/frontend.pid))"
+
+stop: ## Stop backend + frontend dev servers
+	@if [ -f $(LOGDIR)/backend.pid ] && kill -0 $$(cat $(LOGDIR)/backend.pid) 2>/dev/null; then \
+		kill $$(cat $(LOGDIR)/backend.pid) 2>/dev/null; \
+		echo "Backend stopped (PID $$(cat $(LOGDIR)/backend.pid))"; \
+	fi
+	@if [ -f $(LOGDIR)/frontend.pid ] && kill -0 $$(cat $(LOGDIR)/frontend.pid) 2>/dev/null; then \
+		kill $$(cat $(LOGDIR)/frontend.pid) 2>/dev/null; \
+		echo "Frontend stopped (PID $$(cat $(LOGDIR)/frontend.pid))"; \
+	fi
+	@rm -f $(LOGDIR)/backend.pid $(LOGDIR)/frontend.pid
+	@lsof -ti:8000 | xargs kill 2>/dev/null || true
+	@lsof -ti:3000 | xargs kill 2>/dev/null || true
+
+logs-dev: ## Tail dev server logs
+	@tail -f $(LOGDIR)/backend.log $(LOGDIR)/frontend.log 2>/dev/null || \
+		echo "No logs found. Run 'make dev' first."
 
 migrate: ## Run Alembic migrations
 	$(BACKEND) && uv run alembic upgrade head
@@ -85,8 +119,9 @@ lint: ## Run import-linter only
 
 # ── Cleanup ────────────────────────────────────────────────────
 
-nuke: ## Destroy containers, volumes, and all data
+nuke: stop ## Destroy containers, volumes, and all data
 	docker compose down -v --remove-orphans
+	rm -rf $(LOGDIR)
 	@echo "All containers and volumes removed"
 
 restart: nuke up dev ## Nuke + start fresh + dev servers

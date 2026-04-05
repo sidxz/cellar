@@ -36,6 +36,10 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 
+# Dev server logs/pids
+.logs/
+.pids/
+
 # IDE
 .vscode/
 .idea/
