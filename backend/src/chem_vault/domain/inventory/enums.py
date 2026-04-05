@@ -75,6 +75,30 @@ class ShipmentStatus(StrEnum):
     RETURNED = "returned"
 
 
+class SynthesisRequestStatus(StrEnum):
+    """10-state lifecycle of a synthesis request."""
+
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    ASSIGNED = "assigned"
+    IN_PROGRESS = "in_progress"
+    SYNTHESIS_COMPLETE = "synthesis_complete"
+    FULFILLED = "fulfilled"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class FeasibilityStatus(StrEnum):
+    """Chemist's feasibility assessment."""
+
+    FEASIBLE = "feasible"
+    CHALLENGING = "challenging"
+    INFEASIBLE = "infeasible"
+    ALTERNATIVE_PROPOSED = "alternative_proposed"
+
+
 # Valid parent types for each location type
 VALID_PARENT_TYPES: dict[StorageLocationType, set[StorageLocationType | None]] = {
     StorageLocationType.SITE: {None},

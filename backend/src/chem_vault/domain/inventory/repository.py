@@ -10,6 +10,7 @@ from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.inventory.sample_request import SampleRequest
 from chem_vault.domain.inventory.shipment import Shipment
 from chem_vault.domain.inventory.storage_location import StorageLocation
+from chem_vault.domain.inventory.synthesis_request import SynthesisRequest
 from chem_vault.domain.shared.value_objects import BatchNumber
 
 
@@ -83,3 +84,17 @@ class ShipmentRepository(Protocol):
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[Shipment]: ...
     async def save(self, aggregate: Shipment) -> None: ...
+
+
+@runtime_checkable
+class SynthesisRequestRepository(Protocol):
+    """Repository for SynthesisRequest aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> SynthesisRequest | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, status: str | None = None
+    ) -> list[SynthesisRequest]: ...
+    async def find_by_molecule(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+    ) -> list[SynthesisRequest]: ...
+    async def save(self, aggregate: SynthesisRequest) -> None: ...

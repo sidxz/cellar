@@ -139,3 +139,62 @@ class ShipmentShipped(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class ShipmentDelivered(DomainEvent):
     received_date: str
+
+
+# ---------------------------------------------------------------------------
+# Synthesis request events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRequested(DomainEvent):
+    molecule_id: uuid.UUID
+    requester_id: uuid.UUID
+    requested_amount: float
+    amount_unit: str
+    priority: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRequestApproved(DomainEvent):
+    approved_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRequestRejected(DomainEvent):
+    rejected_by: uuid.UUID
+    reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRequestAssigned(DomainEvent):
+    assignment_type: str
+    assigned_to: uuid.UUID | None = None
+    assigned_org_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisStarted(DomainEvent):
+    proposed_route_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisFeasibilityFlagged(DomainEvent):
+    feasibility_status: str
+    feasibility_notes: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisCompleted(DomainEvent):
+    actual_cost_value: float | None = None
+    actual_cost_unit: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisFailed(DomainEvent):
+    failure_reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRequestFulfilled(DomainEvent):
+    fulfilled_batch_id: uuid.UUID
