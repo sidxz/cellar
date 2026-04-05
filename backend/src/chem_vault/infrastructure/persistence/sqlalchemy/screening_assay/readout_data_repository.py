@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.shared.enums import Qualifier
@@ -41,6 +41,97 @@ class SQLAlchemyReadoutDataRepository:
         )
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def find_by_molecule(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+    ) -> list[ReadoutData]:
+        """All non-outlier readout data for a molecule, ordered by created_at desc."""
+        stmt = (
+            select(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.molecule_id == molecule_id,
+                ReadoutDataModel.is_outlier == False,  # noqa: E712
+            )
+            .order_by(ReadoutDataModel.created_at.desc())
+        )
+        result = await self._uow.session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def find_aggregated_by_molecules(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        readout_definition_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, dict[uuid.UUID, "AggregatedReadout"]]:
+        """Batch query: molecule_id -> readout_def_id -> aggregated value.
+
+        Aggregation method comes from readout_definition.aggregation setting.
+        """
+        from chem_vault.domain.screening_assay.activity_types import AggregatedReadout
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+            ReadoutDefinitionModel,
+        )
+
+        if not molecule_ids or not readout_definition_ids:
+            return {}
+
+        stmt = (
+            select(
+                ReadoutDataModel.molecule_id,
+                ReadoutDataModel.readout_definition_id,
+                ReadoutDefinitionModel.name.label("readout_name"),
+                ReadoutDefinitionModel.aggregation,
+                ReadoutDefinitionModel.unit,
+                func.avg(ReadoutDataModel.value_numeric).label("avg_val"),
+                func.min(ReadoutDataModel.value_numeric).label("min_val"),
+                func.max(ReadoutDataModel.value_numeric).label("max_val"),
+                func.count(ReadoutDataModel.value_numeric).label("count_val"),
+            )
+            .join(
+                ReadoutDefinitionModel,
+                ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+            )
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.molecule_id.in_(molecule_ids),
+                ReadoutDataModel.readout_definition_id.in_(readout_definition_ids),
+                ReadoutDataModel.is_outlier == False,  # noqa: E712
+            )
+            .group_by(
+                ReadoutDataModel.molecule_id,
+                ReadoutDataModel.readout_definition_id,
+                ReadoutDefinitionModel.name,
+                ReadoutDefinitionModel.aggregation,
+                ReadoutDefinitionModel.unit,
+            )
+        )
+
+        result = await self._uow.session.execute(stmt)
+        rows = result.all()
+
+        out: dict[uuid.UUID, dict[uuid.UUID, AggregatedReadout]] = {}
+        for row in rows:
+            agg = row.aggregation or "mean"
+            if agg == "min":
+                val = row.min_val
+            elif agg == "max":
+                val = row.max_val
+            else:  # mean, none, median (approx as mean)
+                val = row.avg_val
+
+            entry = AggregatedReadout(
+                readout_definition_id=row.readout_definition_id,
+                readout_name=row.readout_name,
+                value=val,
+                qualifier=None,
+                unit=row.unit,
+                aggregation=agg,
+                data_point_count=row.count_val,
+            )
+            out.setdefault(row.molecule_id, {})[row.readout_definition_id] = entry
+
+        return out
 
     async def save(self, entity: ReadoutData) -> None:
         model = self._to_model(entity)
