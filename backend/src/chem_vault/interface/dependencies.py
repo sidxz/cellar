@@ -72,6 +72,13 @@ from chem_vault.application.research_organization.get_saved_search import GetSav
 from chem_vault.application.research_organization.update_collection import UpdateCollection
 from chem_vault.application.research_organization.update_project import UpdateProject
 from chem_vault.application.research_organization.update_saved_search import UpdateSavedSearch
+from chem_vault.application.screening.plate_templates import (
+    CreatePlateTemplate,
+    DeletePlateTemplate,
+    GetPlateTemplate,
+    ListPlateTemplates,
+    UpdatePlateTemplate,
+)
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
@@ -255,6 +262,13 @@ BulkCreateReadoutDataDep = Annotated[BulkCreateReadoutData, Depends(_get_use_cas
 ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(ListReadoutDataByRun))]
 CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
 ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]
+
+# --- Plate Template dependencies ---
+CreatePlateTemplateDep = Annotated[CreatePlateTemplate, Depends(_get_use_case(CreatePlateTemplate))]
+UpdatePlateTemplateDep = Annotated[UpdatePlateTemplate, Depends(_get_use_case(UpdatePlateTemplate))]
+DeletePlateTemplateDep = Annotated[DeletePlateTemplate, Depends(_get_use_case(DeletePlateTemplate))]
+GetPlateTemplateDep = Annotated[GetPlateTemplate, Depends(_get_use_case(GetPlateTemplate))]
+ListPlateTemplatesDep = Annotated[ListPlateTemplates, Depends(_get_use_case(ListPlateTemplates))]
 
 # --- Research Organization dependencies ---
 CreateProjectDep = Annotated[CreateProject, Depends(_get_use_case(CreateProject))]

@@ -42,6 +42,11 @@ class SQLAlchemyPlateTemplateRepository:
         model = self._to_model(entity)
         await self._uow.session.merge(model)
 
+    async def delete(self, id: uuid.UUID) -> None:
+        model = await self._uow.session.get(PlateTemplateModel, id)
+        if model is not None:
+            await self._uow.session.delete(model)
+
     # ------------------------------------------------------------------
     # Mapping
     # ------------------------------------------------------------------

@@ -82,6 +82,13 @@ from chem_vault.application.inventory.manage_storage import (
     ListStorageLocations,
 )
 from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
+from chem_vault.application.screening.plate_templates import (
+    CreatePlateTemplate,
+    DeletePlateTemplate,
+    GetPlateTemplate,
+    ListPlateTemplates,
+    UpdatePlateTemplate,
+)
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
@@ -141,6 +148,7 @@ from chem_vault.domain.inventory.repository import BatchRepository, SampleReposi
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
+    PlateTemplateRepository,
     ProtocolRepository,
     ReadoutDataRepository,
     RunRepository,
@@ -219,6 +227,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.storage_location
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_repository import (
     SQLAlchemySynthesisRequestRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.plate_template_repository import (
+    SQLAlchemyPlateTemplateRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
@@ -871,6 +882,21 @@ def create_container(
 
     container.define(CreateDoseResponseCurve, _dose_response_create)
     container.define(ListDoseResponseByRun, _dose_response_query(ListDoseResponseByRun))
+
+    # --- Plate Templates ---
+    def _pt_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyPlateTemplateRepository(uow))
+        return _f
+
+    _pt_query = _pt_cmd  # Same signature — uow + repo, no dispatcher
+
+    container.define(CreatePlateTemplate, _pt_cmd(CreatePlateTemplate))
+    container.define(UpdatePlateTemplate, _pt_cmd(UpdatePlateTemplate))
+    container.define(DeletePlateTemplate, _pt_cmd(DeletePlateTemplate))
+    container.define(GetPlateTemplate, _pt_query(GetPlateTemplate))
+    container.define(ListPlateTemplates, _pt_query(ListPlateTemplates))
 
     # --- Research Organization ---
     def _project_cmd(uc_cls):  # type: ignore[no-untyped-def]
