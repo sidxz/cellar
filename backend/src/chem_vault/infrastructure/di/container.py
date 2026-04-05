@@ -48,6 +48,21 @@ from chem_vault.application.inventory.shipments import (
     ReturnShipment,
     ShipShipment,
 )
+from chem_vault.application.inventory.synthesis_requests import (
+    ApproveSynthesisRequest as ApproveSynthReq,
+    AssignSynthesisRequest as AssignSynthReq,
+    CancelSynthesisRequest as CancelSynthReq,
+    CompleteSynthesis,
+    CreateSynthesisRequest as CreateSynthReq,
+    FailSynthesis,
+    FlagInfeasible,
+    FulfillSynthesisRequest as FulfillSynthReq,
+    GetSynthesisRequest as GetSynthReq,
+    ListSynthesisRequests as ListSynthReqs,
+    RejectSynthesisRequest as RejectSynthReq,
+    StartSynthesis,
+    SubmitSynthesisRequest as SubmitSynthReq,
+)
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import AliquotSample, ClearQuarantineSample, DisposeSample, MoveSample, QuarantineSample
@@ -113,7 +128,7 @@ from chem_vault.application.workspace_config.update_vocabulary import UpdateVoca
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
 from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository, SynthesisRouteRepository
-from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, SampleRequestRepository, ShipmentRepository, StorageLocationRepository
+from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, SampleRequestRepository, ShipmentRepository, StorageLocationRepository, SynthesisRequestRepository
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
@@ -164,6 +179,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.shipment_reposit
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
     SQLAlchemyStorageLocationRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_repository import (
+    SQLAlchemySynthesisRequestRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
@@ -649,6 +667,33 @@ def create_container(
     container.define(DeliverShipment, _shipment_cmd(DeliverShipment))
     container.define(ReturnShipment, _shipment_cmd(ReturnShipment))
     container.define(AddShipmentItem, _shipment_cmd(AddShipmentItem))
+
+    # --- Synthesis Requests ---
+    def _synth_req_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySynthesisRequestRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _synth_req_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySynthesisRequestRepository(uow))
+        return _f
+
+    container.define(CreateSynthReq, _synth_req_cmd(CreateSynthReq))
+    container.define(SubmitSynthReq, _synth_req_cmd(SubmitSynthReq))
+    container.define(ApproveSynthReq, _synth_req_cmd(ApproveSynthReq))
+    container.define(RejectSynthReq, _synth_req_cmd(RejectSynthReq))
+    container.define(AssignSynthReq, _synth_req_cmd(AssignSynthReq))
+    container.define(StartSynthesis, _synth_req_cmd(StartSynthesis))
+    container.define(FlagInfeasible, _synth_req_cmd(FlagInfeasible))
+    container.define(CompleteSynthesis, _synth_req_cmd(CompleteSynthesis))
+    container.define(FulfillSynthReq, _synth_req_cmd(FulfillSynthReq))
+    container.define(FailSynthesis, _synth_req_cmd(FailSynthesis))
+    container.define(CancelSynthReq, _synth_req_cmd(CancelSynthReq))
+    container.define(GetSynthReq, _synth_req_query(GetSynthReq))
+    container.define(ListSynthReqs, _synth_req_query(ListSynthReqs))
 
     # --- Screening ---
     def _protocol_cmd(uc_cls):  # type: ignore[no-untyped-def]
