@@ -36,6 +36,9 @@ export function ExportToolbar({ gridRef, filename }: ExportToolbarProps) {
       const data = node.data as Record<string, unknown>;
       const row = fields.map((field) => {
         const value = data[field];
+        if (value !== null && value !== undefined && typeof value === "object") {
+          return JSON.stringify(value);
+        }
         return value ?? "";
       });
       rows.push(row);
