@@ -61,6 +61,9 @@ class RegisterMolecule:
 
     For undisclosed (smiles is None):
       ID dedup only -> create
+
+    Names are always auto-promoted to custom identifiers and subject to
+    workspace-unique enforcement (per US-001 design guardrails).
     """
 
     def __init__(
@@ -87,6 +90,78 @@ class RegisterMolecule:
                 return await self._register_disclosed(input)
             return await self._register_undisclosed(input)
 
+    def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
+        """Collect name + all external IDs into a single set for batch lookup."""
+        ids = {ext.identifier for ext in input.external_ids}
+        if input.name:
+            ids.add(input.name)
+        return ids
+
+    async def _check_identifier_conflicts(
+        self,
+        input: RegisterMoleculeCommand,
+        allowed_molecule_id: uuid.UUID | None,
+    ) -> Result[None, DomainError]:
+        """Batch-check all identifiers (name + external_ids) for conflicts.
+
+        If allowed_molecule_id is set, identifiers already on that molecule
+        are not considered conflicts (duplicate detection case).
+        """
+        all_ids = self._collect_all_identifiers(input)
+        if not all_ids:
+            return Success(None)
+
+        existing_map = await self._repo.find_identifiers_in_workspace(
+            input.workspace_id, all_ids
+        )
+
+        for identifier, owner_id in existing_map.items():
+            if allowed_molecule_id is not None and owner_id == allowed_molecule_id:
+                continue  # already on the target molecule — not a conflict
+            return Failure(
+                ConflictError(
+                    f"Identifier '{identifier}' is already assigned to another molecule"
+                )
+            )
+
+        return Success(None)
+
+    def _add_name_and_ids(
+        self,
+        mol: Molecule,
+        input: RegisterMoleculeCommand,
+        source: str,
+    ) -> None:
+        """Add name as custom identifier + all external_ids to molecule."""
+        existing_values = {i.identifier for i in mol.identifiers}
+
+        # Auto-promote name as custom identifier
+        if input.name and input.name not in existing_values:
+            mol.add_identifier(
+                MoleculeIdentifier.create(
+                    molecule_id=mol.id,
+                    identifier=input.name,
+                    identifier_type=IdentifierType.CUSTOM,
+                    source=f"Registration ({source})",
+                    registered_by=input.registered_by,
+                )
+            )
+            existing_values.add(input.name)
+
+        # Add explicit external IDs
+        for ext_id in input.external_ids:
+            if ext_id.identifier not in existing_values:
+                mol.add_identifier(
+                    MoleculeIdentifier.create(
+                        molecule_id=mol.id,
+                        identifier=ext_id.identifier,
+                        identifier_type=IdentifierType(ext_id.identifier_type),
+                        source=f"Registration ({source})",
+                        registered_by=input.registered_by,
+                    )
+                )
+                existing_values.add(ext_id.identifier)
+
     async def _register_disclosed(
         self, input: RegisterMoleculeCommand
     ) -> Result[RegistrationOutcome, DomainError]:
@@ -111,46 +186,17 @@ class RegisterMolecule:
             input.workspace_id, inchi_key
         )
 
-        # 3. Check external IDs
-        for ext_id in input.external_ids:
-            existing_by_id = await self._repo.find_by_identifier(
-                input.workspace_id, ext_id.identifier
-            )
-            if existing_by_id is not None:
-                if existing_by_inchi is None:
-                    # InChIKey not found but ID exists on different molecule -> CONFLICT
-                    return Failure(
-                        ConflictError(
-                            f"Identifier '{ext_id.identifier}' is already assigned "
-                            f"to molecule '{existing_by_id.registration_number.value}'"
-                        )
-                    )
-                if existing_by_id.id != existing_by_inchi.id:
-                    # InChIKey matches mol A, ID matches mol B -> CONFLICT
-                    return Failure(
-                        ConflictError(
-                            f"Identifier '{ext_id.identifier}' belongs to molecule "
-                            f"'{existing_by_id.registration_number.value}' but InChIKey "
-                            f"matches '{existing_by_inchi.registration_number.value}'"
-                        )
-                    )
+        # 3. Batch-check all identifiers (name + external_ids) for conflicts
+        conflict_check = await self._check_identifier_conflicts(
+            input,
+            allowed_molecule_id=existing_by_inchi.id if existing_by_inchi else None,
+        )
+        if isinstance(conflict_check, Failure):
+            return conflict_check  # type: ignore[return-value]
 
+        # 4a. Duplicate InChIKey — add identifiers to existing molecule
         if existing_by_inchi is not None:
-            # Existing molecule — add IDs, return as existing
-            for ext_id in input.external_ids:
-                has_id = any(
-                    i.identifier == ext_id.identifier for i in existing_by_inchi.identifiers
-                )
-                if not has_id:
-                    existing_by_inchi.add_identifier(
-                        MoleculeIdentifier.create(
-                            molecule_id=existing_by_inchi.id,
-                            identifier=ext_id.identifier,
-                            identifier_type=IdentifierType(ext_id.identifier_type),
-                            source="Registration (duplicate)",
-                            registered_by=input.registered_by,
-                        )
-                    )
+            self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
             await self._repo.save(existing_by_inchi)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -160,7 +206,7 @@ class RegisterMolecule:
                 )
             )
 
-        # New molecule
+        # 4b. New molecule
         reg_number = await self._repo.next_registration_number(input.workspace_id)
         mol = Molecule.register_disclosed(
             workspace_id=input.workspace_id,
@@ -172,17 +218,7 @@ class RegisterMolecule:
             originating_org_id=input.originating_org_id,
             custom_fields=input.custom_fields,
         )
-
-        for ext_id in input.external_ids:
-            mol.add_identifier(
-                MoleculeIdentifier.create(
-                    molecule_id=mol.id,
-                    identifier=ext_id.identifier,
-                    identifier_type=IdentifierType(ext_id.identifier_type),
-                    source="User registration",
-                    registered_by=input.registered_by,
-                )
-            )
+        self._add_name_and_ids(mol, input, source="name")
 
         await self._repo.save(mol)
         events = await self._uow.commit()
@@ -194,49 +230,43 @@ class RegisterMolecule:
     async def _register_undisclosed(
         self, input: RegisterMoleculeCommand
     ) -> Result[RegistrationOutcome, DomainError]:
-        # Phase 1: Check ALL IDs for conflicts before acting
+        # 1. Batch-check all identifiers (name + external_ids)
+        all_ids = self._collect_all_identifiers(input)
+        existing_map = await self._repo.find_identifiers_in_workspace(
+            input.workspace_id, all_ids
+        )
+
+        # 2. Determine if any existing molecule is matched
         matched_molecule: Molecule | None = None
-        for ext_id in input.external_ids:
-            existing = await self._repo.find_by_identifier(
-                input.workspace_id, ext_id.identifier
-            )
-            if existing is None:
-                continue
-            if existing.structure_status.value == "disclosed":
+        matched_id: uuid.UUID | None = None
+
+        for identifier, owner_id in existing_map.items():
+            if matched_id is None:
+                matched_id = owner_id
+            elif owner_id != matched_id:
                 return Failure(
                     ConflictError(
-                        f"Identifier '{ext_id.identifier}' belongs to disclosed "
-                        f"molecule '{existing.registration_number.value}'"
-                    )
-                )
-            if matched_molecule is None:
-                matched_molecule = existing
-            elif existing.id != matched_molecule.id:
-                # Two IDs point to different undisclosed molecules — conflict
-                return Failure(
-                    ConflictError(
-                        f"Identifiers map to different molecules: "
-                        f"'{matched_molecule.registration_number.value}' and "
-                        f"'{existing.registration_number.value}'"
+                        f"Identifiers map to different molecules"
                     )
                 )
 
-        # Phase 2: If matched an existing undisclosed molecule, add new IDs
-        if matched_molecule is not None:
-            for ext_id in input.external_ids:
-                has_id = any(
-                    i.identifier == ext_id.identifier for i in matched_molecule.identifiers
+        if matched_id is not None:
+            matched_molecule = await self._repo.find_by_id(matched_id)
+            if matched_molecule is not None and matched_molecule.structure_status.value == "disclosed":
+                # One of our identifiers/name is claimed by a disclosed molecule
+                conflict_id = next(
+                    k for k, v in existing_map.items() if v == matched_id
                 )
-                if not has_id:
-                    matched_molecule.add_identifier(
-                        MoleculeIdentifier.create(
-                            molecule_id=matched_molecule.id,
-                            identifier=ext_id.identifier,
-                            identifier_type=IdentifierType(ext_id.identifier_type),
-                            source="Registration (duplicate)",
-                            registered_by=input.registered_by,
-                        )
+                return Failure(
+                    ConflictError(
+                        f"Identifier '{conflict_id}' belongs to disclosed "
+                        f"molecule '{matched_molecule.registration_number.value}'"
                     )
+                )
+
+        # 3a. Matched existing undisclosed — add new IDs
+        if matched_molecule is not None:
+            self._add_name_and_ids(matched_molecule, input, source="duplicate")
             await self._repo.save(matched_molecule)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -244,7 +274,14 @@ class RegisterMolecule:
                 RegistrationOutcome(molecule=matched_molecule, is_new=False)
             )
 
-        # New undisclosed molecule
+        # 3b. Check for conflicts on identifiers not in existing_map
+        #     (name might conflict with a different molecule's identifier)
+        if existing_map:
+            # All conflicts already handled above — only reached here if
+            # all existing_map entries point to the same matched molecule.
+            pass
+
+        # 4. New undisclosed molecule
         reg_number = await self._repo.next_registration_number(input.workspace_id)
         mol = Molecule.register_undisclosed(
             workspace_id=input.workspace_id,
@@ -254,17 +291,7 @@ class RegisterMolecule:
             originating_org_id=input.originating_org_id,
             custom_fields=input.custom_fields,
         )
-
-        for ext_id in input.external_ids:
-            mol.add_identifier(
-                MoleculeIdentifier.create(
-                    molecule_id=mol.id,
-                    identifier=ext_id.identifier,
-                    identifier_type=IdentifierType(ext_id.identifier_type),
-                    source="User registration",
-                    registered_by=input.registered_by,
-                )
-            )
+        self._add_name_and_ids(mol, input, source="name")
 
         await self._repo.save(mol)
         events = await self._uow.commit()

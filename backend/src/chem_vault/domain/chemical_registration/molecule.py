@@ -467,6 +467,13 @@ class Molecule(AggregateRoot):
         self.identifiers.append(identifier)
         self.updated_at = datetime.now(UTC)
 
+    def clear_identifiers(self) -> None:
+        """Remove all identifiers. Used during merge to avoid unique constraint
+        violations when identifiers are transferred to the target molecule."""
+        self._guard_tombstone()
+        self.identifiers.clear()
+        self.updated_at = datetime.now(UTC)
+
     def remove_identifier(self, identifier_id: uuid.UUID) -> None:
         """Remove an identifier by ID."""
         self._guard_tombstone()

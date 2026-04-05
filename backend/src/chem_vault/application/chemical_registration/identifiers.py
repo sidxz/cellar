@@ -16,7 +16,7 @@ from chem_vault.domain.chemical_registration.enums import IdentifierType
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +76,18 @@ class AddIdentifier:
             mol = await self._repo.find_by_id(input.molecule_id)
             if mol is None or mol.workspace_id != input.workspace_id:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
+
+            # Workspace-unique check: identifier must not exist on another molecule
+            existing = await self._repo.find_by_identifier(
+                input.workspace_id, input.identifier
+            )
+            if existing is not None and existing.id != mol.id:
+                return Failure(
+                    ConflictError(
+                        f"Identifier '{input.identifier}' is already assigned to "
+                        f"molecule '{existing.registration_number.value}'"
+                    )
+                )
 
             try:
                 identifier = MoleculeIdentifier.create(

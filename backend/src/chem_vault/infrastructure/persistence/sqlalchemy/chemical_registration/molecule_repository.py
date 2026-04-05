@@ -161,7 +161,7 @@ class SQLAlchemyMoleculeRepository(
         )
         self._set_structure_fields(model, aggregate)
         self._set_optional_fields(model, aggregate)
-        model.identifiers = [self._ident_to_model(i) for i in aggregate.identifiers]
+        model.identifiers = [self._ident_to_model(i, aggregate.workspace_id) for i in aggregate.identifiers]
         model.mixture_components = [self._comp_to_model(c) for c in aggregate.mixture_components]
         return model
 
@@ -182,7 +182,7 @@ class SQLAlchemyMoleculeRepository(
         # Sync identifiers (replace strategy for simplicity)
         model.identifiers.clear()
         model.identifiers.extend(
-            self._ident_to_model(i) for i in aggregate.identifiers
+            self._ident_to_model(i, aggregate.workspace_id) for i in aggregate.identifiers
         )
         model.mixture_components.clear()
         model.mixture_components.extend(
@@ -235,10 +235,11 @@ class SQLAlchemyMoleculeRepository(
         model.merged_into_id = aggregate.merged_into_id
 
     @staticmethod
-    def _ident_to_model(ident: MoleculeIdentifier) -> MoleculeIdentifierModel:
+    def _ident_to_model(ident: MoleculeIdentifier, workspace_id: uuid.UUID) -> MoleculeIdentifierModel:
         return MoleculeIdentifierModel(
             id=ident.id,
             molecule_id=ident.molecule_id,
+            workspace_id=workspace_id,
             identifier=ident.identifier,
             identifier_type=ident.identifier_type.value,
             source=ident.source,
@@ -308,6 +309,25 @@ class SQLAlchemyMoleculeRepository(
         domain = self._to_domain(model)
         self._uow.track(domain)
         return domain
+
+    async def find_identifiers_in_workspace(
+        self, workspace_id: uuid.UUID, identifiers: set[str]
+    ) -> dict[str, uuid.UUID]:
+        """Batch lookup: returns {identifier_value: molecule_id} for all matches."""
+        if not identifiers:
+            return {}
+        stmt = (
+            select(
+                MoleculeIdentifierModel.identifier,
+                MoleculeIdentifierModel.molecule_id,
+            )
+            .where(
+                MoleculeIdentifierModel.workspace_id == workspace_id,
+                MoleculeIdentifierModel.identifier.in_(identifiers),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return {row[0]: row[1] for row in result}
 
     async def find_active(
         self,

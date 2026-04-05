@@ -32,6 +32,10 @@ class MoleculeRepository(Protocol):
         self, workspace_id: uuid.UUID, identifier: str
     ) -> Molecule | None: ...
 
+    async def find_identifiers_in_workspace(
+        self, workspace_id: uuid.UUID, identifiers: set[str]
+    ) -> dict[str, uuid.UUID]: ...
+
     async def find_active(
         self,
         workspace_id: uuid.UUID,

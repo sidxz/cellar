@@ -130,12 +130,12 @@ class MergeService:
             )
             await self._merge_event_repo.save(merge_event)
 
-            # --- Transfer registration number as legacy identifier ---
+            # --- Transfer ALL identifiers from source to target ---
+            target_ident_values = {i.identifier for i in target.identifiers}
             reg_value = source.registration_number.value
-            already_has = any(
-                ident.identifier == reg_value for ident in target.identifiers
-            )
-            if not already_has:
+
+            # 1. Registration number as internal_legacy
+            if reg_value not in target_ident_values:
                 target.add_identifier(
                     MoleculeIdentifier.create(
                         molecule_id=target.id,
@@ -145,6 +145,25 @@ class MergeService:
                         registered_by=input.merged_by,
                     )
                 )
+                target_ident_values.add(reg_value)
+
+            # 2. All other source identifiers (vendor_id, cas, custom, etc.)
+            for source_ident in source.identifiers:
+                if source_ident.identifier not in target_ident_values:
+                    target.add_identifier(
+                        MoleculeIdentifier.create(
+                            molecule_id=target.id,
+                            identifier=source_ident.identifier,
+                            identifier_type=source_ident.identifier_type,
+                            source=f"Merge transfer from {reg_value}",
+                            registered_by=input.merged_by,
+                        )
+                    )
+                    target_ident_values.add(source_ident.identifier)
+
+            # 3. Clear source identifiers BEFORE tombstoning to avoid
+            #    UNIQUE(workspace_id, identifier) constraint violation.
+            source.clear_identifiers()
 
             # --- Side effects (e.g., re-point Batch FKs) ---
             await self._side_effect_registry.execute_all(

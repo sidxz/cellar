@@ -128,13 +128,14 @@ class MoleculeIdentifierModel(Base, EntityModelMixin):
     molecule_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("molecules.id", ondelete="CASCADE"), nullable=False
     )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     identifier: Mapped[str] = mapped_column(String(255), nullable=False)
     identifier_type: Mapped[str] = mapped_column(String(50), nullable=False)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
     registered_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("molecule_id", "identifier", name="uq_mol_ident"),
+        UniqueConstraint("workspace_id", "identifier", name="uq_ws_identifier"),
     )
 
 
