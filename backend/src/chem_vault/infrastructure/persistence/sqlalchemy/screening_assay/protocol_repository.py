@@ -86,6 +86,12 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             protocols.append(domain)
         return protocols
 
+    async def delete(self, id: uuid.UUID) -> None:
+        """Delete a protocol by ID (only for DRAFT protocols)."""
+        model = await self._session.get(ProtocolModel, id)
+        if model is not None:
+            await self._session.delete(model)
+
     # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate
     # ------------------------------------------------------------------

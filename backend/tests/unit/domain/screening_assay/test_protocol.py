@@ -584,8 +584,8 @@ class TestProtocolVersioning:
         service = ProtocolVersioningService()
         new_version = service.create_new_version(protocol)
 
-        # Parent is retired
-        assert protocol.status == ProtocolStatus.RETIRED
+        # Parent stays ACTIVE — only retired when new version is published
+        assert protocol.status == ProtocolStatus.ACTIVE
 
         # New version fields
         assert new_version.protocol_version == 2
@@ -607,10 +607,9 @@ class TestProtocolVersioning:
         service = ProtocolVersioningService()
         new_version = service.create_new_version(protocol)
 
-        # Parent should have ProtocolRetired event
+        # Parent has NO events — it's not retired yet
         parent_events = protocol.collect_events()
-        assert len(parent_events) == 1
-        assert isinstance(parent_events[0], ProtocolRetired)
+        assert len(parent_events) == 0
 
         # New version should have ProtocolVersionCreated event
         new_events = new_version.collect_events()

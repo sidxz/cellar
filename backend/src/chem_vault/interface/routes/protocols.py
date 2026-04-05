@@ -14,7 +14,14 @@ from chem_vault.application.screening.create_target import CreateTarget, CreateT
 from chem_vault.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
 from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
-from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
+from chem_vault.application.screening.manage_protocol import (
+    DeleteProtocol,
+    PublishProtocol,
+    RetireProtocol,
+    UpdateProtocol,
+    UpdateProtocolCommand,
+    VersionProtocol,
+)
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
@@ -199,6 +206,12 @@ def _retire_protocol(c: Annotated[Container, Depends(get_container)]) -> RetireP
 def _version_protocol(c: Annotated[Container, Depends(get_container)]) -> VersionProtocol:
     return c[VersionProtocol]
 
+def _update_protocol(c: Annotated[Container, Depends(get_container)]) -> UpdateProtocol:
+    return c[UpdateProtocol]
+
+def _delete_protocol(c: Annotated[Container, Depends(get_container)]) -> DeleteProtocol:
+    return c[DeleteProtocol]
+
 def _create_target(c: Annotated[Container, Depends(get_container)]) -> CreateTarget:
     return c[CreateTarget]
 
@@ -289,6 +302,44 @@ async def version_protocol(
 ) -> ProtocolResponse:
     result = await uc(protocol_id, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
+
+
+class UpdateProtocolRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    target_id: str | None = None
+    category: str | None = None
+
+
+@router.patch("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])
+async def update_protocol(
+    protocol_id: uuid.UUID,
+    body: UpdateProtocolRequest,
+    auth: AuthDep,
+    uc: Annotated[UpdateProtocol, Depends(_update_protocol)],
+) -> ProtocolResponse:
+    """Update a DRAFT protocol's metadata."""
+    from chem_vault.application.shared.sentinel import UNSET
+    cmd = UpdateProtocolCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        name=body.name,
+        description=body.description if "description" in body.model_fields_set else UNSET,
+        target_id=uuid.UUID(body.target_id) if body.target_id and "target_id" in body.model_fields_set else (UNSET if "target_id" not in body.model_fields_set else None),
+        category=body.category if "category" in body.model_fields_set else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.delete("/protocols/{protocol_id}", status_code=204, tags=["protocols"])
+async def delete_protocol(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    uc: Annotated[DeleteProtocol, Depends(_delete_protocol)],
+) -> None:
+    """Delete a DRAFT protocol. Only drafts can be deleted."""
+    result_to_response(await uc(protocol_id, auth=auth))
 
 
 # ---------------------------------------------------------------------------

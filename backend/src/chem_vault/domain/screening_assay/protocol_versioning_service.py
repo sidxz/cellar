@@ -90,8 +90,8 @@ class ProtocolVersioningService:
             readout_definitions=cloned_readouts,
             condition_definitions=cloned_conditions,
         )
-        # Retire parent only after child is successfully constructed
-        parent.retire(reason=f"Superseded by version {new_protocol.protocol_version}")
+        # NOTE: Parent is NOT retired here. It stays ACTIVE until the new
+        # version is published. PublishProtocol use case retires the parent.
 
         new_protocol.register_event(
             ProtocolVersionCreated(
