@@ -47,6 +47,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from chem_vault.interface.routes.projects import router as project_router
     from chem_vault.interface.routes.collections import router as collection_router
     from chem_vault.interface.routes.saved_searches import router as saved_search_router
+    from chem_vault.interface.routes.search import router as search_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -58,6 +59,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(project_router)
     app.include_router(collection_router)
     app.include_router(saved_search_router)
+    app.include_router(search_router)
 
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth

@@ -170,6 +170,7 @@ from chem_vault.application.research_organization.collection_membership import (
 )
 from chem_vault.application.research_organization.collection_merge_side_effect import CollectionMergeSideEffect
 from chem_vault.application.research_organization.create_collection import CreateCollection
+from chem_vault.application.research_organization.execute_search import ExecuteSearch
 from chem_vault.application.research_organization.create_project import CreateProject
 from chem_vault.application.research_organization.create_saved_search import CreateSavedSearch
 from chem_vault.application.research_organization.delete_collection import DeleteCollection
@@ -984,5 +985,16 @@ def create_container(
     container.define(DeleteSavedSearch, _delete_saved_search)
     container.define(GetSavedSearch, _ss_query(GetSavedSearch))
     container.define(ListSavedSearches, _ss_query(ListSavedSearches))
+
+    # --- Execute Search ---
+    def _execute_search(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ExecuteSearch(
+            uow,
+            SQLAlchemyMoleculeRepository(uow),
+            SQLAlchemySavedSearchRepository(uow),
+        )
+
+    container.define(ExecuteSearch, _execute_search)
 
     return container

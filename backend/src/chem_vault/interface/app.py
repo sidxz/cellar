@@ -138,6 +138,9 @@ def create_app() -> FastAPI:
     app.include_router(collection_router)
     app.include_router(saved_search_router)
 
+    from chem_vault.interface.routes.search import router as search_router
+    app.include_router(search_router)
+
     from chem_vault.interface.routes.dashboard import router as dashboard_router
     app.include_router(dashboard_router)
 
