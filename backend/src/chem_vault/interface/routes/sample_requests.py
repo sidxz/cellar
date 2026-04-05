@@ -1,0 +1,221 @@
+"""SampleRequest API routes."""
+
+from __future__ import annotations
+
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from chem_vault.application.inventory.sample_requests import (
+    ApproveSampleRequest,
+    ApproveSampleRequestCommand,
+    CancelSampleRequest,
+    CancelSampleRequestCommand,
+    CreateSampleRequest,
+    CreateSampleRequestCommand,
+    FulfillSampleRequest,
+    FulfillSampleRequestCommand,
+    GetSampleRequest,
+    GetSampleRequestQuery,
+    ListSampleRequests,
+    ListSampleRequestsQuery,
+    RejectSampleRequest,
+    RejectSampleRequestCommand,
+    StartPreparingSampleRequest,
+    StartPreparingSampleRequestCommand,
+)
+from chem_vault.interface.dependencies import AuthDep, _get_use_case
+from chem_vault.interface.error_handlers import result_to_response
+
+router = APIRouter(prefix="/api/v1", tags=["sample-requests"])
+
+
+# ---------------------------------------------------------------------------
+# Response models
+# ---------------------------------------------------------------------------
+
+
+class SampleRequestResponse(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    requester_id: uuid.UUID
+    molecule_id: uuid.UUID
+    batch_id: uuid.UUID | None = None
+    amount_value: float
+    amount_unit: str
+    purpose: str
+    priority: str
+    status: str
+    assigned_to: uuid.UUID | None = None
+    fulfilled_sample_id: uuid.UUID | None = None
+    rejection_reason: str | None = None
+    fulfilled_at: str | None = None
+
+    @classmethod
+    def from_domain(cls, r) -> SampleRequestResponse:  # type: ignore[no-untyped-def]
+        return cls(
+            id=r.id,
+            workspace_id=r.workspace_id,
+            requester_id=r.requester_id,
+            molecule_id=r.molecule_id,
+            batch_id=r.batch_id,
+            amount_value=r.requested_amount.value,
+            amount_unit=r.requested_amount.unit.value,
+            purpose=r.purpose,
+            priority=r.priority.value,
+            status=r.status.value,
+            assigned_to=r.assigned_to,
+            fulfilled_sample_id=r.fulfilled_sample_id,
+            rejection_reason=r.rejection_reason,
+            fulfilled_at=r.fulfilled_at.isoformat() if r.fulfilled_at else None,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Request bodies
+# ---------------------------------------------------------------------------
+
+
+class CreateSampleRequestRequest(BaseModel):
+    molecule_id: uuid.UUID
+    batch_id: uuid.UUID | None = None
+    amount_value: float
+    amount_unit: str
+    purpose: str
+    priority: str = "routine"
+
+
+class ApproveRequest(BaseModel):
+    assigned_to: uuid.UUID | None = None
+
+
+class RejectRequest(BaseModel):
+    reason: str
+
+
+class FulfillRequest(BaseModel):
+    sample_id: uuid.UUID
+
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+
+
+CreateSampleRequestDep = Annotated[CreateSampleRequest, Depends(_get_use_case(CreateSampleRequest))]
+GetSampleRequestDep = Annotated[GetSampleRequest, Depends(_get_use_case(GetSampleRequest))]
+ListSampleRequestsDep = Annotated[ListSampleRequests, Depends(_get_use_case(ListSampleRequests))]
+ApproveSampleRequestDep = Annotated[ApproveSampleRequest, Depends(_get_use_case(ApproveSampleRequest))]
+RejectSampleRequestDep = Annotated[RejectSampleRequest, Depends(_get_use_case(RejectSampleRequest))]
+StartPreparingSampleRequestDep = Annotated[StartPreparingSampleRequest, Depends(_get_use_case(StartPreparingSampleRequest))]
+FulfillSampleRequestDep = Annotated[FulfillSampleRequest, Depends(_get_use_case(FulfillSampleRequest))]
+CancelSampleRequestDep = Annotated[CancelSampleRequest, Depends(_get_use_case(CancelSampleRequest))]
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sample-requests", response_model=SampleRequestResponse, status_code=201)
+async def create_sample_request(
+    body: CreateSampleRequestRequest, auth: AuthDep, uc: CreateSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(
+        CreateSampleRequestCommand(
+            workspace_id=auth.workspace_id,
+            requester_id=auth.user_id,
+            molecule_id=body.molecule_id,
+            batch_id=body.batch_id,
+            amount_value=body.amount_value,
+            amount_unit=body.amount_unit,
+            purpose=body.purpose,
+            priority=body.priority,
+        ),
+        auth=auth,
+    )
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.get("/sample-requests", response_model=list[SampleRequestResponse])
+async def list_sample_requests(
+    auth: AuthDep, uc: ListSampleRequestsDep, status: str | None = None
+) -> list[SampleRequestResponse]:
+    result = await uc(
+        ListSampleRequestsQuery(workspace_id=auth.workspace_id, status=status),
+        auth=auth,
+    )
+    requests = result_to_response(result)
+    return [SampleRequestResponse.from_domain(r) for r in requests]
+
+
+@router.get("/sample-requests/{request_id}", response_model=SampleRequestResponse)
+async def get_sample_request(
+    request_id: uuid.UUID, auth: AuthDep, uc: GetSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(GetSampleRequestQuery(request_id=request_id), auth=auth)
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.post("/sample-requests/{request_id}/approve", response_model=SampleRequestResponse)
+async def approve_sample_request(
+    request_id: uuid.UUID, body: ApproveRequest, auth: AuthDep, uc: ApproveSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(
+        ApproveSampleRequestCommand(request_id=request_id, assigned_to=body.assigned_to),
+        auth=auth,
+    )
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.post("/sample-requests/{request_id}/reject", response_model=SampleRequestResponse)
+async def reject_sample_request(
+    request_id: uuid.UUID, body: RejectRequest, auth: AuthDep, uc: RejectSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(
+        RejectSampleRequestCommand(request_id=request_id, reason=body.reason),
+        auth=auth,
+    )
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.post("/sample-requests/{request_id}/prepare", response_model=SampleRequestResponse)
+async def start_preparing_sample_request(
+    request_id: uuid.UUID, auth: AuthDep, uc: StartPreparingSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(
+        StartPreparingSampleRequestCommand(request_id=request_id),
+        auth=auth,
+    )
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.post("/sample-requests/{request_id}/fulfill", response_model=SampleRequestResponse)
+async def fulfill_sample_request(
+    request_id: uuid.UUID, body: FulfillRequest, auth: AuthDep, uc: FulfillSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(
+        FulfillSampleRequestCommand(request_id=request_id, sample_id=body.sample_id),
+        auth=auth,
+    )
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)
+
+
+@router.post("/sample-requests/{request_id}/cancel", response_model=SampleRequestResponse)
+async def cancel_sample_request(
+    request_id: uuid.UUID, auth: AuthDep, uc: CancelSampleRequestDep
+) -> SampleRequestResponse:
+    result = await uc(
+        CancelSampleRequestCommand(request_id=request_id),
+        auth=auth,
+    )
+    request = result_to_response(result)
+    return SampleRequestResponse.from_domain(request)

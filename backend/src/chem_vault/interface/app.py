@@ -98,6 +98,8 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.readout_data import router as readout_data_router
     from chem_vault.interface.routes.audit import router as audit_router
     from chem_vault.interface.routes.synthesis_routes import router as synth_route_router
+    from chem_vault.interface.routes.sample_requests import router as sample_request_router
+    from chem_vault.interface.routes.shipments import router as shipment_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -116,6 +118,8 @@ def create_app() -> FastAPI:
     app.include_router(readout_data_router)
     app.include_router(audit_router)
     app.include_router(synth_route_router)
+    app.include_router(sample_request_router)
+    app.include_router(shipment_router)
 
     from chem_vault.interface.routes.dashboard import router as dashboard_router
     app.include_router(dashboard_router)

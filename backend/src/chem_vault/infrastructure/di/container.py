@@ -28,6 +28,26 @@ from chem_vault.application.chemical_registration.synthesis_routes import (
 )
 from chem_vault.application.inventory.create_batch import CreateBatch
 from chem_vault.application.inventory.create_sample import CreateSample
+from chem_vault.application.inventory.sample_requests import (
+    ApproveSampleRequest,
+    CancelSampleRequest,
+    CreateSampleRequest,
+    FulfillSampleRequest,
+    GetSampleRequest,
+    ListSampleRequests,
+    RejectSampleRequest,
+    StartPreparingSampleRequest,
+)
+from chem_vault.application.inventory.shipments import (
+    AddShipmentItem,
+    CreateShipment,
+    DeliverShipment,
+    GetShipment,
+    ListShipments,
+    MarkShipmentInTransit,
+    ReturnShipment,
+    ShipShipment,
+)
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import AliquotSample, ClearQuarantineSample, DisposeSample, MoveSample, QuarantineSample
@@ -586,15 +606,49 @@ def create_container(
     container.define(ListStorageLocations, _storage_query(ListStorageLocations))
     container.define(GetStorageLocationChildren, _storage_query(GetStorageLocationChildren))
 
-    # --- Sample Requests & Shipments (repos only — use cases in S23b) ---
-    container.define(
-        SampleRequestRepository,
-        lambda c: SQLAlchemySampleRequestRepository(AsyncUnitOfWork(c[async_sessionmaker])),
-    )
-    container.define(
-        ShipmentRepository,
-        lambda c: SQLAlchemyShipmentRepository(AsyncUnitOfWork(c[async_sessionmaker])),
-    )
+    # --- Sample Requests ---
+    def _sample_request_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySampleRequestRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _sample_request_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySampleRequestRepository(uow))
+        return _f
+
+    container.define(CreateSampleRequest, _sample_request_cmd(CreateSampleRequest))
+    container.define(GetSampleRequest, _sample_request_query(GetSampleRequest))
+    container.define(ListSampleRequests, _sample_request_query(ListSampleRequests))
+    container.define(ApproveSampleRequest, _sample_request_cmd(ApproveSampleRequest))
+    container.define(RejectSampleRequest, _sample_request_cmd(RejectSampleRequest))
+    container.define(FulfillSampleRequest, _sample_request_cmd(FulfillSampleRequest))
+    container.define(CancelSampleRequest, _sample_request_cmd(CancelSampleRequest))
+    container.define(StartPreparingSampleRequest, _sample_request_cmd(StartPreparingSampleRequest))
+
+    # --- Shipments ---
+    def _shipment_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyShipmentRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _shipment_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyShipmentRepository(uow))
+        return _f
+
+    container.define(CreateShipment, _shipment_cmd(CreateShipment))
+    container.define(GetShipment, _shipment_query(GetShipment))
+    container.define(ListShipments, _shipment_query(ListShipments))
+    container.define(ShipShipment, _shipment_cmd(ShipShipment))
+    container.define(MarkShipmentInTransit, _shipment_cmd(MarkShipmentInTransit))
+    container.define(DeliverShipment, _shipment_cmd(DeliverShipment))
+    container.define(ReturnShipment, _shipment_cmd(ReturnShipment))
+    container.define(AddShipmentItem, _shipment_cmd(AddShipmentItem))
 
     # --- Screening ---
     def _protocol_cmd(uc_cls):  # type: ignore[no-untyped-def]
