@@ -125,13 +125,22 @@ def get_preferences_command(
 
 
 # Sentinel auth dependency — stable wrapper so dependency_overrides work in tests.
-# _sentinel.get_auth is a property returning a new callable each time, so we wrap it.
-_sentinel = get_sentinel()
-_sentinel_get_auth = _sentinel.get_auth  # capture once
+# Lazy init: don't crash at import time if Sentinel env vars aren't set.
+# The app will fail on the first auth-required request instead.
+try:
+    _sentinel = get_sentinel()
+    _sentinel_get_auth = _sentinel.get_auth  # capture once
+except (ValueError, Exception):
+    _sentinel = None
+    _sentinel_get_auth = None
 
 
-async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
+async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)] = None) -> Any:
     """Stable auth dependency wrapper — overridable via dependency_overrides."""
+    if auth is None and _sentinel_get_auth is None:
+        raise RuntimeError(
+            "Sentinel not configured. Set SENTINEL_URL and SENTINEL_SERVICE_KEY env vars."
+        )
     return auth
 
 

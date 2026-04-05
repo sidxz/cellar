@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from lagom import Container
 from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.get_molecule import GetMoleculeQuery
@@ -41,8 +42,8 @@ from chem_vault.interface.dependencies import (
     RemoveIdentifierDep,
     SearchMoleculesDep,
     UpdateMoleculeDep,
+    get_container,
 )
-from chem_vault.infrastructure.di.container import Container, get_container
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import (
     PaginatedResponse,
