@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Plus, Upload } from "lucide-react";
+import { Download, FlaskConical, Plus, Upload } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { downloadFile } from "@/shared/lib/api/download";
 import { useMolecules } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
@@ -48,6 +49,15 @@ export function MoleculeList() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
+
+  const handleSdfExport = useCallback(() => {
+    if (!molecules?.length) return;
+    downloadFile({
+      url: "/api/v1/molecules/export/sdf",
+      data: { molecule_ids: molecules.map((m) => m.id) },
+      filename: "compounds.sdf",
+    });
+  }, [molecules]);
 
   const columnDefs = useMemo<ColDef<Molecule>[]>(
     () => [
@@ -174,6 +184,10 @@ export function MoleculeList() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleSdfExport} disabled={!molecules?.length}>
+            <Download className="h-4 w-4" />
+            Export SDF
+          </Button>
           <Button variant="outline" onClick={() => setBulkOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Bulk Upload
@@ -195,6 +209,7 @@ export function MoleculeList() {
           columnDefs={columnDefs}
           loading={isLoading}
           height="calc(100vh - 280px)"
+          exportFilename="compounds"
           onRowClick={(mol) => {
             router.push(`/compounds/${mol.id}`);
           }}
