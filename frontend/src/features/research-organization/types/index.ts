@@ -125,3 +125,47 @@ export interface UpdateSavedSearchInput {
   visibility?: SearchVisibility;
   project_id?: string | null;
 }
+
+// ─── Search types ───────────────────────────────────────────────────────────
+
+export type CriterionType = "text" | "property" | "structure";
+export type TextOperator = "contains" | "equals" | "starts_with";
+export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
+export type StructureSearchType = "substructure" | "similarity" | "exact";
+
+export interface TextCriterion {
+  type: "text";
+  field: string;
+  operator: TextOperator;
+  value: string;
+}
+
+export interface PropertyCriterion {
+  type: "property";
+  field: string;
+  operator: PropertyOperator;
+  value?: number;
+  min?: number;
+  max?: number;
+}
+
+export interface StructureCriterion {
+  type: "structure";
+  search_type: StructureSearchType;
+  smarts?: string;
+  smiles?: string;
+  threshold?: number;
+  inchi_key?: string;
+}
+
+export type SearchCriterion = TextCriterion | PropertyCriterion | StructureCriterion;
+
+export interface SearchQuery {
+  criteria: SearchCriterion[];
+  logic: "and" | "or";
+}
+
+export interface ExecuteSearchInput {
+  query?: SearchQuery;
+  saved_search_id?: string;
+}

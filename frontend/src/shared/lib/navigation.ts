@@ -6,6 +6,7 @@ import {
   FlaskConical,
   FlaskRound,
   FolderKanban,
+  Grid3x3,
   LayoutDashboard,
   Library,
   Package,
@@ -37,6 +38,7 @@ export const navigation: NavGroup[] = [
     items: [
       { title: "Compounds", href: "/compounds", icon: FlaskConical },
       { title: "Assays", href: "/assays", icon: TestTubes },
+      { title: "Plate Templates", href: "/assays/plate-templates", icon: Grid3x3 },
       { title: "Inventory", href: "/inventory", icon: Package },
       { title: "Sample Requests", href: "/inventory/sample-requests", icon: ClipboardList },
       { title: "Shipments", href: "/inventory/shipments", icon: Truck },
@@ -48,6 +50,7 @@ export const navigation: NavGroup[] = [
     items: [
       { title: "Projects", href: "/projects", icon: FolderKanban },
       { title: "Collections", href: "/collections", icon: Library },
+      { title: "Search", href: "/search", icon: Search },
       { title: "Saved Searches", href: "/saved-searches", icon: Search },
     ],
   },

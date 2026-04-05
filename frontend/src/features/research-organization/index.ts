@@ -8,3 +8,5 @@ export { CreateCollectionDialog } from "./components/create-collection-dialog";
 export { AddMoleculesDialog } from "./components/add-molecules-dialog";
 export { SavedSearchListPage, SavedSearchList } from "./components/saved-search-list";
 export { CreateSavedSearchDialog } from "./components/create-saved-search-dialog";
+export { SearchPage } from "./components/search-page";
+export { SearchQueryBuilder } from "./components/search-query-builder";
