@@ -322,9 +322,13 @@ export interface CreateRunInput {
 
 export interface CreateReadoutDataInput {
   run_id: string;
-  molecule_id: string;
-  batch_id: string;
-  readout_definition_id: string;
+  molecule_id?: string;
+  batch_id?: string;
+  readout_definition_id?: string;
+  // Human-readable alternatives (resolved server-side)
+  registration_number?: string;
+  batch_number?: string;
+  readout_definition_name?: string;
   well_id?: string | null;
   value_numeric?: number | null;
   value_qualifier?: string | null;

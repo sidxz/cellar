@@ -21,6 +21,7 @@ class ListMoleculesQuery(Query):
     molecule_type: str | None = None
     lifecycle_stage: str | None = None
     structure_status: str | None = None
+    search_term: str | None = None
     cursor_id: uuid.UUID | None = None
     limit: int | None = None
 
@@ -49,6 +50,7 @@ class ListMolecules:
             mols = await self._repo.find_active(
                 input.workspace_id,
                 filters=filters or None,
+                search_term=input.search_term,
                 cursor_id=input.cursor_id,
                 limit=fetch_limit,
             )

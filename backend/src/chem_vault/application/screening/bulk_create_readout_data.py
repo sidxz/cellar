@@ -11,9 +11,15 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.screening_assay.repository import ReadoutDataRepository
+from chem_vault.domain.screening_assay.repository import (
+    ProtocolRepository,
+    ReadoutDataRepository,
+    RunRepository,
+)
 from chem_vault.domain.shared.enums import Qualifier
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 from chem_vault.domain.shared.value_objects import QualifiedValue
@@ -23,9 +29,13 @@ from chem_vault.domain.shared.value_objects import QualifiedValue
 class ReadoutDataItem:
     run_id: uuid.UUID
     well_id: uuid.UUID | None = None
-    molecule_id: uuid.UUID
-    batch_id: uuid.UUID
-    readout_definition_id: uuid.UUID
+    molecule_id: uuid.UUID | None = None
+    batch_id: uuid.UUID | None = None
+    readout_definition_id: uuid.UUID | None = None
+    # Human-readable alternatives for ID resolution
+    registration_number: str | None = None
+    batch_number: str | None = None
+    readout_definition_name: str | None = None
     value_numeric: float | None = None
     value_qualifier: str | None = None
     value_text: str | None = None
@@ -53,11 +63,116 @@ class BulkCreateReadoutData:
         repo: ReadoutDataRepository,
         guard: DataLockGuard,
         dispatcher: EventDispatcherProtocol,
+        molecule_repo: MoleculeRepository | None = None,
+        batch_repo: BatchRepository | None = None,
+        run_repo: RunRepository | None = None,
+        protocol_repo: ProtocolRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._guard = guard
         self._dispatcher = dispatcher
+        self._molecule_repo = molecule_repo
+        self._batch_repo = batch_repo
+        self._run_repo = run_repo
+        self._protocol_repo = protocol_repo
+
+    async def _resolve_molecule_id(
+        self,
+        workspace_id: uuid.UUID,
+        item: ReadoutDataItem,
+        idx: int,
+    ) -> uuid.UUID:
+        """Resolve molecule_id from the item, looking up by registration_number if needed."""
+        if item.molecule_id is not None:
+            return item.molecule_id
+        if item.registration_number is not None:
+            if self._molecule_repo is None:
+                raise ValidationError(
+                    f"Item {idx}: registration_number provided but molecule resolver not available"
+                )
+            mol = await self._molecule_repo.find_by_registration_number(
+                workspace_id, item.registration_number
+            )
+            if mol is None:
+                raise ValidationError(
+                    f"Item {idx}: molecule with registration_number "
+                    f"'{item.registration_number}' not found"
+                )
+            return mol.id
+        raise ValidationError(
+            f"Item {idx}: either molecule_id or registration_number is required"
+        )
+
+    async def _resolve_batch_id(
+        self,
+        workspace_id: uuid.UUID,
+        item: ReadoutDataItem,
+        idx: int,
+    ) -> uuid.UUID:
+        """Resolve batch_id from the item, looking up by batch_number if needed."""
+        if item.batch_id is not None:
+            return item.batch_id
+        if item.batch_number is not None:
+            if self._batch_repo is None:
+                raise ValidationError(
+                    f"Item {idx}: batch_number provided but batch resolver not available"
+                )
+            batch = await self._batch_repo.find_by_batch_number(
+                workspace_id, item.batch_number
+            )
+            if batch is None:
+                raise ValidationError(
+                    f"Item {idx}: batch with batch_number "
+                    f"'{item.batch_number}' not found"
+                )
+            return batch.id
+        raise ValidationError(
+            f"Item {idx}: either batch_id or batch_number is required"
+        )
+
+    async def _resolve_readout_definition_id(
+        self,
+        item: ReadoutDataItem,
+        idx: int,
+        run_protocol_cache: dict[uuid.UUID, dict],
+    ) -> uuid.UUID:
+        """Resolve readout_definition_id, looking up by name from the run's protocol if needed."""
+        if item.readout_definition_id is not None:
+            return item.readout_definition_id
+        if item.readout_definition_name is not None:
+            if self._run_repo is None or self._protocol_repo is None:
+                raise ValidationError(
+                    f"Item {idx}: readout_definition_name provided but "
+                    f"run/protocol resolver not available"
+                )
+            # Cache protocol readout definitions per run to avoid repeated lookups
+            if item.run_id not in run_protocol_cache:
+                run = await self._run_repo.find_by_id(item.run_id)
+                if run is None:
+                    raise ValidationError(
+                        f"Item {idx}: run '{item.run_id}' not found"
+                    )
+                protocol = await self._protocol_repo.find_by_id(run.protocol_id)
+                if protocol is None:
+                    raise ValidationError(
+                        f"Item {idx}: protocol for run '{item.run_id}' not found"
+                    )
+                run_protocol_cache[item.run_id] = {
+                    "definitions": protocol.readout_definitions,
+                }
+
+            definitions = run_protocol_cache[item.run_id]["definitions"]
+            for rd in definitions:
+                if rd.name == item.readout_definition_name:
+                    return rd.id
+            raise ValidationError(
+                f"Item {idx}: readout definition '{item.readout_definition_name}' "
+                f"not found in protocol"
+            )
+        raise ValidationError(
+            f"Item {idx}: either readout_definition_id or readout_definition_name is required"
+        )
 
     async def __call__(
         self, input: BulkCreateReadoutDataCommand, auth: AuthContext | None = None
@@ -77,9 +192,21 @@ class BulkCreateReadoutData:
 
             result = BulkReadoutResult(total_count=len(input.items))
             entities: list[ReadoutData] = []
+            run_protocol_cache: dict[uuid.UUID, dict] = {}
 
             for idx, item in enumerate(input.items):
                 try:
+                    # Resolve human-readable identifiers to UUIDs
+                    molecule_id = await self._resolve_molecule_id(
+                        input.workspace_id, item, idx
+                    )
+                    batch_id = await self._resolve_batch_id(
+                        input.workspace_id, item, idx
+                    )
+                    readout_definition_id = await self._resolve_readout_definition_id(
+                        item, idx, run_protocol_cache
+                    )
+
                     value: QualifiedValue | None = None
                     if item.value_numeric is not None:
                         qualifier = (
@@ -95,9 +222,9 @@ class BulkCreateReadoutData:
                         workspace_id=input.workspace_id,
                         run_id=item.run_id,
                         well_id=item.well_id,
-                        molecule_id=item.molecule_id,
-                        batch_id=item.batch_id,
-                        readout_definition_id=item.readout_definition_id,
+                        molecule_id=molecule_id,
+                        batch_id=batch_id,
+                        readout_definition_id=readout_definition_id,
                         value=value,
                         value_text=item.value_text,
                         is_outlier=item.is_outlier,

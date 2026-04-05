@@ -36,6 +36,11 @@ export function ReadoutDataTable({
   className,
 }: ReadoutDataTableProps) {
   const { data, isLoading } = useReadoutDataByRun(runId);
+  // TODO: This loads ALL molecules to build a name lookup for the pivot table.
+  // Ideally we'd only fetch the molecules that appear in the readout data, but
+  // there's no batch-fetch-by-ids endpoint yet. Acceptable for now — the table
+  // only needs names for molecules present in the data, not the full catalog.
+  // Revisit when a GET /api/v1/molecules?ids=... endpoint is available.
   const { data: molecules } = useMolecules();
   const { data: protocol } = useProtocol(protocolId);
 

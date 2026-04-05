@@ -69,6 +69,21 @@ export function useUpdateMolecule(id: string) {
   });
 }
 
+export function useMoleculeSearch(q: string) {
+  return useQuery({
+    queryKey: [...MOLECULES_KEY, "search-text", q],
+    queryFn: async () => {
+      const page = await customInstance<PaginatedResponse<Molecule>>({
+        url: "/api/v1/molecules",
+        method: "GET",
+        params: { q, limit: "20" },
+      });
+      return page.items;
+    },
+    enabled: q.length >= 2,
+  });
+}
+
 export function useSearchMolecules(params: {
   search_type: string;
   query: string;

@@ -128,8 +128,31 @@ class CreateReadoutDataRequest(BaseModel):
     is_outlier: bool = False
 
 
+class BulkReadoutDataItem(BaseModel):
+    """Request item for bulk readout import.
+
+    Supports both UUID-based references (molecule_id, batch_id,
+    readout_definition_id) and human-readable alternatives
+    (registration_number, batch_number, readout_definition_name).
+    When both are provided, the UUID takes precedence.
+    """
+    run_id: uuid.UUID
+    well_id: uuid.UUID | None = None
+    molecule_id: uuid.UUID | None = None
+    batch_id: uuid.UUID | None = None
+    readout_definition_id: uuid.UUID | None = None
+    # Human-readable alternatives
+    registration_number: str | None = None
+    batch_number: str | None = None
+    readout_definition_name: str | None = None
+    value_numeric: float | None = None
+    value_qualifier: str | None = None
+    value_text: str | None = None
+    is_outlier: bool = False
+
+
 class BulkReadoutDataRequest(BaseModel):
-    items: list[CreateReadoutDataRequest]
+    items: list[BulkReadoutDataItem]
 
 
 class BulkReadoutDataResponse(BaseModel):
@@ -222,6 +245,9 @@ async def bulk_create_readout_data(
                 molecule_id=item.molecule_id,
                 batch_id=item.batch_id,
                 readout_definition_id=item.readout_definition_id,
+                registration_number=item.registration_number,
+                batch_number=item.batch_number,
+                readout_definition_name=item.readout_definition_name,
                 value_numeric=item.value_numeric,
                 value_qualifier=item.value_qualifier,
                 value_text=item.value_text,

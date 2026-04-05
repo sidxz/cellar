@@ -314,6 +314,7 @@ class SQLAlchemyMoleculeRepository(
         workspace_id: uuid.UUID,
         *,
         filters: dict[str, Any] | None = None,
+        search_term: str | None = None,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[Molecule]:
@@ -329,6 +330,16 @@ class SQLAlchemyMoleculeRepository(
                 stmt = stmt.where(MoleculeModel.lifecycle_stage == filters["lifecycle_stage"])
             if "structure_status" in filters and filters["structure_status"]:
                 stmt = stmt.where(MoleculeModel.structure_status == filters["structure_status"])
+
+        # Free-text search on name and registration_number
+        if search_term:
+            like_pattern = f"%{search_term}%"
+            stmt = stmt.where(
+                sa.or_(
+                    MoleculeModel.name.ilike(like_pattern),
+                    MoleculeModel.registration_number.ilike(like_pattern),
+                )
+            )
 
         # Deterministic ordering by PK for stable cursor pagination
         stmt = stmt.order_by(MoleculeModel.id)

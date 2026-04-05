@@ -249,16 +249,21 @@ async def list_molecules(
     molecule_type: str | None = None,
     lifecycle_stage: str | None = None,
     structure_status: str | None = None,
+    q: str | None = None,
     cursor: str | None = None,
     limit: int | None = None,
 ) -> PaginatedResponse[MoleculeResponse]:
+    # When a search term is provided without an explicit limit, default to 20
+    # (autocomplete scenario — avoids returning the entire table).
+    effective_limit = clamp_limit(limit if limit is not None else (20 if q else None))
     query = ListMoleculesQuery(
         workspace_id=auth.workspace_id,
         molecule_type=molecule_type,
         lifecycle_stage=lifecycle_stage,
         structure_status=structure_status,
+        search_term=q,
         cursor_id=parse_cursor(cursor),
-        limit=clamp_limit(limit),
+        limit=effective_limit,
     )
     page = result_to_response(await use_case(query))
     return PaginatedResponse(

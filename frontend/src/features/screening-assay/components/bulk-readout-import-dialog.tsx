@@ -11,14 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
-import { useProtocol } from "../hooks/use-protocols";
 import { useBulkCreateReadoutData } from "../hooks/use-readout-data";
 import type { CreateReadoutDataInput } from "../types";
 
 interface BulkReadoutImportDialogProps {
   runId: string;
-  protocolId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -35,20 +32,13 @@ const REQUIRED_COLUMNS = [
   "readout_definition",
 ] as const;
 
-function downloadTemplate(
-  readoutDefNames: string[],
-  moleculeExamples: Array<{ reg: string; batch: string }>,
-) {
+function downloadTemplate() {
   const header = "compound,batch,readout_definition,value,qualifier,is_outlier";
-  const defName = readoutDefNames[0] ?? "Readout Name";
-  const mol1 = moleculeExamples[0] ?? { reg: "CV-00001", batch: "CV-00001-001" };
-  const mol2 = moleculeExamples[1] ?? { reg: "CV-00002", batch: "CV-00002-001" };
-
-  const rows = [header];
-  for (const def of readoutDefNames.length > 0 ? readoutDefNames : [defName]) {
-    rows.push(`${mol1.reg},${mol1.batch},${def},85.2,=,false`);
-    rows.push(`${mol2.reg},${mol2.batch},${def},12.7,<,false`);
-  }
+  const rows = [
+    header,
+    "CV-00001,CV-00001-001,Inhibition,85.2,=,false",
+    "CV-00002,CV-00002-001,Inhibition,12.7,<,false",
+  ];
 
   const csv = rows.join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
@@ -60,31 +50,7 @@ function downloadTemplate(
   URL.revokeObjectURL(url);
 }
 
-interface MoleculeLookup {
-  byRegNumber: Map<string, string>;
-  byName: Map<string, string>;
-}
-
-interface BatchLookup {
-  byBatchNumber: Map<string, string>;
-}
-
-function buildMoleculeLookup(molecules: Array<{ id: string; registration_number: string; name: string }> | undefined): MoleculeLookup {
-  const byRegNumber = new Map<string, string>();
-  const byName = new Map<string, string>();
-  for (const mol of molecules ?? []) {
-    byRegNumber.set(mol.registration_number.toLowerCase(), mol.id);
-    if (mol.name) byName.set(mol.name.toLowerCase(), mol.id);
-  }
-  return { byRegNumber, byName };
-}
-
-function resolveMoleculeId(value: string, lookup: MoleculeLookup): string {
-  const lower = value.toLowerCase();
-  return lookup.byRegNumber.get(lower) ?? lookup.byName.get(lower) ?? value;
-}
-
-function parseCsv(text: string, runId: string, moleculeLookup: MoleculeLookup, readoutDefMap: Map<string, string>): ParseResult {
+function parseCsv(text: string, runId: string): ParseResult {
   const lines = text
     .split("\n")
     .map((l) => l.trim())
@@ -113,13 +79,11 @@ function parseCsv(text: string, runId: string, moleculeLookup: MoleculeLookup, r
 
   const rows: CreateReadoutDataInput[] = dataLines.map((line) => {
     const cols = line.split(",").map((c) => c.trim());
-    const compoundValue = cols[compoundIdx] ?? "";
-    const readoutDefName = cols[readoutDefIdx] ?? "";
     return {
       run_id: runId,
-      molecule_id: resolveMoleculeId(compoundValue, moleculeLookup),
-      batch_id: cols[batchIdx] ?? "",
-      readout_definition_id: readoutDefMap.get(readoutDefName.toLowerCase()) ?? readoutDefName,
+      registration_number: cols[compoundIdx] ?? "",
+      batch_number: cols[batchIdx] ?? "",
+      readout_definition_name: cols[readoutDefIdx] ?? "",
       value_numeric:
         valueIdx !== -1 && cols[valueIdx] ? parseFloat(cols[valueIdx]) : undefined,
       value_qualifier:
@@ -136,19 +100,11 @@ function parseCsv(text: string, runId: string, moleculeLookup: MoleculeLookup, r
 
 export function BulkReadoutImportDialog({
   runId,
-  protocolId,
   open,
   onOpenChange,
 }: BulkReadoutImportDialogProps) {
   const bulkCreate = useBulkCreateReadoutData();
-  const { data: molecules } = useMolecules();
-  const { data: protocol } = useProtocol(protocolId);
 
-  const moleculeLookup = buildMoleculeLookup(molecules);
-  const readoutDefMap = new Map<string, string>();
-  for (const rd of protocol?.readout_definitions ?? []) {
-    readoutDefMap.set(rd.name.toLowerCase(), rd.id);
-  }
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
@@ -178,7 +134,7 @@ export function BulkReadoutImportDialog({
       reader.onload = (e) => {
         const text = e.target?.result;
         if (typeof text === "string") {
-          setParseResult(parseCsv(text, runId, moleculeLookup, readoutDefMap));
+          setParseResult(parseCsv(text, runId));
         }
       };
       reader.readAsText(file);
@@ -264,14 +220,7 @@ export function BulkReadoutImportDialog({
             variant="link"
             size="sm"
             className="mt-1 h-auto p-0 text-xs"
-            onClick={() => {
-              const rdNames = (protocol?.readout_definitions ?? []).map((rd) => rd.name);
-              const molExamples = (molecules ?? []).slice(0, 2).map((m) => ({
-                reg: m.registration_number,
-                batch: m.registration_number + "-001",
-              }));
-              downloadTemplate(rdNames, molExamples);
-            }}
+            onClick={() => downloadTemplate()}
           >
             <Download className="mr-1 h-3 w-3" />
             Download CSV template

@@ -37,6 +37,7 @@ class MoleculeRepository(Protocol):
         workspace_id: uuid.UUID,
         *,
         filters: dict[str, Any] | None = None,
+        search_term: str | None = None,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[Molecule]: ...

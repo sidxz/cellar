@@ -572,7 +572,16 @@ def create_container(
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
-        return BulkCreateReadoutData(uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher])
+        return BulkCreateReadoutData(
+            uow,
+            SQLAlchemyReadoutDataRepository(uow),
+            guard,
+            c[EventDispatcher],
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            run_repo=run_repo,
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
 
     container.define(CreateReadoutData, _readout_create)
     container.define(BulkCreateReadoutData, _readout_bulk_create)

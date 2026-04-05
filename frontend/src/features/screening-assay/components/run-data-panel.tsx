@@ -167,7 +167,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
       />
       <BulkReadoutImportDialog
         runId={run.id}
-        protocolId={run.protocol_id}
         open={bulkImportOpen}
         onOpenChange={setBulkImportOpen}
       />
