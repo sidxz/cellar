@@ -49,6 +49,7 @@ import {
 } from "../hooks/use-molecules";
 import { useDisclosuresForMolecule, useMergeHistory } from "../hooks/use-disclosures";
 import { BatchList } from "@/features/inventory/components/batch-list";
+import { SynthesisRouteList } from "./synthesis-route-list";
 import {
   LIFECYCLE_LABELS,
   MOLECULE_TYPE_LABELS,
@@ -478,6 +479,16 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
         </CardHeader>
         <CardContent>
           <BatchList moleculeId={compoundId} />
+        </CardContent>
+      </Card>
+
+      {/* Synthesis Routes Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Synthesis Routes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SynthesisRouteList moleculeId={compoundId} />
         </CardContent>
       </Card>
 
