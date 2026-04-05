@@ -126,21 +126,29 @@ def get_preferences_command(
 
 # Sentinel auth dependency — stable wrapper so dependency_overrides work in tests.
 # Lazy init: don't crash at import time if Sentinel env vars aren't set.
-# The app will fail on the first auth-required request instead.
+# Uses a reject-all stub when Sentinel is unavailable so auth is never bypassed.
+
+
+async def _sentinel_not_configured() -> None:
+    """Stub dependency that rejects all requests when Sentinel is not configured."""
+    from fastapi import HTTPException
+
+    raise HTTPException(
+        status_code=503,
+        detail="Sentinel auth not configured. Set SENTINEL_URL and SENTINEL_SERVICE_KEY.",
+    )
+
+
 try:
     _sentinel = get_sentinel()
-    _sentinel_get_auth = _sentinel.get_auth  # capture once
+    _sentinel_get_auth = _sentinel.get_auth
 except (ValueError, Exception):
     _sentinel = None
-    _sentinel_get_auth = None
+    _sentinel_get_auth = _sentinel_not_configured
 
 
-async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)] = None) -> Any:
+async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
     """Stable auth dependency wrapper — overridable via dependency_overrides."""
-    if auth is None and _sentinel_get_auth is None:
-        raise RuntimeError(
-            "Sentinel not configured. Set SENTINEL_URL and SENTINEL_SERVICE_KEY env vars."
-        )
     return auth
 
 
