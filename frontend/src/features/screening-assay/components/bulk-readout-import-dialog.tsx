@@ -35,11 +35,22 @@ const REQUIRED_COLUMNS = [
   "readout_definition",
 ] as const;
 
-function downloadTemplate() {
+function downloadTemplate(
+  readoutDefNames: string[],
+  moleculeExamples: Array<{ reg: string; batch: string }>,
+) {
   const header = "compound,batch,readout_definition,value,qualifier,is_outlier";
-  const example1 = "CV-00001,CV-00001-001,% Inhibition,85.2,=,false";
-  const example2 = "CV-00002,CV-00002-001,% Inhibition,12.7,<,false";
-  const csv = [header, example1, example2].join("\n");
+  const defName = readoutDefNames[0] ?? "Readout Name";
+  const mol1 = moleculeExamples[0] ?? { reg: "CV-00001", batch: "CV-00001-001" };
+  const mol2 = moleculeExamples[1] ?? { reg: "CV-00002", batch: "CV-00002-001" };
+
+  const rows = [header];
+  for (const def of readoutDefNames.length > 0 ? readoutDefNames : [defName]) {
+    rows.push(`${mol1.reg},${mol1.batch},${def},85.2,=,false`);
+    rows.push(`${mol2.reg},${mol2.batch},${def},12.7,<,false`);
+  }
+
+  const csv = rows.join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -253,7 +264,14 @@ export function BulkReadoutImportDialog({
             variant="link"
             size="sm"
             className="mt-1 h-auto p-0 text-xs"
-            onClick={downloadTemplate}
+            onClick={() => {
+              const rdNames = (protocol?.readout_definitions ?? []).map((rd) => rd.name);
+              const molExamples = (molecules ?? []).slice(0, 2).map((m) => ({
+                reg: m.registration_number,
+                batch: m.registration_number + "-001",
+              }));
+              downloadTemplate(rdNames, molExamples);
+            }}
           >
             <Download className="mr-1 h-3 w-3" />
             Download CSV template

@@ -27,10 +27,14 @@ import {
 } from "../hooks/use-bulk-registration";
 
 function downloadCsvTemplate() {
-  const header = "name,smiles,molecule_type,external_id,external_id_type";
-  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,cas_number";
-  const example2 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,CHEMBL113,chembl_id";
-  const csv = [header, example1, example2].join("\n");
+  // Columns match the backend TabularParser aliases exactly.
+  // Multiple identifier columns are supported — each compound can have
+  // a CAS number AND a vendor ID in the same row.
+  const header = "name,smiles,molecule_type,cas_number,vendor_id";
+  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,VENDOR-001";
+  const example2 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,58-08-2,";
+  const example3 = "Undisclosed Partner Compound,,small_molecule,,PARTNER-042";
+  const csv = [header, example1, example2, example3].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
