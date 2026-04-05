@@ -14,6 +14,7 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
 from chem_vault.application.inventory.create_batch import CreateBatch
 from chem_vault.application.inventory.create_sample import CreateSample
@@ -199,6 +200,14 @@ def create_container(
     container.define(
         AuditRecordingService,
         lambda c: AuditRecordingService(c[AuditRepository]),
+    )
+    container.define(
+        ListAuditOperations,
+        lambda c: ListAuditOperations(c[AuditRepository]),
+    )
+    container.define(
+        GetAuditOperation,
+        lambda c: GetAuditOperation(c[AuditRepository]),
     )
 
     # --- User Preferences ---

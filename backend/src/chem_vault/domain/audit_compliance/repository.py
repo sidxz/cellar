@@ -27,3 +27,15 @@ class AuditRepository(Protocol):
     ) -> list[AuditOperation]:
         """Retrieve all audit operations for a given entity."""
         ...
+
+    async def find_all(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        entity_type: str | None = None,
+        entity_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> list[AuditOperation]:
+        """Retrieve audit operations with optional filters."""
+        ...

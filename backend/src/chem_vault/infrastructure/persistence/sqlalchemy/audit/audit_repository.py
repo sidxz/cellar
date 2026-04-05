@@ -70,6 +70,34 @@ class SQLAlchemyAuditRepository:
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
+    async def find_all(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        entity_type: str | None = None,
+        entity_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> list[AuditOperation]:
+        """Retrieve audit operations with optional filters, ordered by started_at DESC."""
+        stmt = (
+            select(AuditOperationModel)
+            .where(AuditOperationModel.workspace_id == workspace_id)
+            .options(
+                selectinload(AuditOperationModel.entries),
+                selectinload(AuditOperationModel.signature),
+            )
+        )
+        if entity_type is not None:
+            stmt = stmt.where(AuditOperationModel.entity_type == entity_type)
+        if entity_id is not None:
+            stmt = stmt.where(AuditOperationModel.entity_id == entity_id)
+        if user_id is not None:
+            stmt = stmt.where(AuditOperationModel.user_id == user_id)
+        stmt = stmt.order_by(AuditOperationModel.started_at.desc()).limit(limit)
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
     # ------------------------------------------------------------------
     # Mapping helpers
     # ------------------------------------------------------------------

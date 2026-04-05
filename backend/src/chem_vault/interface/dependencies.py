@@ -18,6 +18,7 @@ from fastapi import Depends, Request
 from lagom import Container
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
+from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
@@ -134,13 +135,18 @@ GetPreferencesDep = Annotated[GetPreferences, Depends(get_preferences_query)]
 UpdatePreferencesDep = Annotated[UpdatePreferences, Depends(get_preferences_command)]
 
 
-# --- Workspace Config dependencies ---
+# --- Generic use-case dependency factory ---
 def _get_use_case(uc_type: type):  # noqa: ANN001
     def _dep(container: Annotated[Container, Depends(get_container)]):  # noqa: ANN001
         return container[uc_type]
     return _dep
 
 
+# --- Audit query dependencies ---
+ListAuditOperationsDep = Annotated[ListAuditOperations, Depends(_get_use_case(ListAuditOperations))]
+GetAuditOperationDep = Annotated[GetAuditOperation, Depends(_get_use_case(GetAuditOperation))]
+
+# --- Workspace Config dependencies ---
 CreateOrganizationDep = Annotated[CreateOrganization, Depends(_get_use_case(CreateOrganization))]
 UpdateOrganizationDep = Annotated[UpdateOrganization, Depends(_get_use_case(UpdateOrganization))]
 GetOrganizationDep = Annotated[GetOrganization, Depends(_get_use_case(GetOrganization))]
