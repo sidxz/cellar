@@ -10,6 +10,7 @@ import {
   type GridReadyEvent,
 } from "ag-grid-community";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { useGridPreferences } from "@/shared/hooks/use-grid-preferences";
 import { chemVaultTheme } from "./ag-grid-theme";
 import { ExportToolbar } from "./export-toolbar";
 
@@ -30,6 +31,8 @@ export interface DataGridProps<TData = unknown>
   suppressFilters?: boolean;
   /** When provided, renders CSV + Excel export buttons above the grid */
   exportFilename?: string;
+  /** When provided, persists column state (width, order, visibility) to localStorage. */
+  preferencesKey?: string;
 }
 
 export function DataGrid<TData = unknown>({
@@ -41,9 +44,12 @@ export function DataGrid<TData = unknown>({
   height = "400px",
   suppressFilters = false,
   exportFilename,
+  preferencesKey,
   ...rest
 }: DataGridProps<TData>) {
   const gridRef = useRef<AgGridReact<TData>>(null);
+  const prefs = useGridPreferences(preferencesKey ?? "__unused__");
+  const hasPrefs = !!preferencesKey;
   const defaultColDef = useMemo<ColDef<TData>>(
     () => ({
       sortable: true,
@@ -66,9 +72,16 @@ export function DataGrid<TData = unknown>({
     [onRowClick]
   );
 
-  const handleGridReady = useCallback((event: GridReadyEvent<TData>) => {
-    event.api.sizeColumnsToFit();
-  }, []);
+  const handleGridReady = useCallback(
+    (event: GridReadyEvent<TData>) => {
+      if (hasPrefs) {
+        prefs.applyState(gridRef);
+      } else {
+        event.api.sizeColumnsToFit();
+      }
+    },
+    [hasPrefs, prefs, gridRef]
+  );
 
   if (loading) {
     return (
@@ -100,6 +113,9 @@ export function DataGrid<TData = unknown>({
           defaultColDef={defaultColDef}
           onRowClicked={onRowClick ? handleRowClicked : undefined}
           onGridReady={handleGridReady}
+          onColumnResized={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
+          onColumnMoved={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
+          onColumnVisible={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           rowClass={onRowClick ? "cursor-pointer" : undefined}
           suppressCellFocus
           animateRows={false}
