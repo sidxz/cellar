@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Download,
   FolderOpen,
   Pencil,
   Plus,
   Trash2,
   ExternalLink,
 } from "lucide-react";
-import type { ColDef, GridApi } from "ag-grid-community";
+import type { ColDef } from "ag-grid-community";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,7 @@ import {
 } from "../hooks/use-collections";
 import { useCollectionMolecules, useRemoveMolecules } from "../hooks/use-collection-molecules";
 import { useProject } from "../hooks/use-projects";
+import { downloadFile } from "@/shared/lib/api/download";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 
@@ -61,9 +63,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addMolOpen, setAddMolOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [removeIds, setRemoveIds] = useState<string[]>([]);
   const [removeOpen, setRemoveOpen] = useState(false);
-  const gridApiRef = useRef<GridApi<MoleculeRow> | null>(null);
 
   const moleculeRows: MoleculeRow[] = useMemo(
     () => (moleculeIds ?? []).map((id) => ({ id })),
@@ -138,23 +139,25 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     );
   }
 
+  const handleExportSdf = useCallback(() => {
+    if (!moleculeIds?.length) return;
+    downloadFile({
+      url: "/api/v1/molecules/export/sdf",
+      data: { molecule_ids: moleculeIds },
+      filename: `${collection?.name ?? "collection"}.sdf`,
+    });
+  }, [moleculeIds, collection?.name]);
+
   const handleDelete = () => {
     deleteMutation.mutate(collection.id, {
       onSuccess: () => router.push("/collections"),
     });
   };
 
-  const handleRemoveSelected = () => {
-    removeMutation.mutate(
-      { molecule_ids: selectedIds },
-      {
-        onSuccess: () => {
-          setSelectedIds([]);
-          setRemoveOpen(false);
-          gridApiRef.current?.deselectAll();
-        },
-      }
-    );
+  const handleRemoveSelected = async () => {
+    await removeMutation.mutateAsync({ molecule_ids: removeIds });
+    setRemoveIds([]);
+    setRemoveOpen(false);
   };
 
   return (
@@ -182,6 +185,15 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportSdf}
+            disabled={!moleculeIds?.length}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export SDF
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -257,19 +269,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
       {/* Molecules Section */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Molecules</CardTitle>
-            {selectedIds.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setRemoveOpen(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Remove Selected ({selectedIds.length})
-              </Button>
-            )}
-          </div>
+          <CardTitle>Molecules</CardTitle>
         </CardHeader>
         <CardContent>
           <DataGrid<MoleculeRow>
@@ -278,12 +278,23 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
             loading={moleculesLoading}
             height="400px"
             suppressFilters
-            rowSelection="multiple"
-            onSelectionChanged={(e) => {
-              const rows = e.api.getSelectedRows();
-              setSelectedIds(rows.map((r) => r.id));
-              gridApiRef.current = e.api;
-            }}
+            selectionToolbar={(selected) => (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  {selected.length} selected
+                </span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    setRemoveIds(selected.map((r) => r.id));
+                    setRemoveOpen(true);
+                  }}
+                >
+                  Remove Selected
+                </Button>
+              </>
+            )}
             emptyState={
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
                 <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
@@ -341,8 +352,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove molecules?</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove {selectedIds.length} molecule
-              {selectedIds.length !== 1 ? "s" : ""} from this collection? The
+              Remove {removeIds.length} molecule
+              {removeIds.length !== 1 ? "s" : ""} from this collection? The
               molecules themselves will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
