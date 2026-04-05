@@ -49,6 +49,8 @@ export function MoleculeRegistrationDialog({
   );
   const [orgId, setOrgId] = useState<string>("");
   const [isUndisclosed, setIsUndisclosed] = useState(false);
+  const [extIdValue, setExtIdValue] = useState("");
+  const [extIdType, setExtIdType] = useState<string>("vendor_id");
   const [customFieldValues, setCustomFieldValues] = useState<
     Record<string, string>
   >({});
@@ -66,6 +68,8 @@ export function MoleculeRegistrationDialog({
     setMoleculeType(settings?.default_molecule_type ?? "small_molecule");
     setOrgId("");
     setIsUndisclosed(false);
+    setExtIdValue("");
+    setExtIdType("vendor_id");
     setCustomFieldValues({});
     setError(null);
   };
@@ -99,10 +103,14 @@ export function MoleculeRegistrationDialog({
     }
 
     try {
+      const external_ids = extIdValue.trim()
+        ? [{ identifier: extIdValue.trim(), identifier_type: extIdType }]
+        : [];
       await registerMutation.mutateAsync({
         name: name.trim(),
         smiles: isUndisclosed ? null : smiles.trim(),
         molecule_type: moleculeType,
+        external_ids,
         originating_org_id: orgId,
         custom_fields: Object.keys(customFieldValues).length
           ? customFieldValues
@@ -197,6 +205,35 @@ export function MoleculeRegistrationDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* External Identifier (optional) */}
+          <div className="grid gap-2">
+            <Label>External Identifier</Label>
+            <div className="flex gap-2">
+              <Select value={extIdType} onValueChange={setExtIdType}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vendor_id">Vendor ID</SelectItem>
+                  <SelectItem value="cas_number">CAS Number</SelectItem>
+                  <SelectItem value="chembl_id">ChEMBL ID</SelectItem>
+                  <SelectItem value="pubchem_cid">PubChem CID</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="e.g. ABBVIE-002, 50-78-2"
+                value={extIdValue}
+                onChange={(e) => setExtIdValue(e.target.value)}
+                className="flex-1"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Optional. If this structure already exists, the identifier will be
+              added to the existing compound.
+            </p>
           </div>
 
           {/* Custom fields from workspace settings */}
