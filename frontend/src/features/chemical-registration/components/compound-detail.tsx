@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   FlaskConical,
   ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { EntityLink } from "@/shared/components/entity-link";
@@ -230,6 +232,44 @@ function AddIdentifierForm({
 }
 
 // ---------------------------------------------------------------------------
+// Copy-to-clipboard field
+// ---------------------------------------------------------------------------
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="flex items-start gap-2 group">
+      <span className="text-xs font-medium text-muted-foreground w-16 shrink-0 pt-0.5">
+        {label}
+      </span>
+      <code className="flex-1 text-xs font-mono break-all text-muted-foreground/80">
+        {value}
+      </code>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="shrink-0 p-1 rounded hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+        title={`Copy ${label}`}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-emerald-400" />
+        ) : (
+          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // CompoundDetail
 // ---------------------------------------------------------------------------
 
@@ -351,13 +391,20 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
         </CardHeader>
         <CardContent>
           {isDisclosed && mol.structure?.smiles ? (
-            <div className="flex justify-center">
-              <StructureRenderer
-                smiles={mol.structure.smiles}
-                width={400}
-                height={280}
-              />
-            </div>
+            <>
+              <div className="flex justify-center">
+                <StructureRenderer
+                  smiles={mol.structure.smiles}
+                  width={400}
+                  height={280}
+                />
+              </div>
+              <div className="mt-4 space-y-2">
+                <CopyField label="SMILES" value={mol.structure.smiles} />
+                {mol.structure.inchi && <CopyField label="InChI" value={mol.structure.inchi} />}
+                {mol.structure.inchi_key && <CopyField label="InChI Key" value={mol.structure.inchi_key} />}
+              </div>
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
               <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
