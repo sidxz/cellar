@@ -24,6 +24,7 @@ import {
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useProject, useArchiveProject } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
+import { CollectionList } from "./collection-list";
 import type { ProjectStatus } from "../types";
 
 function statusBadgeVariant(
@@ -147,17 +148,13 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Collections placeholder — wired in Task 3 */}
+      {/* Collections */}
       <Card>
         <CardHeader>
           <CardTitle>Collections</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Collections for this project will appear here.
-            </p>
-          </div>
+          <CollectionList projectId={projectId} />
         </CardContent>
       </Card>
 
