@@ -10,3 +10,4 @@ export { SavedSearchListPage, SavedSearchList } from "./components/saved-search-
 export { CreateSavedSearchDialog } from "./components/create-saved-search-dialog";
 export { SearchPage } from "./components/search-page";
 export { SearchQueryBuilder } from "./components/search-query-builder";
+export { CollectionPickerDialog } from "./components/collection-picker-dialog";
