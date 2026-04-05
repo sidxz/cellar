@@ -42,6 +42,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from chem_vault.interface.routes.settings import router as settings_router
     from chem_vault.interface.routes.vocabularies import router as vocab_router
     from chem_vault.interface.routes.molecules import router as mol_router
+    from chem_vault.interface.routes.export import router as export_router
     from chem_vault.interface.routes.plate_templates import router as plate_template_router
     from chem_vault.interface.routes.projects import router as project_router
     from chem_vault.interface.routes.collections import router as collection_router
@@ -52,6 +53,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(settings_router)
     app.include_router(vocab_router)
     app.include_router(mol_router)
+    app.include_router(export_router)
     app.include_router(plate_template_router)
     app.include_router(project_router)
     app.include_router(collection_router)

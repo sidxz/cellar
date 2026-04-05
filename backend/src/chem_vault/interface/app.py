@@ -106,7 +106,10 @@ def create_app() -> FastAPI:
     app.include_router(org_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
+    from chem_vault.interface.routes.export import router as export_router
+
     app.include_router(mol_router)
+    app.include_router(export_router)
     app.include_router(disclosure_router)
     app.include_router(merge_router)
     app.include_router(rel_router)

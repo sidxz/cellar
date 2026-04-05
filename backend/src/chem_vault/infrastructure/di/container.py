@@ -127,6 +127,7 @@ from chem_vault.application.chemical_registration.merge_service import MergeServ
 from chem_vault.application.chemical_registration.merge_side_effect_registry import MergeSideEffectRegistry
 from chem_vault.application.chemical_registration.register_molecule import RegisterMolecule
 from chem_vault.application.chemical_registration.resolve_disclosure_conflict import ResolveDisclosureConflict
+from chem_vault.application.chemical_registration.export_sdf import ExportMoleculesSDF
 from chem_vault.application.chemical_registration.search_molecules import SearchMolecules
 from chem_vault.application.chemical_registration.update_molecule import UpdateMolecule
 from chem_vault.application.user.get_preferences import GetPreferences
@@ -436,6 +437,12 @@ def create_container(
         return SearchMolecules(uow, SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
 
     container.define(SearchMolecules, _search_molecules)
+
+    def _export_sdf(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ExportMoleculesSDF(uow, SQLAlchemyMoleculeRepository(uow))
+
+    container.define(ExportMoleculesSDF, _export_sdf)
 
     # --- Molecule Relationships ---
     def _rel_cmd(c):  # type: ignore[no-untyped-def]
