@@ -21,6 +21,7 @@ class MergeEvent(Entity):
         self,
         *,
         id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID | None = None,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
         reason: MergeReason,
@@ -33,6 +34,7 @@ class MergeEvent(Entity):
         updated_at: datetime | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at)
+        self.workspace_id = workspace_id
         self.source_molecule_id = source_molecule_id
         self.target_molecule_id = target_molecule_id
         self.reason = reason
@@ -50,6 +52,7 @@ class MergeEvent(Entity):
     def create(
         cls,
         *,
+        workspace_id: uuid.UUID,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
         reason: MergeReason,
@@ -63,6 +66,7 @@ class MergeEvent(Entity):
             raise ValidationError("A molecule cannot merge into itself")
 
         return cls(
+            workspace_id=workspace_id,
             source_molecule_id=source_molecule_id,
             target_molecule_id=target_molecule_id,
             reason=reason,

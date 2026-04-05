@@ -171,55 +171,42 @@ class DisclosureService:
                 )
 
             # ---- Path B: merge needed ----
-            # Save DR in PROCESSING state — only resolve after merge succeeds.
-            # This avoids an inconsistent state if the merge fails.
-            await self._disclosure_repo.save(dr)
-            events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-
+            # Execute merge within the SAME transaction for atomicity.
             target_molecule_id = existing.id
 
-        # Delegate merge to MergeService (opens its own UoW)
-        merge_result = await self._merge_service(
-            MergeCommand(
-                source_molecule_id=input.molecule_id,
-                target_molecule_id=target_molecule_id,
-                reason=MergeReason.DISCLOSURE_RESOLVED,
-                merged_by=input.requested_by,
-                disclosure_request_id=dr.id,
-                notes=input.notes,
-            ),
-            auth=auth,
-        )
-
-        # Update DR status based on merge outcome in a separate transaction
-        async with self._uow:
-            loaded_dr = await self._disclosure_repo.find_by_id(dr.id)
-            if loaded_dr is None:
-                return Failure(NotFoundError("DisclosureRequest", str(dr.id)))
+            merge_result = await self._merge_service.merge_in_transaction(
+                MergeCommand(
+                    source_molecule_id=input.molecule_id,
+                    target_molecule_id=target_molecule_id,
+                    reason=MergeReason.DISCLOSURE_RESOLVED,
+                    merged_by=input.requested_by,
+                    disclosure_request_id=dr.id,
+                    notes=input.notes,
+                ),
+            )
 
             if isinstance(merge_result, Success):
-                loaded_dr.resolve_as_merged(
+                dr.resolve_as_merged(
                     canonical_smiles=canonical_smiles,
                     inchi_key=inchi_key,
                     resolved_to_molecule_id=target_molecule_id,
                 )
             else:
-                loaded_dr.mark_conflict(
+                dr.mark_conflict(
                     f"Merge failed: {merge_result.failure().message}"
                 )
 
-            await self._disclosure_repo.save(loaded_dr)
+            await self._disclosure_repo.save(dr)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
 
-        if isinstance(merge_result, Failure):
-            return Failure(merge_result.failure())
+            if isinstance(merge_result, Failure):
+                return Failure(merge_result.failure())
 
-        return Success(
-            DisclosureOutcome(
-                disclosure_request=loaded_dr,
-                was_merged=True,
-                merged_into_molecule_id=target_molecule_id,
+            return Success(
+                DisclosureOutcome(
+                    disclosure_request=dr,
+                    was_merged=True,
+                    merged_into_molecule_id=target_molecule_id,
+                )
             )
-        )

@@ -38,6 +38,7 @@ class SQLAlchemyMergeEventRepository:
     def _to_domain(model: MergeEventModel) -> MergeEvent:
         return MergeEvent(
             id=model.id,
+            workspace_id=model.workspace_id,
             source_molecule_id=model.source_molecule_id,
             target_molecule_id=model.target_molecule_id,
             disclosure_request_id=model.disclosure_request_id,
@@ -51,9 +52,10 @@ class SQLAlchemyMergeEventRepository:
         )
 
     @staticmethod
-    def _to_model(entity: MergeEvent) -> MergeEventModel:
+    def _to_model(entity: MergeEvent, workspace_id: uuid.UUID | None = None) -> MergeEventModel:
         return MergeEventModel(
             id=entity.id,
+            workspace_id=workspace_id or entity.workspace_id,
             source_molecule_id=entity.source_molecule_id,
             target_molecule_id=entity.target_molecule_id,
             disclosure_request_id=entity.disclosure_request_id,

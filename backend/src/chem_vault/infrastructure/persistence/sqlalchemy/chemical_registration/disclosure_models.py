@@ -20,6 +20,7 @@ class BulkDisclosureModel(Base, EntityModelMixin, VersionMixin):
 
     __tablename__ = "bulk_disclosures"
 
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     source_file: Mapped[str] = mapped_column(String(500), nullable=False)
     partner_org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
@@ -80,6 +81,7 @@ class MergeEventModel(Base, EntityModelMixin):
 
     __tablename__ = "merge_events"
 
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     source_molecule_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("molecules.id"), nullable=False
     )
