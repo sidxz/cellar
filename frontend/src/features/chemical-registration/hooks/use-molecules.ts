@@ -5,6 +5,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import type {
   Molecule,
+  MoleculeIdentifier,
   RegisterMoleculeInput,
   RegistrationResponse,
   UpdateMoleculeInput,
@@ -104,5 +105,77 @@ export function useMoleculeByIdentifier(identifier: string | undefined) {
         method: "GET",
       }),
     enabled: !!identifier,
+  });
+}
+
+// --- Identifiers ---
+
+export function useAddIdentifier(moleculeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      identifier: string;
+      identifier_type: string;
+      source: string;
+    }) =>
+      customInstance<MoleculeIdentifier[]>({
+        url: `/api/v1/molecules/${moleculeId}/identifiers`,
+        method: "POST",
+        data,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
+  });
+}
+
+export function useRemoveIdentifier(moleculeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (identifierId: string) =>
+      customInstance<void>({
+        url: `/api/v1/molecules/${moleculeId}/identifiers/${identifierId}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
+  });
+}
+
+// --- Relationships ---
+
+export function useRelationships(moleculeId: string | undefined) {
+  return useQuery({
+    queryKey: [...MOLECULES_KEY, moleculeId, "relationships"],
+    queryFn: () =>
+      customInstance<
+        Array<{
+          id: string;
+          source_molecule_id: string;
+          target_molecule_id: string;
+          relationship_type: string;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        }>
+      >({
+        url: `/api/v1/molecules/${moleculeId}/relationships`,
+        method: "GET",
+      }),
+    enabled: !!moleculeId,
+  });
+}
+
+export function useCreateRelationship(moleculeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      target_molecule_id: string;
+      relationship_type: string;
+      notes?: string;
+    }) =>
+      customInstance<unknown>({
+        url: `/api/v1/molecules/${moleculeId}/relationships`,
+        method: "POST",
+        data,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
   });
 }
