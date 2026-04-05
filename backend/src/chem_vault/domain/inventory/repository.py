@@ -7,6 +7,8 @@ from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.sample import Sample
+from chem_vault.domain.inventory.sample_request import SampleRequest
+from chem_vault.domain.inventory.shipment import Shipment
 from chem_vault.domain.inventory.storage_location import StorageLocation
 from chem_vault.domain.shared.value_objects import BatchNumber
 
@@ -59,3 +61,25 @@ class StorageLocationRepository(Protocol):
     ) -> list[StorageLocation]: ...
     async def save(self, entity: StorageLocation) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class SampleRequestRepository(Protocol):
+    """Repository for SampleRequest aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> SampleRequest | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, status: str | None = None
+    ) -> list[SampleRequest]: ...
+    async def save(self, aggregate: SampleRequest) -> None: ...
+
+
+@runtime_checkable
+class ShipmentRepository(Protocol):
+    """Repository for Shipment aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> Shipment | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, status: str | None = None
+    ) -> list[Shipment]: ...
+    async def save(self, aggregate: Shipment) -> None: ...

@@ -93,7 +93,7 @@ from chem_vault.application.workspace_config.update_vocabulary import UpdateVoca
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.domain.audit_compliance.repository import AuditRepository
 from chem_vault.domain.chemical_registration.repository import BulkRegistrationRepository, MoleculeRelationshipRepository, MoleculeRepository, SynthesisRouteRepository
-from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, StorageLocationRepository
+from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, SampleRequestRepository, ShipmentRepository, StorageLocationRepository
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
@@ -135,6 +135,12 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_repository
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_repository import (
     SQLAlchemySampleRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_request_repository import (
+    SQLAlchemySampleRequestRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.shipment_repository import (
+    SQLAlchemyShipmentRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
     SQLAlchemyStorageLocationRepository,
@@ -579,6 +585,16 @@ def create_container(
     container.define(DeleteStorageLocation, _storage_delete)
     container.define(ListStorageLocations, _storage_query(ListStorageLocations))
     container.define(GetStorageLocationChildren, _storage_query(GetStorageLocationChildren))
+
+    # --- Sample Requests & Shipments (repos only — use cases in S23b) ---
+    container.define(
+        SampleRequestRepository,
+        lambda c: SQLAlchemySampleRequestRepository(AsyncUnitOfWork(c[async_sessionmaker])),
+    )
+    container.define(
+        ShipmentRepository,
+        lambda c: SQLAlchemyShipmentRepository(AsyncUnitOfWork(c[async_sessionmaker])),
+    )
 
     # --- Screening ---
     def _protocol_cmd(uc_cls):  # type: ignore[no-untyped-def]

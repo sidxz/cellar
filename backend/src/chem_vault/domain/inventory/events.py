@@ -89,3 +89,53 @@ class StorageLocationCreated(DomainEvent):
     name: str
     location_type: str
     parent_id: uuid.UUID | None = None
+
+
+# ---------------------------------------------------------------------------
+# Sample request events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class SampleRequestCreated(DomainEvent):
+    molecule_id: uuid.UUID
+    requester_id: uuid.UUID
+    requested_amount: float
+    amount_unit: str
+    priority: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SampleRequestApproved(DomainEvent):
+    assigned_to: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SampleRequestFulfilled(DomainEvent):
+    fulfilled_sample_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class SampleRequestRejected(DomainEvent):
+    reason: str
+
+
+# ---------------------------------------------------------------------------
+# Shipment events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class ShipmentCreated(DomainEvent):
+    destination_org_id: uuid.UUID
+    item_count: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class ShipmentShipped(DomainEvent):
+    tracking_number: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ShipmentDelivered(DomainEvent):
+    received_date: str

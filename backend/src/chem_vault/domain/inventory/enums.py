@@ -46,6 +46,35 @@ class StorageLocationType(StrEnum):
     DRAWER = "drawer"
 
 
+class RequestPriority(StrEnum):
+    """Priority level for sample/synthesis requests."""
+
+    ROUTINE = "routine"
+    URGENT = "urgent"
+    CRITICAL = "critical"
+
+
+class SampleRequestStatus(StrEnum):
+    """Lifecycle status of a sample request."""
+
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    PREPARING = "preparing"
+    FULFILLED = "fulfilled"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
+class ShipmentStatus(StrEnum):
+    """Lifecycle status of a shipment."""
+
+    PREPARING = "preparing"
+    SHIPPED = "shipped"
+    IN_TRANSIT = "in_transit"
+    DELIVERED = "delivered"
+    RETURNED = "returned"
+
+
 # Valid parent types for each location type
 VALID_PARENT_TYPES: dict[StorageLocationType, set[StorageLocationType | None]] = {
     StorageLocationType.SITE: {None},
