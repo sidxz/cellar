@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { BookmarkPlus, Download, ListPlus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookmarkPlus, ChevronDown, Download, ListPlus, Star } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -31,6 +31,8 @@ import type {
 } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import type { Protocol } from "@/features/screening-assay/types";
+import { usePreferencesStore } from "@/shared/lib/stores/preferences-store";
 import type { ActivityValue } from "../types";
 import { useExecuteSearch } from "../hooks/use-search";
 import {
@@ -101,6 +103,104 @@ function buildColumnDefs(): ColDef<EnrichedMolecule>[] {
   ];
 }
 
+// ─── Protocol column selector ──────────────────────────────────────────────
+
+const CURVE_TYPES = ["ic50", "ec50", "ki", "kd"] as const;
+
+function ProtocolColumnSelector({
+  protocols,
+  selected,
+  onChange,
+}: {
+  protocols: Protocol[];
+  selected: string[];
+  onChange: (cols: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const activeProtocols = protocols.filter((p) => p.status === "active");
+
+  function toggle(colId: string) {
+    onChange(
+      selected.includes(colId)
+        ? selected.filter((c) => c !== colId)
+        : [...selected, colId]
+    );
+  }
+
+  if (activeProtocols.length === 0) return null;
+
+  return (
+    <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-sm"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="font-medium">
+          Protocol Columns{" "}
+          <span className="text-muted-foreground font-normal">
+            ({selected.length} selected)
+          </span>
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3 max-h-64 overflow-y-auto">
+          {activeProtocols.map((p) => {
+            const numericRds = p.readout_definitions.filter(
+              (rd) => rd.data_type === "numeric"
+            );
+            return (
+              <div key={p.id} className="border-b border-border/50 pb-2 last:border-0">
+                <span className="text-xs font-semibold text-foreground">{p.name}</span>
+                <div className="mt-1 ml-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {numericRds.length > 0 && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {numericRds.map((rd) => {
+                        const colId = `rd:${rd.id}`;
+                        return (
+                          <label key={rd.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="rounded"
+                              checked={selected.includes(colId)}
+                              onChange={() => toggle(colId)}
+                            />
+                            {rd.name}
+                            {rd.unit ? ` (${rd.unit})` : ""}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {CURVE_TYPES.map((ct) => {
+                      const colId = `drc:${p.id}:${ct}`;
+                      return (
+                        <label key={ct} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="rounded"
+                            checked={selected.includes(colId)}
+                            onChange={() => toggle(colId)}
+                          />
+                          <span className="italic text-muted-foreground">{ct.toUpperCase()} (curve)</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 export function SearchPage() {
@@ -110,6 +210,16 @@ export function SearchPage() {
   const [currentQuery, setCurrentQuery] = useState<SearchQuery | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [protocolColumns, setProtocolColumns] = useState<string[]>([]);
+
+  // Load default columns from preferences on mount
+  const { defaultSearchColumns, setDefaultSearchColumns } = usePreferencesStore();
+  const defaultsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!defaultsLoadedRef.current && defaultSearchColumns?.length) {
+      setProtocolColumns(defaultSearchColumns);
+      defaultsLoadedRef.current = true;
+    }
+  }, [defaultSearchColumns]);
 
   // Save search dialog state
   const [saveOpen, setSaveOpen] = useState(false);
@@ -130,6 +240,15 @@ export function SearchPage() {
       if (parts[0] === "drc" && protocols) {
         const proto = protocols.find((p) => p.id === parts[1]);
         headerName = `${proto?.name ?? "?"} ${parts[2]?.toUpperCase()}`;
+      } else if (parts[0] === "rd" && protocols) {
+        // Find the readout definition across all protocols
+        for (const proto of protocols) {
+          const rd = proto.readout_definitions.find((r) => r.id === parts[1]);
+          if (rd) {
+            headerName = `${proto.name} — ${rd.name}${rd.unit ? ` (${rd.unit})` : ""}`;
+            break;
+          }
+        }
       }
       return {
         headerName,
@@ -142,7 +261,7 @@ export function SearchPage() {
           const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
           return `${q}${av.value.toPrecision(4)}${av.unit ? ` ${av.unit}` : ""}`;
         },
-        width: 130,
+        width: 140,
         sortable: true,
       };
     });
@@ -205,6 +324,11 @@ export function SearchPage() {
     (searchId: string) => {
       const saved = savedSearches?.find((s: SavedSearch) => s.id === searchId);
       if (!saved) return;
+      // Restore protocol columns from saved search
+      const cols = saved.columns as { protocol_columns?: string[] } | null;
+      if (cols?.protocol_columns) {
+        setProtocolColumns(cols.protocol_columns);
+      }
       const query = saved.query as unknown as SearchQuery;
       if (query?.criteria) {
         handleSearch(query);
@@ -228,7 +352,11 @@ export function SearchPage() {
   const handleSaveSearch = useCallback(() => {
     if (!saveName.trim() || !currentQuery) return;
     createSavedSearch.mutate(
-      { name: saveName.trim(), query: currentQuery as unknown as Record<string, unknown> },
+      {
+        name: saveName.trim(),
+        query: currentQuery as unknown as Record<string, unknown>,
+        columns: protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : null,
+      },
       {
         onSuccess: () => {
           setSaveOpen(false);
@@ -309,41 +437,30 @@ export function SearchPage() {
             </div>
           </div>
 
-          {results.length > 0 && protocols?.length ? (
-            <div className="mb-2">
-              <details className="text-sm">
-                <summary className="cursor-pointer text-muted-foreground">
-                  Protocol columns ({protocolColumns.length} selected)
-                </summary>
-                <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                  {protocols.filter((p) => p.status === "active").map((p) => (
-                    <div key={p.id} className="pl-2">
-                      <span className="text-xs font-medium">{p.name}</span>
-                      <div className="ml-3 flex flex-wrap gap-2">
-                        {["ic50", "ec50"].map((ct) => {
-                          const colId = `drc:${p.id}:${ct}`;
-                          return (
-                            <label key={ct} className="flex items-center gap-1 text-xs">
-                              <input
-                                type="checkbox"
-                                checked={protocolColumns.includes(colId)}
-                                onChange={(e) => {
-                                  setProtocolColumns((prev) =>
-                                    e.target.checked
-                                      ? [...prev, colId]
-                                      : prev.filter((c) => c !== colId)
-                                  );
-                                }}
-                              />
-                              {ct.toUpperCase()}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </details>
+          {protocols?.length ? (
+            <div className="mb-3 flex items-start gap-2">
+              <div className="flex-1">
+                <ProtocolColumnSelector
+                  protocols={protocols}
+                  selected={protocolColumns}
+                  onChange={setProtocolColumns}
+                />
+              </div>
+              {protocolColumns.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 shrink-0"
+                  onClick={() => {
+                    setDefaultSearchColumns(protocolColumns);
+                    showSuccess("Default columns saved");
+                  }}
+                  title="Save current protocol columns as default"
+                >
+                  <Star className="mr-1 h-3.5 w-3.5" />
+                  Set Default
+                </Button>
+              )}
             </div>
           ) : null}
 

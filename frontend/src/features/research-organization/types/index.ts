@@ -131,7 +131,7 @@ export interface UpdateSavedSearchInput {
 
 // ─── Search types ───────────────────────────────────────────────────────────
 
-export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date";
+export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
 export type StructureSearchType = "substructure" | "similarity" | "exact";
@@ -187,6 +187,20 @@ export interface RunDateCriterion {
   date_to?: string;
 }
 
+export type BatchFieldType = "text" | "numeric" | "date";
+
+export interface BatchCriterion {
+  type: "batch";
+  field_type: BatchFieldType;
+  field?: string;
+  operator?: TextOperator | PropertyOperator;
+  value?: string | number;
+  min?: number;
+  max?: number;
+  date_from?: string;
+  date_to?: string;
+}
+
 export type SearchCriterion =
   | TextCriterion
   | PropertyCriterion
@@ -194,7 +208,8 @@ export type SearchCriterion =
   | ActivityCriterion
   | CollectionCriterion
   | KeywordListCriterion
-  | RunDateCriterion;
+  | RunDateCriterion
+  | BatchCriterion;
 
 export interface SearchQuery {
   criteria: SearchCriterion[];

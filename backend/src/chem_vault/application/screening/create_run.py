@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
@@ -28,6 +28,7 @@ class CreateRunCommand(Command):
     parent_run_id: uuid.UUID | None = None
     run_relationship_type: str | None = None
     plate_format: str | None = None
+    plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
     notes: str | None = None
 
@@ -77,6 +78,7 @@ class CreateRun:
                 plate_format=(
                     PlateFormat(input.plate_format) if input.plate_format else None
                 ),
+                plate_template_id=input.plate_template_id,
                 conditions=input.conditions,
                 notes=input.notes,
             )

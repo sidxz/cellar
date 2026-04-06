@@ -6,10 +6,17 @@ import csv
 import io
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
+from typing import TYPE_CHECKING
 
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.import_template import ImportTemplate
 from chem_vault.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
+
+if TYPE_CHECKING:
+    from chem_vault.application.auth import AuthContext
+    from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
+    from chem_vault.application.screening.create_run import CreateRun
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +127,7 @@ class ValidationResult:
 class ImportExecutionResult:
     imported_count: int
     skipped_count: int
+    readout_count: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -131,10 +139,14 @@ class ImportPlateDataService:
         uow: UnitOfWork,
         plate_repo: RegisteredPlateRepository,
         batch_repo: BatchRepository,
+        create_run: CreateRun | None = None,
+        bulk_create_readout_data: BulkCreateReadoutData | None = None,
     ) -> None:
         self._uow = uow
         self._plate_repo = plate_repo
         self._batch_repo = batch_repo
+        self._create_run = create_run
+        self._bulk_create = bulk_create_readout_data
 
     # ------------------------------------------------------------------
     # Helpers
@@ -161,6 +173,32 @@ class ImportPlateDataService:
                 well_idx = idx
 
         return barcode_idx, well_idx
+
+    @staticmethod
+    def _find_readout_indices(
+        headers: list[str],
+        column_mappings: dict[str, str],
+    ) -> dict[int, str]:
+        """Return {column_index: readout_definition_id} for readout-mapped columns."""
+        readout_map: dict[int, str] = {}
+        for idx, header in enumerate(headers):
+            target = column_mappings.get(header) or column_mappings.get(str(idx))
+            if target and target.startswith("readout:"):
+                readout_def_id = target[len("readout:"):]
+                readout_map[idx] = readout_def_id
+        return readout_map
+
+    @staticmethod
+    def _find_qualifier_index(
+        headers: list[str],
+        column_mappings: dict[str, str],
+    ) -> int | None:
+        """Return column index for the qualifier column, if mapped."""
+        for idx, header in enumerate(headers):
+            target = column_mappings.get(header) or column_mappings.get(str(idx))
+            if target == "qualifier":
+                return idx
+        return None
 
     # ------------------------------------------------------------------
     # Phase 2: Validate
@@ -237,29 +275,32 @@ class ImportPlateDataService:
         workspace_id: uuid.UUID,
         protocol_id: uuid.UUID | None,
         run_id: uuid.UUID | None,
+        auth: AuthContext | None = None,
     ) -> ImportExecutionResult:
-        """Execute import — resolve wells to batches/molecules.
+        """Execute import — resolve wells to batches/molecules, create ReadoutData.
 
         For each data row:
         - Resolve plate barcode → RegisteredPlate → well_map → batch_id
         - Resolve batch_id → molecule_id (via batch lookup)
-        - Count as imported when both lookups succeed
-
-        ReadoutData creation via BulkCreateReadoutData will be wired in a
-        follow-up session when the screening-context integration is complete.
+        - Extract readout values from mapped columns
+        - If protocol_id provided: auto-create Run if needed, then BulkCreateReadoutData
         """
         if file_id not in _file_cache:
             raise ValueError(f"File {file_id!r} not found in cache (expired or invalid)")
 
+        headers, data_rows = _file_cache[file_id]
+        barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
+        readout_indices = self._find_readout_indices(headers, column_mappings)
+        qualifier_idx = self._find_qualifier_index(headers, column_mappings)
+
+        # Phase 1: Resolve plate → well → batch → molecule (read-only)
+        resolved_rows: list[dict] = []
+        imported = 0
+        skipped = 0
+        errors: list[str] = []
+        plate_cache: dict[str, object] = {}
+
         async with self._uow:
-            headers, data_rows = _file_cache[file_id]
-            barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
-
-            imported = 0
-            skipped = 0
-            errors: list[str] = []
-            plate_cache: dict[str, object] = {}
-
             for row_num, row in enumerate(data_rows, start=2):
                 try:
                     barcode = (
@@ -310,19 +351,130 @@ class ImportPlateDataService:
                         skipped += 1
                         continue
 
+                    # Extract readout values from this row
+                    row_readouts: dict[str, tuple[float | None, str | None]] = {}
+                    qualifier = None
+                    if qualifier_idx is not None and qualifier_idx < len(row):
+                        qualifier = row[qualifier_idx].strip() or None
+
+                    for col_idx, readout_def_id in readout_indices.items():
+                        if col_idx < len(row):
+                            raw_val = row[col_idx].strip()
+                            if raw_val:
+                                try:
+                                    row_readouts[readout_def_id] = (float(raw_val), qualifier)
+                                except ValueError:
+                                    row_readouts[readout_def_id] = (None, raw_val)
+
+                    resolved_rows.append({
+                        "molecule_id": batch.molecule_id,
+                        "batch_id": batch_id,
+                        "readouts": row_readouts,
+                    })
                     imported += 1
 
                 except (IndexError, ValueError, AttributeError) as exc:
                     errors.append(f"Row {row_num}: {exc}")
                     skipped += 1
 
-            del _file_cache[file_id]
+        del _file_cache[file_id]
 
-            return ImportExecutionResult(
-                imported_count=imported,
-                skipped_count=skipped,
-                errors=errors[:50],
+        # Phase 2: Create ReadoutData if protocol + readout columns present
+        readout_count = 0
+        if (
+            protocol_id
+            and readout_indices
+            and resolved_rows
+            and self._create_run
+            and self._bulk_create
+        ):
+            readout_count = await self._create_readout_data(
+                workspace_id=workspace_id,
+                protocol_id=protocol_id,
+                run_id=run_id,
+                resolved_rows=resolved_rows,
+                auth=auth,
+                errors=errors,
             )
+
+        return ImportExecutionResult(
+            imported_count=imported,
+            skipped_count=skipped,
+            readout_count=readout_count,
+            errors=errors[:50],
+        )
+
+    async def _create_readout_data(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        run_id: uuid.UUID | None,
+        resolved_rows: list[dict],
+        auth: AuthContext | None,
+        errors: list[str],
+    ) -> int:
+        """Auto-create Run (if needed) and bulk-insert ReadoutData."""
+        from returns.result import Failure
+
+        from chem_vault.application.screening.bulk_create_readout_data import (
+            BulkCreateReadoutDataCommand,
+            ReadoutDataItem,
+        )
+        from chem_vault.application.screening.create_run import CreateRunCommand
+
+        # Auto-create a Run if none provided
+        if run_id is None:
+            assert self._create_run is not None
+            run_result = await self._create_run(
+                CreateRunCommand(
+                    workspace_id=workspace_id,
+                    protocol_id=protocol_id,
+                    run_date=date.today(),
+                    notes="Auto-created from plate data import",
+                ),
+                auth=auth,
+            )
+            if isinstance(run_result, Failure):
+                errors.append(f"Failed to create run: {run_result.failure()}")
+                return 0
+            run_id = run_result.unwrap().id
+
+        # Build ReadoutDataItem list
+        items: list[ReadoutDataItem] = []
+        for row_data in resolved_rows:
+            for readout_def_id, (value_numeric, qualifier) in row_data["readouts"].items():
+                items.append(
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        molecule_id=row_data["molecule_id"],
+                        batch_id=row_data["batch_id"],
+                        readout_definition_id=uuid.UUID(readout_def_id),
+                        value_numeric=value_numeric,
+                        value_qualifier=qualifier,
+                        value_text=None if value_numeric is not None else qualifier,
+                    )
+                )
+
+        if not items:
+            return 0
+
+        assert self._bulk_create is not None
+        bulk_result = await self._bulk_create(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=items,
+            ),
+            auth=auth,
+        )
+        if isinstance(bulk_result, Failure):
+            errors.append(f"ReadoutData creation failed: {bulk_result.failure()}")
+            return 0
+
+        result = bulk_result.unwrap()
+        if result.errors:
+            for err in result.errors[:10]:
+                errors.append(f"ReadoutData error: {err}")
+        return result.success_count
 
 
 def clear_file_cache(file_id: str) -> None:

@@ -69,6 +69,7 @@ interface ValidationResponse {
 interface ImportResult {
   imported_count: number;
   skipped_count: number;
+  readout_count: number;
   errors: string[];
 }
 
@@ -715,8 +716,9 @@ function ImportResultCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-3 gap-4">
-          <Stat label="Imported" value={result.imported_count} variant="success" />
+        <div className="grid grid-cols-4 gap-4">
+          <Stat label="Rows Resolved" value={result.imported_count} variant="success" />
+          <Stat label="Readouts Created" value={result.readout_count} variant="success" />
           <Stat label="Skipped" value={result.skipped_count} variant="warn" />
           <Stat label="Errors" value={result.errors.length} variant="error" />
         </div>

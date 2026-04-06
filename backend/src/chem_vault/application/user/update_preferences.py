@@ -15,12 +15,17 @@ from chem_vault.domain.shared.user_preferences import (
 )
 
 
+_UNSET = object()
+
+
 @dataclass(frozen=True, kw_only=True)
 class UpdatePreferencesCommand(Command):
     workspace_id: uuid.UUID
     user_id: uuid.UUID
     theme: str | None = None
     sidebar_collapsed: bool | None = None
+    # Use _UNSET sentinel so that explicit None means "clear", while omission means "don't change"
+    default_search_columns: list[str] | None | object = _UNSET
 
 
 class UpdatePreferences:
@@ -44,5 +49,7 @@ class UpdatePreferences:
             prefs.theme = input.theme
         if input.sidebar_collapsed is not None:
             prefs.sidebar_collapsed = input.sidebar_collapsed
+        if input.default_search_columns is not _UNSET:
+            prefs.default_search_columns = input.default_search_columns  # type: ignore[assignment]
 
         return Success(await self._repo.save(prefs))

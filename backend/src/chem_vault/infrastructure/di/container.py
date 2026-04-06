@@ -1103,6 +1103,8 @@ def create_container(
             uow=uow,
             plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            create_run=c[CreateRun],
+            bulk_create_readout_data=c[BulkCreateReadoutData],
         )
 
     container.define(ImportPlateDataService, _import_plate_data_service)

@@ -10,6 +10,7 @@ import { useEffect, useRef } from "react";
 interface ServerPreferences {
   theme?: string;
   sidebar_collapsed?: boolean;
+  default_search_columns?: string[] | null;
 }
 
 async function fetchPreferences(): Promise<ServerPreferences> {
@@ -37,7 +38,7 @@ async function patchPreferences(prefs: ServerPreferences): Promise<void> {
 export function usePreferencesSync() {
   const { isAuthenticated } = useAuthz();
   const { setTheme: setNextTheme } = useTheme();
-  const { theme, sidebarCollapsed, hydrate } = usePreferencesStore();
+  const { theme, sidebarCollapsed, defaultSearchColumns, hydrate } = usePreferencesStore();
 
   const syncingRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +63,8 @@ export function usePreferencesSync() {
     if (serverPrefs.theme) prefs.theme = serverPrefs.theme as UserPreferences["theme"];
     if (serverPrefs.sidebar_collapsed !== undefined)
       prefs.sidebarCollapsed = serverPrefs.sidebar_collapsed;
+    if (serverPrefs.default_search_columns !== undefined)
+      prefs.defaultSearchColumns = serverPrefs.default_search_columns;
 
     hydrate(prefs);
     if (prefs.theme) setNextTheme(prefs.theme);
@@ -81,6 +84,7 @@ export function usePreferencesSync() {
       patchPreferences({
         theme,
         sidebar_collapsed: sidebarCollapsed,
+        default_search_columns: defaultSearchColumns,
       }).catch(() => {
         // Silent fail — localStorage is the fallback
       });
@@ -89,5 +93,5 @@ export function usePreferencesSync() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [isAuthenticated, theme, sidebarCollapsed]);
+  }, [isAuthenticated, theme, sidebarCollapsed, defaultSearchColumns]);
 }

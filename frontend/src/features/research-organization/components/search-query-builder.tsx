@@ -25,10 +25,12 @@ import type {
   CollectionCriterion,
   KeywordListCriterion,
   RunDateCriterion,
+  BatchCriterion,
   TextOperator,
   PropertyOperator,
   StructureSearchType,
   RefType,
+  BatchFieldType,
 } from "../types";
 
 // ─── Field / operator options ───────────────────────────────────────────────
@@ -103,6 +105,29 @@ function defaultKeywordListCriterion(): KeywordListCriterion {
 function defaultRunDateCriterion(): RunDateCriterion {
   return { type: "run_date" };
 }
+
+function defaultBatchCriterion(): BatchCriterion {
+  return { type: "batch", field_type: "text", field: "batch_number", operator: "contains", value: "" };
+}
+
+const BATCH_TEXT_FIELDS = [
+  { value: "batch_number", label: "Batch Number" },
+  { value: "source", label: "Source" },
+  { value: "salt_form", label: "Salt Form" },
+  { value: "vendor_catalog_number", label: "Vendor Catalog #" },
+  { value: "notebook_reference", label: "Notebook Reference" },
+] as const;
+
+const BATCH_NUMERIC_FIELDS = [
+  { value: "purity", label: "Purity (%)" },
+  { value: "amount_value", label: "Amount" },
+] as const;
+
+const BATCH_FIELD_TYPE_OPTIONS: { value: BatchFieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "numeric", label: "Numeric" },
+  { value: "date", label: "Synthesis Date" },
+];
 
 const CURVE_TYPE_OPTIONS = [
   { value: "ic50", label: "IC50" },
@@ -687,6 +712,178 @@ function RunDateCriterionRow({
   );
 }
 
+function BatchCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: BatchCriterion;
+  onChange: (c: BatchCriterion) => void;
+  onRemove: () => void;
+}) {
+  const ft = criterion.field_type || "text";
+
+  return (
+    <div className="flex items-end gap-2 flex-wrap">
+      <div className="w-32">
+        <Label className="text-xs text-muted-foreground">Field Type</Label>
+        <Select
+          value={ft}
+          onValueChange={(v) => {
+            const newFt = v as BatchFieldType;
+            if (newFt === "text") {
+              onChange({ type: "batch", field_type: "text", field: "batch_number", operator: "contains", value: "" });
+            } else if (newFt === "numeric") {
+              onChange({ type: "batch", field_type: "numeric", field: "purity", operator: "gte", value: undefined });
+            } else {
+              onChange({ type: "batch", field_type: "date" });
+            }
+          }}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {BATCH_FIELD_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {ft === "text" && (
+        <>
+          <div className="w-44">
+            <Label className="text-xs text-muted-foreground">Field</Label>
+            <Select
+              value={criterion.field || "batch_number"}
+              onValueChange={(v) => onChange({ ...criterion, field: v })}
+            >
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {BATCH_TEXT_FIELDS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-32">
+            <Label className="text-xs text-muted-foreground">Operator</Label>
+            <Select
+              value={(criterion.operator as string) || "contains"}
+              onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator })}
+            >
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TEXT_OPERATORS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[120px]">
+            <Label className="text-xs text-muted-foreground">Value</Label>
+            <Input
+              className="h-9"
+              placeholder="Search..."
+              value={(criterion.value as string) ?? ""}
+              onChange={(e) => onChange({ ...criterion, value: e.target.value })}
+            />
+          </div>
+        </>
+      )}
+
+      {ft === "numeric" && (
+        <>
+          <div className="w-36">
+            <Label className="text-xs text-muted-foreground">Field</Label>
+            <Select
+              value={criterion.field || "purity"}
+              onValueChange={(v) => onChange({ ...criterion, field: v })}
+            >
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {BATCH_NUMERIC_FIELDS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-24">
+            <Label className="text-xs text-muted-foreground">Operator</Label>
+            <Select
+              value={(criterion.operator as string) || "gte"}
+              onValueChange={(v) => onChange({ ...criterion, operator: v as PropertyOperator })}
+            >
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PROPERTY_OPERATORS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {criterion.operator === "between" ? (
+            <>
+              <div className="w-24">
+                <Label className="text-xs text-muted-foreground">Min</Label>
+                <Input
+                  className="h-9" type="number" placeholder="Min"
+                  value={criterion.min ?? ""}
+                  onChange={(e) => onChange({ ...criterion, min: e.target.value ? Number(e.target.value) : undefined })}
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-xs text-muted-foreground">Max</Label>
+                <Input
+                  className="h-9" type="number" placeholder="Max"
+                  value={criterion.max ?? ""}
+                  onChange={(e) => onChange({ ...criterion, max: e.target.value ? Number(e.target.value) : undefined })}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="w-28">
+              <Label className="text-xs text-muted-foreground">Value</Label>
+              <Input
+                className="h-9" type="number" placeholder="Value"
+                value={(criterion.value as number) ?? ""}
+                onChange={(e) => onChange({ ...criterion, value: e.target.value ? Number(e.target.value) : undefined })}
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {ft === "date" && (
+        <>
+          <div className="w-44">
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Input
+              className="h-9" type="date"
+              value={criterion.date_from ?? ""}
+              onChange={(e) => onChange({ ...criterion, date_from: e.target.value || undefined })}
+            />
+          </div>
+          <div className="w-44">
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Input
+              className="h-9" type="date"
+              value={criterion.date_to ?? ""}
+              onChange={(e) => onChange({ ...criterion, date_to: e.target.value || undefined })}
+            />
+          </div>
+        </>
+      )}
+
+      <div className="flex-1" />
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 interface SearchQueryBuilderProps {
@@ -793,6 +990,14 @@ export function SearchQueryBuilder({
             <Plus className="mr-1 h-3 w-3" />
             Run Date
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteria([...criteria, defaultBatchCriterion()])}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Batch
+          </Button>
         </div>
       </div>
 
@@ -864,6 +1069,15 @@ export function SearchQueryBuilder({
             case "run_date":
               return (
                 <RunDateCriterionRow
+                  key={key}
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, c)}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "batch":
+              return (
+                <BatchCriterionRow
                   key={key}
                   criterion={criterion}
                   onChange={(c) => updateCriterion(index, c)}

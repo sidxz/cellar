@@ -15,6 +15,9 @@ from sqlalchemy.sql import ColumnElement
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
+    BatchModel,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ReadoutDataModel,
@@ -73,6 +76,8 @@ def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
             clauses.append(_keyword_list_clause(criterion))
         elif ctype == "run_date":
             clauses.append(_run_date_clause(criterion))
+        elif ctype == "batch":
+            clauses.append(_batch_clause(criterion))
         else:
             msg = f"Unknown criterion type: {ctype}"
             raise ValueError(msg)
@@ -251,3 +256,108 @@ def _run_date_clause(criterion: dict[str, Any]) -> ColumnElement:
         .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
         .where(*conditions)
     )
+
+
+# ── Batch field maps ────────────────────────────────────────────────────────
+
+BATCH_TEXT_FIELDS: dict[str, Any] = {
+    "batch_number": BatchModel.batch_number,
+    "source": BatchModel.source,
+    "salt_form": BatchModel.salt_form,
+    "vendor_catalog_number": BatchModel.vendor_catalog_number,
+    "notebook_reference": BatchModel.notebook_reference,
+}
+
+BATCH_NUMERIC_FIELDS: dict[str, Any] = {
+    "purity": BatchModel.purity,
+    "amount_value": BatchModel.amount_value,
+}
+
+
+def _batch_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules by batch-level fields.
+
+    Supported sub-types:
+    - ``field_type: "text"`` — text match on batch_number, source, etc.
+    - ``field_type: "numeric"`` — numeric comparison on purity, amount.
+    - ``field_type: "date"`` — date range on synthesis_date.
+    """
+    from datetime import date
+
+    field_type = criterion.get("field_type", "text")
+
+    if field_type == "text":
+        field_name = criterion["field"]
+        if field_name not in BATCH_TEXT_FIELDS:
+            msg = f"Unknown batch text field: {field_name}"
+            raise ValueError(msg)
+
+        column = BATCH_TEXT_FIELDS[field_name]
+        operator = criterion.get("operator", "contains")
+        value = criterion["value"]
+
+        if operator == "contains":
+            cond = column.ilike(f"%{_escape_like(value)}%", escape="\\")
+        elif operator == "equals":
+            cond = column == value
+        elif operator == "starts_with":
+            cond = column.ilike(f"{_escape_like(value)}%", escape="\\")
+        else:
+            msg = f"Unknown batch text operator: {operator}"
+            raise ValueError(msg)
+
+        return MoleculeModel.id.in_(
+            sa.select(BatchModel.molecule_id).where(cond)
+        )
+
+    elif field_type == "numeric":
+        field_name = criterion["field"]
+        if field_name not in BATCH_NUMERIC_FIELDS:
+            msg = f"Unknown batch numeric field: {field_name}"
+            raise ValueError(msg)
+
+        column = BATCH_NUMERIC_FIELDS[field_name]
+        operator = criterion.get("operator", "eq")
+        value = criterion.get("value")
+
+        op_map = {
+            "eq": "__eq__",
+            "lt": "__lt__",
+            "lte": "__le__",
+            "gt": "__gt__",
+            "gte": "__ge__",
+        }
+
+        if operator == "between":
+            cond = column.between(criterion["min"], criterion["max"])
+        elif operator in op_map:
+            cond = getattr(column, op_map[operator])(value)
+        else:
+            msg = f"Unknown batch numeric operator: {operator}"
+            raise ValueError(msg)
+
+        return MoleculeModel.id.in_(
+            sa.select(BatchModel.molecule_id).where(cond)
+        )
+
+    elif field_type == "date":
+        date_from = criterion.get("date_from")
+        date_to = criterion.get("date_to")
+
+        conditions: list[ColumnElement] = []
+        if date_from:
+            conditions.append(BatchModel.synthesis_date >= date.fromisoformat(date_from))
+        if date_to:
+            conditions.append(BatchModel.synthesis_date <= date.fromisoformat(date_to))
+
+        if not conditions:
+            msg = "batch date criterion requires at least date_from or date_to"
+            raise ValueError(msg)
+
+        return MoleculeModel.id.in_(
+            sa.select(BatchModel.molecule_id).where(*conditions)
+        )
+
+    else:
+        msg = f"Unknown batch field_type: {field_type}"
+        raise ValueError(msg)

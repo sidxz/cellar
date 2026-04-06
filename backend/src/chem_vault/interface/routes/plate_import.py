@@ -85,6 +85,7 @@ class ExecuteImportBody(BaseModel):
 class ExecuteImportResponse(BaseModel):
     imported_count: int
     skipped_count: int
+    readout_count: int = 0
     errors: list[str]
 
 
@@ -223,10 +224,12 @@ async def execute_import_data(
         workspace_id=auth.workspace_id,
         protocol_id=body.protocol_id,
         run_id=body.run_id,
+        auth=auth,
     )
     return ExecuteImportResponse(
         imported_count=result.imported_count,
         skipped_count=result.skipped_count,
+        readout_count=result.readout_count,
         errors=result.errors,
     )
 

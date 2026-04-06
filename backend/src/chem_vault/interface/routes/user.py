@@ -22,11 +22,13 @@ router = APIRouter(prefix="/api/v1/user", tags=["user"])
 class PreferencesResponse(BaseModel):
     theme: str = "dark"
     sidebar_collapsed: bool = False
+    default_search_columns: list[str] | None = None
 
 
 class UpdatePreferencesBody(BaseModel):
     theme: str | None = None
     sidebar_collapsed: bool | None = None
+    default_search_columns: list[str] | None = None
 
 
 @router.get("/preferences", response_model=PreferencesResponse)
@@ -34,7 +36,11 @@ async def get_preferences(auth: AuthDep, use_case: GetPreferencesDep) -> Prefere
     query = GetPreferencesQuery(workspace_id=auth.workspace_id, user_id=auth.user_id)
     result = await use_case(query)
     prefs = result_to_response(result)
-    return PreferencesResponse(theme=prefs.theme, sidebar_collapsed=prefs.sidebar_collapsed)
+    return PreferencesResponse(
+        theme=prefs.theme,
+        sidebar_collapsed=prefs.sidebar_collapsed,
+        default_search_columns=prefs.default_search_columns,
+    )
 
 
 @router.patch("/preferences", response_model=PreferencesResponse)
@@ -43,15 +49,25 @@ async def update_preferences(
     auth: AuthDep,
     use_case: UpdatePreferencesDep,
 ) -> PreferencesResponse:
+    from chem_vault.application.user.update_preferences import _UNSET
+
+    # Distinguish "field omitted" from "field explicitly set to null"
+    dsc = body.default_search_columns if "default_search_columns" in body.model_fields_set else _UNSET
+
     command = UpdatePreferencesCommand(
         workspace_id=auth.workspace_id,
         user_id=auth.user_id,
         theme=body.theme,
         sidebar_collapsed=body.sidebar_collapsed,
+        default_search_columns=dsc,
     )
     result = await use_case(command)
     prefs = result_to_response(result)
-    return PreferencesResponse(theme=prefs.theme, sidebar_collapsed=prefs.sidebar_collapsed)
+    return PreferencesResponse(
+        theme=prefs.theme,
+        sidebar_collapsed=prefs.sidebar_collapsed,
+        default_search_columns=prefs.default_search_columns,
+    )
 
 
 # ---------------------------------------------------------------------------
