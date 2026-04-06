@@ -3,7 +3,10 @@
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
@@ -15,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 
 const STANDARD_TARGET_OPTIONS = [
   { value: "skip", label: "— Skip —" },
@@ -29,6 +33,7 @@ interface ColumnMappingStepProps {
   previewRows: string[][];
   columnMappings: Record<string, string>;
   onMappingsChange: (mappings: Record<string, string>) => void;
+  protocolId?: string;
 }
 
 export function ColumnMappingStep({
@@ -36,7 +41,11 @@ export function ColumnMappingStep({
   previewRows,
   columnMappings,
   onMappingsChange,
+  protocolId,
 }: ColumnMappingStepProps) {
+  const { data: protocol } = useProtocol(protocolId || undefined);
+  const readoutDefs = protocol?.readout_definitions ?? [];
+
   const firstRow = previewRows[0] ?? [];
 
   function handleChange(header: string, target: string) {
@@ -67,7 +76,7 @@ export function ColumnMappingStep({
                   value={columnMappings[header] ?? "skip"}
                   onValueChange={(val) => handleChange(header, val)}
                 >
-                  <SelectTrigger className="w-[220px]">
+                  <SelectTrigger className="w-[260px]">
                     <SelectValue placeholder="Select target field" />
                   </SelectTrigger>
                   <SelectContent>
@@ -76,6 +85,21 @@ export function ColumnMappingStep({
                         {opt.label}
                       </SelectItem>
                     ))}
+
+                    {readoutDefs.length > 0 && (
+                      <>
+                        <SelectSeparator />
+                        <SelectGroup>
+                          <SelectLabel>Readout Definitions</SelectLabel>
+                          {readoutDefs.map((rd) => (
+                            <SelectItem key={rd.id} value={`readout:${rd.id}`}>
+                              {rd.name}
+                              {rd.unit ? ` (${rd.unit})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </TableCell>

@@ -195,19 +195,30 @@ export function ImportWizard() {
   }
 
   function downloadTemplate() {
-    const headers = [
-      "plate_barcode",
-      "well_position",
-      "molecule_identifier",
-      "qualifier",
-    ];
-    const example = ["PLT-001", "A01", "CV-000001", "="];
+    const selectedProtocol = protocols?.find((p) => p.id === protocolId);
+    const readoutDefs = selectedProtocol?.readout_definitions ?? [];
+
+    const baseHeaders = ["plate_barcode", "well_position", "molecule_identifier", "qualifier"];
+    const baseExample = ["PLT-001", "A01", "CV-000001", "="];
+
+    const readoutHeaders = readoutDefs.map((rd) =>
+      rd.unit ? `${rd.name} (${rd.unit})` : rd.name
+    );
+    const readoutExample = readoutDefs.map((rd) =>
+      rd.data_type === "numeric" ? "0.00" : ""
+    );
+
+    const headers = [...baseHeaders, ...readoutHeaders];
+    const example = [...baseExample, ...readoutExample];
+
     const csv = [headers.join(","), example.join(",")].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "plate_import_template.csv";
+    a.download = selectedProtocol
+      ? `plate_import_template_${selectedProtocol.name.replace(/\s+/g, "_")}.csv`
+      : "plate_import_template.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -456,6 +467,7 @@ export function ImportWizard() {
                 previewRows={preview.preview_rows}
                 columnMappings={columnMappings}
                 onMappingsChange={setColumnMappings}
+                protocolId={protocolId || undefined}
               />
             </CardContent>
           </Card>
