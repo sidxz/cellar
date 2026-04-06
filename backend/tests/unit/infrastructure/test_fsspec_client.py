@@ -5,8 +5,10 @@ import pytest
 from chem_vault.infrastructure.storage.fsspec_client import (
     BLOCKED_EXTENSIONS,
     FsspecStorageClient,
+    MAX_FILE_SIZE,
     StorageSettings,
     validate_extension,
+    validate_file_size,
 )
 from chem_vault.domain.shared.errors import ValidationError
 
@@ -33,6 +35,18 @@ class TestValidateExtension:
     def test_case_insensitive(self):
         with pytest.raises(ValidationError, match="blocked"):
             validate_extension("virus.EXE")
+
+
+class TestValidateFileSize:
+    def test_under_limit(self):
+        validate_file_size(1024 * 1024)  # 1 MB — should not raise
+
+    def test_at_limit(self):
+        validate_file_size(MAX_FILE_SIZE)  # exactly 100 MB — should not raise
+
+    def test_over_limit(self):
+        with pytest.raises(ValidationError, match="exceeds maximum"):
+            validate_file_size(MAX_FILE_SIZE + 1)
 
 
 class TestFsspecStorageClient:
