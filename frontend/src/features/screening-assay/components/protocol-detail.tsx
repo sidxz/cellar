@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Archive,
   Plus,
+  Paperclip,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -47,6 +48,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import {
   useProtocol,
   usePublishProtocol,
@@ -391,6 +393,21 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             router.push(`/assays/runs/${runId}`);
           }}
         />
+      </div>
+
+      {/* Files */}
+      <div>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Paperclip className="h-4 w-4" />
+          Files
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Attachments associated with this protocol.
+        </p>
+        <div className="mt-4 space-y-6">
+          <FileUploadZone entityType="protocol" entityId={protocolId} />
+          <AttachmentList entityType="protocol" entityId={protocolId} />
+        </div>
       </div>
 
       <CreateRunDialog

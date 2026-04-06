@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Boxes, Pencil } from "lucide-react";
+import { ArrowLeft, Boxes, Paperclip, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -20,6 +20,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EntityLink } from "@/shared/components/entity-link";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useMolecule } from "@/features/chemical-registration/hooks/use-molecules";
+import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import { useBatch, useUpdateBatch } from "../hooks/use-batches";
 import { SampleList } from "./sample-list";
 import { BATCH_SOURCE_LABELS, type Batch, type BatchSource } from "../types";
@@ -154,6 +155,21 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
         </p>
         <div className="mt-4">
           <SampleList batchId={batchId} />
+        </div>
+      </div>
+
+      {/* Files */}
+      <div>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Paperclip className="h-4 w-4" />
+          Files
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Attachments associated with this batch.
+        </p>
+        <div className="mt-4 space-y-6">
+          <FileUploadZone entityType="batch" entityId={batchId} />
+          <AttachmentList entityType="batch" entityId={batchId} />
         </div>
       </div>
 

@@ -9,6 +9,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Lock,
+  Paperclip,
   Unlock,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
@@ -31,6 +32,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { EntityLink } from "@/shared/components/entity-link";
+import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import {
   useRun,
   useStartRun,
@@ -296,6 +298,21 @@ export function RunDetail({ runId }: RunDetailProps) {
 
       {/* Data visualizations */}
       <RunDataPanel run={run} />
+
+      {/* Files */}
+      <div>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Paperclip className="h-4 w-4" />
+          Files
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Attachments associated with this run.
+        </p>
+        <div className="mt-4 space-y-6">
+          <FileUploadZone entityType="run" entityId={runId} />
+          <AttachmentList entityType="run" entityId={runId} />
+        </div>
+      </div>
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
