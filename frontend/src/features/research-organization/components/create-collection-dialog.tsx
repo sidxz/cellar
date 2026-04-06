@@ -56,6 +56,7 @@ export function CreateCollectionDialog({
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string>(NO_SELECTION);
   const [orgId, setOrgId] = useState<string>(NO_SELECTION);
+  const [visibility, setVisibility] = useState<"private" | "shared">("private");
 
   // Reset form when dialog opens / collection changes
   useEffect(() => {
@@ -66,6 +67,7 @@ export function CreateCollectionDialog({
         collection?.project_id ?? defaultProjectId ?? NO_SELECTION
       );
       setOrgId(collection?.owned_by_org_id ?? NO_SELECTION);
+      setVisibility(collection?.visibility ?? "private");
     }
   }, [open, collection, defaultProjectId]);
 
@@ -74,6 +76,7 @@ export function CreateCollectionDialog({
     setDescription("");
     setProjectId(defaultProjectId ?? NO_SELECTION);
     setOrgId(NO_SELECTION);
+    setVisibility("private");
   };
 
   const mutation = isEdit ? updateMutation : createMutation;
@@ -85,6 +88,7 @@ export function CreateCollectionDialog({
       description: description.trim() || null,
       project_id: projectId === NO_SELECTION ? null : projectId,
       owned_by_org_id: orgId === NO_SELECTION ? null : orgId,
+      visibility,
     };
 
     mutation.mutate(payload, {
@@ -130,6 +134,22 @@ export function CreateCollectionDialog({
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Visibility</Label>
+            <Select
+              value={visibility}
+              onValueChange={(v) => setVisibility(v as "private" | "shared")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="private">Private</SelectItem>
+                <SelectItem value="shared">Shared</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid gap-2">

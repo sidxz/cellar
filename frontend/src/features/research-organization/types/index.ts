@@ -52,6 +52,7 @@ export interface Collection {
   owned_by_org_id: string | null;
   created_by: string;
   molecule_count: number;
+  visibility: "private" | "shared";
   version: number;
 }
 
@@ -101,6 +102,7 @@ export interface CreateCollectionInput {
   description?: string | null;
   project_id?: string | null;
   owned_by_org_id?: string | null;
+  visibility?: "private" | "shared";
 }
 
 export interface UpdateCollectionInput {
@@ -108,6 +110,7 @@ export interface UpdateCollectionInput {
   description?: string | null;
   project_id?: string | null;
   owned_by_org_id?: string | null;
+  visibility?: "private" | "shared";
 }
 
 export interface CreateSavedSearchInput {
