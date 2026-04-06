@@ -18,7 +18,7 @@ export function useAttachments(entityType: AttachableType, entityId: string) {
     queryKey: attachmentsKey(entityType, entityId),
     queryFn: () =>
       customInstance<AttachmentResponse[]>({
-        url: `/api/v1/${entityType}s/${entityId}/attachments`,
+        url: `/api/v1/${entityType}/${entityId}/attachments`,
         method: "GET",
       }),
     enabled: !!entityId,
@@ -35,7 +35,7 @@ export function useUploadAttachment(
       const formData = new FormData();
       formData.append("file", file);
       return customInstance<AttachmentResponse>({
-        url: `/api/v1/${entityType}s/${entityId}/attachments`,
+        url: `/api/v1/${entityType}/${entityId}/attachments`,
         method: "POST",
         data: formData,
       });
