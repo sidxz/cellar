@@ -46,6 +46,7 @@ class CollectionResponse(BaseModel):
     owned_by_org_id: uuid.UUID | None = None
     created_by: uuid.UUID
     molecule_count: int
+    visibility: str
     version: int
 
     @classmethod
@@ -59,6 +60,7 @@ class CollectionResponse(BaseModel):
             owned_by_org_id=coll.owned_by_org_id,
             created_by=coll.created_by,
             molecule_count=coll.molecule_count,
+            visibility=coll.visibility.value,
             version=coll.version,
         )
 
@@ -68,6 +70,7 @@ class CreateCollectionBody(BaseModel):
     description: str | None = None
     project_id: uuid.UUID | None = None
     owned_by_org_id: uuid.UUID | None = None
+    visibility: str = "private"
 
 
 class UpdateCollectionBody(BaseModel):
@@ -75,6 +78,7 @@ class UpdateCollectionBody(BaseModel):
     description: str | None = None
     project_id: uuid.UUID | None = None
     owned_by_org_id: uuid.UUID | None = None
+    visibility: str | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -143,6 +147,7 @@ async def create_collection(
         project_id=body.project_id,
         owned_by_org_id=body.owned_by_org_id,
         created_by=auth.user_id,
+        visibility=body.visibility,
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)
@@ -163,6 +168,7 @@ async def update_collection(
         description=body.description if "description" in provided else ...,
         project_id=body.project_id if "project_id" in provided else ...,
         owned_by_org_id=body.owned_by_org_id if "owned_by_org_id" in provided else ...,
+        visibility=body.visibility if "visibility" in provided else None,
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)

@@ -4,10 +4,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from chem_vault.domain.research_organization.events import CollectionCreated
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
+
+
+class CollectionVisibility(StrEnum):
+    PRIVATE = "private"
+    SHARED = "shared"
+
+
+class CollectionBooleanOp(StrEnum):
+    UNION = "union"
+    INTERSECT = "intersect"
+    DIFFERENCE = "difference"
+    SYMMETRIC_DIFFERENCE = "symmetric_difference"
 
 
 class Collection(AggregateRoot):
@@ -31,6 +44,7 @@ class Collection(AggregateRoot):
         owned_by_org_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
         molecule_count: int = 0,
+        visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -45,6 +59,7 @@ class Collection(AggregateRoot):
         self.owned_by_org_id = owned_by_org_id
         self.created_by = created_by
         self.molecule_count = molecule_count
+        self.visibility = visibility
 
     @classmethod
     def create(
@@ -56,6 +71,7 @@ class Collection(AggregateRoot):
         project_id: uuid.UUID | None = None,
         owned_by_org_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
+        visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
     ) -> Collection:
         collection = cls(
             workspace_id=workspace_id,
@@ -64,6 +80,7 @@ class Collection(AggregateRoot):
             project_id=project_id,
             owned_by_org_id=owned_by_org_id,
             created_by=created_by,
+            visibility=visibility,
         )
         collection.register_event(
             CollectionCreated(
@@ -82,6 +99,7 @@ class Collection(AggregateRoot):
         description: str | None = ...,  # type: ignore[assignment]
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         owned_by_org_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        visibility: CollectionVisibility | None = None,
     ) -> None:
         """Update mutable fields.
 
@@ -98,4 +116,6 @@ class Collection(AggregateRoot):
             self.project_id = project_id
         if owned_by_org_id is not ...:
             self.owned_by_org_id = owned_by_org_id
+        if visibility is not None:
+            self.visibility = visibility
         self.updated_at = datetime.now(UTC)

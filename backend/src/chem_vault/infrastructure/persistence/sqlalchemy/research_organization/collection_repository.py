@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from chem_vault.domain.research_organization.collection import Collection
+from chem_vault.domain.research_organization.collection import Collection, CollectionVisibility
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -33,6 +33,7 @@ class SQLAlchemyCollectionRepository(
             owned_by_org_id=model.owned_by_org_id,
             created_by=model.created_by,
             molecule_count=molecule_count,
+            visibility=CollectionVisibility(model.visibility),
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -47,6 +48,7 @@ class SQLAlchemyCollectionRepository(
             project_id=aggregate.project_id,
             owned_by_org_id=aggregate.owned_by_org_id,
             created_by=aggregate.created_by,
+            visibility=aggregate.visibility.value,
             version=aggregate.version,
         )
 
@@ -55,6 +57,7 @@ class SQLAlchemyCollectionRepository(
         model.description = aggregate.description
         model.project_id = aggregate.project_id
         model.owned_by_org_id = aggregate.owned_by_org_id
+        model.visibility = aggregate.visibility.value
 
     # ------------------------------------------------------------------
     # Override find_by_id to populate molecule_count

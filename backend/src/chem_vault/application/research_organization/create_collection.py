@@ -11,7 +11,7 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.research_organization.collection import Collection
+from chem_vault.domain.research_organization.collection import Collection, CollectionVisibility
 from chem_vault.domain.research_organization.repository import CollectionRepository
 from chem_vault.domain.shared.errors import DomainError
 
@@ -24,6 +24,7 @@ class CreateCollectionCommand(Command):
     project_id: uuid.UUID | None = None
     owned_by_org_id: uuid.UUID | None = None
     created_by: uuid.UUID
+    visibility: str = "private"
 
 
 class CreateCollection:
@@ -50,6 +51,7 @@ class CreateCollection:
                 project_id=input.project_id,
                 owned_by_org_id=input.owned_by_org_id,
                 created_by=input.created_by,
+                visibility=CollectionVisibility(input.visibility),
             )
             await self._repo.save(collection)
             events = await self._uow.commit()

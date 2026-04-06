@@ -62,6 +62,7 @@ class CollectionModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         Uuid, ForeignKey("organizations.id", ondelete="SET NULL")
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False, server_default="private")
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "name", name="uq_collection_ws_name"),
