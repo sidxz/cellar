@@ -472,6 +472,21 @@ async def get_molecule_activity(
     return ActivitySummaryResponse.from_domain(summary)
 
 
+@router.get("/{molecule_id}/plates")
+async def list_molecule_plates(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    c: Annotated[Container, Depends(get_container)],
+):
+    """List all registered plates containing batches of this molecule."""
+    from chem_vault.application.inventory.plate_read_model import PlateReadModelService
+    from chem_vault.interface.routes.registered_plates import MoleculePlateResponse
+
+    service: PlateReadModelService = c[PlateReadModelService]
+    entries = await service.find_plates_for_molecule(auth.workspace_id, molecule_id)
+    return [MoleculePlateResponse.from_entry(e) for e in entries]
+
+
 @router.get("/{molecule_id}/collections")
 async def list_molecule_collections(
     molecule_id: uuid.UUID,

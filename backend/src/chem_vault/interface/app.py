@@ -127,8 +127,10 @@ def create_app() -> FastAPI:
     app.include_router(synth_req_router)
 
     from chem_vault.interface.routes.plate_templates import router as plate_template_router
+    from chem_vault.interface.routes.registered_plates import router as registered_plates_router
 
     app.include_router(plate_template_router)
+    app.include_router(registered_plates_router)
 
     from chem_vault.interface.routes.projects import router as project_router
     from chem_vault.interface.routes.collections import router as collection_router

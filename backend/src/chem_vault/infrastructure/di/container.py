@@ -89,6 +89,21 @@ from chem_vault.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from chem_vault.application.inventory.registered_plates import (
+    ChangeStatus,
+    DeletePlate,
+    DerivePlate,
+    GetPlate,
+    ListChildren,
+    ListPlates,
+    MapWells,
+    RegisterPlate,
+    UpdatePlate,
+)
+from chem_vault.application.inventory.plate_read_model import PlateReadModelService
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
+    SQLAlchemyRegisteredPlateRepository,
+)
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
@@ -908,6 +923,40 @@ def create_container(
     container.define(DeletePlateTemplate, _pt_cmd(DeletePlateTemplate))
     container.define(GetPlateTemplate, _pt_query(GetPlateTemplate))
     container.define(ListPlateTemplates, _pt_query(ListPlateTemplates))
+
+    # --- Registered Plates ---
+    def _reg_plate_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _reg_plate_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow))
+        return _f
+
+    container.define(RegisterPlate, _reg_plate_cmd(RegisterPlate))
+    container.define(UpdatePlate, _reg_plate_cmd(UpdatePlate))
+    container.define(MapWells, _reg_plate_cmd(MapWells))
+    container.define(ChangeStatus, _reg_plate_cmd(ChangeStatus))
+    container.define(DerivePlate, _reg_plate_cmd(DerivePlate))
+    container.define(GetPlate, _reg_plate_query(GetPlate))
+    container.define(ListPlates, _reg_plate_query(ListPlates))
+    container.define(ListChildren, _reg_plate_query(ListChildren))
+
+    def _delete_reg_plate(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeletePlate(uow, SQLAlchemyRegisteredPlateRepository(uow))
+
+    container.define(DeletePlate, _delete_reg_plate)
+
+    # --- Plate Read Model ---
+    container.define(
+        PlateReadModelService,
+        lambda c: PlateReadModelService(c[async_sessionmaker]()),
+    )
 
     # --- Research Organization ---
     def _project_cmd(uc_cls):  # type: ignore[no-untyped-def]
