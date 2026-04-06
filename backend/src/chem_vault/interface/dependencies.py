@@ -69,6 +69,7 @@ from chem_vault.application.research_organization.create_saved_search import Cre
 from chem_vault.application.research_organization.delete_collection import DeleteCollection
 from chem_vault.application.research_organization.delete_saved_search import DeleteSavedSearch
 from chem_vault.application.research_organization.get_collection import GetCollection, ListCollections
+from chem_vault.application.research_organization.get_collections_for_molecule import ListCollectionsForMolecule
 from chem_vault.application.research_organization.get_project import GetProject, ListProjects
 from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
 from chem_vault.application.research_organization.update_collection import UpdateCollection
@@ -289,6 +290,7 @@ ListCollectionsDep = Annotated[ListCollections, Depends(_get_use_case(ListCollec
 AddMoleculesToCollectionDep = Annotated[AddMoleculesToCollection, Depends(_get_use_case(AddMoleculesToCollection))]
 RemoveMoleculesFromCollectionDep = Annotated[RemoveMoleculesFromCollection, Depends(_get_use_case(RemoveMoleculesFromCollection))]
 ListCollectionMoleculesDep = Annotated[ListCollectionMolecules, Depends(_get_use_case(ListCollectionMolecules))]
+ListCollectionsForMoleculeDep = Annotated[ListCollectionsForMolecule, Depends(_get_use_case(ListCollectionsForMolecule))]
 CreateSavedSearchDep = Annotated[CreateSavedSearch, Depends(_get_use_case(CreateSavedSearch))]
 UpdateSavedSearchDep = Annotated[UpdateSavedSearch, Depends(_get_use_case(UpdateSavedSearch))]
 DeleteSavedSearchDep = Annotated[DeleteSavedSearch, Depends(_get_use_case(DeleteSavedSearch))]

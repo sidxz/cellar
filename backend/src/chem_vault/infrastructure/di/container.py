@@ -177,6 +177,7 @@ from chem_vault.application.research_organization.create_saved_search import Cre
 from chem_vault.application.research_organization.delete_collection import DeleteCollection
 from chem_vault.application.research_organization.delete_saved_search import DeleteSavedSearch
 from chem_vault.application.research_organization.get_collection import GetCollection, ListCollections
+from chem_vault.application.research_organization.get_collections_for_molecule import ListCollectionsForMolecule
 from chem_vault.application.research_organization.get_project import GetProject, ListProjects
 from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
 from chem_vault.application.research_organization.update_collection import UpdateCollection
@@ -948,6 +949,7 @@ def create_container(
     container.define(GetCollection, _collection_query(GetCollection))
     container.define(ListCollections, _collection_query(ListCollections))
     container.define(ListCollectionMolecules, _collection_query(ListCollectionMolecules))
+    container.define(ListCollectionsForMolecule, _collection_query(ListCollectionsForMolecule))
 
     def _add_molecules(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])

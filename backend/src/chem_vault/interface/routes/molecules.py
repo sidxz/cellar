@@ -36,6 +36,7 @@ from chem_vault.interface.dependencies import (
     AuthDep,
     GetMoleculeByIdentifierDep,
     GetMoleculeDep,
+    ListCollectionsForMoleculeDep,
     ListIdentifiersDep,
     ListMoleculesDep,
     MoleculeActivityServiceDep,
@@ -469,6 +470,28 @@ async def get_molecule_activity(
         auth.workspace_id, molecule_id
     )
     return ActivitySummaryResponse.from_domain(summary)
+
+
+@router.get("/{molecule_id}/collections")
+async def list_molecule_collections(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListCollectionsForMoleculeDep,
+):
+    """List collections containing this molecule."""
+    from chem_vault.application.research_organization.get_collections_for_molecule import (
+        ListCollectionsForMoleculeQuery,
+    )
+    from chem_vault.interface.routes.collections import CollectionResponse
+
+    result = await use_case(
+        ListCollectionsForMoleculeQuery(
+            workspace_id=auth.workspace_id,
+            molecule_id=molecule_id,
+        )
+    )
+    collections = result_to_response(result)
+    return [CollectionResponse.from_domain(c) for c in collections]
 
 
 # ---------------------------------------------------------------------------
