@@ -6,6 +6,8 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.inventory.batch import Batch
+from chem_vault.domain.inventory.import_template import ImportTemplate
+from chem_vault.domain.inventory.registered_plate import RegisteredPlate
 from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.inventory.sample_request import SampleRequest
 from chem_vault.domain.inventory.shipment import Shipment
@@ -99,4 +101,49 @@ class SynthesisRequestRepository(Protocol):
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[SynthesisRequest]: ...
     async def save(self, aggregate: SynthesisRequest) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class RegisteredPlateRepository(Protocol):
+    """Repository for RegisteredPlate aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> RegisteredPlate | None: ...
+    async def find_by_barcode(
+        self, workspace_id: uuid.UUID, barcode: str
+    ) -> RegisteredPlate | None: ...
+    async def find_by_location(
+        self, storage_location_id: uuid.UUID
+    ) -> list[RegisteredPlate]: ...
+    async def find_children(
+        self, parent_plate_id: uuid.UUID
+    ) -> list[RegisteredPlate]: ...
+    async def find_by_project(
+        self, project_id: uuid.UUID
+    ) -> list[RegisteredPlate]: ...
+    async def search(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        barcode: str | None = None,
+        plate_label: str | None = None,
+        plate_type: str | None = None,
+        status: str | None = None,
+        format: str | None = None,
+        storage_location_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
+    ) -> list[RegisteredPlate]: ...
+    async def save(self, aggregate: RegisteredPlate) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class ImportTemplateRepository(Protocol):
+    """Repository for ImportTemplate entities."""
+
+    async def find_by_id(self, id: uuid.UUID) -> ImportTemplate | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[ImportTemplate]: ...
+    async def save(self, entity: ImportTemplate) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
