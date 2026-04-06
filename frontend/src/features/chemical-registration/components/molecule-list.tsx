@@ -66,18 +66,23 @@ export function MoleculeList() {
       {
         headerName: "Structure",
         field: "structure",
-        width: 72,
+        width: 120,
         sortable: false,
         filter: false,
         resizable: false,
+        autoHeight: true,
         cellRenderer: (params: ICellRendererParams<Molecule>) => {
           const mol = params.data;
           if (!mol) return null;
           if (mol.structure_status === "disclosed" && mol.structure?.smiles) {
-            return <StructureThumbnail smiles={mol.structure.smiles} size={40} />;
+            return (
+              <div className="py-1">
+                <StructureThumbnail smiles={mol.structure.smiles} size={80} />
+              </div>
+            );
           }
           return (
-            <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+            <div className="flex h-[80px] w-[80px] items-center justify-center rounded bg-muted text-xs text-muted-foreground">
               N/A
             </div>
           );
