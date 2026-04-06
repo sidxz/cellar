@@ -1,14 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FlaskConical } from "lucide-react";
+import { ArrowLeft, FlaskConical, GitBranch, Grid3x3, Pencil } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { usePlate, usePlateChildren } from "../hooks/use-plates";
+import { usePlate, usePlateChildren, useChangeStatus, useDerivePlate } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels, plateStatusLabels } from "../types/plates";
+import { WellMappingDialog } from "./well-mapping-dialog";
 
 // ---------------------------------------------------------------------------
 // Badge helpers
@@ -110,6 +119,8 @@ interface PlateDetailProps {
 export function PlateDetail({ plateId }: PlateDetailProps) {
   const { data: plate, isLoading } = usePlate(plateId);
   const { data: children } = usePlateChildren(plateId);
+  const [wellMapOpen, setWellMapOpen] = useState(false);
+  const changeStatus = useChangeStatus(plateId);
 
   if (isLoading) {
     return (
@@ -160,6 +171,55 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
             </Badge>
           </div>
           <p className="mt-1 text-muted-foreground">{plate.plate_label}</p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setWellMapOpen(true)}
+            disabled={plate.status === "disposed"}
+          >
+            <Grid3x3 className="mr-1.5 h-3.5 w-3.5" />
+            Map Wells
+          </Button>
+          <Select
+            value="__current__"
+            onValueChange={(v) => {
+              if (v !== "__current__") changeStatus.mutate(v);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[150px] text-xs">
+              <SelectValue>Change Status</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__current__" disabled>Change Status</SelectItem>
+              {plate.status === "registered" && (
+                <>
+                  <SelectItem value="stored">Store</SelectItem>
+                  <SelectItem value="in_use">Check Out</SelectItem>
+                  <SelectItem value="disposed">Dispose</SelectItem>
+                </>
+              )}
+              {plate.status === "in_use" && (
+                <>
+                  <SelectItem value="stored">Return to Storage</SelectItem>
+                  <SelectItem value="depleted">Mark Depleted</SelectItem>
+                </>
+              )}
+              {plate.status === "stored" && (
+                <>
+                  <SelectItem value="in_use">Check Out</SelectItem>
+                  <SelectItem value="depleted">Mark Depleted</SelectItem>
+                  <SelectItem value="disposed">Dispose</SelectItem>
+                </>
+              )}
+              {plate.status === "depleted" && (
+                <SelectItem value="disposed">Dispose</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -285,6 +345,15 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Well mapping dialog */}
+      <WellMappingDialog
+        open={wellMapOpen}
+        onOpenChange={setWellMapOpen}
+        plateId={plateId}
+        format={plate.format}
+        initialWellMap={plate.well_map}
+      />
     </div>
   );
 }
