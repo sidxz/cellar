@@ -57,8 +57,8 @@ class ImportPreviewResponse(BaseModel):
 class ValidateImportBody(BaseModel):
     file_id: str
     column_mappings: dict[str, str]
-    protocol_id: uuid.UUID
-    run_id: uuid.UUID
+    protocol_id: uuid.UUID | None = None
+    run_id: uuid.UUID | None = None
 
 
 class ValidationDetailResponse(BaseModel):
@@ -78,8 +78,8 @@ class ValidationResultResponse(BaseModel):
 class ExecuteImportBody(BaseModel):
     file_id: str
     column_mappings: dict[str, str]
-    protocol_id: uuid.UUID
-    run_id: uuid.UUID
+    protocol_id: uuid.UUID | None = None
+    run_id: uuid.UUID | None = None
 
 
 class ExecuteImportResponse(BaseModel):

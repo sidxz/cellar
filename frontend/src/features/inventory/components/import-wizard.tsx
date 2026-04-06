@@ -49,28 +49,27 @@ interface PreviewResponse {
   headers: string[];
   preview_rows: string[][];
   total_rows: number;
-  file_key: string;
+  file_id: string;
 }
 
-interface ValidationIssue {
+interface ValidationDetail {
   row: number;
-  column: string;
-  message: string;
+  issue: string;
+  severity: string;
 }
 
 interface ValidationResponse {
+  total_rows: number;
   matched: number;
   unresolved: number;
   errors: number;
-  issues: ValidationIssue[];
-  valid: boolean;
+  details: ValidationDetail[];
 }
 
 interface ImportResult {
-  imported: number;
-  skipped: number;
-  errors: number;
-  plate_ids: string[];
+  imported_count: number;
+  skipped_count: number;
+  errors: string[];
 }
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
@@ -232,7 +231,7 @@ export function ImportWizard() {
         url: "/api/v1/plates/import/validate",
         method: "POST",
         data: {
-          file_key: preview.file_key,
+          file_id: preview.file_id,
           column_mappings: columnMappings,
           protocol_id: protocolId || null,
           run_id: runId || null,
@@ -274,14 +273,14 @@ export function ImportWizard() {
         url: "/api/v1/plates/import/execute",
         method: "POST",
         data: {
-          file_key: preview.file_key,
+          file_id: preview.file_id,
           column_mappings: columnMappings,
           protocol_id: protocolId || null,
           run_id: runId || null,
         },
       });
       setImportResult(response);
-      showSuccess(`Imported ${response.imported} plate(s)`);
+      showSuccess(`Imported ${response.imported_count} row(s)`);
     } catch (err: unknown) {
       showError(
         err instanceof Error ? err.message : "Import failed."
@@ -577,7 +576,7 @@ export function ImportWizard() {
                 </Button>
                 <Button
                   onClick={handleImport}
-                  disabled={importing || (validation != null && !validation.valid)}
+                  disabled={importing || (validation != null && validation.errors > 0)}
                 >
                   {importing && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -646,22 +645,23 @@ function ValidationSummaryCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          {validation.valid ? (
+          {validation.errors === 0 ? (
             <CheckCircle2 className="h-5 w-5 text-green-500" />
           ) : (
             <XCircle className="h-5 w-5 text-destructive" />
           )}
-          Validation {validation.valid ? "Passed" : "Failed"}
+          Validation {validation.errors === 0 ? "Passed" : "Failed"}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
+          <Stat label="Total Rows" value={validation.total_rows} variant="success" />
           <Stat label="Matched" value={validation.matched} variant="success" />
           <Stat label="Unresolved" value={validation.unresolved} variant="warn" />
           <Stat label="Errors" value={validation.errors} variant="error" />
         </div>
 
-        {validation.issues.length > 0 && (
+        {validation.details.length > 0 && (
           <div>
             <p className="text-sm font-medium mb-2">Issues</p>
             <div className="rounded-md border max-h-60 overflow-y-auto">
@@ -669,21 +669,23 @@ function ValidationSummaryCard({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-16">Row</TableHead>
-                    <TableHead className="w-40">Column</TableHead>
-                    <TableHead>Message</TableHead>
+                    <TableHead className="w-24">Severity</TableHead>
+                    <TableHead>Issue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {validation.issues.map((issue, i) => (
+                  {validation.details.map((d, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-mono text-xs">
-                        {issue.row}
+                        {d.row}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {issue.column}
+                      <TableCell className="text-xs">
+                        <span className={d.severity === "error" ? "text-destructive" : "text-yellow-500"}>
+                          {d.severity}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-xs text-destructive">
-                        {issue.message}
+                      <TableCell className="text-xs">
+                        {d.issue}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -714,14 +716,16 @@ function ImportResultCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-4">
-          <Stat label="Imported" value={result.imported} variant="success" />
-          <Stat label="Skipped" value={result.skipped} variant="warn" />
-          <Stat label="Errors" value={result.errors} variant="error" />
+          <Stat label="Imported" value={result.imported_count} variant="success" />
+          <Stat label="Skipped" value={result.skipped_count} variant="warn" />
+          <Stat label="Errors" value={result.errors.length} variant="error" />
         </div>
-        {result.plate_ids.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            {result.plate_ids.length} plate(s) created or updated.
-          </p>
+        {result.errors.length > 0 && (
+          <div className="text-xs text-destructive space-y-1 max-h-40 overflow-y-auto">
+            {result.errors.map((e, i) => (
+              <p key={i}>{e}</p>
+            ))}
+          </div>
         )}
         <Button onClick={onDone}>View Plates</Button>
       </CardContent>

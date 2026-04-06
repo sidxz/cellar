@@ -1100,6 +1100,7 @@ def create_container(
     def _import_plate_data_service(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportPlateDataService(
+            uow=uow,
             plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
         )

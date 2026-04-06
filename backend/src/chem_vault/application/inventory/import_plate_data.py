@@ -7,6 +7,7 @@ import io
 import uuid
 from dataclasses import dataclass, field
 
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.import_template import ImportTemplate
 from chem_vault.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
 
@@ -127,9 +128,11 @@ class ImportPlateDataService:
 
     def __init__(
         self,
+        uow: UnitOfWork,
         plate_repo: RegisteredPlateRepository,
         batch_repo: BatchRepository,
     ) -> None:
+        self._uow = uow
         self._plate_repo = plate_repo
         self._batch_repo = batch_repo
 
@@ -169,71 +172,59 @@ class ImportPlateDataService:
         column_mappings: dict[str, str],
         workspace_id: uuid.UUID,
     ) -> ValidationResult:
-        """Validate column mappings against cached data rows.
-
-        Checks that every plate barcode resolves to a RegisteredPlate and,
-        when a well_position column is mapped, that the well exists in the
-        plate's well_map.
-        """
+        """Validate column mappings against cached data rows."""
         if file_id not in _file_cache:
             raise ValueError(f"File {file_id!r} not found in cache (expired or invalid)")
 
-        headers, data_rows = _file_cache[file_id]
-        barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
+        async with self._uow:
+            headers, data_rows = _file_cache[file_id]
+            barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
 
-        details: list[ValidationDetail] = []
-        matched = 0
-        unresolved = 0
-        error_count = 0
+            details: list[ValidationDetail] = []
+            matched = 0
+            unresolved = 0
+            error_count = 0
 
-        for row_num, row in enumerate(data_rows, start=2):  # 1-indexed + header row
-            if barcode_idx is not None and barcode_idx < len(row):
-                barcode = row[barcode_idx].strip()
-                if not barcode:
-                    details.append(
-                        ValidationDetail(
-                            row=row_num,
-                            issue="Missing plate barcode",
-                            severity="warning",
-                        )
-                    )
-                    matched += 1  # Not a hard error — row still counts
-                    continue
+            for row_num, row in enumerate(data_rows, start=2):
+                if barcode_idx is not None and barcode_idx < len(row):
+                    barcode = row[barcode_idx].strip()
+                    if not barcode:
+                        matched += 1
+                        continue
 
-                plate = await self._plate_repo.find_by_barcode(workspace_id, barcode)
-                if plate is None:
-                    details.append(
-                        ValidationDetail(
-                            row=row_num,
-                            issue=f"Plate {barcode!r} not found",
-                            severity="error",
-                        )
-                    )
-                    error_count += 1
-                    unresolved += 1
-                    continue
-
-                # Validate well position if mapped
-                if well_idx is not None and well_idx < len(row):
-                    well_pos = row[well_idx].strip().upper()
-                    if well_pos and plate.well_map and well_pos not in plate.well_map:
+                    plate = await self._plate_repo.find_by_barcode(workspace_id, barcode)
+                    if plate is None:
                         details.append(
                             ValidationDetail(
                                 row=row_num,
-                                issue=f"Well {well_pos} not mapped on plate {barcode!r}",
-                                severity="warning",
+                                issue=f"Plate {barcode!r} not found",
+                                severity="error",
                             )
                         )
+                        error_count += 1
+                        unresolved += 1
+                        continue
 
-            matched += 1
+                    if well_idx is not None and well_idx < len(row):
+                        well_pos = row[well_idx].strip().upper()
+                        if well_pos and plate.well_map and well_pos not in plate.well_map:
+                            details.append(
+                                ValidationDetail(
+                                    row=row_num,
+                                    issue=f"Well {well_pos} not mapped on plate {barcode!r}",
+                                    severity="warning",
+                                )
+                            )
 
-        return ValidationResult(
-            total_rows=len(data_rows),
-            matched=matched,
-            unresolved=unresolved,
-            errors=error_count,
-            details=details[:100],
-        )
+                matched += 1
+
+            return ValidationResult(
+                total_rows=len(data_rows),
+                matched=matched,
+                unresolved=unresolved,
+                errors=error_count,
+                details=details[:100],
+            )
 
     # ------------------------------------------------------------------
     # Phase 3: Execute
@@ -260,88 +251,78 @@ class ImportPlateDataService:
         if file_id not in _file_cache:
             raise ValueError(f"File {file_id!r} not found in cache (expired or invalid)")
 
-        headers, data_rows = _file_cache[file_id]
-        barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
+        async with self._uow:
+            headers, data_rows = _file_cache[file_id]
+            barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
 
-        imported = 0
-        skipped = 0
-        errors: list[str] = []
+            imported = 0
+            skipped = 0
+            errors: list[str] = []
+            plate_cache: dict[str, object] = {}
 
-        # Plate cache to avoid repeated DB lookups for the same barcode
-        plate_cache: dict[str, object] = {}
-
-        for row_num, row in enumerate(data_rows, start=2):
-            try:
-                barcode = (
-                    row[barcode_idx].strip()
-                    if barcode_idx is not None and barcode_idx < len(row)
-                    else None
-                )
-                well_pos = (
-                    row[well_idx].strip().upper()
-                    if well_idx is not None and well_idx < len(row)
-                    else None
-                )
-
-                if not barcode or not well_pos:
-                    skipped += 1
-                    continue
-
-                # Resolve plate (cached)
-                if barcode not in plate_cache:
-                    plate_cache[barcode] = await self._plate_repo.find_by_barcode(
-                        workspace_id, barcode
-                    )
-                plate = plate_cache[barcode]
-
-                if plate is None:
-                    errors.append(f"Row {row_num}: Plate {barcode!r} not found")
-                    skipped += 1
-                    continue
-
-                # Resolve batch_id from well_map
-                well_map = plate.well_map if hasattr(plate, "well_map") else {}  # type: ignore[union-attr]
-                well_entry = well_map.get(well_pos) if well_map else None
-
-                if not well_entry or not well_entry.get("batch_id"):
-                    errors.append(
-                        f"Row {row_num}: Well {well_pos} not mapped on plate {barcode!r}"
-                    )
-                    skipped += 1
-                    continue
-
-                # Resolve batch → molecule_id
-                batch_id_raw = well_entry["batch_id"]
+            for row_num, row in enumerate(data_rows, start=2):
                 try:
-                    batch_id = uuid.UUID(str(batch_id_raw))
-                except (ValueError, AttributeError):
-                    errors.append(f"Row {row_num}: Invalid batch_id {batch_id_raw!r}")
+                    barcode = (
+                        row[barcode_idx].strip()
+                        if barcode_idx is not None and barcode_idx < len(row)
+                        else None
+                    )
+                    well_pos = (
+                        row[well_idx].strip().upper()
+                        if well_idx is not None and well_idx < len(row)
+                        else None
+                    )
+
+                    if not barcode or not well_pos:
+                        skipped += 1
+                        continue
+
+                    if barcode not in plate_cache:
+                        plate_cache[barcode] = await self._plate_repo.find_by_barcode(
+                            workspace_id, barcode
+                        )
+                    plate = plate_cache[barcode]
+
+                    if plate is None:
+                        errors.append(f"Row {row_num}: Plate {barcode!r} not found")
+                        skipped += 1
+                        continue
+
+                    well_map = plate.well_map if hasattr(plate, "well_map") else {}
+                    well_entry = well_map.get(well_pos) if well_map else None
+
+                    if not well_entry or not well_entry.get("batch_id"):
+                        errors.append(f"Row {row_num}: Well {well_pos} not mapped on plate {barcode!r}")
+                        skipped += 1
+                        continue
+
+                    batch_id_raw = well_entry["batch_id"]
+                    try:
+                        batch_id = uuid.UUID(str(batch_id_raw))
+                    except (ValueError, AttributeError):
+                        errors.append(f"Row {row_num}: Invalid batch_id {batch_id_raw!r}")
+                        skipped += 1
+                        continue
+
+                    batch = await self._batch_repo.find_by_id(batch_id)
+                    if batch is None:
+                        errors.append(f"Row {row_num}: Batch {batch_id} not found")
+                        skipped += 1
+                        continue
+
+                    imported += 1
+
+                except (IndexError, ValueError, AttributeError) as exc:
+                    errors.append(f"Row {row_num}: {exc}")
                     skipped += 1
-                    continue
 
-                batch = await self._batch_repo.find_by_id(batch_id)
-                if batch is None:
-                    errors.append(f"Row {row_num}: Batch {batch_id} not found")
-                    skipped += 1
-                    continue
+            del _file_cache[file_id]
 
-                # All lookups succeeded — plate → well → batch → molecule resolved
-                # ReadoutData creation will be wired here via BulkCreateReadoutData
-                # once the screening-context integration session is complete.
-                imported += 1
-
-            except (IndexError, ValueError, AttributeError) as exc:
-                errors.append(f"Row {row_num}: {exc}")
-                skipped += 1
-
-        # Clean up cache after a successful execution pass
-        del _file_cache[file_id]
-
-        return ImportExecutionResult(
-            imported_count=imported,
-            skipped_count=skipped,
-            errors=errors[:50],
-        )
+            return ImportExecutionResult(
+                imported_count=imported,
+                skipped_count=skipped,
+                errors=errors[:50],
+            )
 
 
 def clear_file_cache(file_id: str) -> None:
