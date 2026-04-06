@@ -38,6 +38,7 @@ import { showError, showSuccess } from "@/shared/lib/toast";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import {
   useCreateImportTemplate,
+  useDeleteImportTemplate,
   useImportTemplates,
 } from "../hooks/use-import-templates";
 import { ColumnMappingStep } from "./column-mapping-step";
@@ -139,6 +140,8 @@ export function ImportWizard() {
   const { data: protocols } = useProtocols();
   const { data: importTemplates } = useImportTemplates();
   const createTemplate = useCreateImportTemplate();
+  const deleteTemplate = useDeleteImportTemplate();
+  const [showTemplates, setShowTemplates] = useState(false);
 
   // ── Step 1: Upload ───────────────────────────────────────────────────────────
 
@@ -291,6 +294,58 @@ export function ImportWizard() {
       </div>
 
       <StepIndicator current={step} />
+
+      {/* Saved templates management */}
+      {importTemplates && importTemplates.length > 0 && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setShowTemplates((v) => !v)}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showTemplates ? "Hide" : "Manage"} saved templates ({importTemplates.length})
+          </button>
+          {showTemplates && (
+            <Card className="mt-2">
+              <CardContent className="pt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Columns</TableHead>
+                      <TableHead className="w-20" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importTemplates.map((tpl) => (
+                      <TableRow key={tpl.id}>
+                        <TableCell className="font-medium">{tpl.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {tpl.description || "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {Object.keys(tpl.column_mappings).length} mappings
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deleteTemplate.mutate(tpl.id)}
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* ── Step 1: Upload ── */}
       {step === 1 && (

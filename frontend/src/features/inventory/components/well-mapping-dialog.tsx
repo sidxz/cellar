@@ -113,16 +113,17 @@ export function WellMappingDialog({
   };
 
   const mappedCount = Object.keys(wellMap).length;
+  const fmt = parseInt(format, 10);
   const cellSize =
-    parseInt(format, 10) > 384
-      ? "h-3 w-3 text-[4px]"
-      : parseInt(format, 10) > 96
-        ? "h-4 w-4 text-[6px]"
-        : "h-7 w-7 text-[9px]";
+    fmt > 384
+      ? "h-4 w-4 text-[5px]"
+      : fmt > 96
+        ? "h-6 w-6 text-[8px]"
+        : "h-9 w-9 text-xs";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Map Wells to Batches</DialogTitle>
           <DialogDescription>
