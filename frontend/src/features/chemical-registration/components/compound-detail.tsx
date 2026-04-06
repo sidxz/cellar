@@ -12,6 +12,7 @@ import {
   Grid3X3,
   History,
   LayoutDashboard,
+  Paperclip,
   TestTubes,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
@@ -38,6 +39,7 @@ import {
   CollectionsTab,
   PlatesTab,
   HistoryTab,
+  FilesTab,
 } from "./detail-tabs";
 
 // ---------------------------------------------------------------------------
@@ -208,6 +210,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             <Grid3X3 className="mr-1.5 h-4 w-4" />
             Plates
           </TabsTrigger>
+          <TabsTrigger value="files">
+            <Paperclip className="mr-1.5 h-4 w-4" />
+            Files
+          </TabsTrigger>
           <TabsTrigger value="history">
             <History className="mr-1.5 h-4 w-4" />
             History
@@ -232,6 +238,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
 
         <TabsContent value="plates">
           <PlatesTab moleculeId={compoundId} />
+        </TabsContent>
+
+        <TabsContent value="files">
+          <FilesTab moleculeId={compoundId} />
         </TabsContent>
 
         <TabsContent value="history">
