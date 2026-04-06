@@ -165,18 +165,33 @@ class SQLAlchemyCollectionRepository(
 
     async def find_collections_containing(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
-    ) -> list[uuid.UUID]:
-        """Return IDs of collections in workspace that contain the given molecule."""
+    ) -> list[Collection]:
+        """Return Collection objects in workspace that contain the given molecule."""
+        # Subquery for molecule counts
+        count_sq = (
+            select(
+                CollectionMoleculeModel.collection_id,
+                func.count().label("mol_count"),
+            )
+            .group_by(CollectionMoleculeModel.collection_id)
+            .subquery()
+        )
+
         stmt = (
-            select(CollectionMoleculeModel.collection_id)
-            .join(CollectionModel, CollectionMoleculeModel.collection_id == CollectionModel.id)
+            select(CollectionModel, func.coalesce(count_sq.c.mol_count, 0).label("mol_count"))
+            .outerjoin(count_sq, CollectionModel.id == count_sq.c.collection_id)
+            .join(CollectionMoleculeModel, CollectionMoleculeModel.collection_id == CollectionModel.id)
             .where(
                 CollectionModel.workspace_id == workspace_id,
                 CollectionMoleculeModel.molecule_id == molecule_id,
             )
+            .order_by(CollectionModel.name)
         )
         result = await self._session.execute(stmt)
-        return list(result.scalars())
+        return [
+            self._to_domain(row[0], molecule_count=row[1])
+            for row in result.all()
+        ]
 
     async def replace_molecule(
         self,
