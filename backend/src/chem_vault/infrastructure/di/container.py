@@ -101,8 +101,16 @@ from chem_vault.application.inventory.registered_plates import (
     UpdatePlate,
 )
 from chem_vault.application.inventory.plate_read_model import PlateReadModelService
+from chem_vault.application.inventory.import_templates import (
+    CreateImportTemplate,
+    DeleteImportTemplate,
+    ListImportTemplates,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.import_template_repository import (
+    SQLAlchemyImportTemplateRepository,
 )
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
@@ -1066,5 +1074,16 @@ def create_container(
         )
 
     container.define(ExecuteSearch, _execute_search)
+
+    # --- Import Templates ---
+    def _import_tmpl_uc(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyImportTemplateRepository(uow))
+        return _f
+
+    container.define(CreateImportTemplate, _import_tmpl_uc(CreateImportTemplate))
+    container.define(ListImportTemplates, _import_tmpl_uc(ListImportTemplates))
+    container.define(DeleteImportTemplate, _import_tmpl_uc(DeleteImportTemplate))
 
     return container
