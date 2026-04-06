@@ -133,6 +133,76 @@ class SQLAlchemyReadoutDataRepository:
 
         return out
 
+    async def find_by_molecule_and_definition(
+        self,
+        molecule_id: uuid.UUID,
+        readout_definition_id: uuid.UUID,
+    ) -> list[ReadoutData]:
+        """Non-outlier, non-computed readout data for a molecule+definition pair."""
+        stmt = (
+            select(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.molecule_id == molecule_id,
+                ReadoutDataModel.readout_definition_id == readout_definition_id,
+                ReadoutDataModel.is_outlier.is_(False),
+                ReadoutDataModel.is_computed.is_(False),
+            )
+            .order_by(ReadoutDataModel.created_at.desc())
+        )
+        result = await self._uow.session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def find_grouped_by_condition(
+        self,
+        protocol_id: uuid.UUID,
+        condition_name: str,
+    ) -> list:
+        """Aggregate readout values grouped by a named condition across runs.
+
+        Returns rows with fields: condition_value, avg_value, min_value,
+        max_value, data_point_count.
+        """
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+            ReadoutDefinitionModel,
+            RunModel,
+        )
+
+        stmt = (
+            select(
+                RunModel.conditions[condition_name].as_string().label(
+                    "condition_value"
+                ),
+                func.avg(ReadoutDataModel.value_numeric).label("avg_value"),
+                func.min(ReadoutDataModel.value_numeric).label("min_value"),
+                func.max(ReadoutDataModel.value_numeric).label("max_value"),
+                func.count(ReadoutDataModel.value_numeric).label("data_point_count"),
+            )
+            .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
+            .join(
+                ReadoutDefinitionModel,
+                ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+            )
+            .where(
+                RunModel.protocol_id == protocol_id,
+                RunModel.conditions[condition_name].as_string() != None,  # noqa: E711
+                ReadoutDataModel.is_outlier.is_(False),
+                ReadoutDataModel.value_numeric != None,  # noqa: E711
+            )
+            .group_by(RunModel.conditions[condition_name].as_string())
+            .order_by(RunModel.conditions[condition_name].as_string())
+        )
+        result = await self._uow.session.execute(stmt)
+        return result.all()
+
+    async def delete_computed_for_run(self, run_id: uuid.UUID) -> int:
+        """Delete all computed readout data rows for a run. Returns deleted count."""
+        stmt = delete(ReadoutDataModel).where(
+            ReadoutDataModel.run_id == run_id,
+            ReadoutDataModel.is_computed.is_(True),
+        )
+        result = await self._uow.session.execute(stmt)
+        return result.rowcount
+
     async def save(self, entity: ReadoutData) -> None:
         model = self._to_model(entity)
         await self._uow.session.merge(model)

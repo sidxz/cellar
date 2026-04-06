@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
@@ -26,6 +27,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
     ConditionDefinitionModel,
     ProtocolModel,
     ReadoutDefinitionModel,
+    protocol_projects,
 )
 
 
@@ -91,6 +93,62 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model = await self._session.get(ProtocolModel, id)
         if model is not None and model.workspace_id == workspace_id:
             await self._session.delete(model)
+
+    # ------------------------------------------------------------------
+    # Project association methods
+    # ------------------------------------------------------------------
+
+    async def add_to_project(
+        self, protocol_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Link a protocol to a project (idempotent via ON CONFLICT DO NOTHING)."""
+        stmt = (
+            pg_insert(protocol_projects)
+            .values(protocol_id=protocol_id, project_id=project_id)
+            .on_conflict_do_nothing()
+        )
+        await self._session.execute(stmt)
+
+    async def remove_from_project(
+        self, protocol_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Unlink a protocol from a project."""
+        stmt = protocol_projects.delete().where(
+            protocol_projects.c.protocol_id == protocol_id,
+            protocol_projects.c.project_id == project_id,
+        )
+        await self._session.execute(stmt)
+
+    async def find_by_project(
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+    ) -> list[Protocol]:
+        """Return all protocols linked to a project, newest first."""
+        subq = select(protocol_projects.c.protocol_id).where(
+            protocol_projects.c.project_id == project_id
+        )
+        stmt = (
+            select(ProtocolModel)
+            .where(
+                ProtocolModel.workspace_id == workspace_id,
+                ProtocolModel.id.in_(subq),
+            )
+            .order_by(ProtocolModel.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        protocols = []
+        for model in result.scalars().all():
+            domain = self._to_domain(model)
+            self._uow.track(domain)
+            protocols.append(domain)
+        return protocols
+
+    async def find_project_ids(self, protocol_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return all project IDs linked to a given protocol."""
+        stmt = select(protocol_projects.c.project_id).where(
+            protocol_projects.c.protocol_id == protocol_id
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate
