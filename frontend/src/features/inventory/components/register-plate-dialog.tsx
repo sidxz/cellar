@@ -23,6 +23,8 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { useRegisterPlate } from "../hooks/use-plates";
 import type { PlateType } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
+import { useStorageLocations } from "../hooks/use-storage-locations";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
 type PlateFormat = (typeof PLATE_FORMATS)[number];
@@ -37,11 +39,15 @@ export function RegisterPlateDialog({
   onOpenChange,
 }: RegisterPlateDialogProps) {
   const registerMutation = useRegisterPlate();
+  const { data: storageLocations } = useStorageLocations();
+  const { data: projects } = useProjects();
 
   const [barcode, setBarcode] = useState("");
   const [label, setLabel] = useState("");
   const [format, setFormat] = useState<PlateFormat>("96");
   const [plateType, setPlateType] = useState<PlateType>("compound_storage");
+  const [storageLocationId, setStorageLocationId] = useState<string>("__none__");
+  const [projectId, setProjectId] = useState<string>("__none__");
   const [notes, setNotes] = useState("");
 
   // Reset form when dialog opens
@@ -51,6 +57,8 @@ export function RegisterPlateDialog({
       setLabel("");
       setFormat("96");
       setPlateType("compound_storage");
+      setStorageLocationId("__none__");
+      setProjectId("__none__");
       setNotes("");
     }
   }, [open]);
@@ -66,6 +74,8 @@ export function RegisterPlateDialog({
         plate_label: label.trim(),
         format,
         plate_type: plateType,
+        storage_location_id: storageLocationId === "__none__" ? null : storageLocationId,
+        project_id: projectId === "__none__" ? null : projectId,
         notes: notes.trim() || null,
       },
       {
@@ -151,6 +161,43 @@ export function RegisterPlateDialog({
                   {(Object.keys(plateTypeLabels) as PlateType[]).map((t) => (
                     <SelectItem key={t} value={t}>
                       {plateTypeLabels[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Project + Storage Location row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Project (optional)</Label>
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {(projects ?? []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Storage Location (optional)</Label>
+              <Select value={storageLocationId} onValueChange={setStorageLocationId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {(storageLocations ?? []).map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -18,6 +18,48 @@ import { usePlate, usePlateChildren, useChangeStatus, useDerivePlate } from "../
 import type { PlateStatus, PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels, plateStatusLabels } from "../types/plates";
 import { WellMappingDialog } from "./well-mapping-dialog";
+import { useStorageLocations } from "../hooks/use-storage-locations";
+import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
+import { useProject } from "@/features/research-organization/hooks/use-projects";
+
+// ---------------------------------------------------------------------------
+// ID → name resolver helpers
+// ---------------------------------------------------------------------------
+
+function ResolvedStorageLocation({ id }: { id: string | null }) {
+  const { data: locations } = useStorageLocations();
+  if (!id) return <span className="text-muted-foreground">Not set</span>;
+  if (!locations) return <span className="text-muted-foreground">Loading...</span>;
+  const loc = locations.find((l) => l.id === id);
+  return <span>{loc?.name ?? id}</span>;
+}
+
+function ResolvedProject({ id }: { id: string | null }) {
+  const { data: project } = useProject(id ?? undefined);
+  if (!id) return <span className="text-muted-foreground">Not set</span>;
+  if (!project) return <span className="text-muted-foreground">Loading...</span>;
+  return <span>{project.name}</span>;
+}
+
+function ResolvedTemplate({ id }: { id: string | null }) {
+  const { data: template } = usePlateTemplate(id ?? undefined);
+  if (!id) return <span className="text-muted-foreground">None</span>;
+  if (!template) return <span className="text-muted-foreground">Loading...</span>;
+  return <span>{template.name}</span>;
+}
+
+function ResolvedParentPlate({ id }: { id: string | null }) {
+  const { data: parent } = usePlate(id ?? undefined);
+  if (!id) return <span className="text-muted-foreground">None</span>;
+  return (
+    <Link
+      href={`/inventory/plates/${id}`}
+      className="text-primary hover:underline font-mono"
+    >
+      {parent ? parent.barcode : "View parent"}
+    </Link>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Badge helpers
@@ -240,38 +282,16 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
             )}
           </MetaRow>
           <MetaRow label="Storage Location">
-            {plate.storage_location_id ?? (
-              <span className="text-muted-foreground">Not set</span>
-            )}
+            <ResolvedStorageLocation id={plate.storage_location_id} />
           </MetaRow>
           <MetaRow label="Project">
-            {plate.project_id ?? (
-              <span className="text-muted-foreground">Not set</span>
-            )}
+            <ResolvedProject id={plate.project_id} />
           </MetaRow>
           <MetaRow label="Template">
-            {plate.template_id ?? (
-              <span className="text-muted-foreground">None</span>
-            )}
+            <ResolvedTemplate id={plate.template_id} />
           </MetaRow>
           <MetaRow label="Parent Plate">
-            {plate.parent_plate_id ? (
-              <Link
-                href={`/inventory/plates/${plate.parent_plate_id}`}
-                className="text-primary hover:underline font-mono"
-              >
-                View parent
-              </Link>
-            ) : (
-              <span className="text-muted-foreground">None</span>
-            )}
-          </MetaRow>
-          <MetaRow label="Registered By">
-            {plate.registered_by ? (
-              <span className="font-mono text-xs">{plate.registered_by}</span>
-            ) : (
-              <span className="text-muted-foreground">\u2014</span>
-            )}
+            <ResolvedParentPlate id={plate.parent_plate_id} />
           </MetaRow>
           {plate.notes && (
             <MetaRow label="Notes">
