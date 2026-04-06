@@ -13,15 +13,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
+import { useCollections } from "../hooks/use-collections";
 import type {
   SearchCriterion,
   SearchQuery,
   TextCriterion,
   PropertyCriterion,
   StructureCriterion,
+  ActivityCriterion,
+  CollectionCriterion,
+  KeywordListCriterion,
+  RunDateCriterion,
   TextOperator,
   PropertyOperator,
   StructureSearchType,
+  RefType,
 } from "../types";
 
 // ─── Field / operator options ───────────────────────────────────────────────
@@ -80,6 +87,37 @@ function defaultPropertyCriterion(): PropertyCriterion {
 function defaultStructureCriterion(): StructureCriterion {
   return { type: "structure", search_type: "substructure", smarts: "", smiles: undefined, threshold: 0.7, inchi_key: undefined };
 }
+
+function defaultActivityCriterion(): ActivityCriterion {
+  return { type: "activity", protocol_id: "", operator: "lt" as PropertyOperator, value: 0 };
+}
+
+function defaultCollectionCriterion(): CollectionCriterion {
+  return { type: "collection", collection_id: "" };
+}
+
+function defaultKeywordListCriterion(): KeywordListCriterion {
+  return { type: "keyword_list", values: [], ref_type: "registration_number" as RefType };
+}
+
+function defaultRunDateCriterion(): RunDateCriterion {
+  return { type: "run_date" };
+}
+
+const CURVE_TYPE_OPTIONS = [
+  { value: "ic50", label: "IC50" },
+  { value: "ec50", label: "EC50" },
+  { value: "ki", label: "Ki" },
+  { value: "kd", label: "Kd" },
+] as const;
+
+const REF_TYPE_OPTIONS: { value: RefType; label: string }[] = [
+  { value: "registration_number", label: "Registration Number" },
+  { value: "name", label: "Name" },
+  { value: "external_id", label: "External ID" },
+  { value: "smiles", label: "SMILES" },
+  { value: "inchi_key", label: "InChI Key" },
+];
 
 // ─── Criterion row components ───────────────────────────────────────────────
 
@@ -410,6 +448,245 @@ function StructureCriterionRow({
   );
 }
 
+function ActivityCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: ActivityCriterion;
+  onChange: (c: ActivityCriterion) => void;
+  onRemove: () => void;
+}) {
+  const { data: protocols } = useProtocols();
+  const { data: protocol } = useProtocol(criterion.protocol_id || undefined);
+
+  return (
+    <div className="flex items-end gap-2 flex-wrap">
+      <div className="w-44">
+        <Label className="text-xs text-muted-foreground">Protocol</Label>
+        <Select
+          value={criterion.protocol_id || undefined}
+          onValueChange={(v) =>
+            onChange({ ...criterion, protocol_id: v, readout_definition_id: undefined, curve_type: undefined })
+          }
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Select protocol..." />
+          </SelectTrigger>
+          <SelectContent>
+            {protocols
+              ?.filter((p) => p.status === "active")
+              .map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="w-44">
+        <Label className="text-xs text-muted-foreground">Readout / Curve</Label>
+        <Select
+          value={criterion.readout_definition_id ?? criterion.curve_type ?? undefined}
+          onValueChange={(v) => {
+            const isCurve = CURVE_TYPE_OPTIONS.some((ct) => ct.value === v);
+            if (isCurve) {
+              onChange({ ...criterion, curve_type: v, readout_definition_id: undefined });
+            } else {
+              onChange({ ...criterion, readout_definition_id: v, curve_type: undefined });
+            }
+          }}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Select..." />
+          </SelectTrigger>
+          <SelectContent>
+            {protocol?.readout_definitions
+              ?.filter((rd) => rd.data_type === "numeric")
+              .map((rd) => (
+                <SelectItem key={rd.id} value={rd.id}>
+                  {rd.name}{rd.unit ? ` (${rd.unit})` : ""}
+                </SelectItem>
+              ))}
+            {CURVE_TYPE_OPTIONS.map((ct) => (
+              <SelectItem key={ct.value} value={ct.value}>
+                {ct.label} (curve)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="w-24">
+        <Label className="text-xs text-muted-foreground">Operator</Label>
+        <Select
+          value={criterion.operator}
+          onValueChange={(v) => onChange({ ...criterion, operator: v as PropertyOperator })}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PROPERTY_OPERATORS.filter((o) => o.value !== "between").map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="w-28">
+        <Label className="text-xs text-muted-foreground">Value</Label>
+        <Input
+          className="h-9"
+          type="number"
+          placeholder="Value"
+          value={criterion.value ?? ""}
+          onChange={(e) =>
+            onChange({ ...criterion, value: e.target.value ? Number(e.target.value) : 0 })
+          }
+        />
+      </div>
+      <div className="flex-1" />
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
+function CollectionCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: CollectionCriterion;
+  onChange: (c: CollectionCriterion) => void;
+  onRemove: () => void;
+}) {
+  const { data: collections } = useCollections();
+
+  return (
+    <div className="flex items-end gap-2">
+      <div className="w-64">
+        <Label className="text-xs text-muted-foreground">In Collection</Label>
+        <Select
+          value={criterion.collection_id || undefined}
+          onValueChange={(v) => onChange({ ...criterion, collection_id: v })}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Select collection..." />
+          </SelectTrigger>
+          <SelectContent>
+            {collections?.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name} ({c.molecule_count})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex-1" />
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
+function KeywordListCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: KeywordListCriterion;
+  onChange: (c: KeywordListCriterion) => void;
+  onRemove: () => void;
+}) {
+  const rawText = criterion.values.join("\n");
+
+  function handleTextChange(text: string) {
+    const parsed = text
+      .split(/[,\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    onChange({ ...criterion, values: parsed });
+  }
+
+  return (
+    <div className="flex items-start gap-2">
+      <div className="w-44">
+        <Label className="text-xs text-muted-foreground">Identifier Type</Label>
+        <Select
+          value={criterion.ref_type}
+          onValueChange={(v) => onChange({ ...criterion, ref_type: v as RefType })}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REF_TYPE_OPTIONS.map((r) => (
+              <SelectItem key={r.value} value={r.value}>
+                {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex-1">
+        <Label className="text-xs text-muted-foreground">
+          Values ({criterion.values.length} identifier{criterion.values.length !== 1 ? "s" : ""})
+        </Label>
+        <textarea
+          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-20 font-mono text-xs resize-y"
+          placeholder="One per line, or comma-separated..."
+          value={rawText}
+          onChange={(e) => handleTextChange(e.target.value)}
+        />
+      </div>
+      <Button variant="ghost" size="icon" className="mt-5 h-9 w-9 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
+function RunDateCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: RunDateCriterion;
+  onChange: (c: RunDateCriterion) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-end gap-2">
+      <div className="w-44">
+        <Label className="text-xs text-muted-foreground">From</Label>
+        <Input
+          className="h-9"
+          type="date"
+          value={criterion.date_from ?? ""}
+          onChange={(e) => onChange({ ...criterion, date_from: e.target.value || undefined })}
+        />
+      </div>
+      <div className="w-44">
+        <Label className="text-xs text-muted-foreground">To</Label>
+        <Input
+          className="h-9"
+          type="date"
+          value={criterion.date_to ?? ""}
+          onChange={(e) => onChange({ ...criterion, date_to: e.target.value || undefined })}
+        />
+      </div>
+      <div className="flex-1" />
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 interface SearchQueryBuilderProps {
@@ -484,6 +761,38 @@ export function SearchQueryBuilder({
             <Plus className="mr-1 h-3 w-3" />
             Structure
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteria([...criteria, defaultActivityCriterion()])}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Activity
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteria([...criteria, defaultCollectionCriterion()])}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Collection
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteria([...criteria, defaultKeywordListCriterion()])}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Keyword List
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteria([...criteria, defaultRunDateCriterion()])}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Run Date
+          </Button>
         </div>
       </div>
 
@@ -519,6 +828,42 @@ export function SearchQueryBuilder({
             case "structure":
               return (
                 <StructureCriterionRow
+                  key={key}
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, c)}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "activity":
+              return (
+                <ActivityCriterionRow
+                  key={key}
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, c)}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "collection":
+              return (
+                <CollectionCriterionRow
+                  key={key}
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, c)}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "keyword_list":
+              return (
+                <KeywordListCriterionRow
+                  key={key}
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, c)}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "run_date":
+              return (
+                <RunDateCriterionRow
                   key={key}
                   criterion={criterion}
                   onChange={(c) => updateCriterion(index, c)}

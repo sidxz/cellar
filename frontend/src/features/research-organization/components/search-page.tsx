@@ -30,6 +30,8 @@ import type {
   LifecycleStage,
 } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
+import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import type { ActivityValue } from "../types";
 import { useExecuteSearch } from "../hooks/use-search";
 import {
   useSavedSearches,
@@ -39,16 +41,20 @@ import { SearchQueryBuilder } from "./search-query-builder";
 import { CollectionPickerDialog } from "./collection-picker-dialog";
 import type { SearchQuery, SavedSearch } from "../types";
 
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+type EnrichedMolecule = Molecule & { activity?: Record<string, ActivityValue> };
+
 // ─── Results grid columns ───────────────────────────────────────────────────
 
-function buildColumnDefs(): ColDef<Molecule>[] {
+function buildColumnDefs(): ColDef<EnrichedMolecule>[] {
   return [
     {
       headerName: "Structure",
       width: 72,
       sortable: false,
       filter: false,
-      cellRenderer: (params: ICellRendererParams<Molecule>) => {
+      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
         const smiles = params.data?.structure?.smiles;
         if (!smiles) return <div className="h-10 w-10 rounded bg-muted" />;
         return <StructureThumbnail smiles={smiles} size={48} />;
@@ -82,7 +88,7 @@ function buildColumnDefs(): ColDef<Molecule>[] {
       headerName: "Stage",
       field: "lifecycle_stage",
       width: 120,
-      cellRenderer: (params: ICellRendererParams<Molecule>) => {
+      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
         const stage = params.value as LifecycleStage | undefined;
         if (!stage) return "\u2014";
         return (
@@ -98,11 +104,12 @@ function buildColumnDefs(): ColDef<Molecule>[] {
 // ─── Main component ─────────────────────────────────────────────────────────
 
 export function SearchPage() {
-  const [results, setResults] = useState<Molecule[]>([]);
+  const [results, setResults] = useState<EnrichedMolecule[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [currentQuery, setCurrentQuery] = useState<SearchQuery | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [protocolColumns, setProtocolColumns] = useState<string[]>([]);
 
   // Save search dialog state
   const [saveOpen, setSaveOpen] = useState(false);
@@ -112,40 +119,87 @@ export function SearchPage() {
   const searchMutation = useExecuteSearch();
   const { data: savedSearches } = useSavedSearches();
   const createSavedSearch = useCreateSavedSearch();
+  const { data: protocols } = useProtocols();
 
   const columnDefs = useMemo(buildColumnDefs, []);
+
+  const dynamicColumnDefs = useMemo(() => {
+    return protocolColumns.map((colId) => {
+      const parts = colId.split(":");
+      let headerName = colId;
+      if (parts[0] === "drc" && protocols) {
+        const proto = protocols.find((p) => p.id === parts[1]);
+        headerName = `${proto?.name ?? "?"} ${parts[2]?.toUpperCase()}`;
+      }
+      return {
+        headerName,
+        valueGetter: (params: { data?: EnrichedMolecule }) => {
+          return params.data?.activity?.[colId]?.value ?? null;
+        },
+        valueFormatter: (params: { value: number | null; data?: EnrichedMolecule }) => {
+          const av = params.data?.activity?.[colId];
+          if (!av?.value) return "";
+          const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
+          return `${q}${av.value.toPrecision(4)}${av.unit ? ` ${av.unit}` : ""}`;
+        },
+        width: 130,
+        sortable: true,
+      };
+    });
+  }, [protocolColumns, protocols]);
+
+  const allColumnDefs = useMemo(
+    () => [...columnDefs, ...dynamicColumnDefs],
+    [columnDefs, dynamicColumnDefs]
+  );
 
   const handleSearch = useCallback(
     (query: SearchQuery) => {
       setCurrentQuery(query);
       setHasSearched(true);
+      const input = {
+        query,
+        ...(protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : {}),
+      };
       searchMutation.mutate(
-        { input: { query }, limit: 100 },
+        { input, limit: 100 },
         {
           onSuccess: (data) => {
-            setResults(data.items);
+            const enrichedItems: EnrichedMolecule[] = data.items.map((mol) => ({
+              ...mol,
+              activity: data.activity_data?.[mol.id] ?? undefined,
+            }));
+            setResults(enrichedItems);
             setNextCursor(data.next_cursor);
             setTotalCount(data.total_count);
           },
         }
       );
     },
-    [searchMutation]
+    [searchMutation, protocolColumns]
   );
 
   const handleLoadMore = useCallback(() => {
     if (!currentQuery || !nextCursor) return;
+    const input = {
+      query: currentQuery,
+      ...(protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : {}),
+    };
     searchMutation.mutate(
-      { input: { query: currentQuery }, cursor: nextCursor, limit: 100 },
+      { input, cursor: nextCursor, limit: 100 },
       {
         onSuccess: (data) => {
-          setResults((prev) => [...prev, ...data.items]);
+          const enrichedItems: EnrichedMolecule[] = data.items.map((mol) => ({
+            ...mol,
+            activity: data.activity_data?.[mol.id] ?? undefined,
+          }));
+          setResults((prev) => [...prev, ...enrichedItems]);
           setNextCursor(data.next_cursor);
           setTotalCount(data.total_count);
         },
       }
     );
-  }, [currentQuery, nextCursor, searchMutation]);
+  }, [currentQuery, nextCursor, searchMutation, protocolColumns]);
 
   const handleLoadSavedSearch = useCallback(
     (searchId: string) => {
@@ -255,9 +309,47 @@ export function SearchPage() {
             </div>
           </div>
 
-          <DataGrid<Molecule>
+          {results.length > 0 && protocols?.length ? (
+            <div className="mb-2">
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground">
+                  Protocol columns ({protocolColumns.length} selected)
+                </summary>
+                <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                  {protocols.filter((p) => p.status === "active").map((p) => (
+                    <div key={p.id} className="pl-2">
+                      <span className="text-xs font-medium">{p.name}</span>
+                      <div className="ml-3 flex flex-wrap gap-2">
+                        {["ic50", "ec50"].map((ct) => {
+                          const colId = `drc:${p.id}:${ct}`;
+                          return (
+                            <label key={ct} className="flex items-center gap-1 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={protocolColumns.includes(colId)}
+                                onChange={(e) => {
+                                  setProtocolColumns((prev) =>
+                                    e.target.checked
+                                      ? [...prev, colId]
+                                      : prev.filter((c) => c !== colId)
+                                  );
+                                }}
+                              />
+                              {ct.toUpperCase()}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </div>
+          ) : null}
+
+          <DataGrid<EnrichedMolecule>
             rowData={results}
-            columnDefs={columnDefs}
+            columnDefs={allColumnDefs}
             loading={searchMutation.isPending && results.length === 0}
             height="500px"
             exportFilename="search-results"

@@ -2,9 +2,15 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import type { PaginatedResponse } from "@/shared/types/pagination";
 import type { Molecule } from "@/features/chemical-registration/types";
-import type { ExecuteSearchInput } from "../types";
+import type { ExecuteSearchInput, ActivityValue } from "../types";
+
+export interface EnrichedSearchResponse {
+  items: Molecule[];
+  next_cursor: string | null;
+  total_count: number | null;
+  activity_data?: Record<string, Record<string, ActivityValue>>;
+}
 
 export function useExecuteSearch() {
   return useMutation({
@@ -17,7 +23,7 @@ export function useExecuteSearch() {
       if (params.cursor) searchParams.cursor = params.cursor;
       if (params.limit) searchParams.limit = String(params.limit);
 
-      return customInstance<PaginatedResponse<Molecule>>({
+      return customInstance<EnrichedSearchResponse>({
         url: "/api/v1/search/execute",
         method: "POST",
         data: params.input,

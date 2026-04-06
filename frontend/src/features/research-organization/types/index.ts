@@ -128,7 +128,7 @@ export interface UpdateSavedSearchInput {
 
 // ─── Search types ───────────────────────────────────────────────────────────
 
-export type CriterionType = "text" | "property" | "structure";
+export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
 export type StructureSearchType = "substructure" | "similarity" | "exact";
@@ -158,7 +158,40 @@ export interface StructureCriterion {
   inchi_key?: string;
 }
 
-export type SearchCriterion = TextCriterion | PropertyCriterion | StructureCriterion;
+export interface ActivityCriterion {
+  type: "activity";
+  protocol_id: string;
+  readout_definition_id?: string;
+  curve_type?: string;
+  operator: PropertyOperator;
+  value: number;
+}
+
+export interface CollectionCriterion {
+  type: "collection";
+  collection_id: string;
+}
+
+export interface KeywordListCriterion {
+  type: "keyword_list";
+  values: string[];
+  ref_type: RefType;
+}
+
+export interface RunDateCriterion {
+  type: "run_date";
+  date_from?: string;
+  date_to?: string;
+}
+
+export type SearchCriterion =
+  | TextCriterion
+  | PropertyCriterion
+  | StructureCriterion
+  | ActivityCriterion
+  | CollectionCriterion
+  | KeywordListCriterion
+  | RunDateCriterion;
 
 export interface SearchQuery {
   criteria: SearchCriterion[];
@@ -168,4 +201,15 @@ export interface SearchQuery {
 export interface ExecuteSearchInput {
   query?: SearchQuery;
   saved_search_id?: string;
+  protocol_columns?: string[];
+}
+
+export interface ActivityValue {
+  value: number | null;
+  qualifier: string | null;
+  unit: string | null;
+  source: "readout" | "dose_response";
+  curve_type: string | null;
+  r_squared: number | null;
+  data_point_count: number;
 }
