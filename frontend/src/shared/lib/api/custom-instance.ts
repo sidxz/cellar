@@ -35,14 +35,20 @@ export const customInstance = async <T>({
   const client = typeof window !== "undefined" ? getSentinelClient() : null;
   const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
 
+  const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
+
+  const fetchHeaders: Record<string, string> = {
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...authHeaders,
+    ...headers,
+  };
+
   const response = await fetch(`${_baseUrl}${url}${queryString}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-      ...headers,
-    },
-    ...(data ? { body: JSON.stringify(data) } : {}),
+    headers: fetchHeaders,
+    ...(data
+      ? { body: isFormData ? (data as FormData) : JSON.stringify(data) }
+      : {}),
   });
 
   if (!response.ok) {

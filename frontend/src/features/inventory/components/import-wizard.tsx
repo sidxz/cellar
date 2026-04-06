@@ -155,7 +155,6 @@ export function ImportWizard() {
         url: "/api/v1/plates/import/preview",
         method: "POST",
         data: formData,
-        headers: { "Content-Type": "multipart/form-data" },
       });
       setPreview(response);
       // Auto-detect obvious column mappings by name
@@ -300,7 +299,7 @@ export function ImportWizard() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Import Plate Data</h1>
         <p className="mt-1 text-muted-foreground">
-          Upload a CSV/TSV file and map columns to plate fields.
+          Import screening results (readout values) from plate reader exports. To map compounds to wells, use the &quot;Map Wells&quot; button on a plate&apos;s detail page instead.
         </p>
       </div>
 
