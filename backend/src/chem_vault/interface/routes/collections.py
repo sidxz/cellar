@@ -97,7 +97,7 @@ class MoleculeReferenceBody(BaseModel):
 
 
 class AddMoleculesBody(BaseModel):
-    refs: list[MoleculeReferenceBody]
+    references: list[MoleculeReferenceBody]
 
 
 class RemoveMoleculesBody(BaseModel):
@@ -224,7 +224,7 @@ async def add_molecules_to_collection(
 ) -> MembershipResultResponse:
     refs = [
         MoleculeReference(value=r.value, ref_type=RefType(r.ref_type))
-        for r in body.refs
+        for r in body.references
     ]
     command = AddMoleculesToCollectionCommand(
         workspace_id=auth.workspace_id,
