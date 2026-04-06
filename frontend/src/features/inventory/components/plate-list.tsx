@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Plus, Trash2 } from "lucide-react";
+import { FileUp, FlaskConical, Plus, Trash2 } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import {
   AlertDialog,
@@ -282,6 +282,7 @@ export function PlateList() {
 }
 
 function PageHeader({ onNew }: { onNew: () => void }) {
+  const router = useRouter();
   return (
     <div className="mb-6 flex items-center justify-between">
       <div>
@@ -290,10 +291,16 @@ function PageHeader({ onNew }: { onNew: () => void }) {
           Manage registered plates and well mappings.
         </p>
       </div>
-      <Button onClick={onNew}>
-        <Plus className="mr-2 h-4 w-4" />
-        Register Plate
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
+          <FileUp className="mr-2 h-4 w-4" />
+          Import Data
+        </Button>
+        <Button onClick={onNew}>
+          <Plus className="mr-2 h-4 w-4" />
+          Register Plate
+        </Button>
+      </div>
     </div>
   );
 }

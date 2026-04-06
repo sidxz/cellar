@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FlaskConical, GitBranch, Grid3x3, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -159,6 +160,7 @@ interface PlateDetailProps {
 }
 
 export function PlateDetail({ plateId }: PlateDetailProps) {
+  const router = useRouter();
   const { data: plate, isLoading } = usePlate(plateId);
   const { data: children } = usePlateChildren(plateId);
   const [wellMapOpen, setWellMapOpen] = useState(false);
@@ -225,6 +227,14 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           >
             <Grid3x3 className="mr-1.5 h-3.5 w-3.5" />
             Map Wells
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/inventory/plates/import")}
+          >
+            <FileUp className="mr-1.5 h-3.5 w-3.5" />
+            Import Data
           </Button>
           <Select
             value="__current__"
