@@ -945,9 +945,18 @@ def create_container(
             return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow))
         return _f
 
+    def _map_wells(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MapWells(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyBatchRepository(uow),
+            c[EventDispatcher],
+        )
+
     container.define(RegisterPlate, _reg_plate_cmd(RegisterPlate))
     container.define(UpdatePlate, _reg_plate_cmd(UpdatePlate))
-    container.define(MapWells, _reg_plate_cmd(MapWells))
+    container.define(MapWells, _map_wells)
     container.define(ChangeStatus, _reg_plate_cmd(ChangeStatus))
     container.define(DerivePlate, _reg_plate_cmd(DerivePlate))
     container.define(GetPlate, _reg_plate_query(GetPlate))

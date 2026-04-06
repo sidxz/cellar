@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from chem_vault.domain.screening_assay.enums import PlateFormat
 from chem_vault.domain.screening_assay.plate_template import PlateTemplate
@@ -46,6 +46,19 @@ class SQLAlchemyPlateTemplateRepository:
         model = await self._uow.session.get(PlateTemplateModel, id)
         if model is not None:
             await self._uow.session.delete(model)
+
+    async def count_references(self, template_id: uuid.UUID) -> int:
+        """Count how many plates/runs reference this template."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import PlateModel
+        from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import RegisteredPlateModel
+
+        run_result = await self._uow.session.execute(
+            select(func.count()).select_from(PlateModel).where(PlateModel.template_id == template_id)
+        )
+        plate_result = await self._uow.session.execute(
+            select(func.count()).select_from(RegisteredPlateModel).where(RegisteredPlateModel.template_id == template_id)
+        )
+        return (run_result.scalar() or 0) + (plate_result.scalar() or 0)
 
     # ------------------------------------------------------------------
     # Mapping

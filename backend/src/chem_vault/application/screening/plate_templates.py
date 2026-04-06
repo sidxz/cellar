@@ -15,7 +15,7 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import PlateFormat
 from chem_vault.domain.screening_assay.plate_template import PlateTemplate
 from chem_vault.domain.screening_assay.repository import PlateTemplateRepository
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +141,14 @@ class DeletePlateTemplate:
             template = await self._repo.find_by_id(input.template_id)
             if template is None or template.workspace_id != input.workspace_id:
                 return Failure(NotFoundError("PlateTemplate", str(input.template_id)))
+
+            ref_count = await self._repo.count_references(input.template_id)
+            if ref_count > 0:
+                return Failure(
+                    ConflictError(
+                        f"PlateTemplate is referenced by {ref_count} plate(s)/run(s) and cannot be deleted"
+                    )
+                )
 
             await self._repo.delete(input.template_id)
             await self._uow.commit()

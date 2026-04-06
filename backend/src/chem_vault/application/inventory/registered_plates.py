@@ -14,9 +14,9 @@ from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.enums import PlateStatus, PlateType
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
-from chem_vault.domain.inventory.repository import RegisteredPlateRepository
+from chem_vault.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
 from chem_vault.domain.screening_assay.enums import PlateFormat
-from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
+from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import Barcode
 
 # ---------------------------------------------------------------------------
@@ -266,10 +266,12 @@ class MapWells:
         self,
         uow: UnitOfWork,
         repo: RegisteredPlateRepository,
+        batch_repo: BatchRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._batch_repo = batch_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -281,6 +283,17 @@ class MapWells:
             plate = await self._repo.find_by_id(input.plate_id)
             if plate is None or plate.workspace_id != input.workspace_id:
                 return _not_found(input.plate_id)
+
+            # Validate that all referenced batch_ids exist
+            batch_ids: set[uuid.UUID] = set()
+            for entry in input.well_map.values():
+                if isinstance(entry, dict) and entry.get("batch_id"):
+                    batch_ids.add(uuid.UUID(entry["batch_id"]))
+
+            for bid in batch_ids:
+                batch = await self._batch_repo.find_by_id(bid)
+                if batch is None:
+                    return Failure(ValidationError(f"Batch {bid} not found"))
 
             plate.map_wells(input.well_map)
 
