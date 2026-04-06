@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FileUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,9 @@ import {
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMapWells } from "../hooks/use-plates";
 import type { WellMapping } from "../types/plates";
 
@@ -32,6 +36,32 @@ function plateDimensions(format: string): { rows: number; cols: number } {
 
 function rowLabels(count: number): string[] {
   return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".slice(0, count).split("");
+}
+
+/**
+ * Parse CSV text with well mappings.
+ * Expected format: Well,BatchNumber,Concentration,Unit
+ * e.g.: A1,CV-00001-001,10,mM
+ */
+function parseCsvWellMap(text: string): Record<string, WellMapping> {
+  const map: Record<string, WellMapping> = {};
+  const lines = text.trim().split("\n");
+  for (const line of lines) {
+    const parts = line.split(/[,\t]/).map((s) => s.trim());
+    if (parts.length < 2) continue;
+    const [well, batchId, concStr, unit] = parts;
+    // Skip header rows
+    if (!well || /^well$/i.test(well) || /^position$/i.test(well)) continue;
+    // Validate well position format (letter(s) + number)
+    if (!/^[A-Z]{1,2}\d{1,2}$/i.test(well)) continue;
+    const pos = well.toUpperCase();
+    map[pos] = {
+      batch_id: batchId,
+      concentration_value: concStr ? parseFloat(concStr) || null : null,
+      concentration_unit: concStr && parseFloat(concStr) ? (unit || "mM") : null,
+    };
+  }
+  return map;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +86,7 @@ export function WellMappingDialog({
   const { rows, cols } = plateDimensions(format);
   const letters = rowLabels(rows);
   const mapWells = useMapWells(plateId);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Local editable copy of well_map
   const [wellMap, setWellMap] = useState<Record<string, WellMapping>>({});
@@ -63,6 +94,7 @@ export function WellMappingDialog({
   const [batchId, setBatchId] = useState("");
   const [concValue, setConcValue] = useState("");
   const [concUnit, setConcUnit] = useState("mM");
+  const [csvText, setCsvText] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -70,6 +102,7 @@ export function WellMappingDialog({
       setSelectedWell(null);
       setBatchId("");
       setConcValue("");
+      setCsvText("");
     }
   }, [open, initialWellMap]);
 
@@ -106,10 +139,58 @@ export function WellMappingDialog({
     });
   }, [selectedWell]);
 
+  const handleCsvImport = () => {
+    const parsed = parseCsvWellMap(csvText);
+    const count = Object.keys(parsed).length;
+    if (count === 0) {
+      showError("No valid well mappings found in the pasted data.");
+      return;
+    }
+    setWellMap((prev) => ({ ...prev, ...parsed }));
+    showSuccess(`Mapped ${count} wells from pasted data`);
+    setCsvText("");
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCsvWellMap(text);
+      const count = Object.keys(parsed).length;
+      if (count === 0) {
+        showError("No valid well mappings found in the file.");
+        return;
+      }
+      setWellMap((prev) => ({ ...prev, ...parsed }));
+      showSuccess(`Mapped ${count} wells from file`);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const handleSave = () => {
     mapWells.mutate(wellMap, {
       onSuccess: () => onOpenChange(false),
     });
+  };
+
+  const handleDownloadTemplate = () => {
+    const header = "Well,Batch Number,Concentration,Unit";
+    const examples = [
+      "A1,CV-00001-001,10,mM",
+      "A2,CV-00002-001,10,mM",
+      "B1,CV-00003-001,5,mM",
+    ];
+    const csv = [header, ...examples].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "well_mapping_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const mappedCount = Object.keys(wellMap).length;
@@ -123,16 +204,16 @@ export function WellMappingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[1200px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[80vw] h-[85vh] max-w-none flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Map Wells to Batches</DialogTitle>
           <DialogDescription>
-            Click a well to select it, then enter a batch number and concentration.
+            Assign compound batches to wells — click individually or paste/upload a CSV.
             {mappedCount > 0 && ` (${mappedCount} wells mapped)`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-[1fr_280px] gap-6">
+        <div className="flex-1 min-h-0 grid grid-cols-[1fr_320px] gap-6 overflow-hidden">
           {/* Plate grid */}
           <div className="overflow-auto">
             <div className="inline-flex flex-col gap-0.5">
@@ -149,7 +230,7 @@ export function WellMappingDialog({
               </div>
               {letters.map((row) => (
                 <div key={row} className="flex gap-0.5">
-                  <div className={`w-5 flex items-center justify-center text-xs text-muted-foreground font-mono`}>
+                  <div className="w-5 flex items-center justify-center text-xs text-muted-foreground font-mono">
                     {row}
                   </div>
                   {Array.from({ length: cols }, (_, i) => {
@@ -164,9 +245,7 @@ export function WellMappingDialog({
                           setSelectedWell(pos);
                           if (well) {
                             setBatchId(well.batch_id);
-                            setConcValue(
-                              well.concentration_value?.toString() ?? ""
-                            );
+                            setConcValue(well.concentration_value?.toString() ?? "");
                             setConcUnit(well.concentration_unit ?? "mM");
                           } else {
                             setBatchId("");
@@ -190,80 +269,151 @@ export function WellMappingDialog({
             </div>
           </div>
 
-          {/* Assignment panel */}
-          <div className="space-y-4 border-l pl-4">
-            {selectedWell ? (
-              <>
-                <div>
-                  <p className="text-sm font-medium">
-                    Well <span className="font-mono text-primary">{selectedWell}</span>
+          {/* Right panel — tabs for click-assign vs CSV import */}
+          <div className="border-l pl-4 overflow-auto">
+            <Tabs defaultValue="click">
+              <TabsList className="w-full">
+                <TabsTrigger value="click" className="flex-1">Click to Assign</TabsTrigger>
+                <TabsTrigger value="csv" className="flex-1">Paste / Upload CSV</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="click" className="mt-4 space-y-4">
+                {selectedWell ? (
+                  <>
+                    <div>
+                      <p className="text-sm font-medium">
+                        Well <span className="font-mono text-primary text-lg">{selectedWell}</span>
+                      </p>
+                      {wellMap[selectedWell] && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Currently: {wellMap[selectedWell].batch_id}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-id">Batch #</Label>
+                      <Input
+                        id="batch-id"
+                        placeholder="e.g. CV-00001-001"
+                        value={batchId}
+                        onChange={(e) => setBatchId(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") assignWell();
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="conc-value">Concentration</Label>
+                        <Input
+                          id="conc-value"
+                          type="number"
+                          step="any"
+                          placeholder="10"
+                          value={concValue}
+                          onChange={(e) => setConcValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") assignWell();
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="conc-unit">Unit</Label>
+                        <Input
+                          id="conc-unit"
+                          placeholder="mM"
+                          value={concUnit}
+                          onChange={(e) => setConcUnit(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={assignWell} disabled={!batchId.trim()}>
+                        Assign & Next
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={clearWell}
+                        disabled={!wellMap[selectedWell]}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4">
+                    Click a well on the plate to assign a batch.
                   </p>
-                  {wellMap[selectedWell] && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Currently: {wellMap[selectedWell].batch_id}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="batch-id">Batch # or ID</Label>
-                  <Input
-                    id="batch-id"
-                    placeholder="e.g. CV-00001-001"
-                    value={batchId}
-                    onChange={(e) => setBatchId(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") assignWell();
-                    }}
+                )}
+              </TabsContent>
+
+              <TabsContent value="csv" className="mt-4 space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Paste CSV data or upload a file. Format: <code className="text-xs bg-muted px-1 py-0.5 rounded">Well, Batch#, Concentration, Unit</code>
+                  </p>
+                  <Textarea
+                    placeholder={"A1,CV-00001-001,10,mM\nA2,CV-00002-001,10,mM\nB1,CV-00003-001,5,mM"}
+                    rows={8}
+                    value={csvText}
+                    onChange={(e) => setCsvText(e.target.value)}
+                    className="font-mono text-xs"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="conc-value">Concentration</Label>
-                    <Input
-                      id="conc-value"
-                      type="number"
-                      step="any"
-                      placeholder="10"
-                      value={concValue}
-                      onChange={(e) => setConcValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") assignWell();
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="conc-unit">Unit</Label>
-                    <Input
-                      id="conc-unit"
-                      placeholder="mM"
-                      value={concUnit}
-                      onChange={(e) => setConcUnit(e.target.value)}
-                    />
-                  </div>
-                </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={assignWell} disabled={!batchId.trim()}>
-                    Assign
+                  <Button
+                    size="sm"
+                    onClick={handleCsvImport}
+                    disabled={!csvText.trim()}
+                  >
+                    Apply Pasted Data
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={clearWell}
-                    disabled={!wellMap[selectedWell]}
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    Clear
+                    <FileUp className="mr-1.5 h-3.5 w-3.5" />
+                    Upload CSV
                   </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.tsv,.txt"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Click a well on the plate to assign a batch.
-              </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs"
+                  onClick={handleDownloadTemplate}
+                >
+                  Download template CSV
+                </Button>
+              </TabsContent>
+            </Tabs>
+
+            {/* Clear all */}
+            {mappedCount > 0 && (
+              <div className="mt-6 pt-4 border-t">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive text-xs"
+                  onClick={() => setWellMap({})}
+                >
+                  Clear all {mappedCount} wells
+                </Button>
+              </div>
             )}
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
