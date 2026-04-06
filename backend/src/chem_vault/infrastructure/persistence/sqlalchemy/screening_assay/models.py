@@ -11,6 +11,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Column,
     Date,
     DateTime,
     Float,
@@ -18,6 +19,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     Text,
     Uuid,
 )
@@ -29,6 +31,28 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base import (
     EntityModelMixin,
     VersionMixin,
     WorkspaceIdMixin,
+)
+
+
+# ---------------------------------------------------------------------------
+# Association tables
+# ---------------------------------------------------------------------------
+
+protocol_projects = Table(
+    "protocol_projects",
+    Base.metadata,
+    Column(
+        "protocol_id",
+        Uuid(as_uuid=True),
+        ForeignKey("protocols.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "project_id",
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
@@ -201,6 +225,9 @@ class RunModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     )
     run_relationship_type: Mapped[str | None] = mapped_column(String(30))
     plate_format: Mapped[str | None] = mapped_column(String(10))
+    plate_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("plate_templates.id", ondelete="SET NULL")
+    )
     conditions: Mapped[dict | None] = mapped_column(JSONB)
     qc_metrics: Mapped[dict | None] = mapped_column(JSONB)
     is_locked: Mapped[bool] = mapped_column(
@@ -302,6 +329,9 @@ class ReadoutDataModel(Base, EntityModelMixin, WorkspaceIdMixin):
     value_qualifier: Mapped[str | None] = mapped_column(String(5))
     value_text: Mapped[str | None] = mapped_column(Text)
     is_outlier: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    is_computed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
 

@@ -176,6 +176,7 @@ class SQLAlchemyReadoutDataRepository:
             value=value,
             value_text=model.value_text,
             is_outlier=model.is_outlier,
+            is_computed=model.is_computed,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -194,4 +195,5 @@ class SQLAlchemyReadoutDataRepository:
             value_qualifier=entity.value.qualifier.value if entity.value else None,
             value_text=entity.value_text,
             is_outlier=entity.is_outlier,
+            is_computed=entity.is_computed,
         )
