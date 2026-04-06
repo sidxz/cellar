@@ -299,3 +299,14 @@ DeleteSavedSearchDep = Annotated[DeleteSavedSearch, Depends(_get_use_case(Delete
 GetSavedSearchDep = Annotated[GetSavedSearch, Depends(_get_use_case(GetSavedSearch))]
 ListSavedSearchesDep = Annotated[ListSavedSearches, Depends(_get_use_case(ListSavedSearches))]
 ExecuteSearchDep = Annotated[ExecuteSearch, Depends(_get_use_case(ExecuteSearch))]
+
+# --- Attachment dependencies ---
+from chem_vault.application.attachment.upload_attachment import UploadAttachment
+from chem_vault.application.attachment.delete_attachment import DeleteAttachment
+from chem_vault.application.attachment.list_attachments import ListAttachments
+from chem_vault.application.attachment.download_attachment import DownloadAttachment
+
+UploadAttachmentDep = Annotated[UploadAttachment, Depends(_get_use_case(UploadAttachment))]
+DeleteAttachmentDep = Annotated[DeleteAttachment, Depends(_get_use_case(DeleteAttachment))]
+ListAttachmentsDep = Annotated[ListAttachments, Depends(_get_use_case(ListAttachments))]
+DownloadAttachmentDep = Annotated[DownloadAttachment, Depends(_get_use_case(DownloadAttachment))]

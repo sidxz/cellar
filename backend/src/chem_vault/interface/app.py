@@ -146,6 +146,9 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.plate_import import router as plate_import_router
     app.include_router(plate_import_router)
 
+    from chem_vault.interface.routes.attachments import router as attachment_router
+    app.include_router(attachment_router)
+
     from chem_vault.interface.routes.dashboard import router as dashboard_router
     app.include_router(dashboard_router)
 
