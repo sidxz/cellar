@@ -24,6 +24,7 @@ from chem_vault.application.screening.create_readout_data import (
 )
 from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
 from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
+from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -47,6 +48,7 @@ class ReadoutDataResponse(BaseModel):
     value_qualifier: str | None = None
     value_text: str | None = None
     is_outlier: bool
+    is_computed: bool = False
 
     @classmethod
     def from_domain(cls, rd) -> ReadoutDataResponse:  # type: ignore[no-untyped-def]
@@ -62,6 +64,7 @@ class ReadoutDataResponse(BaseModel):
             value_qualifier=rd.value.qualifier.value if rd.value else None,
             value_text=rd.value_text,
             is_outlier=rd.is_outlier,
+            is_computed=rd.is_computed,
         )
 
 
@@ -202,6 +205,9 @@ def _create_dose_response(c: Annotated[Container, Depends(get_container)]) -> Cr
 def _list_dose_response(c: Annotated[Container, Depends(get_container)]) -> ListDoseResponseByRun:
     return c[ListDoseResponseByRun]
 
+def _calc_engine(c: Annotated[Container, Depends(get_container)]) -> ReadoutCalculationEngine:
+    return c[ReadoutCalculationEngine]
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -235,6 +241,7 @@ async def bulk_create_readout_data(
     auth: AuthDep,
     body: BulkReadoutDataRequest,
     uc: Annotated[BulkCreateReadoutData, Depends(_bulk_create_readout)],
+    engine: Annotated[ReadoutCalculationEngine, Depends(_calc_engine)],
 ) -> BulkReadoutDataResponse:
     cmd = BulkCreateReadoutDataCommand(
         workspace_id=auth.workspace_id,
@@ -258,6 +265,12 @@ async def bulk_create_readout_data(
     )
     result = await uc(cmd, auth=auth)
     data = result_to_response(result)
+
+    # Trigger computation pipeline for each affected run
+    run_ids = {item.run_id for item in body.items}
+    for run_id in run_ids:
+        await engine.compute_for_run(run_id)
+
     return BulkReadoutDataResponse(
         total_count=data.total_count,
         success_count=data.success_count,

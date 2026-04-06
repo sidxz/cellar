@@ -5,10 +5,12 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Response
 from lagom import Container
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
 from chem_vault.application.screening.create_protocol import CreateProtocol, CreateProtocolCommand
 from chem_vault.application.screening.create_target import CreateTarget, CreateTargetCommand
 from chem_vault.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
@@ -29,6 +31,11 @@ from chem_vault.application.screening.manage_readout_definitions import (
     RemoveReadoutDefinitionCommand,
 )
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
+from chem_vault.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -75,9 +82,15 @@ class ProtocolResponse(BaseModel):
     created_by: uuid.UUID
     readout_definitions: list[ReadoutDefinitionResponse]
     condition_definitions: list[ConditionDefinitionResponse]
+    project_ids: list[uuid.UUID] = []
 
     @classmethod
-    def from_domain(cls, p) -> ProtocolResponse:  # type: ignore[no-untyped-def]
+    def from_domain(  # type: ignore[no-untyped-def]
+        cls,
+        p,
+        *,
+        project_ids: list[uuid.UUID] | None = None,
+    ) -> ProtocolResponse:
         return cls(
             id=p.id,
             workspace_id=p.workspace_id,
@@ -115,7 +128,28 @@ class ProtocolResponse(BaseModel):
                 )
                 for cd in p.condition_definitions
             ],
+            project_ids=project_ids or [],
         )
+
+
+class ConditionGroupReadoutResponse(BaseModel):
+    readout_definition_id: uuid.UUID
+    name: str
+    value: float
+    unit: str | None = None
+    aggregation: str
+    count: int
+
+
+class ConditionGroupResponse(BaseModel):
+    condition_value: str
+    run_count: int
+    aggregated_readouts: list[ConditionGroupReadoutResponse]
+
+
+class ConditionGroupsResponse(BaseModel):
+    condition_name: str
+    groups: list[ConditionGroupResponse]
 
 
 class TargetResponse(BaseModel):
@@ -251,6 +285,9 @@ def _get_update_target(c: Annotated[Container, Depends(get_container)]) -> Updat
 def _get_delete_target(c: Annotated[Container, Depends(get_container)]) -> DeleteTarget:
     return c[DeleteTarget]
 
+def _condition_grouping(c: Annotated[Container, Depends(get_container)]) -> ConditionGroupingService:
+    return c[ConditionGroupingService]
+
 
 # ---------------------------------------------------------------------------
 # Protocol routes
@@ -281,7 +318,16 @@ async def create_protocol(
 async def list_protocols(
     auth: AuthDep,
     uc: Annotated[ListProtocols, Depends(_list_protocols)],
+    c: Annotated[Container, Depends(get_container)],
+    project_id: uuid.UUID | None = Query(default=None),
 ) -> list[ProtocolResponse]:
+    if project_id is not None:
+        # Filter by project: use protocol repo directly
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        repo = SQLAlchemyProtocolRepository(uow)
+        async with uow:
+            protocols = await repo.find_by_project(auth.workspace_id, project_id)
+        return [ProtocolResponse.from_domain(p) for p in protocols]
     result = await uc(auth=auth)
     protocols = result_to_response(result)
     return [ProtocolResponse.from_domain(p) for p in protocols]
@@ -382,8 +428,18 @@ async def add_readout_definition(
     body: AddReadoutDefinitionRequest,
     auth: AuthDep,
     uc: Annotated[AddReadoutDefinition, Depends(_add_readout_definition)],
+    get_proto: Annotated[GetProtocol, Depends(_get_protocol)],
 ) -> ProtocolResponse:
     """Add a readout definition to a DRAFT protocol."""
+    # Validate formula if this is a calculated readout
+    if body.is_calculated and body.calculation_formula:
+        proto_result = await get_proto(protocol_id, auth=auth)
+        proto = result_to_response(proto_result)
+        available_names = [rd.name for rd in proto.readout_definitions]
+        evaluator = AstevalFormulaEvaluator()
+        val_result = evaluator.validate(body.calculation_formula, available_names)
+        result_to_response(val_result)
+
     cmd = AddReadoutDefinitionCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
@@ -420,6 +476,93 @@ async def remove_readout_definition(
     )
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
+
+
+# ---------------------------------------------------------------------------
+# Protocol–Project association routes
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/protocols/{protocol_id}/projects/{project_id}",
+    status_code=204,
+    tags=["protocols"],
+)
+async def add_protocol_to_project(
+    protocol_id: uuid.UUID,
+    project_id: uuid.UUID,
+    auth: AuthDep,
+    c: Annotated[Container, Depends(get_container)],
+) -> Response:
+    """Link a protocol to a project (idempotent)."""
+    uow = AsyncUnitOfWork(c[async_sessionmaker])
+    repo = SQLAlchemyProtocolRepository(uow)
+    async with uow:
+        await repo.add_to_project(protocol_id, project_id)
+        await uow.commit()
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/protocols/{protocol_id}/projects/{project_id}",
+    status_code=204,
+    tags=["protocols"],
+)
+async def remove_protocol_from_project(
+    protocol_id: uuid.UUID,
+    project_id: uuid.UUID,
+    auth: AuthDep,
+    c: Annotated[Container, Depends(get_container)],
+) -> Response:
+    """Unlink a protocol from a project."""
+    uow = AsyncUnitOfWork(c[async_sessionmaker])
+    repo = SQLAlchemyProtocolRepository(uow)
+    async with uow:
+        await repo.remove_from_project(protocol_id, project_id)
+        await uow.commit()
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Condition grouping routes
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/protocols/{protocol_id}/condition-groups",
+    response_model=ConditionGroupsResponse,
+    tags=["protocols"],
+)
+async def get_condition_groups(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    condition_name: Annotated[str, Query(...)],
+    svc: Annotated[ConditionGroupingService, Depends(_condition_grouping)],
+) -> ConditionGroupsResponse:
+    """Aggregate readout data grouped by a condition value."""
+    result = await svc.group_by_condition(auth.workspace_id, protocol_id, condition_name)
+    groups = result_to_response(result)
+    return ConditionGroupsResponse(
+        condition_name=condition_name,
+        groups=[
+            ConditionGroupResponse(
+                condition_value=g.condition_value,
+                run_count=g.run_count,
+                aggregated_readouts=[
+                    ConditionGroupReadoutResponse(
+                        readout_definition_id=ar.readout_definition_id,
+                        name=ar.name,
+                        value=ar.value,
+                        unit=ar.unit,
+                        aggregation=ar.aggregation,
+                        count=ar.count,
+                    )
+                    for ar in g.aggregated_readouts
+                ],
+            )
+            for g in groups
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

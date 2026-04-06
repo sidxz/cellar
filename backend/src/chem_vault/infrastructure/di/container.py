@@ -946,6 +946,51 @@ def create_container(
     container.define(GetPlateTemplate, _pt_query(GetPlateTemplate))
     container.define(ListPlateTemplates, _pt_query(ListPlateTemplates))
 
+    # --- Computation Services ---
+    from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator
+    from chem_vault.domain.screening_assay.plate_normalizer import PlateNormalizer
+    from chem_vault.domain.screening_assay.replicate_aggregator import ReplicateAggregator
+    from chem_vault.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+    from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+    from chem_vault.application.screening.cross_protocol_resolver import CrossProtocolResolver
+    from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
+
+    container.define(AstevalFormulaEvaluator, Singleton(AstevalFormulaEvaluator))
+    container.define(FormulaEvaluator, lambda c: c[AstevalFormulaEvaluator])
+    container.define(PlateNormalizer, Singleton(PlateNormalizer))
+    container.define(ReplicateAggregator, Singleton(ReplicateAggregator))
+
+    def _readout_calc_engine(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ReadoutCalculationEngine(
+            formula_evaluator=c[FormulaEvaluator],
+            plate_normalizer=c[PlateNormalizer],
+            replicate_aggregator=c[ReplicateAggregator],
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
+
+    container.define(ReadoutCalculationEngine, _readout_calc_engine)
+
+    def _cross_protocol_resolver(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CrossProtocolResolver(
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+        )
+
+    container.define(CrossProtocolResolver, _cross_protocol_resolver)
+
+    def _condition_grouping_service(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ConditionGroupingService(
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
+
+    container.define(ConditionGroupingService, _condition_grouping_service)
+
     # --- Registered Plates ---
     def _reg_plate_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
