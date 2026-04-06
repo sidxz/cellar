@@ -284,18 +284,31 @@ class MapWells:
             if plate is None or plate.workspace_id != input.workspace_id:
                 return _not_found(input.plate_id)
 
-            # Validate that all referenced batch_ids exist
-            batch_ids: set[uuid.UUID] = set()
-            for entry in input.well_map.values():
-                if isinstance(entry, dict) and entry.get("batch_id"):
-                    batch_ids.add(uuid.UUID(entry["batch_id"]))
-
-            for bid in batch_ids:
-                batch = await self._batch_repo.find_by_id(bid)
+            # Validate and resolve batch references (accept UUID or batch number)
+            resolved_map = dict(input.well_map)
+            seen_refs: dict[str, uuid.UUID] = {}
+            for pos, entry in resolved_map.items():
+                if not isinstance(entry, dict) or not entry.get("batch_id"):
+                    continue
+                raw = entry["batch_id"].strip()
+                if raw in seen_refs:
+                    entry["batch_id"] = str(seen_refs[raw])
+                    continue
+                # Try as UUID first
+                try:
+                    bid = uuid.UUID(raw)
+                    batch = await self._batch_repo.find_by_id(bid)
+                except ValueError:
+                    # Not a UUID — resolve as batch number
+                    batch = await self._batch_repo.find_by_batch_number(
+                        input.workspace_id, raw
+                    )
                 if batch is None:
-                    return Failure(ValidationError(f"Batch {bid} not found"))
+                    return Failure(ValidationError(f"Batch '{raw}' not found"))
+                entry["batch_id"] = str(batch.id)
+                seen_refs[raw] = batch.id
 
-            plate.map_wells(input.well_map)
+            plate.map_wells(resolved_map)
 
             await self._repo.save(plate)
             events = await self._uow.commit()
