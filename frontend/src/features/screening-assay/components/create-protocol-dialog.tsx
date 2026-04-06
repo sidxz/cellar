@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Separator } from "@/shared/components/ui/separator";
+import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
 import { useCreateProtocol } from "../hooks/use-protocols";
@@ -49,6 +50,8 @@ interface ReadoutDefState {
   unit: string;
   aggregation: string;
   normalization: string;
+  is_calculated: boolean;
+  calculation_formula: string;
   display_order: number;
 }
 
@@ -59,6 +62,8 @@ function emptyReadoutDef(order: number): ReadoutDefState {
     unit: "",
     aggregation: "none",
     normalization: "none",
+    is_calculated: false,
+    calculation_formula: "",
     display_order: order,
   };
 }
@@ -102,7 +107,7 @@ export function CreateProtocolDialog({
   const updateReadout = (
     index: number,
     field: keyof ReadoutDefState,
-    value: string | number
+    value: string | number | boolean
   ) => {
     setReadoutDefs((prev) =>
       prev.map((rd, i) => (i === index ? { ...rd, [field]: value } : rd))
@@ -123,6 +128,10 @@ export function CreateProtocolDialog({
           rd.aggregation as CreateReadoutDefinitionInput["aggregation"],
         normalization:
           rd.normalization as CreateReadoutDefinitionInput["normalization"],
+        is_calculated: rd.is_calculated,
+        calculation_formula: rd.is_calculated
+          ? rd.calculation_formula || null
+          : null,
         display_order: rd.display_order,
       }));
 
@@ -344,6 +353,38 @@ export function CreateProtocolDialog({
                           </Select>
                         </div>
                       </div>
+
+                      {/* Calculated readout toggle */}
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={rd.is_calculated}
+                          onCheckedChange={(checked) =>
+                            updateReadout(index, "is_calculated", checked)
+                          }
+                          size="sm"
+                        />
+                        <Label className="text-xs">Calculated</Label>
+                      </div>
+                      {rd.is_calculated && (
+                        <div className="grid gap-1">
+                          <Label className="text-xs">Formula</Label>
+                          <Input
+                            className="font-mono text-xs"
+                            placeholder='e.g., 100 * (1 - Raw / Control)'
+                            value={rd.calculation_formula}
+                            onChange={(e) =>
+                              updateReadout(
+                                index,
+                                "calculation_formula",
+                                e.target.value
+                              )
+                            }
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Use readout names as variables. Cross-protocol: @ProtocolName.ReadoutName
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {readoutDefs.length > 1 && (

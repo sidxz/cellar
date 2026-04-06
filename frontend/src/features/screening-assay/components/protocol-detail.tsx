@@ -59,6 +59,7 @@ import {
   useAddReadoutDefinition,
   useRemoveReadoutDefinition,
 } from "../hooks/use-protocols";
+import { ConditionGroupTable } from "./condition-group-table";
 import { RunList } from "./run-list";
 import { CreateRunDialog } from "./create-run-dialog";
 import {
@@ -372,6 +373,24 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                 </TableBody>
               </Table>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Condition Grouping */}
+      {protocol.condition_definitions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Condition Grouping</CardTitle>
+            <CardDescription>
+              Readout values aggregated by experimental condition across runs.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ConditionGroupTable
+              protocolId={protocolId}
+              conditionDefinitions={protocol.condition_definitions}
+            />
           </CardContent>
         </Card>
       )}

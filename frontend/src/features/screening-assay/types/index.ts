@@ -196,6 +196,7 @@ export interface Protocol {
   created_by: string;
   readout_definitions: ReadoutDefinition[];
   condition_definitions: ConditionDefinition[];
+  project_ids: string[];
 }
 
 export interface Target {
@@ -243,6 +244,7 @@ export interface ReadoutData {
   value_qualifier: string | null;
   value_text: string | null;
   is_outlier: boolean;
+  is_computed: boolean;
 }
 
 export interface DoseResponseCurve {
@@ -265,6 +267,45 @@ export interface DoseResponseCurve {
   curve_class: CurveClass | null;
   raw_data: Array<Record<string, unknown>> | null;
   excluded_points: Array<Record<string, unknown>> | null;
+}
+
+// ─── Plate Template ─────────────────────────────────────────────────────────
+
+export type WellDesignation =
+  | "compound"
+  | "positive_control"
+  | "negative_control"
+  | "empty";
+
+export const WELL_DESIGNATION_LABELS: Record<WellDesignation, string> = {
+  compound: "Compound",
+  positive_control: "Positive Control",
+  negative_control: "Negative Control",
+  empty: "Empty",
+};
+
+export interface PlateTemplate {
+  id: string;
+  workspace_id: string;
+  name: string;
+  format: PlateFormat;
+  template_map: Record<string, WellDesignation>;
+  description: string | null;
+  created_by: string;
+}
+
+export interface CreatePlateTemplateInput {
+  name: string;
+  format: PlateFormat;
+  template_map: Record<string, WellDesignation>;
+  description?: string | null;
+}
+
+export interface UpdatePlateTemplateInput {
+  name?: string;
+  format?: PlateFormat;
+  template_map?: Record<string, WellDesignation>;
+  description?: string | null;
 }
 
 // ─── Create Input Types ───────────────────────────────────────────────────────
@@ -324,6 +365,7 @@ export interface CreateRunInput {
   protocol_id: string;
   run_date: string;
   plate_format?: PlateFormat | null;
+  plate_template_id?: string | null;
   performed_at_org_id?: string | null;
   parent_run_id?: string | null;
   run_relationship_type?: RunRelationshipType | null;
@@ -365,4 +407,26 @@ export interface CreateDoseResponseCurveInput {
   curve_class?: CurveClass | null;
   raw_data?: Array<Record<string, unknown>> | null;
   excluded_points?: Array<Record<string, unknown>> | null;
+}
+
+// ─── Condition Grouping ──────────────────────────────────────────────────────
+
+export interface AggregatedReadoutResponse {
+  readout_definition_id: string;
+  name: string;
+  value: number;
+  unit: string | null;
+  aggregation: string;
+  count: number;
+}
+
+export interface ConditionGroupResponse {
+  condition_value: string;
+  run_count: number;
+  aggregated_readouts: AggregatedReadoutResponse[];
+}
+
+export interface ConditionGroupsResponse {
+  condition_name: string;
+  groups: ConditionGroupResponse[];
 }

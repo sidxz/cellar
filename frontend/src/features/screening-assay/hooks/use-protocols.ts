@@ -7,13 +7,14 @@ import type { CreateProtocolInput, Protocol } from "../types";
 
 const PROTOCOLS_KEY = ["protocols"];
 
-export function useProtocols() {
+export function useProtocols(projectId?: string) {
   return useQuery({
-    queryKey: PROTOCOLS_KEY,
+    queryKey: projectId ? [...PROTOCOLS_KEY, { projectId }] : PROTOCOLS_KEY,
     queryFn: () =>
       customInstance<Protocol[]>({
         url: "/api/v1/protocols",
         method: "GET",
+        ...(projectId ? { params: { project_id: projectId } } : {}),
       }),
   });
 }

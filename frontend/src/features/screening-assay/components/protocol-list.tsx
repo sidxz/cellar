@@ -1,10 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { TestTubes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
 import { useProtocols } from "../hooks/use-protocols";
 import {
   PROTOCOL_TYPE_LABELS,
@@ -30,8 +38,14 @@ function statusBadgeVariant(
   }
 }
 
+const ALL_PROJECTS = "__all__";
+
 export function ProtocolList({ onSelect }: ProtocolListProps) {
-  const { data: protocols, isLoading, error } = useProtocols();
+  const [projectFilter, setProjectFilter] = useState<string>(ALL_PROJECTS);
+  const { data: projects } = useProjects();
+  const { data: protocols, isLoading, error } = useProtocols(
+    projectFilter !== ALL_PROJECTS ? projectFilter : undefined
+  );
 
   const columnDefs = useMemo<ColDef<Protocol>[]>(
     () => [
@@ -81,22 +95,46 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
   }
 
   return (
-    <DataGrid<Protocol>
-      rowData={protocols}
-      columnDefs={columnDefs}
-      loading={isLoading}
-      height="400px"
-      suppressFilters
-      onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
-      emptyState={
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <TestTubes className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No protocols</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create your first screening protocol to get started.
-          </p>
+    <div className="space-y-3">
+      {/* Project filter */}
+      {projects && projects.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 text-sm text-muted-foreground">
+            Project:
+          </span>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      }
-    />
+      )}
+
+      <DataGrid<Protocol>
+        rowData={protocols}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="400px"
+        suppressFilters
+        onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
+        emptyState={
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+            <TestTubes className="h-12 w-12 text-muted-foreground/40" />
+            <h3 className="mt-4 text-lg font-semibold">No protocols</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create your first screening protocol to get started.
+            </p>
+          </div>
+        }
+      />
+    </div>
   );
 }

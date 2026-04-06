@@ -102,12 +102,19 @@ export function ReadoutDataTable({
     ];
 
     for (const rd of readoutDefs) {
+      const baseName = rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
+      const headerName = rd.is_calculated ? `${baseName} [calc]` : baseName;
       cols.push({
-        headerName: rd.unit ? `${rd.name} (${rd.unit})` : rd.name,
+        headerName,
+        headerTooltip: rd.is_calculated && rd.calculation_formula
+          ? `Calculated: ${rd.calculation_formula}`
+          : undefined,
         colId: rd.id,
         width: 130,
         cellClass: "text-right tabular-nums",
-        headerClass: "ag-right-aligned-header",
+        headerClass: rd.is_calculated
+          ? "ag-right-aligned-header italic"
+          : "ag-right-aligned-header",
         valueGetter: (p) => {
           const row = p.data?.values.get(rd.id);
           if (!row) return null;
