@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { FileUp } from "lucide-react";
 import {
   Dialog,
@@ -66,6 +66,104 @@ function parseCsvWellMap(text: string): Record<string, WellMapping> {
 
 // ---------------------------------------------------------------------------
 // Component
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// PlateGrid — measures its container and computes square cell sizes
+// ---------------------------------------------------------------------------
+
+interface PlateGridProps {
+  rows: number;
+  cols: number;
+  letters: string[];
+  wellMap: Record<string, WellMapping>;
+  selectedWell: string | null;
+  onSelectWell: (pos: string) => void;
+}
+
+function PlateGrid({ rows, cols, letters, wellMap, selectedWell, onSelectWell }: PlateGridProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cellSize, setCellSize] = useState(0);
+  const LABEL_SIZE = 24; // px reserved for row/col labels
+  const GAP = 2; // px between cells
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      const availW = rect.width - LABEL_SIZE - GAP * cols;
+      const availH = rect.height - LABEL_SIZE - GAP * rows;
+      const size = Math.max(Math.floor(Math.min(availW / cols, availH / rows)), 8);
+      setCellSize(size);
+    };
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cols, rows]);
+
+  return (
+    <div ref={containerRef} className="flex-1 min-w-0 flex items-center justify-center">
+      {cellSize > 0 && (
+        <div
+          className="inline-grid"
+          style={{
+            gridTemplateColumns: `${LABEL_SIZE}px repeat(${cols}, ${cellSize}px)`,
+            gridTemplateRows: `${LABEL_SIZE}px repeat(${rows}, ${cellSize}px)`,
+            gap: `${GAP}px`,
+          }}
+        >
+          {/* Top-left corner */}
+          <div />
+          {/* Column headers */}
+          {Array.from({ length: cols }, (_, i) => (
+            <div
+              key={`col-${i}`}
+              className="flex items-center justify-center text-xs text-muted-foreground font-mono"
+            >
+              {i + 1}
+            </div>
+          ))}
+          {/* Rows */}
+          {letters.map((row) => (
+            <Fragment key={`row-${row}`}>
+              <div className="flex items-center justify-center text-xs text-muted-foreground font-mono">
+                {row}
+              </div>
+              {Array.from({ length: cols }, (_, i) => {
+                const pos = `${row}${i + 1}`;
+                const well = wellMap[pos];
+                const isSelected = selectedWell === pos;
+                return (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => onSelectWell(pos)}
+                    title={
+                      well
+                        ? `${pos}: ${well.batch_id} @ ${well.concentration_value ?? "\u2014"} ${well.concentration_unit ?? ""}`
+                        : pos
+                    }
+                    className={`rounded-sm border transition-colors flex items-center justify-center font-mono
+                      ${cellSize > 28 ? "text-[10px]" : "text-[7px]"}
+                      ${isSelected ? "ring-2 ring-primary border-primary" : ""}
+                      ${well ? "bg-primary/60 border-primary/40 text-primary-foreground" : "bg-muted/30 border-muted hover:bg-muted/60"}
+                    `}
+                  />
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dialog
 // ---------------------------------------------------------------------------
 
 interface WellMappingDialogProps {
@@ -194,17 +292,18 @@ export function WellMappingDialog({
   };
 
   const mappedCount = Object.keys(wellMap).length;
-  const fmt = parseInt(format, 10);
-  const cellSize =
-    fmt > 384
-      ? "h-4 w-4 text-[5px]"
-      : fmt > 96
-        ? "h-6 w-6 text-[8px]"
-        : "h-9 w-9 text-xs";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[80vw] h-[85vh] max-w-none flex flex-col">
+      <DialogContent
+        className="flex flex-col"
+        style={{
+          width: "92vw",
+          maxWidth: "92vw",
+          height: "80vh",
+          maxHeight: "80vh",
+        }}
+      >
         <DialogHeader className="shrink-0">
           <DialogTitle>Map Wells to Batches</DialogTitle>
           <DialogDescription>
@@ -213,64 +312,30 @@ export function WellMappingDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 grid grid-cols-[1fr_320px] gap-6 overflow-hidden">
-          {/* Plate grid */}
-          <div className="overflow-auto">
-            <div className="inline-flex flex-col gap-0.5">
-              {/* Column headers */}
-              <div className="flex gap-0.5 pl-6">
-                {Array.from({ length: cols }, (_, i) => (
-                  <div
-                    key={i}
-                    className={`${cellSize} flex items-center justify-center text-muted-foreground font-mono`}
-                  >
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-              {letters.map((row) => (
-                <div key={row} className="flex gap-0.5">
-                  <div className="w-5 flex items-center justify-center text-xs text-muted-foreground font-mono">
-                    {row}
-                  </div>
-                  {Array.from({ length: cols }, (_, i) => {
-                    const pos = `${row}${i + 1}`;
-                    const well = wellMap[pos];
-                    const isSelected = selectedWell === pos;
-                    return (
-                      <button
-                        key={pos}
-                        type="button"
-                        onClick={() => {
-                          setSelectedWell(pos);
-                          if (well) {
-                            setBatchId(well.batch_id);
-                            setConcValue(well.concentration_value?.toString() ?? "");
-                            setConcUnit(well.concentration_unit ?? "mM");
-                          } else {
-                            setBatchId("");
-                            setConcValue("");
-                          }
-                        }}
-                        title={
-                          well
-                            ? `${pos}: ${well.batch_id} @ ${well.concentration_value ?? "—"} ${well.concentration_unit ?? ""}`
-                            : pos
-                        }
-                        className={`${cellSize} rounded-sm border transition-colors flex items-center justify-center font-mono
-                          ${isSelected ? "ring-2 ring-primary border-primary" : ""}
-                          ${well ? "bg-primary/60 border-primary/40 text-primary-foreground" : "bg-muted/30 border-muted hover:bg-muted/60"}
-                        `}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="flex-1 min-h-0 flex gap-6 overflow-hidden">
+          {/* Plate grid — measured container, computed cell size */}
+          <PlateGrid
+            rows={rows}
+            cols={cols}
+            letters={letters}
+            wellMap={wellMap}
+            selectedWell={selectedWell}
+            onSelectWell={(pos) => {
+              setSelectedWell(pos);
+              const well = wellMap[pos];
+              if (well) {
+                setBatchId(well.batch_id);
+                setConcValue(well.concentration_value?.toString() ?? "");
+                setConcUnit(well.concentration_unit ?? "mM");
+              } else {
+                setBatchId("");
+                setConcValue("");
+              }
+            }}
+          />
 
           {/* Right panel — tabs for click-assign vs CSV import */}
-          <div className="border-l pl-4 overflow-auto">
+          <div className="w-80 shrink-0 border-l pl-4 overflow-auto">
             <Tabs defaultValue="click">
               <TabsList className="w-full">
                 <TabsTrigger value="click" className="flex-1">Click to Assign</TabsTrigger>
