@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Beaker,
   FolderOpen,
+  Grid3X3,
   History,
   LayoutDashboard,
   TestTubes,
@@ -35,6 +36,7 @@ import {
   BatchesTab,
   ActivityTab,
   CollectionsTab,
+  PlatesTab,
   HistoryTab,
 } from "./detail-tabs";
 
@@ -202,6 +204,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             <FolderOpen className="mr-1.5 h-4 w-4" />
             Collections
           </TabsTrigger>
+          <TabsTrigger value="plates">
+            <Grid3X3 className="mr-1.5 h-4 w-4" />
+            Plates
+          </TabsTrigger>
           <TabsTrigger value="history">
             <History className="mr-1.5 h-4 w-4" />
             History
@@ -222,6 +228,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
 
         <TabsContent value="collections">
           <CollectionsTab moleculeId={compoundId} />
+        </TabsContent>
+
+        <TabsContent value="plates">
+          <PlatesTab moleculeId={compoundId} />
         </TabsContent>
 
         <TabsContent value="history">
