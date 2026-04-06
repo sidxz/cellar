@@ -96,10 +96,9 @@ class RegisteredPlate(AggregateRoot):
         well_map: dict | None = None,
         storage_location_id: uuid.UUID | None = None,
         parent_plate_id: uuid.UUID | None = None,
-        protocol_id: uuid.UUID | None = None,
-        run_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
+        template_id: uuid.UUID | None = None,
         notes: str | None = None,
-        custom_fields: dict | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -119,10 +118,9 @@ class RegisteredPlate(AggregateRoot):
         self.well_map: dict = well_map if well_map is not None else {}
         self.storage_location_id = storage_location_id
         self.parent_plate_id = parent_plate_id
-        self.protocol_id = protocol_id
-        self.run_id = run_id
+        self.project_id = project_id
+        self.template_id = template_id
         self.notes = notes
-        self.custom_fields = custom_fields
 
     # ------------------------------------------------------------------
     # Factory method
@@ -140,10 +138,9 @@ class RegisteredPlate(AggregateRoot):
         registered_by: uuid.UUID,
         storage_location_id: uuid.UUID | None = None,
         parent_plate_id: uuid.UUID | None = None,
-        protocol_id: uuid.UUID | None = None,
-        run_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
+        template_id: uuid.UUID | None = None,
         notes: str | None = None,
-        custom_fields: dict | None = None,
     ) -> RegisteredPlate:
         """Register a new physical plate in the inventory."""
         plate = cls(
@@ -155,10 +152,9 @@ class RegisteredPlate(AggregateRoot):
             registered_by=registered_by,
             storage_location_id=storage_location_id,
             parent_plate_id=parent_plate_id,
-            protocol_id=protocol_id,
-            run_id=run_id,
+            project_id=project_id,
+            template_id=template_id,
             notes=notes,
-            custom_fields=custom_fields,
         )
         plate.register_event(
             PlateRegistered(
@@ -297,8 +293,8 @@ class RegisteredPlate(AggregateRoot):
         plate_label: str | None = None,
         format: PlateFormat | None = ...,  # type: ignore[assignment]
         plate_type: PlateType | None = None,
-        protocol_id: uuid.UUID | None = ...,  # type: ignore[assignment]
-        run_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        template_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         notes: str | None = ...,  # type: ignore[assignment]
         custom_fields: dict | None = ...,  # type: ignore[assignment]
     ) -> None:
@@ -316,10 +312,10 @@ class RegisteredPlate(AggregateRoot):
             self.plate_label = plate_label.strip()
         if plate_type is not None:
             self.plate_type = plate_type
-        if protocol_id is not ...:
-            self.protocol_id = protocol_id
-        if run_id is not ...:
-            self.run_id = run_id
+        if project_id is not ...:
+            self.project_id = project_id
+        if template_id is not ...:
+            self.template_id = template_id
         if notes is not ...:
             self.notes = notes
         if custom_fields is not ...:
