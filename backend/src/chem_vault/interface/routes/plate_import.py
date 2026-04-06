@@ -11,11 +11,11 @@ from pydantic import BaseModel
 
 from chem_vault.application.inventory.import_plate_data import (
     ImportExecutionResult,
+    ImportPlateDataService,
     ImportPreview,
     ValidationResult,
-    execute_import,
+    auto_match_template,
     preview_import_file,
-    validate_import_mapping,
 )
 from chem_vault.application.inventory.import_templates import (
     CreateImportTemplate,
@@ -118,8 +118,14 @@ class CreateImportTemplateBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Use-case dependencies
+# Use-case / service dependencies
 # ---------------------------------------------------------------------------
+
+
+def _import_plate_data_service(
+    c: Annotated[Container, Depends(get_container)],
+) -> ImportPlateDataService:
+    return c[ImportPlateDataService]
 
 
 def _create_import_template(
@@ -149,17 +155,35 @@ def _delete_import_template(
 async def preview_import(
     auth: AuthDep,
     file: UploadFile = File(...),
+    list_uc: Annotated[ListImportTemplates, Depends(_list_import_templates)] = ...,
 ) -> ImportPreviewResponse:
     content = await file.read()
     preview: ImportPreview = preview_import_file(file.filename or "upload.csv", content)
+
+    # Auto-match against saved templates using header similarity
+    suggested_id: str | None = None
+    suggested_name: str | None = None
+    try:
+        templates_result = await list_uc(
+            ListImportTemplatesQuery(workspace_id=auth.workspace_id)
+        )
+        from returns.result import Success
+
+        if isinstance(templates_result, Success):
+            templates: list[ImportTemplate] = templates_result.unwrap()
+            suggested_id, suggested_name = auto_match_template(preview.headers, templates)
+    except Exception:
+        # Auto-matching is best-effort; never fail the preview because of it
+        pass
+
     return ImportPreviewResponse(
         file_id=preview.file_id,
         filename=preview.filename,
         headers=preview.headers,
         preview_rows=preview.preview_rows,
         row_count=preview.row_count,
-        suggested_template_id=preview.suggested_template_id,
-        suggested_template_name=preview.suggested_template_name,
+        suggested_template_id=suggested_id,
+        suggested_template_name=suggested_name,
     )
 
 
@@ -167,23 +191,13 @@ async def preview_import(
 async def validate_import(
     body: ValidateImportBody,
     auth: AuthDep,
-    container: Annotated[Container, Depends(get_container)],
+    service: Annotated[ImportPlateDataService, Depends(_import_plate_data_service)],
 ) -> ValidationResultResponse:
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
-    session_factory = container[async_sessionmaker]
-    uow = AsyncUnitOfWork(session_factory)
-    plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
-
-    async with uow:
-        result: ValidationResult = await validate_import_mapping(
-            file_id=body.file_id,
-            column_mappings=body.column_mappings,
-            protocol_id=body.protocol_id,
-            run_id=body.run_id,
-            plate_repo=plate_repo,
-            workspace_id=auth.workspace_id,
-        )
+    result: ValidationResult = await service.validate(
+        file_id=body.file_id,
+        column_mappings=body.column_mappings,
+        workspace_id=auth.workspace_id,
+    )
 
     return ValidationResultResponse(
         total_rows=result.total_rows,
@@ -201,13 +215,14 @@ async def validate_import(
 async def execute_import_data(
     body: ExecuteImportBody,
     auth: AuthDep,
+    service: Annotated[ImportPlateDataService, Depends(_import_plate_data_service)],
 ) -> ExecuteImportResponse:
-    result: ImportExecutionResult = await execute_import(
+    result: ImportExecutionResult = await service.execute(
         file_id=body.file_id,
         column_mappings=body.column_mappings,
+        workspace_id=auth.workspace_id,
         protocol_id=body.protocol_id,
         run_id=body.run_id,
-        workspace_id=auth.workspace_id,
     )
     return ExecuteImportResponse(
         imported_count=result.imported_count,

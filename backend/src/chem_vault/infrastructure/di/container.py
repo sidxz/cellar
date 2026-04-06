@@ -106,6 +106,7 @@ from chem_vault.application.inventory.import_templates import (
     DeleteImportTemplate,
     ListImportTemplates,
 )
+from chem_vault.application.inventory.import_plate_data import ImportPlateDataService
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
 )
@@ -1094,5 +1095,15 @@ def create_container(
     container.define(CreateImportTemplate, _import_tmpl_uc(CreateImportTemplate))
     container.define(ListImportTemplates, _import_tmpl_uc(ListImportTemplates))
     container.define(DeleteImportTemplate, _import_tmpl_uc(DeleteImportTemplate))
+
+    # --- Import Plate Data Service ---
+    def _import_plate_data_service(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportPlateDataService(
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+        )
+
+    container.define(ImportPlateDataService, _import_plate_data_service)
 
     return container
