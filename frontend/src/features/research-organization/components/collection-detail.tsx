@@ -110,6 +110,15 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     [router]
   );
 
+  const handleExportSdf = useCallback(() => {
+    if (!moleculeIds?.length) return;
+    downloadFile({
+      url: "/api/v1/molecules/export/sdf",
+      data: { molecule_ids: moleculeIds },
+      filename: `${collection?.name ?? "collection"}.sdf`,
+    });
+  }, [moleculeIds, collection?.name]);
+
   // --- Loading ---
   if (isLoading) {
     return (
@@ -138,15 +147,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
       </div>
     );
   }
-
-  const handleExportSdf = useCallback(() => {
-    if (!moleculeIds?.length) return;
-    downloadFile({
-      url: "/api/v1/molecules/export/sdf",
-      data: { molecule_ids: moleculeIds },
-      filename: `${collection?.name ?? "collection"}.sdf`,
-    });
-  }, [moleculeIds, collection?.name]);
 
   const handleDelete = () => {
     deleteMutation.mutate(collection.id, {
