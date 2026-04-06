@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import JSON, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chem_vault.infrastructure.persistence.sqlalchemy.base import (
@@ -118,4 +118,54 @@ class StorageLocationModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
     __table_args__ = (
         Index("ix_storage_ws_type", "workspace_id", "type"),
         Index("ix_storage_parent", "parent_id"),
+    )
+
+
+class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """Standalone physical plate in inventory."""
+
+    __tablename__ = "registered_plates"
+
+    barcode: Mapped[str] = mapped_column(String(100), nullable=False)
+    plate_label: Mapped[str] = mapped_column(String(300), nullable=False)
+    format: Mapped[str] = mapped_column(String(10), nullable=False)
+    plate_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    well_map: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="registered"
+    )
+    storage_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("storage_locations.id")
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    template_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    parent_plate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("registered_plates.id")
+    )
+    registered_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "barcode", name="uq_reg_plate_ws_barcode"),
+        Index("ix_reg_plate_status", "workspace_id", "status"),
+        Index("ix_reg_plate_type", "workspace_id", "plate_type"),
+        Index("ix_reg_plate_location", "storage_location_id"),
+        Index("ix_reg_plate_project", "project_id"),
+        Index("ix_reg_plate_parent", "parent_plate_id"),
+    )
+
+
+class ImportTemplateModel(Base, EntityModelMixin, WorkspaceIdMixin):
+    """Saved column mapping for plate data imports."""
+
+    __tablename__ = "import_templates"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    column_mappings: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    default_protocol_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        Index("ix_import_template_ws", "workspace_id"),
     )
