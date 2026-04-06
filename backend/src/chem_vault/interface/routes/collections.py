@@ -12,6 +12,7 @@ from chem_vault.application.research_organization.collection_membership import (
     ListCollectionMoleculesQuery,
     RemoveMoleculesFromCollectionCommand,
 )
+from chem_vault.application.research_organization.compose_collections import ComposeCollectionsCommand
 from chem_vault.application.research_organization.create_collection import CreateCollectionCommand
 from chem_vault.application.research_organization.delete_collection import DeleteCollectionCommand
 from chem_vault.application.research_organization.get_collection import (
@@ -24,6 +25,7 @@ from chem_vault.domain.research_organization.collection import Collection
 from chem_vault.interface.dependencies import (
     AddMoleculesToCollectionDep,
     AuthDep,
+    ComposeCollectionsDep,
     CreateCollectionDep,
     DeleteCollectionDep,
     GetCollectionDep,
@@ -83,6 +85,12 @@ class UpdateCollectionBody(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class ComposeCollectionsBody(BaseModel):
+    operation: str
+    collection_ids: list[uuid.UUID]
+    result_name: str
+
+
 class MoleculeReferenceBody(BaseModel):
     value: str
     ref_type: str  # "uuid", "registration_number", "external_id", "smiles", "inchi_key", "name"
@@ -119,6 +127,24 @@ async def list_collections(
     )
     collections = result_to_response(await use_case(query))
     return [CollectionResponse.from_domain(c) for c in collections]
+
+
+@router.post("/compose", response_model=CollectionResponse)
+async def compose_collections(
+    body: ComposeCollectionsBody,
+    auth: AuthDep,
+    use_case: ComposeCollectionsDep,
+) -> CollectionResponse:
+    """Create a new collection from a boolean set operation on existing collections."""
+    cmd = ComposeCollectionsCommand(
+        workspace_id=auth.workspace_id,
+        operation=body.operation,
+        collection_ids=body.collection_ids,
+        result_name=body.result_name,
+        created_by=auth.user_id,
+    )
+    collection = result_to_response(await use_case(cmd))
+    return CollectionResponse.from_domain(collection)
 
 
 @router.get("/{collection_id}", response_model=CollectionResponse)

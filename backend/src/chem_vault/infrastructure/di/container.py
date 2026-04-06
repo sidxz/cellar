@@ -170,6 +170,7 @@ from chem_vault.application.research_organization.collection_membership import (
     RemoveMoleculesFromCollection,
 )
 from chem_vault.application.research_organization.collection_merge_side_effect import CollectionMergeSideEffect
+from chem_vault.application.research_organization.compose_collections import ComposeCollections
 from chem_vault.application.research_organization.create_collection import CreateCollection
 from chem_vault.application.research_organization.execute_search import ExecuteSearch
 from chem_vault.application.research_organization.create_project import CreateProject
@@ -944,6 +945,7 @@ def create_container(
         return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow))
 
     container.define(CreateCollection, _collection_cmd(CreateCollection))
+    container.define(ComposeCollections, _collection_cmd(ComposeCollections))
     container.define(UpdateCollection, _collection_cmd(UpdateCollection))
     container.define(DeleteCollection, _delete_collection)
     container.define(GetCollection, _collection_query(GetCollection))

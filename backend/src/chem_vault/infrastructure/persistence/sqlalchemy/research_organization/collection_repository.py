@@ -196,6 +196,56 @@ class SQLAlchemyCollectionRepository(
             for row in result.all()
         ]
 
+    async def compose_molecule_ids(
+        self,
+        operation: str,
+        collection_ids: list[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        """Execute set operation across collection memberships."""
+        from sqlalchemy import func as sa_func
+
+        if operation == "union":
+            stmt = (
+                select(CollectionMoleculeModel.molecule_id)
+                .where(CollectionMoleculeModel.collection_id.in_(collection_ids))
+                .group_by(CollectionMoleculeModel.molecule_id)
+            )
+        elif operation == "intersect":
+            stmt = (
+                select(CollectionMoleculeModel.molecule_id)
+                .where(CollectionMoleculeModel.collection_id.in_(collection_ids))
+                .group_by(CollectionMoleculeModel.molecule_id)
+                .having(
+                    sa_func.count(sa_func.distinct(CollectionMoleculeModel.collection_id))
+                    == len(collection_ids)
+                )
+            )
+        elif operation == "difference":
+            first_id = collection_ids[0]
+            rest_ids = collection_ids[1:]
+            first = select(CollectionMoleculeModel.molecule_id).where(
+                CollectionMoleculeModel.collection_id == first_id
+            )
+            rest = select(CollectionMoleculeModel.molecule_id).where(
+                CollectionMoleculeModel.collection_id.in_(rest_ids)
+            )
+            stmt = first.except_(rest)
+        elif operation == "symmetric_difference":
+            stmt = (
+                select(CollectionMoleculeModel.molecule_id)
+                .where(CollectionMoleculeModel.collection_id.in_(collection_ids))
+                .group_by(CollectionMoleculeModel.molecule_id)
+                .having(
+                    sa_func.count(sa_func.distinct(CollectionMoleculeModel.collection_id)) == 1
+                )
+            )
+        else:
+            msg = f"Unknown boolean operation: {operation}"
+            raise ValueError(msg)
+
+        result = await self._session.execute(stmt)
+        return list(result.scalars())
+
     async def replace_molecule(
         self,
         source_molecule_id: uuid.UUID,

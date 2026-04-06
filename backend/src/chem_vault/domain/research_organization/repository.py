@@ -76,6 +76,12 @@ class CollectionRepository(Protocol):
         new_molecule_id: uuid.UUID,
     ) -> int: ...
 
+    async def compose_molecule_ids(
+        self,
+        operation: str,
+        collection_ids: list[uuid.UUID],
+    ) -> list[uuid.UUID]: ...
+
 
 @runtime_checkable
 class SavedSearchRepository(Protocol):

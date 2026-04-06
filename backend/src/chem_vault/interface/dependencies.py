@@ -62,6 +62,7 @@ from chem_vault.application.research_organization.collection_membership import (
     ListCollectionMolecules,
     RemoveMoleculesFromCollection,
 )
+from chem_vault.application.research_organization.compose_collections import ComposeCollections
 from chem_vault.application.research_organization.create_collection import CreateCollection
 from chem_vault.application.research_organization.execute_search import ExecuteSearch
 from chem_vault.application.research_organization.create_project import CreateProject
@@ -282,6 +283,7 @@ UpdateProjectDep = Annotated[UpdateProject, Depends(_get_use_case(UpdateProject)
 ArchiveProjectDep = Annotated[ArchiveProject, Depends(_get_use_case(ArchiveProject))]
 GetProjectDep = Annotated[GetProject, Depends(_get_use_case(GetProject))]
 ListProjectsDep = Annotated[ListProjects, Depends(_get_use_case(ListProjects))]
+ComposeCollectionsDep = Annotated[ComposeCollections, Depends(_get_use_case(ComposeCollections))]
 CreateCollectionDep = Annotated[CreateCollection, Depends(_get_use_case(CreateCollection))]
 UpdateCollectionDep = Annotated[UpdateCollection, Depends(_get_use_case(UpdateCollection))]
 DeleteCollectionDep = Annotated[DeleteCollection, Depends(_get_use_case(DeleteCollection))]
