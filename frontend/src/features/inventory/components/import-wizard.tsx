@@ -418,12 +418,12 @@ export function ImportWizard() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Protocol</label>
                   {protocols && protocols.length > 0 ? (
-                    <Select value={protocolId} onValueChange={setProtocolId}>
+                    <Select value={protocolId || "__none__"} onValueChange={(v) => setProtocolId(v === "__none__" ? "" : v)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select protocol…" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {protocols.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.name}

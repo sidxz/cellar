@@ -53,14 +53,14 @@ export function PlateList() {
   const router = useRouter();
   const [registerOpen, setRegisterOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RegisteredPlate | null>(null);
-  const [filterType, setFilterType] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterFormat, setFilterFormat] = useState<string>("");
+  const [filterType, setFilterType] = useState<string>("__all__");
+  const [filterStatus, setFilterStatus] = useState<string>("__all__");
+  const [filterFormat, setFilterFormat] = useState<string>("__all__");
 
   const { data: plates, isLoading, error } = usePlates({
-    plate_type: filterType || undefined,
-    status: filterStatus || undefined,
-    format: filterFormat || undefined,
+    plate_type: filterType === "__all__" ? undefined : filterType,
+    status: filterStatus === "__all__" ? undefined : filterStatus,
+    format: filterFormat === "__all__" ? undefined : filterFormat,
   });
   const deleteMutation = useDeletePlate();
 
@@ -176,7 +176,7 @@ export function PlateList() {
             <SelectValue placeholder="All types" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All types</SelectItem>
+            <SelectItem value="__all__">All types</SelectItem>
             {(Object.keys(plateTypeLabels) as PlateType[]).map((t) => (
               <SelectItem key={t} value={t}>
                 {plateTypeLabels[t]}
@@ -190,7 +190,7 @@ export function PlateList() {
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All statuses</SelectItem>
+            <SelectItem value="__all__">All statuses</SelectItem>
             {(Object.keys(plateStatusLabels) as PlateStatus[]).map((s) => (
               <SelectItem key={s} value={s}>
                 {plateStatusLabels[s]}
@@ -204,7 +204,7 @@ export function PlateList() {
             <SelectValue placeholder="All formats" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All formats</SelectItem>
+            <SelectItem value="__all__">All formats</SelectItem>
             {PLATE_FORMATS.map((f) => (
               <SelectItem key={f} value={f}>
                 {f}-well
