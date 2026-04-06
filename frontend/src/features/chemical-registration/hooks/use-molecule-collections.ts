@@ -1,0 +1,15 @@
+import { useQuery } from "@tanstack/react-query";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import type { Collection } from "@/features/research-organization/types";
+
+export function useMoleculeCollections(moleculeId: string | undefined) {
+  return useQuery({
+    queryKey: ["molecule-collections", moleculeId],
+    queryFn: () =>
+      customInstance<Collection[]>({
+        url: `/api/v1/molecules/${moleculeId}/collections`,
+        method: "GET",
+      }),
+    enabled: !!moleculeId,
+  });
+}
