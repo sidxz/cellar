@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, Plus } from "lucide-react";
+import { FolderOpen, GitMerge, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useCollections } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
+import { BooleanCollectionsDialog } from "./boolean-collections-dialog";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import type { Collection } from "../types";
 
@@ -22,6 +23,7 @@ export function CollectionList({ projectId }: CollectionListProps) {
   const { data: collections, isLoading, error } = useCollections(projectId);
   const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
+  const [booleanOpsOpen, setBooleanOpsOpen] = useState(false);
 
   const projectLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -58,6 +60,14 @@ export function CollectionList({ projectId }: CollectionListProps) {
         },
       },
       {
+        headerName: "Visibility",
+        field: "visibility",
+        width: 110,
+        cellRenderer: (params: { value: string }) => {
+          return params.value === "shared" ? "Shared" : "Private";
+        },
+      },
+      {
         headerName: "Created By",
         field: "created_by",
         width: 140,
@@ -84,7 +94,11 @@ export function CollectionList({ projectId }: CollectionListProps) {
   return (
     <div>
       {/* Toolbar */}
-      <div className="mb-4 flex items-center justify-end">
+      <div className="mb-4 flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => setBooleanOpsOpen(true)}>
+          <GitMerge className="mr-2 h-4 w-4" />
+          Boolean Ops
+        </Button>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Collection
@@ -123,6 +137,11 @@ export function CollectionList({ projectId }: CollectionListProps) {
         open={createOpen}
         onOpenChange={setCreateOpen}
         defaultProjectId={projectId}
+      />
+
+      <BooleanCollectionsDialog
+        open={booleanOpsOpen}
+        onOpenChange={setBooleanOpsOpen}
       />
     </div>
   );
