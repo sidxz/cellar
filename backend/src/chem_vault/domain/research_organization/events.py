@@ -37,3 +37,38 @@ class CollectionMembersChanged(DomainEvent):
 class SavedSearchCreated(DomainEvent):
     workspace_id: uuid.UUID
     name: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectMemberAdded(DomainEvent):
+    """Fired when a user is added to a project."""
+
+    project_id: uuid.UUID
+    user_id: uuid.UUID
+    role: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectMemberRemoved(DomainEvent):
+    """Fired when a user is removed from a project."""
+
+    project_id: uuid.UUID
+    user_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class EntityAddedToProject(DomainEvent):
+    """Fired when a molecule or protocol is added to a project."""
+
+    entity_type: str  # "molecule" | "protocol"
+    entity_id: uuid.UUID
+    project_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class EntityRemovedFromProject(DomainEvent):
+    """Fired when a molecule or protocol is removed from a project."""
+
+    entity_type: str
+    entity_id: uuid.UUID
+    project_id: uuid.UUID
