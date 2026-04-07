@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Beaker,
   FolderOpen,
+  FolderKanban,
   Grid3X3,
   History,
   LayoutDashboard,
@@ -40,6 +41,7 @@ import {
   PlatesTab,
   HistoryTab,
   FilesTab,
+  ProjectsTab,
 } from "./detail-tabs";
 
 // ---------------------------------------------------------------------------
@@ -206,6 +208,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             <FolderOpen className="mr-1.5 h-4 w-4" />
             Collections
           </TabsTrigger>
+          <TabsTrigger value="projects">
+            <FolderKanban className="mr-1.5 h-4 w-4" />
+            Projects
+          </TabsTrigger>
           <TabsTrigger value="plates">
             <Grid3X3 className="mr-1.5 h-4 w-4" />
             Plates
@@ -234,6 +240,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
 
         <TabsContent value="collections">
           <CollectionsTab moleculeId={compoundId} />
+        </TabsContent>
+
+        <TabsContent value="projects">
+          <ProjectsTab moleculeId={compoundId} />
         </TabsContent>
 
         <TabsContent value="plates">
