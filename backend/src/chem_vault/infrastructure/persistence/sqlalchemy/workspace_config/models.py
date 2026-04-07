@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import JSON, Boolean, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -67,4 +67,29 @@ class ControlledVocabularyModel(Base, EntityModelMixin, WorkspaceIdMixin, Versio
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "name", name="uq_vocab_ws_name"),
+    )
+
+
+class CustomFieldDefinitionModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """CustomFieldDefinition — workspace-scoped custom field schema."""
+
+    __tablename__ = "custom_field_definitions"
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    data_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    applies_to: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    default_value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pick_list_values: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    vocabulary_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("controlled_vocabularies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", "applies_to", name="uq_cfd_ws_name_target"),
     )
