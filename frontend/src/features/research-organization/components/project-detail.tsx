@@ -26,6 +26,7 @@ import { useProject, useArchiveProject } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 import { CollectionList } from "./collection-list";
 import { SavedSearchList } from "./saved-search-list";
+import { ProjectMembers } from "./project-members";
 import type { ProjectStatus } from "../types";
 
 function statusBadgeVariant(
@@ -166,6 +167,16 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
         </CardHeader>
         <CardContent>
           <SavedSearchList projectId={projectId} />
+        </CardContent>
+      </Card>
+
+      {/* Members */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Members</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProjectMembers projectId={projectId} />
         </CardContent>
       </Card>
 
