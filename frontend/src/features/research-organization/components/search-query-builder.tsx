@@ -15,6 +15,8 @@ import {
 } from "@/shared/components/ui/select";
 import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import { useCollections } from "../hooks/use-collections";
+import { useProjects } from "../hooks/use-projects";
+import { Badge } from "@/shared/components/ui/badge";
 import type {
   SearchCriterion,
   SearchQuery,
@@ -26,6 +28,7 @@ import type {
   KeywordListCriterion,
   RunDateCriterion,
   BatchCriterion,
+  ProjectCriterion,
   TextOperator,
   PropertyOperator,
   StructureSearchType,
@@ -108,6 +111,10 @@ function defaultRunDateCriterion(): RunDateCriterion {
 
 function defaultBatchCriterion(): BatchCriterion {
   return { type: "batch", field_type: "text", field: "batch_number", operator: "contains", value: "" };
+}
+
+function defaultProjectCriterion(): ProjectCriterion {
+  return { type: "project", project_ids: [] };
 }
 
 const BATCH_TEXT_FIELDS = [
@@ -884,6 +891,62 @@ function BatchCriterionRow({
   );
 }
 
+function ProjectCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: ProjectCriterion;
+  onChange: (c: ProjectCriterion) => void;
+  onRemove: () => void;
+}) {
+  const { data: projects } = useProjects();
+
+  return (
+    <div className="flex items-start gap-2 flex-wrap">
+      <div className="flex items-end gap-2 flex-1 flex-wrap">
+        <div className="w-56">
+          <Label className="text-xs text-muted-foreground">Add Project</Label>
+          <Select
+            value=""
+            onValueChange={(val) => {
+              const current = criterion.project_ids ?? [];
+              const updated = current.includes(val)
+                ? current.filter((id) => id !== val)
+                : [...current, val];
+              onChange({ ...criterion, project_ids: updated });
+            }}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Add project..." />
+            </SelectTrigger>
+            <SelectContent>
+              {projects?.filter((p) => p.status === "active").map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap gap-1 items-center min-h-9">
+          {(criterion.project_ids ?? []).map((id) => {
+            const proj = projects?.find((p) => p.id === id);
+            return proj ? (
+              <Badge key={id} variant="secondary" className="text-xs">
+                {proj.name}
+              </Badge>
+            ) : null;
+          })}
+        </div>
+      </div>
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 self-end" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 interface SearchQueryBuilderProps {
@@ -998,6 +1061,14 @@ export function SearchQueryBuilder({
             <Plus className="mr-1 h-3 w-3" />
             Batch
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteria([...criteria, defaultProjectCriterion()])}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Project
+          </Button>
         </div>
       </div>
 
@@ -1078,6 +1149,15 @@ export function SearchQueryBuilder({
             case "batch":
               return (
                 <BatchCriterionRow
+                  key={key}
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, c)}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "project":
+              return (
+                <ProjectCriterionRow
                   key={key}
                   criterion={criterion}
                   onChange={(c) => updateCriterion(index, c)}
