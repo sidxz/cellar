@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   TestTubes,
   Truck,
+  Pipette,
 } from "lucide-react";
 
 export interface NavItem {
@@ -63,6 +64,7 @@ export const navigation: NavGroup[] = [
       { title: "Organizations", href: "/admin/organizations", icon: Building2 },
       { title: "Vocabularies", href: "/admin/vocabularies", icon: BookOpen },
       { title: "Custom Fields", href: "/admin/custom-fields", icon: SlidersHorizontal },
+      { title: "Salt Catalog", href: "/admin/salt-catalog", icon: Pipette },
       { title: "Audit Log", href: "/admin/audit", icon: ShieldCheck },
       { title: "Settings", href: "/admin/settings", icon: Settings },
     ],
