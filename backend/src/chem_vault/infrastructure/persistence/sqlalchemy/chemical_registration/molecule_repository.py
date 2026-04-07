@@ -8,6 +8,7 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from chem_vault.domain.chemical_registration.enums import (
     ComponentRole,
@@ -35,6 +36,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mode
     MixtureComponentModel,
     MoleculeIdentifierModel,
     MoleculeModel,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    molecule_projects,
 )
 
 
@@ -337,6 +341,7 @@ class SQLAlchemyMoleculeRepository(
         search_term: str | None = None,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        project_ids: list[uuid.UUID] | None = None,
     ) -> list[Molecule]:
         stmt = select(MoleculeModel).where(
             MoleculeModel.workspace_id == workspace_id,
@@ -372,6 +377,30 @@ class SQLAlchemyMoleculeRepository(
                     MoleculeModel.id.in_(identifier_subq),
                 )
             )
+
+        # Project scoping: None = no filter (admin), [] = unscoped only, [ids] = unscoped + matching
+        if project_ids is not None:
+            unscoped_subq = (
+                select(MoleculeModel.id)
+                .where(
+                    MoleculeModel.workspace_id == workspace_id,
+                    ~MoleculeModel.id.in_(
+                        select(molecule_projects.c.molecule_id)
+                    ),
+                )
+            )
+            if project_ids:
+                scoped_subq = select(molecule_projects.c.molecule_id).where(
+                    molecule_projects.c.project_id.in_(project_ids)
+                )
+                stmt = stmt.where(
+                    sa.or_(
+                        MoleculeModel.id.in_(unscoped_subq),
+                        MoleculeModel.id.in_(scoped_subq),
+                    )
+                )
+            else:
+                stmt = stmt.where(MoleculeModel.id.in_(unscoped_subq))
 
         # Deterministic ordering by PK for stable cursor pagination
         stmt = stmt.order_by(MoleculeModel.id)
@@ -519,3 +548,36 @@ class SQLAlchemyMoleculeRepository(
             (self._to_domain(row[0]), float(row[1]))
             for row in result.all()
         ]
+
+    # ------------------------------------------------------------------
+    # Project association methods
+    # ------------------------------------------------------------------
+
+    async def add_to_project(
+        self, molecule_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Link a molecule to a project (idempotent via ON CONFLICT DO NOTHING)."""
+        stmt = (
+            pg_insert(molecule_projects)
+            .values(molecule_id=molecule_id, project_id=project_id)
+            .on_conflict_do_nothing()
+        )
+        await self._session.execute(stmt)
+
+    async def remove_from_project(
+        self, molecule_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Unlink a molecule from a project."""
+        stmt = molecule_projects.delete().where(
+            molecule_projects.c.molecule_id == molecule_id,
+            molecule_projects.c.project_id == project_id,
+        )
+        await self._session.execute(stmt)
+
+    async def find_project_ids(self, molecule_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return all project IDs linked to a given molecule."""
+        stmt = select(molecule_projects.c.project_id).where(
+            molecule_projects.c.molecule_id == molecule_id
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
