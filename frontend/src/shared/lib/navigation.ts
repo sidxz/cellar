@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   TestTubes,
   Truck,
 } from "lucide-react";
@@ -61,6 +62,7 @@ export const navigation: NavGroup[] = [
     items: [
       { title: "Organizations", href: "/admin/organizations", icon: Building2 },
       { title: "Vocabularies", href: "/admin/vocabularies", icon: BookOpen },
+      { title: "Custom Fields", href: "/admin/custom-fields", icon: SlidersHorizontal },
       { title: "Audit Log", href: "/admin/audit", icon: ShieldCheck },
       { title: "Settings", href: "/admin/settings", icon: Settings },
     ],

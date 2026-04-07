@@ -38,6 +38,8 @@ import {
   useRemoveIdentifier,
 } from "../../hooks/use-molecules";
 import type { Molecule } from "../../types";
+import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
+import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
 
 // ---------------------------------------------------------------------------
 // Identifier type options
@@ -203,6 +205,64 @@ function AddIdentifierForm({
 }
 
 // ---------------------------------------------------------------------------
+// Custom Fields section (uses definitions for proper labels)
+// ---------------------------------------------------------------------------
+
+function CustomFieldsSection({ molecule }: { molecule: Molecule }) {
+  const { data: definitions } = useCustomFields("molecule");
+
+  const hasValues =
+    molecule.custom_fields && Object.keys(molecule.custom_fields).length > 0;
+
+  if (!hasValues) return null;
+
+  // If we have definitions, use the renderer (read-only). Otherwise fall back to
+  // a plain key/value display so data is never hidden even while definitions load.
+  if (definitions && definitions.length > 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom Fields</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CustomFieldsRenderer
+            definitions={definitions}
+            values={molecule.custom_fields as Record<string, unknown>}
+            onChange={() => {
+              /* read-only */
+            }}
+            readOnly
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Fallback: render raw key/value pairs
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Custom Fields</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          {Object.entries(molecule.custom_fields as Record<string, unknown>).map(
+            ([key, value]) => (
+              <div key={key}>
+                <p className="text-sm text-muted-foreground">
+                  {key.replace(/_/g, " ")}
+                </p>
+                <p className="font-medium">{String(value ?? "\u2014")}</p>
+              </div>
+            )
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // OverviewTab
 // ---------------------------------------------------------------------------
 
@@ -356,25 +416,7 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
       </Card>
 
       {/* Custom Fields */}
-      {molecule.custom_fields && Object.keys(molecule.custom_fields).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Custom Fields</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-              {Object.entries(molecule.custom_fields).map(([key, value]) => (
-                <div key={key}>
-                  <p className="text-sm text-muted-foreground">
-                    {key.replace(/_/g, " ")}
-                  </p>
-                  <p className="font-medium">{String(value ?? "\u2014")}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <CustomFieldsSection molecule={molecule} />
     </div>
   );
 }
