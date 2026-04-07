@@ -9,6 +9,7 @@ from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledV
 from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
 from chem_vault.domain.workspace_config.enums import FieldTarget
 from chem_vault.domain.workspace_config.organization import Organization
+from chem_vault.domain.workspace_config.registration_form import RegistrationForm
 from chem_vault.domain.workspace_config.salt_entry import SaltEntry
 from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
 
@@ -99,5 +100,23 @@ class SaltEntryRepository(Protocol):
     async def find_by_smiles(
         self, workspace_id: uuid.UUID, smiles: str
     ) -> SaltEntry | None: ...
+
+    async def delete(self, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class RegistrationFormRepository(Protocol):
+    """Repository for RegistrationForm aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> RegistrationForm | None: ...
+
+    async def save(self, aggregate: RegistrationForm) -> None: ...
+
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        applies_to: FieldTarget | None = None,
+    ) -> list[RegistrationForm]: ...
 
     async def delete(self, id: uuid.UUID) -> None: ...

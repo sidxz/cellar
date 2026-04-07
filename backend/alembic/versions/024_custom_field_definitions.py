@@ -100,8 +100,45 @@ def upgrade() -> None:
     op.add_column("batches", sa.Column("salt_stoichiometry", sa.Integer, nullable=False, server_default="1"))
     op.add_column("batches", sa.Column("formula_weight", sa.Float, nullable=True))
 
+    op.create_table(
+        "registration_forms",
+        sa.Column("id", UUID(as_uuid=True), nullable=False),
+        sa.Column("workspace_id", UUID(as_uuid=True), nullable=False),
+        sa.Column("name", sa.String(200), nullable=False),
+        sa.Column("applies_to", sa.String(20), nullable=False),
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("field_overrides", sa.JSON(), nullable=False, server_default="[]"),
+        sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "workspace_id", "name", "applies_to", name="uq_regform_ws_name_target"
+        ),
+    )
+    op.create_index(
+        "ix_registration_forms_workspace",
+        "registration_forms",
+        ["workspace_id"],
+    )
+
 
 def downgrade() -> None:
+    # Drop registration_forms first (no FK deps, added last in upgrade)
+    op.drop_index("ix_registration_forms_workspace", table_name="registration_forms")
+    op.drop_table("registration_forms")
+
     # Reverse batch salt field restructuring
     op.drop_column("batches", "formula_weight")
     op.drop_column("batches", "salt_stoichiometry")

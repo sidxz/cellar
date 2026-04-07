@@ -110,3 +110,18 @@ class SaltEntryModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     __table_args__ = (
         UniqueConstraint("workspace_id", "code", name="uq_salt_ws_code"),
     )
+
+
+class RegistrationFormModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """RegistrationForm — workspace-scoped form template for molecule/batch registration."""
+
+    __tablename__ = "registration_forms"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    applies_to: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    field_overrides: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", "applies_to", name="uq_regform_ws_name_target"),
+    )

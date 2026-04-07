@@ -165,6 +165,10 @@ from chem_vault.application.workspace_config.create_salt_entry import CreateSalt
 from chem_vault.application.workspace_config.list_salt_entries import ListSaltEntries
 from chem_vault.application.workspace_config.update_salt_entry import UpdateSaltEntry
 from chem_vault.application.workspace_config.delete_salt_entry import DeleteSaltEntry
+from chem_vault.application.workspace_config.create_registration_form import CreateRegistrationForm
+from chem_vault.application.workspace_config.update_registration_form import UpdateRegistrationForm
+from chem_vault.application.workspace_config.delete_registration_form import DeleteRegistrationForm
+from chem_vault.application.workspace_config.list_registration_forms import ListRegistrationForms
 from chem_vault.application.workspace_config.create_vocabulary import CreateVocabulary
 from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabulary
 from chem_vault.application.workspace_config.get_organization import GetOrganization
@@ -191,6 +195,7 @@ from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
     CustomFieldDefinitionRepository,
     OrganizationRepository,
+    RegistrationFormRepository,
     SaltEntryRepository,
     WorkspaceSettingsRepository,
 )
@@ -325,6 +330,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.custom_fi
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
     SQLAlchemySaltEntryRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.registration_form_repository import (
+    SQLAlchemyRegistrationFormRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
     SQLAlchemyOrganizationRepository,
@@ -507,6 +515,36 @@ def create_container(
     container.define(UpdateSaltEntry, _salt_cmd(UpdateSaltEntry))
     container.define(ListSaltEntries, _salt_query(ListSaltEntries))
     container.define(DeleteSaltEntry, _delete_salt_entry)
+
+    # --- Registration Forms ---
+    container.define(
+        SQLAlchemyRegistrationFormRepository,
+        lambda c: SQLAlchemyRegistrationFormRepository(AsyncUnitOfWork(c[async_sessionmaker])),
+    )
+    container.define(
+        RegistrationFormRepository,
+        lambda c: c[SQLAlchemyRegistrationFormRepository],
+    )
+
+    def _regform_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRegistrationFormRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _regform_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            return uc_cls(c[RegistrationFormRepository])
+        return _f
+
+    def _delete_registration_form(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteRegistrationForm(uow, SQLAlchemyRegistrationFormRepository(uow))
+
+    container.define(CreateRegistrationForm, _regform_cmd(CreateRegistrationForm))
+    container.define(UpdateRegistrationForm, _regform_cmd(UpdateRegistrationForm))
+    container.define(ListRegistrationForms, _regform_query(ListRegistrationForms))
+    container.define(DeleteRegistrationForm, _delete_registration_form)
 
     # --- Chemical Registration ---
     container.define(StructureProcessor, Singleton(StructureProcessor))
