@@ -24,11 +24,12 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Switch } from "@/shared/components/ui/switch";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
 import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
-import type { CustomFieldDefinition } from "@/features/workspace-config/types";
+import { useRegistrationForms } from "@/features/workspace-config/hooks/use-registration-forms";
+import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
+import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { useRegisterMolecule } from "../hooks/use-molecules";
-import { MOLECULE_TYPE_LABELS, type MoleculeType } from "../types";
+import { MOLECULE_TYPE_LABELS } from "../types";
 
 interface MoleculeRegistrationDialogProps {
   open: boolean;
@@ -41,8 +42,19 @@ export function MoleculeRegistrationDialog({
 }: MoleculeRegistrationDialogProps) {
   const { data: orgs } = useOrganizations();
   const { data: settings } = useWorkspaceSettings();
-  const { data: vocabularies } = useVocabularies();
+  const { data: registrationForms } = useRegistrationForms("molecule");
+  const { data: customFieldDefs } = useCustomFields("molecule", true);
   const registerMutation = useRegisterMolecule();
+
+  const defaultFormId =
+    registrationForms?.find((f) => f.is_default)?.id ?? "";
+  const [selectedFormId, setSelectedFormId] = useState<string>("");
+
+  // Derive active form overrides from selected form
+  const activeFormOverrides =
+    registrationForms?.find(
+      (f) => f.id === (selectedFormId || defaultFormId)
+    )?.field_overrides ?? [];
 
   const [name, setName] = useState("");
   const [smiles, setSmiles] = useState("");
@@ -65,13 +77,8 @@ export function MoleculeRegistrationDialog({
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
-  const customFields: CustomFieldDefinition[] = Array.isArray(
-    settings?.custom_field_definitions
-  )
-    ? settings.custom_field_definitions
-    : [];
-
   const reset = () => {
+    setSelectedFormId("");
     setName("");
     setSmiles("");
     setMoleculeType(settings?.default_molecule_type ?? "small_molecule");
@@ -90,11 +97,6 @@ export function MoleculeRegistrationDialog({
     setError(null);
   };
 
-  const getVocabTerms = (vocabName: string | null | undefined): string[] => {
-    if (!vocabName || !vocabularies) return [];
-    return vocabularies.find((v) => v.name === vocabName)?.terms ?? [];
-  };
-
   const handleSubmit = async () => {
     setError(null);
     if (!name.trim()) {
@@ -110,9 +112,13 @@ export function MoleculeRegistrationDialog({
       return;
     }
 
-    // Validate required custom fields
-    for (const field of customFields) {
-      if (field.required && !customFieldValues[field.name]?.trim()) {
+    // Validate required custom fields (based on active form overrides or field definitions)
+    for (const field of customFieldDefs ?? []) {
+      const override = activeFormOverrides.find(
+        (o) => o.field_definition_id === field.id
+      );
+      const isRequired = override?.is_required ?? field.is_required;
+      if (isRequired && !String(customFieldValues[field.name] ?? "").trim()) {
         setError(`${field.label} is required`);
         return;
       }
@@ -170,6 +176,33 @@ export function MoleculeRegistrationDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {/* Registration form selector */}
+          {registrationForms && registrationForms.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="reg-form">Registration Form</Label>
+              <Select
+                value={selectedFormId || defaultFormId}
+                onValueChange={setSelectedFormId}
+              >
+                <SelectTrigger id="reg-form">
+                  <SelectValue placeholder="Select a form..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {registrationForms.map((form) => (
+                    <SelectItem key={form.id} value={form.id}>
+                      {form.name}
+                      {form.is_default && (
+                        <span className="ml-2 text-muted-foreground text-xs">
+                          (default)
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid gap-2">
             <Label htmlFor="name">Name</Label>
             <Input
@@ -350,50 +383,20 @@ export function MoleculeRegistrationDialog({
             </div>
           )}
 
-          {/* Custom fields from workspace settings */}
-          {customFields.map((field) => (
-            <div key={field.name} className="grid gap-2">
-              <Label>
-                {field.label}
-                {field.required && (
-                  <span className="ml-1 text-destructive">*</span>
-                )}
-              </Label>
-              {field.data_type === "select" ? (
-                <Select
-                  value={customFieldValues[field.name] ?? ""}
-                  onValueChange={(v) =>
-                    setCustomFieldValues((prev) => ({
-                      ...prev,
-                      [field.name]: v,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={`Select ${field.label}...`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getVocabTerms(field.vocabulary_name).map((term) => (
-                      <SelectItem key={term} value={term}>
-                        {term}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  type={field.data_type === "number" ? "number" : field.data_type === "date" ? "date" : "text"}
-                  value={customFieldValues[field.name] ?? ""}
-                  onChange={(e) =>
-                    setCustomFieldValues((prev) => ({
-                      ...prev,
-                      [field.name]: e.target.value,
-                    }))
-                  }
-                />
-              )}
+          {/* Custom fields — rendered via CustomFieldsRenderer with form overrides */}
+          {customFieldDefs && customFieldDefs.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Custom Fields</Label>
+              <CustomFieldsRenderer
+                definitions={customFieldDefs}
+                formOverrides={activeFormOverrides}
+                values={customFieldValues}
+                onChange={(vals) =>
+                  setCustomFieldValues(vals as Record<string, string>)
+                }
+              />
             </div>
-          ))}
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

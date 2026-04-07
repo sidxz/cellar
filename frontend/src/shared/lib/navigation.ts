@@ -18,6 +18,7 @@ import {
   TestTubes,
   Truck,
   Pipette,
+  FormInput,
 } from "lucide-react";
 
 export interface NavItem {
@@ -65,6 +66,7 @@ export const navigation: NavGroup[] = [
       { title: "Vocabularies", href: "/admin/vocabularies", icon: BookOpen },
       { title: "Custom Fields", href: "/admin/custom-fields", icon: SlidersHorizontal },
       { title: "Salt Catalog", href: "/admin/salt-catalog", icon: Pipette },
+      { title: "Registration Forms", href: "/admin/registration-forms", icon: FormInput },
       { title: "Audit Log", href: "/admin/audit", icon: ShieldCheck },
       { title: "Settings", href: "/admin/settings", icon: Settings },
     ],
