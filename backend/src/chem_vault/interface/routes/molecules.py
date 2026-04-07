@@ -31,6 +31,9 @@ from chem_vault.application.chemical_registration.update_molecule import UpdateM
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from chem_vault.application.research_organization.manage_molecule_projects import (
+    ListMoleculeProjectsQuery,
+)
 from chem_vault.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
@@ -38,6 +41,7 @@ from chem_vault.interface.dependencies import (
     GetMoleculeDep,
     ListCollectionsForMoleculeDep,
     ListIdentifiersDep,
+    ListMoleculeProjectsDep,
     ListMoleculesDep,
     MoleculeActivityServiceDep,
     RegisterMoleculeDep,
@@ -573,3 +577,18 @@ async def remove_identifier(
         identifier_id=identifier_id,
     )
     result_to_response(await use_case(command, auth=auth))
+
+
+@router.get("/{molecule_id}/projects", response_model=list[uuid.UUID])
+async def list_molecule_projects(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListMoleculeProjectsDep,
+) -> list[uuid.UUID]:
+    result = await use_case(
+        ListMoleculeProjectsQuery(
+            workspace_id=auth.workspace_id,
+            molecule_id=molecule_id,
+        )
+    )
+    return result_to_response(result)

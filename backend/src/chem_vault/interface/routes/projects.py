@@ -6,19 +6,36 @@ import uuid
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.responses import Response
 
 from chem_vault.application.research_organization.archive_project import ArchiveProjectCommand
 from chem_vault.application.research_organization.create_project import CreateProjectCommand
 from chem_vault.application.research_organization.get_project import GetProjectQuery, ListProjectsQuery
+from chem_vault.application.research_organization.manage_project_members import (
+    AddProjectMemberCommand,
+    ListProjectMembersQuery,
+    RemoveProjectMemberCommand,
+    UpdateProjectMemberRoleCommand,
+)
+from chem_vault.application.research_organization.manage_molecule_projects import (
+    AddMoleculeToProjectCommand,
+    RemoveMoleculeFromProjectCommand,
+)
 from chem_vault.application.research_organization.update_project import UpdateProjectCommand
 from chem_vault.domain.research_organization.project import Project, ProjectStatus
 from chem_vault.interface.dependencies import (
+    AddMoleculeToProjectDep,
+    AddProjectMemberDep,
     ArchiveProjectDep,
     AuthDep,
     CreateProjectDep,
     GetProjectDep,
+    ListProjectMembersDep,
     ListProjectsDep,
+    RemoveMoleculeFromProjectDep,
+    RemoveProjectMemberDep,
     UpdateProjectDep,
+    UpdateProjectMemberRoleDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -127,3 +144,136 @@ async def archive_project(
     )
     project = result_to_response(await use_case(command, auth=auth))
     return ProjectResponse.from_domain(project)
+
+
+class ProjectMemberResponse(BaseModel):
+    project_id: uuid.UUID
+    user_id: uuid.UUID
+    role: str
+
+
+class AddMemberBody(BaseModel):
+    user_id: uuid.UUID
+    role: str = "viewer"
+
+
+class UpdateMemberRoleBody(BaseModel):
+    role: str
+
+
+@router.get("/{project_id}/members", response_model=list[ProjectMemberResponse])
+async def list_members(
+    project_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListProjectMembersDep,
+) -> list[ProjectMemberResponse]:
+    result = await use_case(
+        ListProjectMembersQuery(workspace_id=auth.workspace_id, project_id=project_id)
+    )
+    members = result_to_response(result)
+    return [
+        ProjectMemberResponse(project_id=m.project_id, user_id=m.user_id, role=m.role.value)
+        for m in members
+    ]
+
+
+@router.post("/{project_id}/members", response_model=ProjectMemberResponse, status_code=201)
+async def add_member(
+    project_id: uuid.UUID,
+    body: AddMemberBody,
+    auth: AuthDep,
+    use_case: AddProjectMemberDep,
+) -> ProjectMemberResponse:
+    result = await use_case(
+        AddProjectMemberCommand(
+            workspace_id=auth.workspace_id,
+            project_id=project_id,
+            user_id=body.user_id,
+            role=body.role,
+        ),
+        auth=auth,
+    )
+    member = result_to_response(result)
+    return ProjectMemberResponse(
+        project_id=member.project_id, user_id=member.user_id, role=member.role.value
+    )
+
+
+@router.patch("/{project_id}/members/{user_id}", response_model=ProjectMemberResponse)
+async def update_member_role(
+    project_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: UpdateMemberRoleBody,
+    auth: AuthDep,
+    use_case: UpdateProjectMemberRoleDep,
+) -> ProjectMemberResponse:
+    result = await use_case(
+        UpdateProjectMemberRoleCommand(
+            workspace_id=auth.workspace_id,
+            project_id=project_id,
+            user_id=user_id,
+            role=body.role,
+        ),
+        auth=auth,
+    )
+    member = result_to_response(result)
+    return ProjectMemberResponse(
+        project_id=member.project_id, user_id=member.user_id, role=member.role.value
+    )
+
+
+@router.delete("/{project_id}/members/{user_id}", status_code=204)
+async def remove_member(
+    project_id: uuid.UUID,
+    user_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: RemoveProjectMemberDep,
+) -> Response:
+    result = await use_case(
+        RemoveProjectMemberCommand(
+            workspace_id=auth.workspace_id,
+            project_id=project_id,
+            user_id=user_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+@router.post("/{project_id}/molecules/{molecule_id}", status_code=204)
+async def add_molecule_to_project(
+    project_id: uuid.UUID,
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: AddMoleculeToProjectDep,
+) -> Response:
+    result = await use_case(
+        AddMoleculeToProjectCommand(
+            workspace_id=auth.workspace_id,
+            project_id=project_id,
+            molecule_id=molecule_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+@router.delete("/{project_id}/molecules/{molecule_id}", status_code=204)
+async def remove_molecule_from_project(
+    project_id: uuid.UUID,
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: RemoveMoleculeFromProjectDep,
+) -> Response:
+    result = await use_case(
+        RemoveMoleculeFromProjectCommand(
+            workspace_id=auth.workspace_id,
+            project_id=project_id,
+            molecule_id=molecule_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
