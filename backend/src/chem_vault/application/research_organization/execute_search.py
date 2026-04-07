@@ -26,6 +26,7 @@ class ExecuteSearchQuery(Query):
     protocol_columns: list[str] | None = None
     cursor_id: uuid.UUID | None = None
     limit: int = 50
+    project_ids: list[uuid.UUID] | None = None
 
 
 class ExecuteSearch:
@@ -74,6 +75,7 @@ class ExecuteSearch:
                     query_dict,
                     cursor_id=input.cursor_id,
                     limit=fetch_limit,
+                    project_ids=input.project_ids,
                 )
             except ValueError as e:
                 return Failure(ValidationError(str(e)))

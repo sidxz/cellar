@@ -25,6 +25,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
     CollectionMoleculeModel,
+    molecule_projects,
 )
 
 # Mappings of query field names -> SA column references
@@ -72,6 +73,8 @@ def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
             clauses.append(_activity_clause(criterion))
         elif ctype == "collection":
             clauses.append(_collection_clause(criterion))
+        elif ctype == "project":
+            clauses.append(_project_clause(criterion))
         elif ctype == "keyword_list":
             clauses.append(_keyword_list_clause(criterion))
         elif ctype == "run_date":
@@ -213,6 +216,31 @@ def _collection_clause(criterion: dict[str, Any]) -> ColumnElement:
         sa.select(CollectionMoleculeModel.molecule_id).where(
             CollectionMoleculeModel.collection_id == collection_id,
         )
+    )
+
+
+def _project_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules by project membership.
+
+    - No project_ids selected: return unscoped molecules only.
+    - project_ids provided: return unscoped + molecules in the specified projects.
+    """
+    project_ids = criterion.get("project_ids", [])
+    if not project_ids:
+        # No projects selected — return unscoped molecules only
+        return ~MoleculeModel.id.in_(
+            sa.select(molecule_projects.c.molecule_id)
+        )
+    # Return unscoped + molecules in the specified projects
+    return sa.or_(
+        ~MoleculeModel.id.in_(
+            sa.select(molecule_projects.c.molecule_id)
+        ),
+        MoleculeModel.id.in_(
+            sa.select(molecule_projects.c.molecule_id).where(
+                molecule_projects.c.project_id.in_(project_ids)
+            )
+        ),
     )
 
 

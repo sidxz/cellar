@@ -462,6 +462,7 @@ class SQLAlchemyMoleculeRepository(
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        project_ids: list[uuid.UUID] | None = None,
     ) -> list[Molecule]:
         """Compound search using a structured query dict (text + property + structure criteria).
 
@@ -500,6 +501,13 @@ class SQLAlchemyMoleculeRepository(
 
         if where_clause is not None:
             stmt = stmt.where(where_clause)
+
+        # Apply project scoping if provided
+        if project_ids is not None:
+            from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+                _project_clause,
+            )
+            stmt = stmt.where(_project_clause({"project_ids": [str(p) for p in project_ids]}))
 
         stmt = stmt.order_by(MoleculeModel.id)
         if cursor_id is not None:
