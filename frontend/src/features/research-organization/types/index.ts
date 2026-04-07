@@ -97,6 +97,31 @@ export interface UpdateProjectInput {
   description?: string | null;
 }
 
+// ─── Project Membership ─────────────────────────────────────────────────────
+
+export type ProjectRole = "viewer" | "editor" | "manager";
+
+export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
+  viewer: "Viewer",
+  editor: "Editor",
+  manager: "Manager",
+};
+
+export interface ProjectMember {
+  project_id: string;
+  user_id: string;
+  role: ProjectRole;
+}
+
+export interface AddMemberInput {
+  user_id: string;
+  role: ProjectRole;
+}
+
+export interface UpdateMemberRoleInput {
+  role: ProjectRole;
+}
+
 export interface CreateCollectionInput {
   name: string;
   description?: string | null;
@@ -131,7 +156,7 @@ export interface UpdateSavedSearchInput {
 
 // ─── Search types ───────────────────────────────────────────────────────────
 
-export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch";
+export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch" | "project";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
 export type StructureSearchType = "substructure" | "similarity" | "exact";
@@ -201,6 +226,11 @@ export interface BatchCriterion {
   date_to?: string;
 }
 
+export interface ProjectCriterion {
+  type: "project";
+  project_ids: string[];
+}
+
 export type SearchCriterion =
   | TextCriterion
   | PropertyCriterion
@@ -209,7 +239,8 @@ export type SearchCriterion =
   | CollectionCriterion
   | KeywordListCriterion
   | RunDateCriterion
-  | BatchCriterion;
+  | BatchCriterion
+  | ProjectCriterion;
 
 export interface SearchQuery {
   criteria: SearchCriterion[];
