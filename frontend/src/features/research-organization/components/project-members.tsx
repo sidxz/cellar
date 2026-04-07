@@ -10,8 +10,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/shared/components/ui/dialog";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { MemberSelector } from "@/shared/components/member-selector";
+import { MemberName } from "@/shared/components/entity-name";
 import {
   Select,
   SelectContent,
@@ -46,17 +47,17 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
   const removeMember = useRemoveProjectMember(projectId);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [newUserId, setNewUserId] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [newRole, setNewRole] = useState<ProjectRole>("viewer");
 
   const handleAdd = () => {
-    if (!newUserId.trim()) return;
+    if (!selectedUserId) return;
     addMember.mutate(
-      { user_id: newUserId.trim(), role: newRole },
+      { user_id: selectedUserId, role: newRole },
       {
         onSuccess: () => {
           setAddOpen(false);
-          setNewUserId("");
+          setSelectedUserId(null);
           setNewRole("viewer");
         },
       }
@@ -81,11 +82,11 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>User ID</Label>
-                <Input
-                  value={newUserId}
-                  onChange={(e) => setNewUserId(e.target.value)}
-                  placeholder="Enter user ID"
+                <Label>Member</Label>
+                <MemberSelector
+                  selectedId={selectedUserId}
+                  onSelect={setSelectedUserId}
+                  placeholder="Search by name or email..."
                 />
               </div>
               <div>
@@ -101,7 +102,7 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={handleAdd} disabled={addMember.isPending}>
+              <Button onClick={handleAdd} disabled={!selectedUserId || addMember.isPending}>
                 Add
               </Button>
             </div>
@@ -112,7 +113,7 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>User ID</TableHead>
+            <TableHead>Member</TableHead>
             <TableHead>Role</TableHead>
             <TableHead className="w-24" />
           </TableRow>
@@ -120,7 +121,7 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
         <TableBody>
           {members?.map((m) => (
             <TableRow key={m.user_id}>
-              <TableCell className="font-mono text-xs">{m.user_id}</TableCell>
+              <TableCell><MemberName id={m.user_id} /></TableCell>
               <TableCell>
                 <Select
                   value={m.role}
