@@ -73,11 +73,13 @@ class RegisterMolecule:
         repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
         structure_processor: StructureProcessorProtocol,
+        custom_field_validator=None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._processor = structure_processor
+        self._custom_field_validator = custom_field_validator
 
     async def __call__(
         self,
@@ -208,6 +210,15 @@ class RegisterMolecule:
             )
 
         # 4b. New molecule
+        if self._custom_field_validator and input.custom_fields:
+            from chem_vault.domain.workspace_config.enums import FieldTarget
+            from returns.pipeline import is_successful
+            validation = await self._custom_field_validator.validate(
+                input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
+            )
+            if not is_successful(validation):
+                return validation  # type: ignore[return-value]
+
         reg_number = await self._repo.next_registration_number(input.workspace_id)
         mol = Molecule.register_disclosed(
             workspace_id=input.workspace_id,
@@ -283,6 +294,15 @@ class RegisterMolecule:
             pass
 
         # 4. New undisclosed molecule
+        if self._custom_field_validator and input.custom_fields:
+            from chem_vault.domain.workspace_config.enums import FieldTarget
+            from returns.pipeline import is_successful
+            validation = await self._custom_field_validator.validate(
+                input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
+            )
+            if not is_successful(validation):
+                return validation  # type: ignore[return-value]
+
         reg_number = await self._repo.next_registration_number(input.workspace_id)
         mol = Molecule.register_undisclosed(
             workspace_id=input.workspace_id,

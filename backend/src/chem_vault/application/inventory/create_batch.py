@@ -50,11 +50,13 @@ class CreateBatch:
         repo: BatchRepository,
         molecule_repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
+        custom_field_validator=None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._molecule_repo = molecule_repo
         self._dispatcher = dispatcher
+        self._custom_field_validator = custom_field_validator
 
     async def __call__(
         self, input: CreateBatchCommand, auth: AuthContext | None = None
@@ -81,6 +83,15 @@ class CreateBatch:
                     value=input.concentration_value,
                     unit=ConcentrationUnit(input.concentration_unit),
                 )
+
+            if self._custom_field_validator and input.custom_fields:
+                from chem_vault.domain.workspace_config.enums import FieldTarget
+                from returns.pipeline import is_successful
+                validation = await self._custom_field_validator.validate(
+                    input.custom_fields, FieldTarget.BATCH, input.workspace_id
+                )
+                if not is_successful(validation):
+                    return validation  # type: ignore[return-value]
 
             batch = Batch.create(
                 workspace_id=input.workspace_id,

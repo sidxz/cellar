@@ -43,10 +43,12 @@ class UpdateBatch:
         uow: UnitOfWork,
         repo: BatchRepository,
         dispatcher: EventDispatcherProtocol,
+        custom_field_validator=None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._custom_field_validator = custom_field_validator
 
     async def __call__(
         self, input: UpdateBatchCommand, auth: AuthContext | None = None
@@ -82,6 +84,15 @@ class UpdateBatch:
                 fields["storage_conditions_notes"] = input.storage_conditions_notes
             if input.custom_fields is not UNSET:
                 fields["custom_fields"] = input.custom_fields
+
+            if self._custom_field_validator and input.custom_fields is not UNSET and input.custom_fields is not None:
+                from chem_vault.domain.workspace_config.enums import FieldTarget
+                from returns.pipeline import is_successful
+                validation = await self._custom_field_validator.validate(
+                    input.custom_fields, FieldTarget.BATCH, input.workspace_id
+                )
+                if not is_successful(validation):
+                    return validation  # type: ignore[return-value]
 
             if fields:
                 batch.update(**fields)

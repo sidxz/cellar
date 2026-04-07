@@ -81,6 +81,7 @@ from chem_vault.application.inventory.manage_storage import (
     GetStorageLocationChildren,
     ListStorageLocations,
 )
+from chem_vault.application.inventory.update_batch import UpdateBatch
 from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
 from chem_vault.application.screening.plate_templates import (
     CreatePlateTemplate,
@@ -159,6 +160,7 @@ from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.application.workspace_config.create_organization import CreateOrganization
+from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
 from chem_vault.application.workspace_config.create_vocabulary import CreateVocabulary
 from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabulary
 from chem_vault.application.workspace_config.get_organization import GetOrganization
@@ -183,6 +185,7 @@ from chem_vault.domain.screening_assay.repository import (
 from chem_vault.domain.shared.user_preferences import UserPreferencesRepository
 from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
+    CustomFieldDefinitionRepository,
     OrganizationRepository,
     WorkspaceSettingsRepository,
 )
@@ -311,6 +314,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.user_preferences_repositor
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (
     SQLAlchemyControlledVocabularyRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
+    SQLAlchemyCustomFieldDefinitionRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
     SQLAlchemyOrganizationRepository,
@@ -450,6 +456,20 @@ def create_container(
 
     container.define(DeleteVocabulary, _delete_vocabulary)
 
+    # --- Custom Field Definitions ---
+    container.define(
+        SQLAlchemyCustomFieldDefinitionRepository,
+        lambda c: SQLAlchemyCustomFieldDefinitionRepository(AsyncUnitOfWork(c[async_sessionmaker])),
+    )
+    container.define(
+        CustomFieldDefinitionRepository,
+        lambda c: c[SQLAlchemyCustomFieldDefinitionRepository],
+    )
+    container.define(
+        CustomFieldValidator,
+        lambda c: CustomFieldValidator(repo=c[CustomFieldDefinitionRepository]),
+    )
+
     # --- Chemical Registration ---
     container.define(StructureProcessor, Singleton(StructureProcessor))
     container.define(StructureProcessorProtocol, lambda c: c[StructureProcessor])
@@ -457,7 +477,7 @@ def create_container(
     def _mol_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[StructureProcessorProtocol])
+            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[StructureProcessorProtocol], c[CustomFieldValidator])
         return _f
 
     def _mol_cmd_no_proc(uc_cls):  # type: ignore[no-untyped-def]
@@ -473,7 +493,12 @@ def create_container(
         return _f
 
     container.define(RegisterMolecule, _mol_cmd(RegisterMolecule))
-    container.define(UpdateMolecule, _mol_cmd_no_proc(UpdateMolecule))
+
+    def _update_molecule(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateMolecule(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[CustomFieldValidator])
+
+    container.define(UpdateMolecule, _update_molecule)
     container.define(GetMolecule, _mol_query(GetMolecule))
     container.define(ListMolecules, _mol_query(ListMolecules))
     container.define(GetMoleculeByIdentifier, _mol_query(GetMoleculeByIdentifier))
@@ -660,7 +685,7 @@ def create_container(
     # --- Inventory ---
     def _batch_cmd(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), SQLAlchemyMoleculeRepository(uow), c[EventDispatcher])
+        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[CustomFieldValidator])
 
     def _batch_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -668,7 +693,12 @@ def create_container(
             return uc_cls(uow, SQLAlchemyBatchRepository(uow))
         return _f
 
+    def _update_batch(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateBatch(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher], c[CustomFieldValidator])
+
     container.define(CreateBatch, _batch_cmd)
+    container.define(UpdateBatch, _update_batch)
     container.define(GetBatch, _batch_query(GetBatch))
     container.define(ListBatchesByMolecule, _batch_query(ListBatchesByMolecule))
 

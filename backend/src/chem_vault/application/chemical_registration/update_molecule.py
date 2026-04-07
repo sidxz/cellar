@@ -40,10 +40,12 @@ class UpdateMolecule:
         uow: UnitOfWork,
         repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
+        custom_field_validator=None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._custom_field_validator = custom_field_validator
 
     async def __call__(
         self,
@@ -69,6 +71,14 @@ class UpdateMolecule:
                     )
 
                 if input.custom_fields is not UNSET:
+                    if self._custom_field_validator and input.custom_fields is not None:
+                        from chem_vault.domain.workspace_config.enums import FieldTarget
+                        from returns.pipeline import is_successful
+                        validation = await self._custom_field_validator.validate(
+                            input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
+                        )
+                        if not is_successful(validation):
+                            return validation  # type: ignore[return-value]
                     mol.update_custom_fields(input.custom_fields)  # type: ignore[arg-type]
             except ValidationError as exc:
                 return Failure(exc)
