@@ -9,6 +9,7 @@ from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledV
 from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
 from chem_vault.domain.workspace_config.enums import FieldTarget
 from chem_vault.domain.workspace_config.organization import Organization
+from chem_vault.domain.workspace_config.salt_entry import SaltEntry
 from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
 
 
@@ -75,5 +76,28 @@ class CustomFieldDefinitionRepository(Protocol):
         applies_to: FieldTarget | None = None,
         active_only: bool = True,
     ) -> list[CustomFieldDefinition]: ...
+
+    async def delete(self, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class SaltEntryRepository(Protocol):
+    """Repository for SaltEntry aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> SaltEntry | None: ...
+
+    async def save(self, aggregate: SaltEntry) -> None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, active_only: bool = True
+    ) -> list[SaltEntry]: ...
+
+    async def find_by_code(
+        self, workspace_id: uuid.UUID, code: str
+    ) -> SaltEntry | None: ...
+
+    async def find_by_smiles(
+        self, workspace_id: uuid.UUID, smiles: str
+    ) -> SaltEntry | None: ...
 
     async def delete(self, id: uuid.UUID) -> None: ...

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -92,4 +92,21 @@ class CustomFieldDefinitionModel(Base, EntityModelMixin, WorkspaceIdMixin, Versi
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "name", "applies_to", name="uq_cfd_ws_name_target"),
+    )
+
+
+class SaltEntryModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """SaltEntry — workspace-scoped salt catalog entry for chemical registration."""
+
+    __tablename__ = "salt_catalog"
+
+    code: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    smiles: Mapped[str] = mapped_column(String(500), nullable=False)
+    molecular_weight: Mapped[float] = mapped_column(Float, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "code", name="uq_salt_ws_code"),
     )

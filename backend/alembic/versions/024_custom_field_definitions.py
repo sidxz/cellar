@@ -59,8 +59,43 @@ def upgrade() -> None:
         ["workspace_id"],
     )
 
+    op.create_table(
+        "salt_catalog",
+        sa.Column("id", UUID(as_uuid=True), nullable=False),
+        sa.Column("workspace_id", UUID(as_uuid=True), nullable=False),
+        sa.Column("code", sa.String(50), nullable=False),
+        sa.Column("name", sa.String(200), nullable=False),
+        sa.Column("smiles", sa.String(500), nullable=False),
+        sa.Column("molecular_weight", sa.Float(), nullable=False),
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("workspace_id", "code", name="uq_salt_ws_code"),
+    )
+    op.create_index(
+        "ix_salt_catalog_workspace",
+        "salt_catalog",
+        ["workspace_id"],
+    )
+
 
 def downgrade() -> None:
+    op.drop_index("ix_salt_catalog_workspace", table_name="salt_catalog")
+    op.drop_table("salt_catalog")
     op.drop_index(
         "ix_custom_field_definitions_workspace", table_name="custom_field_definitions"
     )
