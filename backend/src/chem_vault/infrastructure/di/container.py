@@ -160,6 +160,10 @@ from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.application.workspace_config.create_organization import CreateOrganization
+from chem_vault.application.workspace_config.create_custom_field import CreateCustomField
+from chem_vault.application.workspace_config.list_custom_fields import ListCustomFields
+from chem_vault.application.workspace_config.update_custom_field import UpdateCustomField
+from chem_vault.application.workspace_config.delete_custom_field import DeleteCustomField
 from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
 from chem_vault.application.workspace_config.create_salt_entry import CreateSaltEntry
 from chem_vault.application.workspace_config.list_salt_entries import ListSaltEntries
@@ -486,6 +490,27 @@ def create_container(
         lambda c: CustomFieldValidator(repo=c[CustomFieldDefinitionRepository]),
     )
 
+    def _cfd_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow=uow, repo=SQLAlchemyCustomFieldDefinitionRepository(uow), dispatcher=c[EventDispatcher])
+        return _f
+
+    def _cfd_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow=uow, repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+        return _f
+
+    def _delete_custom_field(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteCustomField(uow=uow, repo=SQLAlchemyCustomFieldDefinitionRepository(uow), dispatcher=c[EventDispatcher])
+
+    container.define(CreateCustomField, _cfd_cmd(CreateCustomField))
+    container.define(UpdateCustomField, _cfd_cmd(UpdateCustomField))
+    container.define(ListCustomFields, _cfd_query(ListCustomFields))
+    container.define(DeleteCustomField, _delete_custom_field)
+
     # --- Salt Catalog ---
     container.define(
         SQLAlchemySaltEntryRepository,
@@ -504,7 +529,8 @@ def create_container(
 
     def _salt_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
-            return uc_cls(c[SaltEntryRepository])
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySaltEntryRepository(uow))
         return _f
 
     def _delete_salt_entry(c):  # type: ignore[no-untyped-def]
@@ -534,7 +560,8 @@ def create_container(
 
     def _regform_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
-            return uc_cls(c[RegistrationFormRepository])
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRegistrationFormRepository(uow))
         return _f
 
     def _delete_registration_form(c):  # type: ignore[no-untyped-def]

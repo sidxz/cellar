@@ -206,7 +206,7 @@ class TestListCustomFields:
         repo = AsyncMock()
         repo.find_by_workspace.return_value = cfds
 
-        uc = ListCustomFields(repo=repo)
+        uc = ListCustomFields(uow=FakeUnitOfWork(), repo=repo)
         query = ListCustomFieldsQuery(workspace_id=workspace_id)
         result = await uc(query)
 
@@ -222,7 +222,7 @@ class TestListCustomFields:
         repo = AsyncMock()
         repo.find_by_workspace.return_value = []
 
-        uc = ListCustomFields(repo=repo)
+        uc = ListCustomFields(uow=FakeUnitOfWork(), repo=repo)
         query = ListCustomFieldsQuery(
             workspace_id=workspace_id, applies_to="batch", active_only=False
         )
@@ -238,7 +238,7 @@ class TestListCustomFields:
         repo = AsyncMock()
         repo.find_by_workspace.return_value = []
 
-        uc = ListCustomFields(repo=repo)
+        uc = ListCustomFields(uow=FakeUnitOfWork(), repo=repo)
         result = await uc(ListCustomFieldsQuery(workspace_id=workspace_id))
         assert result.unwrap() == []
 

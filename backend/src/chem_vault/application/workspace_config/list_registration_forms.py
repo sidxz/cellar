@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from chem_vault.application.shared.query import Query
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.workspace_config.enums import FieldTarget
 from chem_vault.domain.workspace_config.registration_form import RegistrationForm
@@ -21,14 +22,16 @@ class ListRegistrationFormsQuery(Query):
 
 
 class ListRegistrationForms:
-    def __init__(self, repo: RegistrationFormRepository) -> None:
+    def __init__(self, uow: UnitOfWork, repo: RegistrationFormRepository) -> None:
+        self._uow = uow
         self._repo = repo
 
     async def __call__(
         self, input: ListRegistrationFormsQuery
     ) -> Result[list[RegistrationForm], DomainError]:
-        results = await self._repo.find_by_workspace(
-            input.workspace_id,
-            applies_to=input.applies_to,
-        )
-        return Success(results)
+        async with self._uow:
+            results = await self._repo.find_by_workspace(
+                input.workspace_id,
+                applies_to=input.applies_to,
+            )
+            return Success(results)
