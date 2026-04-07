@@ -6,10 +6,12 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Column,
     DateTime,
     ForeignKey,
     Index,
     String,
+    Table,
     Text,
     UniqueConstraint,
     Uuid,
@@ -29,6 +31,28 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base import (
 # Base.metadata before the mapper resolves cross-context FK targets.
 import chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401,E402
 import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models  # noqa: F401,E402
+
+
+# ---------------------------------------------------------------------------
+# Association tables
+# ---------------------------------------------------------------------------
+
+molecule_projects = Table(
+    "molecule_projects",
+    Base.metadata,
+    Column(
+        "molecule_id",
+        Uuid(as_uuid=True),
+        ForeignKey("molecules.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "project_id",
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class ProjectModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
@@ -109,4 +133,28 @@ class SavedSearchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     __table_args__ = (
         Index("ix_saved_searches_ws_creator", "workspace_id", "created_by"),
+    )
+
+
+class ProjectMemberModel(Base):
+    """Project membership — who can access a project and at what role."""
+
+    __tablename__ = "project_members"
+
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_project_members_user", "user_id"),
     )
