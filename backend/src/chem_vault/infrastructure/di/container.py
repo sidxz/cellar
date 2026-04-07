@@ -205,6 +205,17 @@ from chem_vault.application.research_organization.get_collection import GetColle
 from chem_vault.application.research_organization.get_collections_for_molecule import ListCollectionsForMolecule
 from chem_vault.application.research_organization.get_project import GetProject, ListProjects
 from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
+from chem_vault.application.research_organization.manage_project_members import (
+    AddProjectMember,
+    ListProjectMembers,
+    RemoveProjectMember,
+    UpdateProjectMemberRole,
+)
+from chem_vault.application.research_organization.manage_molecule_projects import (
+    AddMoleculeToProject,
+    ListMoleculeProjects,
+    RemoveMoleculeFromProject,
+)
 from chem_vault.application.research_organization.update_collection import UpdateCollection
 from chem_vault.application.research_organization.update_project import UpdateProject
 from chem_vault.application.research_organization.update_saved_search import UpdateSavedSearch
@@ -229,6 +240,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.coll
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
     SQLAlchemyProjectRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (
+    SQLAlchemyProjectMemberRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
     SQLAlchemySavedSearchRepository,
@@ -1047,11 +1061,69 @@ def create_container(
             return uc_cls(uow, SQLAlchemyProjectRepository(uow))
         return _f
 
-    container.define(CreateProject, _project_cmd(CreateProject))
+    def _create_project(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateProject(
+            uow,
+            SQLAlchemyProjectRepository(uow),
+            c[EventDispatcher],
+            member_repo=SQLAlchemyProjectMemberRepository(uow),
+        )
+
+    container.define(CreateProject, _create_project)
     container.define(UpdateProject, _project_cmd(UpdateProject))
     container.define(ArchiveProject, _project_cmd(ArchiveProject))
     container.define(GetProject, _project_query(GetProject))
     container.define(ListProjects, _project_query(ListProjects))
+
+    # -- Project member management --
+    def _member_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProjectRepository(uow),
+                SQLAlchemyProjectMemberRepository(uow),
+                c[EventDispatcher],
+            )
+        return _f
+
+    def _member_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProjectRepository(uow),
+                SQLAlchemyProjectMemberRepository(uow),
+            )
+        return _f
+
+    container.define(AddProjectMember, _member_cmd(AddProjectMember))
+    container.define(RemoveProjectMember, _member_cmd(RemoveProjectMember))
+    container.define(UpdateProjectMemberRole, _member_query(UpdateProjectMemberRole))
+    container.define(ListProjectMembers, _member_query(ListProjectMembers))
+
+    # -- Molecule-project association --
+    def _mol_project_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProjectRepository(uow),
+                SQLAlchemyMoleculeRepository(uow),
+                SQLAlchemyProjectMemberRepository(uow),
+                c[EventDispatcher],
+            )
+        return _f
+
+    container.define(AddMoleculeToProject, _mol_project_cmd(AddMoleculeToProject))
+    container.define(RemoveMoleculeFromProject, _mol_project_cmd(RemoveMoleculeFromProject))
+
+    def _list_mol_projects(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListMoleculeProjects(uow, SQLAlchemyMoleculeRepository(uow))
+
+    container.define(ListMoleculeProjects, _list_mol_projects)
 
     def _collection_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]

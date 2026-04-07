@@ -73,6 +73,17 @@ from chem_vault.application.research_organization.get_collection import GetColle
 from chem_vault.application.research_organization.get_collections_for_molecule import ListCollectionsForMolecule
 from chem_vault.application.research_organization.get_project import GetProject, ListProjects
 from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
+from chem_vault.application.research_organization.manage_project_members import (
+    AddProjectMember,
+    ListProjectMembers,
+    RemoveProjectMember,
+    UpdateProjectMemberRole,
+)
+from chem_vault.application.research_organization.manage_molecule_projects import (
+    AddMoleculeToProject,
+    ListMoleculeProjects,
+    RemoveMoleculeFromProject,
+)
 from chem_vault.application.research_organization.update_collection import UpdateCollection
 from chem_vault.application.research_organization.update_project import UpdateProject
 from chem_vault.application.research_organization.update_saved_search import UpdateSavedSearch
@@ -299,6 +310,13 @@ DeleteSavedSearchDep = Annotated[DeleteSavedSearch, Depends(_get_use_case(Delete
 GetSavedSearchDep = Annotated[GetSavedSearch, Depends(_get_use_case(GetSavedSearch))]
 ListSavedSearchesDep = Annotated[ListSavedSearches, Depends(_get_use_case(ListSavedSearches))]
 ExecuteSearchDep = Annotated[ExecuteSearch, Depends(_get_use_case(ExecuteSearch))]
+AddProjectMemberDep = Annotated[AddProjectMember, Depends(_get_use_case(AddProjectMember))]
+RemoveProjectMemberDep = Annotated[RemoveProjectMember, Depends(_get_use_case(RemoveProjectMember))]
+UpdateProjectMemberRoleDep = Annotated[UpdateProjectMemberRole, Depends(_get_use_case(UpdateProjectMemberRole))]
+ListProjectMembersDep = Annotated[ListProjectMembers, Depends(_get_use_case(ListProjectMembers))]
+AddMoleculeToProjectDep = Annotated[AddMoleculeToProject, Depends(_get_use_case(AddMoleculeToProject))]
+RemoveMoleculeFromProjectDep = Annotated[RemoveMoleculeFromProject, Depends(_get_use_case(RemoveMoleculeFromProject))]
+ListMoleculeProjectsDep = Annotated[ListMoleculeProjects, Depends(_get_use_case(ListMoleculeProjects))]
 
 # --- Attachment dependencies ---
 from chem_vault.application.attachment.upload_attachment import UploadAttachment
