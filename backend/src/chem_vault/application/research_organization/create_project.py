@@ -12,7 +12,11 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.research_organization.project import Project
-from chem_vault.domain.research_organization.repository import ProjectRepository
+from chem_vault.domain.research_organization.project_membership import ProjectRole
+from chem_vault.domain.research_organization.repository import (
+    ProjectMemberRepository,
+    ProjectRepository,
+)
 from chem_vault.domain.shared.errors import ConflictError, DomainError
 
 
@@ -30,10 +34,12 @@ class CreateProject:
         uow: UnitOfWork,
         repo: ProjectRepository,
         dispatcher: EventDispatcherProtocol,
+        member_repo: ProjectMemberRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._member_repo = member_repo
 
     async def __call__(
         self, input: CreateProjectCommand, auth: AuthContext | None = None
@@ -54,6 +60,13 @@ class CreateProject:
                 created_by=input.created_by,
             )
             await self._repo.save(project)
+
+            # Auto-add creator as project manager
+            if self._member_repo is not None:
+                await self._member_repo.add_member(
+                    project.id, input.created_by, ProjectRole.MANAGER
+                )
+
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(project)
