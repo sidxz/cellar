@@ -6,6 +6,8 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
+from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
+from chem_vault.domain.workspace_config.enums import FieldTarget
 from chem_vault.domain.workspace_config.organization import Organization
 from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
 
@@ -54,5 +56,24 @@ class ControlledVocabularyRepository(Protocol):
     async def find_by_name(
         self, workspace_id: uuid.UUID, name: str
     ) -> ControlledVocabulary | None: ...
+
+    async def delete(self, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class CustomFieldDefinitionRepository(Protocol):
+    """Repository for CustomFieldDefinition aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> CustomFieldDefinition | None: ...
+
+    async def save(self, aggregate: CustomFieldDefinition) -> None: ...
+
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        applies_to: FieldTarget | None = None,
+        active_only: bool = True,
+    ) -> list[CustomFieldDefinition]: ...
 
     async def delete(self, id: uuid.UUID) -> None: ...
