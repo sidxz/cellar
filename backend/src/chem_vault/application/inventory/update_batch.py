@@ -24,7 +24,11 @@ from chem_vault.domain.shared.value_objects import Amount, Concentration, Storag
 class UpdateBatchCommand(Command):
     workspace_id: uuid.UUID
     batch_id: uuid.UUID
-    salt_form: str | None | object = UNSET
+    salt_entry_id: uuid.UUID | None | object = UNSET
+    salt_name: str | None | object = UNSET
+    salt_smiles: str | None | object = UNSET
+    salt_stoichiometry: int | object = UNSET
+    formula_weight: float | None | object = UNSET
     purity: float | None | object = UNSET
     amount_value: float | None = None
     amount_unit: str | None = None
@@ -61,8 +65,10 @@ class UpdateBatch:
                 return Failure(NotFoundError("Batch", str(input.batch_id)))
 
             fields: dict[str, object] = {}
-            if input.salt_form is not UNSET:
-                fields["salt_form"] = input.salt_form
+            for attr in ("salt_entry_id", "salt_name", "salt_smiles", "salt_stoichiometry", "formula_weight"):
+                val = getattr(input, attr)
+                if val is not UNSET:
+                    fields[attr] = val
             if input.purity is not UNSET:
                 fields["purity"] = input.purity
             if input.amount_value is not None and input.amount_unit is not None:

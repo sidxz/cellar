@@ -92,8 +92,24 @@ def upgrade() -> None:
         ["workspace_id"],
     )
 
+    # Batch salt field restructuring
+    op.alter_column("batches", "salt_form", new_column_name="salt_name", type_=sa.String(200))
+    op.add_column("batches", sa.Column("salt_entry_id", UUID(as_uuid=True), nullable=True))
+    op.create_foreign_key("fk_batch_salt_entry", "batches", "salt_catalog", ["salt_entry_id"], ["id"], ondelete="SET NULL")
+    op.add_column("batches", sa.Column("salt_smiles", sa.String(500), nullable=True))
+    op.add_column("batches", sa.Column("salt_stoichiometry", sa.Integer, nullable=False, server_default="1"))
+    op.add_column("batches", sa.Column("formula_weight", sa.Float, nullable=True))
+
 
 def downgrade() -> None:
+    # Reverse batch salt field restructuring
+    op.drop_column("batches", "formula_weight")
+    op.drop_column("batches", "salt_stoichiometry")
+    op.drop_column("batches", "salt_smiles")
+    op.drop_constraint("fk_batch_salt_entry", "batches", type_="foreignkey")
+    op.drop_column("batches", "salt_entry_id")
+    op.alter_column("batches", "salt_name", new_column_name="salt_form", type_=sa.String(100))
+
     op.drop_index("ix_salt_catalog_workspace", table_name="salt_catalog")
     op.drop_table("salt_catalog")
     op.drop_index(

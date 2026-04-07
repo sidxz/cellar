@@ -253,7 +253,11 @@ class BatchBody(BaseModel):
     source: str
     amount_value: float
     amount_unit: str
-    salt_form: str | None = None
+    salt_entry_id: uuid.UUID | None = None
+    salt_name: str | None = None
+    salt_smiles: str | None = None
+    salt_stoichiometry: int = 1
+    formula_weight: float | None = None
     purity: float | None = None
     concentration_value: float | None = None
     concentration_unit: str | None = None
@@ -335,7 +339,11 @@ async def register_molecule(
             chemist=auth.user_id,
             amount_value=b.amount_value,
             amount_unit=b.amount_unit,
-            salt_form=b.salt_form,
+            salt_entry_id=b.salt_entry_id,
+            salt_name=b.salt_name,
+            salt_smiles=b.salt_smiles,
+            salt_stoichiometry=b.salt_stoichiometry,
+            formula_weight=b.formula_weight,
             purity=b.purity,
             concentration_value=b.concentration_value,
             concentration_unit=b.concentration_unit,

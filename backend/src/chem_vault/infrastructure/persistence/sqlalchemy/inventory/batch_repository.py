@@ -82,7 +82,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             workspace_id=model.workspace_id,
             molecule_id=model.molecule_id,
             batch_number=BatchNumber(value=model.batch_number),
-            salt_form=model.salt_form,
+            salt_entry_id=model.salt_entry_id,
+            salt_name=model.salt_name,
+            salt_smiles=model.salt_smiles,
+            salt_stoichiometry=model.salt_stoichiometry,
+            formula_weight=model.formula_weight,
             purity=model.purity,
             amount=Amount(value=model.amount_value, unit=AmountUnit(model.amount_unit)),
             concentration=concentration,
@@ -112,7 +116,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             workspace_id=aggregate.workspace_id,
             molecule_id=aggregate.molecule_id,
             batch_number=aggregate.batch_number.value,
-            salt_form=aggregate.salt_form,
+            salt_entry_id=aggregate.salt_entry_id,
+            salt_name=aggregate.salt_name,
+            salt_smiles=aggregate.salt_smiles,
+            salt_stoichiometry=aggregate.salt_stoichiometry,
+            formula_weight=aggregate.formula_weight,
             purity=aggregate.purity,
             amount_value=aggregate.amount.value,
             amount_unit=aggregate.amount.unit.value,
@@ -140,7 +148,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
 
     def _update_model(self, model: BatchModel, aggregate: Batch) -> None:
         model.molecule_id = aggregate.molecule_id
-        model.salt_form = aggregate.salt_form
+        model.salt_entry_id = aggregate.salt_entry_id
+        model.salt_name = aggregate.salt_name
+        model.salt_smiles = aggregate.salt_smiles
+        model.salt_stoichiometry = aggregate.salt_stoichiometry
+        model.formula_weight = aggregate.formula_weight
         model.purity = aggregate.purity
         model.amount_value = aggregate.amount.value
         model.amount_unit = aggregate.amount.unit.value

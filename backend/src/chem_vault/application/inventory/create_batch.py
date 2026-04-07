@@ -29,7 +29,11 @@ class CreateBatchCommand(Command):
     chemist: uuid.UUID
     amount_value: float
     amount_unit: str
-    salt_form: str | None = None
+    salt_entry_id: uuid.UUID | None = None
+    salt_name: str | None = None
+    salt_smiles: str | None = None
+    salt_stoichiometry: int = 1
+    formula_weight: float | None = None
     purity: float | None = None
     concentration_value: float | None = None
     concentration_unit: str | None = None
@@ -100,7 +104,11 @@ class CreateBatch:
                 amount=Amount(value=input.amount_value, unit=AmountUnit(input.amount_unit)),
                 source=BatchSource(input.source),
                 chemist=input.chemist,
-                salt_form=input.salt_form,
+                salt_entry_id=input.salt_entry_id,
+                salt_name=input.salt_name,
+                salt_smiles=input.salt_smiles,
+                salt_stoichiometry=input.salt_stoichiometry,
+                formula_weight=input.formula_weight,
                 purity=input.purity,
                 concentration=concentration,
                 supplier_org_id=input.supplier_org_id,

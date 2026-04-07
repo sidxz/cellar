@@ -34,7 +34,13 @@ class BatchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     molecule_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     batch_number: Mapped[str] = mapped_column(String(50), nullable=False)
-    salt_form: Mapped[str | None] = mapped_column(String(100))
+    salt_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("salt_catalog.id", ondelete="SET NULL"), nullable=True
+    )
+    salt_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    salt_smiles: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    salt_stoichiometry: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    formula_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     purity: Mapped[float | None] = mapped_column(Float)
     amount_value: Mapped[float] = mapped_column(Float, nullable=False)
     amount_unit: Mapped[str] = mapped_column(String(20), nullable=False)

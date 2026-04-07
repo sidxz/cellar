@@ -24,7 +24,11 @@ class BatchResponse(BaseModel):
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
     batch_number: str
-    salt_form: str | None = None
+    salt_entry_id: uuid.UUID | None = None
+    salt_name: str | None = None
+    salt_smiles: str | None = None
+    salt_stoichiometry: int = 1
+    formula_weight: float | None = None
     purity: float | None = None
     amount_value: float
     amount_unit: str
@@ -44,7 +48,11 @@ class BatchResponse(BaseModel):
             workspace_id=b.workspace_id,
             molecule_id=b.molecule_id,
             batch_number=b.batch_number.value,
-            salt_form=b.salt_form,
+            salt_entry_id=b.salt_entry_id,
+            salt_name=b.salt_name,
+            salt_smiles=b.salt_smiles,
+            salt_stoichiometry=b.salt_stoichiometry,
+            formula_weight=b.formula_weight,
             purity=b.purity,
             amount_value=b.amount.value,
             amount_unit=b.amount.unit.value,
@@ -64,7 +72,11 @@ class CreateBatchRequest(BaseModel):
     source: str
     amount_value: float
     amount_unit: str
-    salt_form: str | None = None
+    salt_entry_id: uuid.UUID | None = None
+    salt_name: str | None = None
+    salt_smiles: str | None = None
+    salt_stoichiometry: int = 1
+    formula_weight: float | None = None
     purity: float | None = None
     concentration_value: float | None = None
     concentration_unit: str | None = None
@@ -79,7 +91,11 @@ class CreateBatchRequest(BaseModel):
 
 
 class UpdateBatchRequest(BaseModel):
-    salt_form: str | None = None
+    salt_entry_id: uuid.UUID | None = None
+    salt_name: str | None = None
+    salt_smiles: str | None = None
+    salt_stoichiometry: int | None = None
+    formula_weight: float | None = None
     purity: float | None = None
     amount_value: float | None = None
     amount_unit: str | None = None
@@ -118,7 +134,11 @@ async def create_batch(
         chemist=auth.user_id,
         amount_value=body.amount_value,
         amount_unit=body.amount_unit,
-        salt_form=body.salt_form,
+        salt_entry_id=body.salt_entry_id,
+        salt_name=body.salt_name,
+        salt_smiles=body.salt_smiles,
+        salt_stoichiometry=body.salt_stoichiometry,
+        formula_weight=body.formula_weight,
         purity=body.purity,
         concentration_value=body.concentration_value,
         concentration_unit=body.concentration_unit,
@@ -168,7 +188,11 @@ async def update_batch(
     cmd = UpdateBatchCommand(
         workspace_id=auth.workspace_id,
         batch_id=batch_id,
-        salt_form=body.salt_form if "salt_form" in body.model_fields_set else UNSET,
+        salt_entry_id=body.salt_entry_id if "salt_entry_id" in body.model_fields_set else UNSET,
+        salt_name=body.salt_name if "salt_name" in body.model_fields_set else UNSET,
+        salt_smiles=body.salt_smiles if "salt_smiles" in body.model_fields_set else UNSET,
+        salt_stoichiometry=body.salt_stoichiometry if "salt_stoichiometry" in body.model_fields_set else UNSET,
+        formula_weight=body.formula_weight if "formula_weight" in body.model_fields_set else UNSET,
         purity=body.purity if "purity" in body.model_fields_set else UNSET,
         amount_value=body.amount_value,
         amount_unit=body.amount_unit,

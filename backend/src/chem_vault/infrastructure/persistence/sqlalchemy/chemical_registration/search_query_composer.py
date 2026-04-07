@@ -291,7 +291,7 @@ def _run_date_clause(criterion: dict[str, Any]) -> ColumnElement:
 BATCH_TEXT_FIELDS: dict[str, Any] = {
     "batch_number": BatchModel.batch_number,
     "source": BatchModel.source,
-    "salt_form": BatchModel.salt_form,
+    "salt_name": BatchModel.salt_name,
     "vendor_catalog_number": BatchModel.vendor_catalog_number,
     "notebook_reference": BatchModel.notebook_reference,
 }
