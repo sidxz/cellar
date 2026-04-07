@@ -161,6 +161,10 @@ from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.application.workspace_config.create_organization import CreateOrganization
 from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
+from chem_vault.application.workspace_config.create_salt_entry import CreateSaltEntry
+from chem_vault.application.workspace_config.list_salt_entries import ListSaltEntries
+from chem_vault.application.workspace_config.update_salt_entry import UpdateSaltEntry
+from chem_vault.application.workspace_config.delete_salt_entry import DeleteSaltEntry
 from chem_vault.application.workspace_config.create_vocabulary import CreateVocabulary
 from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabulary
 from chem_vault.application.workspace_config.get_organization import GetOrganization
@@ -187,6 +191,7 @@ from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
     CustomFieldDefinitionRepository,
     OrganizationRepository,
+    SaltEntryRepository,
     WorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -317,6 +322,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.controlle
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
     SQLAlchemyCustomFieldDefinitionRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
+    SQLAlchemySaltEntryRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
     SQLAlchemyOrganizationRepository,
@@ -469,6 +477,36 @@ def create_container(
         CustomFieldValidator,
         lambda c: CustomFieldValidator(repo=c[CustomFieldDefinitionRepository]),
     )
+
+    # --- Salt Catalog ---
+    container.define(
+        SQLAlchemySaltEntryRepository,
+        lambda c: SQLAlchemySaltEntryRepository(AsyncUnitOfWork(c[async_sessionmaker])),
+    )
+    container.define(
+        SaltEntryRepository,
+        lambda c: c[SQLAlchemySaltEntryRepository],
+    )
+
+    def _salt_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemySaltEntryRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _salt_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            return uc_cls(c[SaltEntryRepository])
+        return _f
+
+    def _delete_salt_entry(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteSaltEntry(uow, SQLAlchemySaltEntryRepository(uow))
+
+    container.define(CreateSaltEntry, _salt_cmd(CreateSaltEntry))
+    container.define(UpdateSaltEntry, _salt_cmd(UpdateSaltEntry))
+    container.define(ListSaltEntries, _salt_query(ListSaltEntries))
+    container.define(DeleteSaltEntry, _delete_salt_entry)
 
     # --- Chemical Registration ---
     container.define(StructureProcessor, Singleton(StructureProcessor))

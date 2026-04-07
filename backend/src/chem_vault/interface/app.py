@@ -155,6 +155,9 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.custom_fields import router as custom_fields_router
     app.include_router(custom_fields_router)
 
+    from chem_vault.interface.routes.salt_catalog import router as salt_catalog_router
+    app.include_router(salt_catalog_router)
+
     # Health check (unauthenticated)
     @app.get("/health")
     async def health() -> dict[str, str]:
