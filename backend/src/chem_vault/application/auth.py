@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
+from chem_vault.domain.research_organization.project_membership import ProjectRole
 from chem_vault.domain.shared.errors import AuthorizationError
 
 # Role hierarchy (ascending privilege)
@@ -77,3 +78,38 @@ def require_same_workspace(auth: AuthContext | None, workspace_id: uuid.UUID | N
         from chem_vault.domain.shared.errors import NotFoundError
 
         raise NotFoundError("Entity")
+
+
+@runtime_checkable
+class ProjectAccessContext(Protocol):
+    """Extended auth with project-level access info."""
+
+    @property
+    def accessible_project_ids(self) -> list[uuid.UUID] | None:
+        """None = admin bypass, [] = no projects, [ids] = specific projects."""
+        ...
+
+
+def require_project_role(
+    auth: AuthContext | None,
+    user_role: ProjectRole | None,
+    minimum_role: ProjectRole,
+) -> None:
+    """Raise if the user lacks the required project role.
+
+    Admins bypass project-role checks.
+    """
+    if auth is None:
+        return  # System calls bypass
+    if auth.is_admin:
+        return  # Admins bypass
+    if user_role is None:
+        raise AuthorizationError(
+            "Not a member of this project",
+            detail="You must be added to this project to perform this action.",
+        )
+    if not user_role.has_at_least(minimum_role):
+        raise AuthorizationError(
+            f"Requires at least '{minimum_role.value}' project role",
+            detail=f"Current project role: '{user_role.value}'",
+        )

@@ -7,6 +7,10 @@ from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.research_organization.collection import Collection
 from chem_vault.domain.research_organization.project import Project
+from chem_vault.domain.research_organization.project_membership import (
+    ProjectMember,
+    ProjectRole,
+)
 from chem_vault.domain.research_organization.saved_search import SavedSearch
 
 
@@ -104,3 +108,30 @@ class SavedSearchRepository(Protocol):
     async def find_by_creator(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> list[SavedSearch]: ...
+
+
+@runtime_checkable
+class ProjectMemberRepository(Protocol):
+    """Repository for project membership records."""
+
+    async def find_accessible_project_ids(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[uuid.UUID]: ...
+
+    async def find_members(self, project_id: uuid.UUID) -> list[ProjectMember]: ...
+
+    async def add_member(
+        self, project_id: uuid.UUID, user_id: uuid.UUID, role: ProjectRole
+    ) -> None: ...
+
+    async def remove_member(
+        self, project_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None: ...
+
+    async def update_role(
+        self, project_id: uuid.UUID, user_id: uuid.UUID, role: ProjectRole
+    ) -> None: ...
+
+    async def get_role(
+        self, project_id: uuid.UUID, user_id: uuid.UUID
+    ) -> ProjectRole | None: ...
