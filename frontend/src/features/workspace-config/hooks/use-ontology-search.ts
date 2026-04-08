@@ -10,6 +10,24 @@ export interface OntologyTerm {
   uri: string | null;
 }
 
+export function useOntologyDescendants(
+  ontology: string,
+  rootConceptId: string,
+  enabled?: boolean,
+) {
+  return useQuery({
+    queryKey: ["ontology-descendants", ontology, rootConceptId],
+    queryFn: () =>
+      customInstance<OntologyTerm[]>({
+        url: "/api/v1/ontology/descendants",
+        method: "GET",
+        params: { ontology, root_concept_id: rootConceptId },
+      }),
+    enabled: enabled !== false && !!ontology && !!rootConceptId,
+    staleTime: 30 * 60 * 1000, // 30 min — ontology trees don't change
+  });
+}
+
 export function useOntologySearch(
   query: string,
   ontologies: string[],

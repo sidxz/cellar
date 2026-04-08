@@ -11,7 +11,8 @@ import httpx
 from chem_vault.domain.shared.ontology import OntologyTerm
 from chem_vault.domain.shared.secret_provider import SecretProvider
 
-BIOPORTAL_SEARCH_URL = "https://data.bioontology.org/search"
+BIOPORTAL_BASE_URL = "https://data.bioontology.org"
+BIOPORTAL_SEARCH_URL = f"{BIOPORTAL_BASE_URL}/search"
 
 
 class BioPortalClient:
@@ -54,10 +55,12 @@ class BioPortalClient:
             "pagesize": page_size,
             "include": "prefLabel",
         }
-        if ontology_sources:
-            params["ontologies"] = ",".join(ontology_sources)
-        if subtree_root_id:
+        if subtree_root_id and ontology_sources:
+            # BioPortal requires "ontology" (singular) with subtree_root_id
+            params["ontology"] = ontology_sources[0]
             params["subtree_root_id"] = subtree_root_id
+        elif ontology_sources:
+            params["ontologies"] = ",".join(ontology_sources)
 
         headers = {"Authorization": f"apikey token={api_key}"}
 
@@ -98,4 +101,49 @@ class BioPortalClient:
                     )
                 )
 
+        return results
+
+    async def list_descendants(
+        self,
+        ontology: str,
+        root_concept_id: str,
+        *,
+        workspace_id: uuid.UUID | None = None,
+    ) -> list[OntologyTerm]:
+        """List all descendants of a concept in an ontology."""
+        api_key = None
+        if workspace_id is not None:
+            api_key = await self._get_api_key(workspace_id)
+        if not api_key:
+            api_key = os.environ.get("BIOPORTAL_API_KEY")
+        if not api_key:
+            return []
+
+        from urllib.parse import quote
+        encoded_id = quote(root_concept_id, safe="")
+        url = f"{BIOPORTAL_BASE_URL}/ontologies/{ontology}/classes/{encoded_id}/descendants"
+        headers = {"Authorization": f"apikey token={api_key}"}
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            try:
+                resp = await client.get(url, params={"pagesize": 100}, headers=headers)
+                resp.raise_for_status()
+            except httpx.HTTPError:
+                return []
+
+        data = resp.json()
+        results: list[OntologyTerm] = []
+        for item in data.get("collection", []):
+            term_id = item.get("@id", "")
+            label = item.get("prefLabel", "")
+            if term_id and label:
+                results.append(
+                    OntologyTerm(
+                        term_id=term_id,
+                        label=label,
+                        ontology_source=ontology,
+                        uri=term_id,
+                    )
+                )
+        results.sort(key=lambda t: t.label)
         return results

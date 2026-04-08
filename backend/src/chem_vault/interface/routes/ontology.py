@@ -135,6 +135,24 @@ async def search_ontology(
     return [OntologyTermResponse.from_domain(t) for t in terms]
 
 
+@router.get("/ontology/descendants", response_model=list[OntologyTermResponse])
+async def list_ontology_descendants(
+    auth: AuthDep,
+    use_case: SearchOntologyDep,
+    ontology: str = Query(...),
+    root_concept_id: str = Query(...),
+) -> list[OntologyTermResponse]:
+    """List all descendants of a concept — for dropdown-style selection."""
+    # Access the BioPortalClient through the search service (same DI instance)
+    bioportal = use_case._search_service  # type: ignore[attr-defined]
+    terms = await bioportal.list_descendants(
+        ontology=ontology,
+        root_concept_id=root_concept_id,
+        workspace_id=auth.workspace_id,
+    )
+    return [OntologyTermResponse.from_domain(t) for t in terms]
+
+
 # ---------------------------------------------------------------------------
 # Ontology slot CRUD
 # ---------------------------------------------------------------------------
