@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TestTubes, Crosshair, Plus } from "lucide-react";
+import { TestTubes, Crosshair, Plus, Download } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -14,12 +14,16 @@ import { ProtocolList } from "./protocol-list";
 import { TargetList } from "./target-list";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateTargetDialog } from "./create-target-dialog";
+import { useCddEnabled } from "../hooks/use-cdd-enabled";
+import { CddImportDialog } from "./cdd-import-dialog";
 
 export function ScreeningDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [createTargetOpen, setCreateTargetOpen] = useState(false);
+  const [cddImportOpen, setCddImportOpen] = useState(false);
+  const { enabled: cddEnabled } = useCddEnabled();
 
   return (
     <div>
@@ -44,10 +48,18 @@ export function ScreeningDashboard() {
           </TabsList>
 
           {tab === "protocols" && (
-            <Button onClick={() => setCreateProtocolOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Protocol
-            </Button>
+            <div className="flex items-center gap-2">
+              {cddEnabled && (
+                <Button variant="outline" onClick={() => setCddImportOpen(true)}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Import from CDD
+                </Button>
+              )}
+              <Button onClick={() => setCreateProtocolOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Protocol
+              </Button>
+            </div>
           )}
           {tab === "targets" && (
             <Button onClick={() => setCreateTargetOpen(true)}>
@@ -77,6 +89,13 @@ export function ScreeningDashboard() {
       <CreateTargetDialog
         open={createTargetOpen}
         onOpenChange={setCreateTargetOpen}
+      />
+      <CddImportDialog
+        open={cddImportOpen}
+        onOpenChange={setCddImportOpen}
+        onImported={(protocolId) => {
+          router.push(`/assays/protocols/${protocolId}`);
+        }}
       />
     </div>
   );
