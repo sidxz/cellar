@@ -154,8 +154,8 @@ class TestMapCddProtocol:
         assert rd.aggregation == ReadoutAggregation.NONE
         assert rd.normalization == ReadoutNormalization.NONE
 
-    def test_calculated_outputs_excluded(self):
-        """Dose-response calculation outputs (Hill slope, R², IC50 value, etc.) are skipped."""
+    def test_dose_response_calculation_mapped(self):
+        """CDD dose-response calculations become DOSE_RESPONSE readouts with proper config."""
         cdd = {
             "id": 1,
             "name": "DR Protocol",
@@ -163,11 +163,11 @@ class TestMapCddProtocol:
                 {"id": 100, "name": "Concentration", "data_type": "Number", "unit_label": "uM"},
                 {"id": 101, "name": "% Inhibition", "data_type": "Number", "unit_label": "%"},
                 # All below are auto-generated calculation outputs:
-                {"id": 102, "name": "IC50", "data_type": "Number", "unit_label": "uM"},
+                {"id": 102, "name": "IC50calc", "data_type": "Number", "unit_label": "uM"},
                 {"id": 103, "name": "Hill slope", "data_type": "Number"},
                 {"id": 104, "name": "R squared", "data_type": "Number"},
-                {"id": 105, "name": "IC50 CI (Lower)", "data_type": "Number", "unit_label": "uM"},
-                {"id": 106, "name": "IC50 CI (Upper)", "data_type": "Number", "unit_label": "uM"},
+                {"id": 105, "name": "IC50calc CI (Lower)", "data_type": "Number", "unit_label": "uM"},
+                {"id": 106, "name": "IC50calc CI (Upper)", "data_type": "Number", "unit_label": "uM"},
             ],
             "calculations": [
                 {
@@ -183,10 +183,17 @@ class TestMapCddProtocol:
             ],
         }
         result = map_cdd_protocol(cdd)
-        # Only the 2 user-defined readouts, not the 5 calculated ones
+        # 2 user-defined Number readouts + 1 synthesized DOSE_RESPONSE
         names = [r.name for r in result.readouts]
-        assert names == ["Concentration", "% Inhibition"]
-        assert len(result.readouts) == 2
+        assert names == ["Concentration", "% Inhibition", "IC50calc"]
+        assert len(result.readouts) == 3
+
+        dr = result.readouts[2]
+        assert dr.data_type == ReadoutDataType.DOSE_RESPONSE
+        assert dr.unit == "uM"
+        assert dr.dose_response_config is not None
+        assert dr.dose_response_config.x_readout_name == "Concentration"
+        assert dr.dose_response_config.y_readout_name == "% Inhibition"
 
     def test_description_and_category_from_protocol_fields(self):
         cdd = {

@@ -131,16 +131,90 @@ def _collect_calculated_readout_ids(calculations: list[dict[str, Any]]) -> set[i
     return ids
 
 
+def _build_dose_response_readouts(
+    calculations: list[dict[str, Any]],
+    rd_by_id: dict[int, dict[str, Any]],
+    start_order: int,
+) -> list[MappedReadout]:
+    """Synthesize DOSE_RESPONSE readouts from CDD dose-response calculations.
+
+    CDD represents dose-response curves as calculations (not readout data types).
+    Each dose-response calculation has:
+      - inputs: dose_readout_definition (X axis), response_readout_definition (Y axis)
+      - outputs: intercept_readout_definitions (primary IC50/EC50 value + CI bounds + stats)
+
+    We create one DOSE_RESPONSE readout per calculation, named after the primary
+    intercept output (user-defined name like "IC50calc"), with X/Y axis names
+    from the input readout definitions.
+    """
+    dr_readouts: list[MappedReadout] = []
+    order = start_order
+
+    for calc in calculations:
+        if calc.get("class") != "dose response calculation":
+            continue
+
+        inputs = calc.get("inputs", {})
+        outputs = calc.get("outputs", {})
+
+        # Resolve input readout names
+        dose_id = inputs.get("dose_readout_definition")
+        response_id = inputs.get("response_readout_definition")
+        dose_rd = rd_by_id.get(dose_id, {}) if dose_id else {}
+        response_rd = rd_by_id.get(response_id, {}) if response_id else {}
+
+        x_name = dose_rd.get("name", "Dose")
+        y_name = response_rd.get("name", "Response")
+
+        # Primary output name + unit from the intercept readout definition
+        intercept_defs = outputs.get("intercept_readout_definitions", [])
+        intercept_id: int | None = None
+        if intercept_defs and isinstance(intercept_defs[0], list) and intercept_defs[0]:
+            intercept_id = intercept_defs[0][0] if isinstance(intercept_defs[0][0], int) else None
+
+        intercept_rd = rd_by_id.get(intercept_id, {}) if intercept_id else {}
+        dr_name = intercept_rd.get("name", "Dose Response")
+        dr_unit = intercept_rd.get("unit_label")
+
+        dr_readouts.append(
+            MappedReadout(
+                name=dr_name,
+                data_type=ReadoutDataType.DOSE_RESPONSE,
+                unit=dr_unit,
+                aggregation=ReadoutAggregation.NONE,
+                normalization=ReadoutNormalization.NONE,
+                precision=None,
+                pick_list_values=None,
+                dose_response_config=DoseResponseConfig(
+                    curve_type=CurveType.IC50,
+                    x_readout_name=x_name,
+                    y_readout_name=y_name,
+                    hill_slope_constraint=HillSlopeConstraint.UNCONSTRAINED,
+                    normalization_scope=NormalizationScope.PER_PLATE,
+                ),
+                display_order=order,
+            )
+        )
+        order += 1
+
+    return dr_readouts
+
+
 def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
     """Map a single CDD protocol dict to a full mapping result with warnings."""
     warnings: list[MappingWarning] = []
     readouts: list[MappedReadout] = []
     conditions: list[MappedCondition] = []
 
+    calculations = cdd_protocol.get("calculations", [])
+
     # Collect IDs of auto-generated calculation outputs so we skip them
-    calculated_ids = _collect_calculated_readout_ids(
-        cdd_protocol.get("calculations", [])
-    )
+    calculated_ids = _collect_calculated_readout_ids(calculations)
+
+    # Build ID→readout lookup for resolving calculation input/output names
+    rd_by_id: dict[int, dict[str, Any]] = {
+        rd["id"]: rd for rd in cdd_protocol.get("readout_definitions", []) if "id" in rd
+    }
 
     # CDD readout_definitions includes both readouts and conditions.
     # Conditions have "protocol_condition": true.
@@ -219,6 +293,10 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
             )
         )
         readout_idx += 1
+
+    # Synthesize DOSE_RESPONSE readouts from dose-response calculations
+    dr_readouts = _build_dose_response_readouts(calculations, rd_by_id, readout_idx)
+    readouts.extend(dr_readouts)
 
     # CDD stores description and category in protocol_fields
     pf = cdd_protocol.get("protocol_fields") or {}
