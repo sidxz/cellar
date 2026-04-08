@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type {
   DerivePlateInput,
   MoleculePlateEntry,
@@ -13,14 +14,21 @@ import type {
 } from "../types/plates";
 
 const PLATES_KEY = ["plates"];
+const MOLECULES_KEY = ["molecules"];
 
+const plateHooks = createCrudHooks<RegisteredPlate, RegisterPlateInput, UpdatePlateInput>({
+  entityName: "Plate",
+  baseUrl: "/api/v1/plates",
+  queryKey: PLATES_KEY,
+});
+
+/** Custom list — supports optional filter params with undefined values. */
 export function usePlates(params?: {
   barcode?: string;
   plate_type?: string;
   status?: string;
   format?: string;
 }) {
-  // Build clean params object (omit undefined values)
   const cleanParams: Record<string, string> = {};
   if (params?.barcode) cleanParams.barcode = params.barcode;
   if (params?.plate_type) cleanParams.plate_type = params.plate_type;
@@ -38,49 +46,12 @@ export function usePlates(params?: {
   });
 }
 
-export function usePlate(id: string | undefined) {
-  return useQuery({
-    queryKey: [...PLATES_KEY, id],
-    queryFn: () =>
-      customInstance<RegisteredPlate>({
-        url: `/api/v1/plates/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
+export const usePlate = plateHooks.useGet;
+export const useRegisterPlate = plateHooks.useCreate;
+export const useUpdatePlate = plateHooks.useUpdate;
+export const useDeletePlate = plateHooks.useDelete;
 
-export function useRegisterPlate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: RegisterPlateInput) =>
-      customInstance<RegisteredPlate>({
-        url: "/api/v1/plates",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PLATES_KEY });
-      showSuccess("Plate registered");
-    },
-  });
-}
-
-export function useUpdatePlate(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdatePlateInput) =>
-      customInstance<RegisteredPlate>({
-        url: `/api/v1/plates/${id}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PLATES_KEY });
-      showSuccess("Plate updated");
-    },
-  });
-}
+// --- Custom hooks (non-standard URL patterns) ---
 
 export function useMapWells(id: string) {
   const qc = useQueryClient();
@@ -130,21 +101,6 @@ export function useDerivePlate(parentId: string) {
   });
 }
 
-export function useDeletePlate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `/api/v1/plates/${id}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PLATES_KEY });
-      showSuccess("Plate deleted");
-    },
-  });
-}
-
 export function usePlateChildren(parentId: string | undefined) {
   return useQuery({
     queryKey: [...PLATES_KEY, parentId, "children"],
@@ -156,8 +112,6 @@ export function usePlateChildren(parentId: string | undefined) {
     enabled: !!parentId,
   });
 }
-
-const MOLECULES_KEY = ["molecules"];
 
 export function useMoleculePlates(moleculeId: string | undefined) {
   return useQuery({

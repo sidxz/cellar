@@ -3,10 +3,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateSampleRequestInput, SampleRequest } from "../types/sample-request";
 
 const SAMPLE_REQUESTS_KEY = ["sample-requests"];
 
+const srHooks = createCrudHooks<SampleRequest, CreateSampleRequestInput, Record<string, unknown>>({
+  entityName: "Sample request",
+  baseUrl: "/api/v1/sample-requests",
+  queryKey: SAMPLE_REQUESTS_KEY,
+});
+
+/** Custom list — supports optional status filter. */
 export function useSampleRequests(status?: string) {
   return useQuery({
     queryKey: [...SAMPLE_REQUESTS_KEY, { status }],
@@ -19,33 +27,10 @@ export function useSampleRequests(status?: string) {
   });
 }
 
-export function useSampleRequest(id: string | undefined) {
-  return useQuery({
-    queryKey: [...SAMPLE_REQUESTS_KEY, id],
-    queryFn: () =>
-      customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
+export const useSampleRequest = srHooks.useGet;
+export const useCreateSampleRequest = srHooks.useCreate;
 
-export function useCreateSampleRequest() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateSampleRequestInput) =>
-      customInstance<SampleRequest>({
-        url: "/api/v1/sample-requests",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SAMPLE_REQUESTS_KEY });
-      showSuccess("Sample request created");
-    },
-  });
-}
+// --- State transitions (callers pass { id, ...payload } directly) ---
 
 export function useApproveSampleRequest() {
   const qc = useQueryClient();

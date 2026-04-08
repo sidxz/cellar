@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type {
   Collection,
   CreateCollectionInput,
@@ -11,6 +11,13 @@ import type {
 
 const COLLECTIONS_KEY = ["collections"];
 
+const collectionHooks = createCrudHooks<Collection, CreateCollectionInput, UpdateCollectionInput>({
+  entityName: "Collection",
+  baseUrl: "/api/v1/collections",
+  queryKey: COLLECTIONS_KEY,
+});
+
+/** Custom list — supports optional projectId filter. */
 export function useCollections(projectId?: string) {
   return useQuery({
     queryKey: projectId
@@ -25,61 +32,7 @@ export function useCollections(projectId?: string) {
   });
 }
 
-export function useCollection(id: string | undefined) {
-  return useQuery({
-    queryKey: [...COLLECTIONS_KEY, id],
-    queryFn: () =>
-      customInstance<Collection>({
-        url: `/api/v1/collections/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
-
-export function useCreateCollection() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateCollectionInput) =>
-      customInstance<Collection>({
-        url: "/api/v1/collections",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: COLLECTIONS_KEY });
-      showSuccess("Collection created");
-    },
-  });
-}
-
-export function useUpdateCollection(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateCollectionInput) =>
-      customInstance<Collection>({
-        url: `/api/v1/collections/${id}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: COLLECTIONS_KEY });
-      showSuccess("Collection updated");
-    },
-  });
-}
-
-export function useDeleteCollection() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `/api/v1/collections/${id}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: COLLECTIONS_KEY });
-      showSuccess("Collection deleted");
-    },
-  });
-}
+export const useCollection = collectionHooks.useGet;
+export const useCreateCollection = collectionHooks.useCreate;
+export const useUpdateCollection = collectionHooks.useUpdate;
+export const useDeleteCollection = collectionHooks.useDelete;

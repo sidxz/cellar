@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,22 +40,21 @@ export interface UpdateRegistrationFormInput {
 }
 
 // ---------------------------------------------------------------------------
-// Query keys
+// Hooks
 // ---------------------------------------------------------------------------
 
 const REGISTRATION_FORMS_KEY = ["registration-forms"];
 
-function buildQueryKey(appliesTo?: string) {
-  return [...REGISTRATION_FORMS_KEY, appliesTo ?? "all"];
-}
+const formHooks = createCrudHooks<RegistrationForm, CreateRegistrationFormInput, UpdateRegistrationFormInput>({
+  entityName: "Registration form",
+  baseUrl: "/api/v1/registration-forms",
+  queryKey: REGISTRATION_FORMS_KEY,
+});
 
-// ---------------------------------------------------------------------------
-// Hooks
-// ---------------------------------------------------------------------------
-
+/** Custom list hook — supports `appliesTo` filtering. */
 export function useRegistrationForms(appliesTo?: string) {
   return useQuery({
-    queryKey: buildQueryKey(appliesTo),
+    queryKey: [...REGISTRATION_FORMS_KEY, appliesTo ?? "all"],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (appliesTo) params.applies_to = appliesTo;
@@ -68,49 +67,6 @@ export function useRegistrationForms(appliesTo?: string) {
   });
 }
 
-export function useCreateRegistrationForm() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateRegistrationFormInput) =>
-      customInstance<RegistrationForm>({
-        url: "/api/v1/registration-forms",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: REGISTRATION_FORMS_KEY });
-      showSuccess("Registration form created");
-    },
-  });
-}
-
-export function useUpdateRegistrationForm(formId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateRegistrationFormInput) =>
-      customInstance<RegistrationForm>({
-        url: `/api/v1/registration-forms/${formId}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: REGISTRATION_FORMS_KEY });
-      showSuccess("Registration form updated");
-    },
-  });
-}
-
-export function useDeleteRegistrationForm() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (formId: string) =>
-      customInstance<void>({
-        url: `/api/v1/registration-forms/${formId}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: REGISTRATION_FORMS_KEY });
-      showSuccess("Registration form deleted");
-    },
-  });
-}
+export const useCreateRegistrationForm = formHooks.useCreate;
+export const useUpdateRegistrationForm = formHooks.useUpdate;
+export const useDeleteRegistrationForm = formHooks.useDelete;

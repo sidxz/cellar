@@ -1,78 +1,20 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "../types";
 
-const PROJECTS_KEY = ["projects"];
+const projectHooks = createCrudHooks<Project, CreateProjectInput, UpdateProjectInput>({
+  entityName: "Project",
+  baseUrl: "/api/v1/projects",
+  queryKey: ["projects"],
+});
 
-export function useProjects() {
-  return useQuery({
-    queryKey: PROJECTS_KEY,
-    queryFn: () =>
-      customInstance<Project[]>({
-        url: "/api/v1/projects",
-        method: "GET",
-      }),
-  });
-}
-
-export function useProject(id: string | undefined) {
-  return useQuery({
-    queryKey: [...PROJECTS_KEY, id],
-    queryFn: () =>
-      customInstance<Project>({
-        url: `/api/v1/projects/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
-
-export function useCreateProject() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateProjectInput) =>
-      customInstance<Project>({
-        url: "/api/v1/projects",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROJECTS_KEY });
-      showSuccess("Project created");
-    },
-  });
-}
-
-export function useUpdateProject(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateProjectInput) =>
-      customInstance<Project>({
-        url: `/api/v1/projects/${id}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROJECTS_KEY });
-      showSuccess("Project updated");
-    },
-  });
-}
+export const useProjects = projectHooks.useList;
+export const useProject = projectHooks.useGet;
+export const useCreateProject = projectHooks.useCreate;
+export const useUpdateProject = projectHooks.useUpdate;
 
 export function useArchiveProject() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<Project>({
-        url: `/api/v1/projects/${id}/archive`,
-        method: "POST",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROJECTS_KEY });
-      showSuccess("Project archived");
-    },
-  });
+  const action = projectHooks.useAction("archive", "Project archived");
+  return { ...action, mutate: (id: string, options?: Parameters<typeof action.mutate>[1]) => action.mutate({ id }, options) };
 }

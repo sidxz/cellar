@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 
 export interface SaltEntry {
   id: string;
@@ -32,6 +32,13 @@ export interface UpdateSaltEntryInput {
 
 const SALT_CATALOG_KEY = ["salt-catalog"];
 
+const saltHooks = createCrudHooks<SaltEntry, CreateSaltEntryInput, UpdateSaltEntryInput>({
+  entityName: "Salt entry",
+  baseUrl: "/api/v1/salt-catalog",
+  queryKey: SALT_CATALOG_KEY,
+});
+
+/** Custom list — supports activeOnly boolean flag. */
 export function useSaltCatalog(activeOnly = true) {
   return useQuery({
     queryKey: [...SALT_CATALOG_KEY, activeOnly],
@@ -44,49 +51,6 @@ export function useSaltCatalog(activeOnly = true) {
   });
 }
 
-export function useCreateSaltEntry() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateSaltEntryInput) =>
-      customInstance<SaltEntry>({
-        url: "/api/v1/salt-catalog",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SALT_CATALOG_KEY });
-      showSuccess("Salt entry created");
-    },
-  });
-}
-
-export function useUpdateSaltEntry(saltId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateSaltEntryInput) =>
-      customInstance<SaltEntry>({
-        url: `/api/v1/salt-catalog/${saltId}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SALT_CATALOG_KEY });
-      showSuccess("Salt entry updated");
-    },
-  });
-}
-
-export function useDeleteSaltEntry() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (saltId: string) =>
-      customInstance<void>({
-        url: `/api/v1/salt-catalog/${saltId}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SALT_CATALOG_KEY });
-      showSuccess("Salt entry deleted");
-    },
-  });
-}
+export const useCreateSaltEntry = saltHooks.useCreate;
+export const useUpdateSaltEntry = saltHooks.useUpdate;
+export const useDeleteSaltEntry = saltHooks.useDelete;

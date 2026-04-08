@@ -1,8 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 
 export interface OntologySlotDefinition {
   id: string;
@@ -35,62 +33,13 @@ export interface UpdateOntologySlotInput {
   display_order?: number;
 }
 
-const ONTOLOGY_SLOTS_KEY = ["ontology-slots"];
+const slotHooks = createCrudHooks<OntologySlotDefinition, CreateOntologySlotInput, UpdateOntologySlotInput>({
+  entityName: "Ontology slot",
+  baseUrl: "/api/v1/ontology-slots",
+  queryKey: ["ontology-slots"],
+});
 
-export function useOntologySlots() {
-  return useQuery({
-    queryKey: ONTOLOGY_SLOTS_KEY,
-    queryFn: () =>
-      customInstance<OntologySlotDefinition[]>({
-        url: "/api/v1/ontology-slots",
-        method: "GET",
-      }),
-  });
-}
-
-export function useCreateOntologySlot() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateOntologySlotInput) =>
-      customInstance<OntologySlotDefinition>({
-        url: "/api/v1/ontology-slots",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ONTOLOGY_SLOTS_KEY });
-      showSuccess("Ontology slot created");
-    },
-  });
-}
-
-export function useUpdateOntologySlot(slotId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateOntologySlotInput) =>
-      customInstance<OntologySlotDefinition>({
-        url: `/api/v1/ontology-slots/${slotId}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ONTOLOGY_SLOTS_KEY });
-      showSuccess("Ontology slot updated");
-    },
-  });
-}
-
-export function useDeleteOntologySlot() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (slotId: string) =>
-      customInstance<void>({
-        url: `/api/v1/ontology-slots/${slotId}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ONTOLOGY_SLOTS_KEY });
-      showSuccess("Ontology slot deleted");
-    },
-  });
-}
+export const useOntologySlots = slotHooks.useList;
+export const useCreateOntologySlot = slotHooks.useCreate;
+export const useUpdateOntologySlot = slotHooks.useUpdate;
+export const useDeleteOntologySlot = slotHooks.useDelete;

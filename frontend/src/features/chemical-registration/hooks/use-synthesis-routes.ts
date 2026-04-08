@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type {
   AddReactionStepInput,
   CreateSynthesisRouteInput,
@@ -13,6 +14,17 @@ import type {
 
 const SYNTHESIS_ROUTES_KEY = ["synthesis-routes"];
 
+const routeHooks = createCrudHooks<SynthesisRoute, CreateSynthesisRouteInput, Record<string, unknown>>({
+  entityName: "Synthesis route",
+  baseUrl: "/api/v1/synthesis-routes",
+  queryKey: SYNTHESIS_ROUTES_KEY,
+});
+
+export const useSynthesisRoute = routeHooks.useGet;
+export const useCreateSynthesisRoute = routeHooks.useCreate;
+export const useDeleteSynthesisRoute = routeHooks.useDelete;
+
+/** Custom list — filters by molecule_id, returns SynthesisRouteSummary[]. */
 export function useSynthesisRoutesByMolecule(moleculeId: string | undefined) {
   return useQuery({
     queryKey: [...SYNTHESIS_ROUTES_KEY, "molecule", moleculeId],
@@ -26,65 +38,7 @@ export function useSynthesisRoutesByMolecule(moleculeId: string | undefined) {
   });
 }
 
-export function useSynthesisRoute(id: string | undefined) {
-  return useQuery({
-    queryKey: [...SYNTHESIS_ROUTES_KEY, id],
-    queryFn: () =>
-      customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
-
-export function useCreateSynthesisRoute() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateSynthesisRouteInput) =>
-      customInstance<SynthesisRoute>({
-        url: "/api/v1/synthesis-routes",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
-      showSuccess("Synthesis route created");
-    },
-  });
-}
-
-export function useAddReactionStep(routeId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: AddReactionStepInput) =>
-      customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${routeId}/steps`,
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
-      showSuccess("Reaction step added");
-    },
-  });
-}
-
-export function useRecordStepOutcome(routeId: string, stepId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: RecordStepOutcomeInput) =>
-      customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${routeId}/steps/${stepId}/outcome`,
-        method: "PUT",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
-      showSuccess("Step outcome recorded");
-    },
-  });
-}
+// --- State transitions (callers pass plain id string) ---
 
 export function useValidateSynthesisRoute() {
   const qc = useQueryClient();
@@ -132,6 +86,8 @@ export function useDeprecateSynthesisRoute() {
   });
 }
 
+// --- Update (callers pass { id, ...data }) ---
+
 export function useUpdateSynthesisRoute() {
   const qc = useQueryClient();
   return useMutation({
@@ -156,17 +112,36 @@ export function useUpdateSynthesisRoute() {
   });
 }
 
-export function useDeleteSynthesisRoute() {
+// --- Reaction steps (nested under route) ---
+
+export function useAddReactionStep(routeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `/api/v1/synthesis-routes/${id}`,
-        method: "DELETE",
+    mutationFn: (data: AddReactionStepInput) =>
+      customInstance<SynthesisRoute>({
+        url: `/api/v1/synthesis-routes/${routeId}/steps`,
+        method: "POST",
+        data,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
-      showSuccess("Route deleted");
+      showSuccess("Reaction step added");
+    },
+  });
+}
+
+export function useRecordStepOutcome(routeId: string, stepId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: RecordStepOutcomeInput) =>
+      customInstance<SynthesisRoute>({
+        url: `/api/v1/synthesis-routes/${routeId}/steps/${stepId}/outcome`,
+        method: "PUT",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_ROUTES_KEY });
+      showSuccess("Step outcome recorded");
     },
   });
 }

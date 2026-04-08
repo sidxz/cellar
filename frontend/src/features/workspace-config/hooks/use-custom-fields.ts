@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 
 export interface CustomFieldDefinition {
   id: string;
@@ -44,16 +44,16 @@ export interface UpdateCustomFieldInput {
 
 const CUSTOM_FIELDS_KEY = ["custom-fields"];
 
-function buildQueryKey(appliesTo?: string, activeOnly?: boolean) {
-  return [...CUSTOM_FIELDS_KEY, appliesTo ?? "all", activeOnly ?? true];
-}
+const cfHooks = createCrudHooks<CustomFieldDefinition, CreateCustomFieldInput, UpdateCustomFieldInput>({
+  entityName: "Custom field",
+  baseUrl: "/api/v1/custom-fields",
+  queryKey: CUSTOM_FIELDS_KEY,
+});
 
-export function useCustomFields(
-  appliesTo?: string,
-  activeOnly?: boolean
-) {
+/** Custom list hook — supports `appliesTo` and `activeOnly` filtering. */
+export function useCustomFields(appliesTo?: string, activeOnly?: boolean) {
   return useQuery({
-    queryKey: buildQueryKey(appliesTo, activeOnly),
+    queryKey: [...CUSTOM_FIELDS_KEY, appliesTo ?? "all", activeOnly ?? true],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (appliesTo) params.applies_to = appliesTo;
@@ -67,49 +67,6 @@ export function useCustomFields(
   });
 }
 
-export function useCreateCustomField() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateCustomFieldInput) =>
-      customInstance<CustomFieldDefinition>({
-        url: "/api/v1/custom-fields",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CUSTOM_FIELDS_KEY });
-      showSuccess("Custom field created");
-    },
-  });
-}
-
-export function useUpdateCustomField(fieldId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateCustomFieldInput) =>
-      customInstance<CustomFieldDefinition>({
-        url: `/api/v1/custom-fields/${fieldId}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CUSTOM_FIELDS_KEY });
-      showSuccess("Custom field updated");
-    },
-  });
-}
-
-export function useDeleteCustomField() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (fieldId: string) =>
-      customInstance<void>({
-        url: `/api/v1/custom-fields/${fieldId}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CUSTOM_FIELDS_KEY });
-      showSuccess("Custom field deleted");
-    },
-  });
-}
+export const useCreateCustomField = cfHooks.useCreate;
+export const useUpdateCustomField = cfHooks.useUpdate;
+export const useDeleteCustomField = cfHooks.useDelete;

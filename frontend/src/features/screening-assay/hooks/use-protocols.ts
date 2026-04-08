@@ -3,10 +3,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateProtocolInput, Protocol } from "../types";
 
 const PROTOCOLS_KEY = ["protocols"];
 
+const protocolHooks = createCrudHooks<
+  Protocol,
+  CreateProtocolInput,
+  { name?: string; description?: string | null; target_id?: string | null; category?: string | null }
+>({
+  entityName: "Protocol",
+  baseUrl: "/api/v1/protocols",
+  queryKey: PROTOCOLS_KEY,
+});
+
+/** Custom list — supports optional projectId filter. */
 export function useProtocols(projectId?: string) {
   return useQuery({
     queryKey: projectId ? [...PROTOCOLS_KEY, { projectId }] : PROTOCOLS_KEY,
@@ -19,30 +31,12 @@ export function useProtocols(projectId?: string) {
   });
 }
 
-export function useProtocol(id: string | undefined) {
-  return useQuery({
-    queryKey: [...PROTOCOLS_KEY, id],
-    queryFn: () =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
+export const useProtocol = protocolHooks.useGet;
+export const useCreateProtocol = protocolHooks.useCreate;
+export const useUpdateProtocol = protocolHooks.useUpdate;
+export const useDeleteProtocol = protocolHooks.useDelete;
 
-export function useCreateProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateProtocolInput) =>
-      customInstance<Protocol>({
-        url: "/api/v1/protocols",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol created"); },
-  });
-}
+// --- State transitions (callers pass plain id string) ---
 
 export function usePublishProtocol() {
   const qc = useQueryClient();
@@ -81,30 +75,7 @@ export function useVersionProtocol() {
   });
 }
 
-export function useUpdateProtocol(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { name?: string; description?: string | null; target_id?: string | null; category?: string | null }) =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol updated"); },
-  });
-}
-
-export function useDeleteProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `/api/v1/protocols/${id}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol deleted"); },
-  });
-}
+// --- Readout definitions (nested under protocol) ---
 
 export function useAddReadoutDefinition(protocolId: string) {
   const qc = useQueryClient();
@@ -142,6 +113,8 @@ export function useRemoveReadoutDefinition(protocolId: string) {
   });
 }
 
+// --- Condition definitions (nested under protocol) ---
+
 export function useAddConditionDefinition(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -172,6 +145,8 @@ export function useRemoveConditionDefinition(protocolId: string) {
   });
 }
 
+// --- Control layouts (nested under protocol) ---
+
 export function useSetControlLayout(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -196,6 +171,8 @@ export function useRemoveControlLayout(protocolId: string) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Control layout removed"); },
   });
 }
+
+// --- Ontology annotations (nested under protocol) ---
 
 export interface OntologyAnnotationInput {
   slot: string;

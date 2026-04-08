@@ -3,10 +3,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateRunInput, Run } from "../types";
 
 const RUNS_KEY = ["runs"];
 
+const runHooks = createCrudHooks<Run, CreateRunInput, Record<string, unknown>>({
+  entityName: "Run",
+  baseUrl: "/api/v1/runs",
+  queryKey: RUNS_KEY,
+});
+
+export const useRun = runHooks.useGet;
+export const useCreateRun = runHooks.useCreate;
+
+/** Custom list — runs are nested under protocols. */
 export function useRunsByProtocol(protocolId: string | undefined) {
   return useQuery({
     queryKey: [...RUNS_KEY, "protocol", protocolId],
@@ -19,30 +30,7 @@ export function useRunsByProtocol(protocolId: string | undefined) {
   });
 }
 
-export function useRun(id: string | undefined) {
-  return useQuery({
-    queryKey: [...RUNS_KEY, id],
-    queryFn: () =>
-      customInstance<Run>({
-        url: `/api/v1/runs/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
-
-export function useCreateRun() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateRunInput) =>
-      customInstance<Run>({
-        url: "/api/v1/runs",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run created"); },
-  });
-}
+// --- State transitions ---
 
 export function useStartRun() {
   const qc = useQueryClient();

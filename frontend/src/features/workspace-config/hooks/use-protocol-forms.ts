@@ -1,8 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 
 export interface ProtocolForm {
   id: string;
@@ -36,62 +34,13 @@ export interface UpdateProtocolFormInput {
   ontology_defaults?: Array<Record<string, unknown>> | null;
 }
 
-const PROTOCOL_FORMS_KEY = ["protocol-forms"];
+const pfHooks = createCrudHooks<ProtocolForm, CreateProtocolFormInput, UpdateProtocolFormInput>({
+  entityName: "Protocol form",
+  baseUrl: "/api/v1/protocol-forms",
+  queryKey: ["protocol-forms"],
+});
 
-export function useProtocolForms() {
-  return useQuery({
-    queryKey: PROTOCOL_FORMS_KEY,
-    queryFn: () =>
-      customInstance<ProtocolForm[]>({
-        url: "/api/v1/protocol-forms",
-        method: "GET",
-      }),
-  });
-}
-
-export function useCreateProtocolForm() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateProtocolFormInput) =>
-      customInstance<ProtocolForm>({
-        url: "/api/v1/protocol-forms",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROTOCOL_FORMS_KEY });
-      showSuccess("Protocol form created");
-    },
-  });
-}
-
-export function useUpdateProtocolForm(formId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateProtocolFormInput) =>
-      customInstance<ProtocolForm>({
-        url: `/api/v1/protocol-forms/${formId}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROTOCOL_FORMS_KEY });
-      showSuccess("Protocol form updated");
-    },
-  });
-}
-
-export function useDeleteProtocolForm() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (formId: string) =>
-      customInstance<void>({
-        url: `/api/v1/protocol-forms/${formId}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROTOCOL_FORMS_KEY });
-      showSuccess("Protocol form deleted");
-    },
-  });
-}
+export const useProtocolForms = pfHooks.useList;
+export const useCreateProtocolForm = pfHooks.useCreate;
+export const useUpdateProtocolForm = pfHooks.useUpdate;
+export const useDeleteProtocolForm = pfHooks.useDelete;
