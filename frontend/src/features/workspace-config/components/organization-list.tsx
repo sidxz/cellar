@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Building2, Plus } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Table,
   TableBody,
@@ -34,13 +35,10 @@ export function OrganizationList() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Organizations</h1>
-          <p className="mt-1 text-muted-foreground">
-            Manage partner organizations, CROs, and vendors.
-          </p>
-        </div>
+      <PageHeader
+        title="Organizations"
+        subtitle="Manage partner organizations, CROs, and vendors."
+      >
         <Button
           onClick={() => {
             setEditing(null);
@@ -50,7 +48,7 @@ export function OrganizationList() {
           <Plus className="mr-2 h-4 w-4" />
           Add Organization
         </Button>
-      </div>
+      </PageHeader>
 
       {orgs && orgs.length > 0 ? (
         <div className="mt-6 rounded-md border">

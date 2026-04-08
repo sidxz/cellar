@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Card,
   CardContent,
@@ -295,13 +296,10 @@ export function ImportWizard() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Import Plate Data</h1>
-        <p className="mt-1 text-muted-foreground">
-          Import screening results (readout values) from plate reader exports. To map compounds to wells, use the &quot;Map Wells&quot; button on a plate&apos;s detail page instead.
-        </p>
-      </div>
+      <PageHeader
+        title="Import Plate Data"
+        subtitle='Import screening results (readout values) from plate reader exports. To map compounds to wells, use the "Map Wells" button on a plate&apos;s detail page instead.'
+      />
 
       <StepIndicator current={step} />
 

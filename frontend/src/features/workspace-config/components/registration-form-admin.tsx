@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -483,21 +484,15 @@ export function RegistrationFormAdmin() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Registration Forms
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Define registration form templates with custom field overrides for
-            molecule and batch registration.
-          </p>
-        </div>
+      <PageHeader
+        title="Registration Forms"
+        subtitle="Define registration form templates with custom field overrides for molecule and batch registration."
+      >
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Add Form
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="mt-6">
         {isLoading ? (

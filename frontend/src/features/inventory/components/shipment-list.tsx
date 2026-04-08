@@ -7,6 +7,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { OrgName } from "@/shared/components/entity-name";
 import {
   Select,
@@ -96,19 +97,15 @@ export function ShipmentListPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Shipments</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage outbound sample shipments and chain-of-custody.
-          </p>
-        </div>
+      <PageHeader
+        title="Shipments"
+        subtitle="Manage outbound sample shipments and chain-of-custody."
+      >
         <Button onClick={() => setCreateOpen(true)}>
           <Truck className="mr-2 h-4 w-4" />
           New Shipment
         </Button>
-      </div>
+      </PageHeader>
 
       {/* Status filter */}
       <div className="flex items-center gap-3">

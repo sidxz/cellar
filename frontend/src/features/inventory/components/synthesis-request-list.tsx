@@ -7,6 +7,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { MoleculeName } from "@/shared/components/entity-name";
 import {
   Select,
@@ -129,21 +130,15 @@ export function SynthesisRequestListPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Synthesis Requests
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Track and manage synthesis requests across the workspace.
-          </p>
-        </div>
+      <PageHeader
+        title="Synthesis Requests"
+        subtitle="Track and manage synthesis requests across the workspace."
+      >
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Request
         </Button>
-      </div>
+      </PageHeader>
 
       {/* Status filter */}
       <div className="flex items-center gap-3">

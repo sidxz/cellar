@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
+import { PageHeader } from "@/shared/components/page-header";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -97,11 +98,10 @@ export function WorkspaceSettingsForm() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight">Workspace Settings</h1>
-      <p className="mt-1 text-muted-foreground">
-        Configure registration rules, audit policies, and workspace-level
-        defaults.
-      </p>
+      <PageHeader
+        title="Workspace Settings"
+        subtitle="Configure registration rules, audit policies, and workspace-level defaults."
+      />
 
       <div className="mt-6 space-y-6">
         {/* General */}

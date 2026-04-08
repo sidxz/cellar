@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -597,19 +598,15 @@ export function ProtocolFormAdmin() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Protocol Forms</h1>
-          <p className="mt-1 text-muted-foreground">
-            Pre-configured protocol templates with readout definitions,
-            conditions, and ontology defaults.
-          </p>
-        </div>
+      <PageHeader
+        title="Protocol Forms"
+        subtitle="Pre-configured protocol templates with readout definitions, conditions, and ontology defaults."
+      >
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Add Form
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="mt-6">
         {isLoading ? (

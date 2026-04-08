@@ -9,6 +9,7 @@ import {
   TabsTrigger,
 } from "@/shared/components/ui/tabs";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import { BatchList } from "./batch-list";
 import { SampleList } from "./sample-list";
 import { StorageBrowser } from "./storage-browser";
@@ -30,12 +31,10 @@ export function InventoryDashboard() {
 
   return (
     <div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage batches, samples, and storage locations.
-        </p>
-      </div>
+      <PageHeader
+        title="Inventory"
+        subtitle="Manage batches, samples, and storage locations."
+      />
 
       <Tabs value={tab} onValueChange={setTab} className="mt-6">
         <TabsList>

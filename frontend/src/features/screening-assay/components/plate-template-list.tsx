@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Grid3x3, Plus, Trash2 } from "lucide-react";
 import type { ColDef } from "ag-grid-community";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,7 +91,12 @@ export function PlateTemplateListPage() {
   if (error) {
     return (
       <div>
-        <PageHeader onNew={() => setCreateOpen(true)} />
+        <PageHeader title="Plate Templates" subtitle="Manage plate layout templates for screening runs.">
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Plate Template
+          </Button>
+        </PageHeader>
         <ErrorState message="Failed to load plate templates. Is the backend running?" details={error.message} />
       </div>
     );
@@ -98,7 +104,12 @@ export function PlateTemplateListPage() {
 
   return (
     <div>
-      <PageHeader onNew={() => setCreateOpen(true)} />
+      <PageHeader title="Plate Templates" subtitle="Manage plate layout templates for screening runs.">
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Plate Template
+        </Button>
+      </PageHeader>
 
       <DataGrid<PlateTemplate>
         rowData={templates}
@@ -153,23 +164,6 @@ export function PlateTemplateListPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function PageHeader({ onNew }: { onNew: () => void }) {
-  return (
-    <div className="mb-6 flex items-center justify-between">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Plate Templates</h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage plate layout templates for screening runs.
-        </p>
-      </div>
-      <Button onClick={onNew}>
-        <Plus className="mr-2 h-4 w-4" />
-        New Plate Template
-      </Button>
     </div>
   );
 }

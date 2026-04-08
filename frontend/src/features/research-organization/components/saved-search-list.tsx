@@ -6,6 +6,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -138,12 +139,10 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
 export function SavedSearchListPage() {
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Saved Searches</h1>
-        <p className="mt-1 text-muted-foreground">
-          Reusable searches across compounds, assays, and inventory.
-        </p>
-      </div>
+      <PageHeader
+        title="Saved Searches"
+        subtitle="Reusable searches across compounds, assays, and inventory."
+      />
       <SavedSearchList />
     </div>
   );

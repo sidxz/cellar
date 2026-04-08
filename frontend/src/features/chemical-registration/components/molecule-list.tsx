@@ -8,6 +8,7 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useMolecules } from "../hooks/use-molecules";
 import { useSdfExport } from "../hooks/use-sdf-export";
@@ -176,28 +177,23 @@ export function MoleculeList() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Compounds</h1>
-          <p className="mt-1 text-muted-foreground">
-            Search, register, and manage chemical compounds.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleSdfExport} disabled={!molecules?.length}>
-            <Download className="h-4 w-4" />
-            Export SDF
-          </Button>
-          <Button variant="outline" onClick={() => setBulkOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Bulk Upload
-          </Button>
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Register Compound
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Compounds"
+        subtitle="Search, register, and manage chemical compounds."
+      >
+        <Button variant="outline" size="sm" onClick={handleSdfExport} disabled={!molecules?.length}>
+          <Download className="h-4 w-4" />
+          Export SDF
+        </Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}>
+          <Upload className="mr-2 h-4 w-4" />
+          Bulk Upload
+        </Button>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Register Compound
+        </Button>
+      </PageHeader>
 
       <div className="mt-4">
         <CompoundSearchBar />

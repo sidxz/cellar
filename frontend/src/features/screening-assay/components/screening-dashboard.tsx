@@ -10,6 +10,7 @@ import {
   TabsTrigger,
 } from "@/shared/components/ui/tabs";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import { ProtocolList } from "./protocol-list";
 import { TargetList } from "./target-list";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
@@ -27,12 +28,10 @@ export function ScreeningDashboard() {
 
   return (
     <div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Assays</h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage screening protocols and assay runs.
-        </p>
-      </div>
+      <PageHeader
+        title="Assays"
+        subtitle="Manage screening protocols and assay runs."
+      />
 
       <Tabs value={tab} onValueChange={setTab} className="mt-6">
         <div className="flex items-center justify-between">

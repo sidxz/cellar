@@ -7,6 +7,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -67,7 +68,12 @@ export function ProjectListPage() {
   if (error) {
     return (
       <div>
-        <PageHeader onNew={() => setCreateOpen(true)} />
+        <PageHeader title="Projects" subtitle="Organize research projects and collections.">
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
+        </PageHeader>
         <ErrorState message="Failed to load projects. Is the backend running?" details={error.message} />
       </div>
     );
@@ -75,7 +81,12 @@ export function ProjectListPage() {
 
   return (
     <div>
-      <PageHeader onNew={() => setCreateOpen(true)} />
+      <PageHeader title="Projects" subtitle="Organize research projects and collections.">
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Project
+        </Button>
+      </PageHeader>
 
       {/* Toolbar */}
       <div className="mb-4 flex items-center gap-3">
@@ -110,23 +121,6 @@ export function ProjectListPage() {
       />
 
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
-    </div>
-  );
-}
-
-function PageHeader({ onNew }: { onNew: () => void }) {
-  return (
-    <div className="mb-6 flex items-center justify-between">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-        <p className="mt-1 text-muted-foreground">
-          Organize research projects and collections.
-        </p>
-      </div>
-      <Button onClick={onNew}>
-        <Plus className="mr-2 h-4 w-4" />
-        New Project
-      </Button>
     </div>
   );
 }

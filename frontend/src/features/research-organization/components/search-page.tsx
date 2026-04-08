@@ -6,6 +6,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -364,13 +365,10 @@ export function SearchPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Compound Search</h1>
-        <p className="mt-1 text-muted-foreground">
-          Build compound queries with text, property, and structure criteria.
-        </p>
-      </div>
+      <PageHeader
+        title="Compound Search"
+        subtitle="Build compound queries with text, property, and structure criteria."
+      />
 
       {/* Saved search selector */}
       {savedSearches && savedSearches.length > 0 && (

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FlaskRound, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -369,31 +370,25 @@ export function SaltCatalogAdmin() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Salt Catalog</h1>
-          <p className="mt-1 text-muted-foreground">
-            Manage the salt forms used during structure standardization and
-            parent extraction.
-          </p>
+      <PageHeader
+        title="Salt Catalog"
+        subtitle="Manage the salt forms used during structure standardization and parent extraction."
+      >
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            id="show-all"
+            checked={showAll}
+            onCheckedChange={setShowAll}
+          />
+          <label htmlFor="show-all" className="cursor-pointer select-none">
+            Show inactive
+          </label>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Switch
-              id="show-all"
-              checked={showAll}
-              onCheckedChange={setShowAll}
-            />
-            <label htmlFor="show-all" className="cursor-pointer select-none">
-              Show inactive
-            </label>
-          </div>
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Salt
-          </Button>
-        </div>
-      </div>
+        <Button onClick={openCreate}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Salt
+        </Button>
+      </PageHeader>
 
       <div className="mt-6">
         {isLoading ? (

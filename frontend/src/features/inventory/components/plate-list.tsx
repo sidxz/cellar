@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, FlaskConical, Plus, Trash2 } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -155,7 +156,16 @@ export function PlateList() {
   if (error) {
     return (
       <div>
-        <PageHeader onNew={() => setRegisterOpen(true)} />
+        <PageHeader title="Plates" subtitle="Manage registered plates and well mappings.">
+          <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
+            <FileUp className="mr-2 h-4 w-4" />
+            Import Data
+          </Button>
+          <Button onClick={() => setRegisterOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Register Plate
+          </Button>
+        </PageHeader>
         <ErrorState message="Failed to load plates. Is the backend running?" details={error.message} />
       </div>
     );
@@ -163,7 +173,16 @@ export function PlateList() {
 
   return (
     <div>
-      <PageHeader onNew={() => setRegisterOpen(true)} />
+      <PageHeader title="Plates" subtitle="Manage registered plates and well mappings.">
+        <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
+          <FileUp className="mr-2 h-4 w-4" />
+          Import Data
+        </Button>
+        <Button onClick={() => setRegisterOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Register Plate
+        </Button>
+      </PageHeader>
 
       {/* Filter bar */}
       <div className="mb-4 flex flex-wrap gap-2">
@@ -264,30 +283,6 @@ export function PlateList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function PageHeader({ onNew }: { onNew: () => void }) {
-  const router = useRouter();
-  return (
-    <div className="mb-6 flex items-center justify-between">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Plates</h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage registered plates and well mappings.
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
-          <FileUp className="mr-2 h-4 w-4" />
-          Import Data
-        </Button>
-        <Button onClick={onNew}>
-          <Plus className="mr-2 h-4 w-4" />
-          Register Plate
-        </Button>
-      </div>
     </div>
   );
 }

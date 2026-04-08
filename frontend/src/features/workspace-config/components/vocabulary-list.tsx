@@ -4,6 +4,7 @@ import { useState } from "react";
 import { BookOpen, Lock, Plus, Trash2, Unlock } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Table,
   TableBody,
@@ -38,13 +39,10 @@ export function VocabularyList() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Controlled Vocabularies</h1>
-          <p className="mt-1 text-muted-foreground">
-            Manage standardized picklists for consistent data entry.
-          </p>
-        </div>
+      <PageHeader
+        title="Controlled Vocabularies"
+        subtitle="Manage standardized picklists for consistent data entry."
+      >
         <Button
           onClick={() => {
             setEditing(null);
@@ -54,7 +52,7 @@ export function VocabularyList() {
           <Plus className="mr-2 h-4 w-4" />
           Add Vocabulary
         </Button>
-      </div>
+      </PageHeader>
 
       {vocabs && vocabs.length > 0 ? (
         <div className="mt-6 rounded-md border">

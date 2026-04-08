@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ListFilter, Plus, Trash2, Pencil } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -507,18 +508,15 @@ export function CustomFieldAdmin() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Custom Fields</h1>
-          <p className="mt-1 text-muted-foreground">
-            Define additional data fields for molecules, batches, and samples.
-          </p>
-        </div>
+      <PageHeader
+        title="Custom Fields"
+        subtitle="Define additional data fields for molecules, batches, and samples."
+      >
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Add Custom Field
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="mt-6">
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)}>

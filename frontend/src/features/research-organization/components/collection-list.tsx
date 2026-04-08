@@ -7,6 +7,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName } from "@/shared/components/entity-name";
 import { useCollections } from "../hooks/use-collections";
@@ -138,12 +139,10 @@ export function CollectionList({ projectId }: CollectionListProps) {
 export function CollectionListPage() {
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Collections</h1>
-        <p className="mt-1 text-muted-foreground">
-          Curated sets of molecules for research and analysis.
-        </p>
-      </div>
+      <PageHeader
+        title="Collections"
+        subtitle="Curated sets of molecules for research and analysis."
+      />
       <CollectionList />
     </div>
   );
