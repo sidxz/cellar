@@ -39,12 +39,12 @@ class WorkspaceSettings(AggregateRoot):
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         self.registration_rules = registration_rules or {}
-        self.custom_field_definitions = custom_field_definitions or []
+        self.custom_field_definitions = custom_field_definitions if isinstance(custom_field_definitions, list) else []
         self.default_molecule_type = default_molecule_type
-        self.audit_reason_policy = audit_reason_policy
+        self.audit_reason_policy = audit_reason_policy if isinstance(audit_reason_policy, str) else None
         self.signature_required_for = signature_required_for or []
         self.audit_retention_days = audit_retention_days
-        self.formulation_number_scheme = formulation_number_scheme
+        self.formulation_number_scheme = formulation_number_scheme if isinstance(formulation_number_scheme, str) else None
         self.cdd_vault_id = cdd_vault_id
 
     @property
