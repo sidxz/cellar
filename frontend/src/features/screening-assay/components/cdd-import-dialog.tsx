@@ -213,7 +213,7 @@ export function CddImportDialog({
             )}
             {preview && (
               <>
-                {/* Fixed header: name + summary */}
+                {/* Fixed header: name + description + category + summary */}
                 <div className="shrink-0 space-y-3">
                   <div className="grid gap-1.5">
                     <Label>Protocol Name</Label>
@@ -223,6 +223,21 @@ export function CddImportDialog({
                       placeholder={preview.name}
                     />
                   </div>
+                  {(preview.description || preview.category) && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                      {preview.category && (
+                        <span>
+                          <span className="text-muted-foreground">Category:</span>{" "}
+                          <Badge variant="secondary">{preview.category}</Badge>
+                        </span>
+                      )}
+                      {preview.description && (
+                        <span className="text-muted-foreground">
+                          {preview.description}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span>
                       <span className="font-medium text-green-600">

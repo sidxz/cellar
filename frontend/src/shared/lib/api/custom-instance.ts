@@ -55,5 +55,9 @@ export const customInstance = async <T>({
     throw new Error(`API error: ${response.status}`);
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json() as Promise<T>;
 };

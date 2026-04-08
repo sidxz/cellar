@@ -37,6 +37,8 @@ export interface MappingWarning {
 
 export interface CddProtocolMappingResult {
   name: string;
+  description: string | null;
+  category: string | null;
   readouts: MappedReadout[];
   conditions: MappedCondition[];
   warnings: MappingWarning[];

@@ -91,6 +91,8 @@ class MappingWarningResponse(BaseModel):
 
 class CddProtocolMappingResultResponse(BaseModel):
     name: str
+    description: str | None = None
+    category: str | None = None
     readouts: list[MappedReadoutResponse]
     conditions: list[MappedConditionResponse]
     warnings: list[MappingWarningResponse]
@@ -100,6 +102,8 @@ class CddProtocolMappingResultResponse(BaseModel):
     def from_dto(cls, m: CddProtocolMappingResult) -> CddProtocolMappingResultResponse:
         return cls(
             name=m.name,
+            description=m.description,
+            category=m.category,
             readouts=[MappedReadoutResponse.from_dto(r) for r in m.readouts],
             conditions=[MappedConditionResponse.from_dto(c) for c in m.conditions],
             warnings=[MappingWarningResponse.from_dto(w) for w in m.warnings],

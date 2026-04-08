@@ -68,6 +68,8 @@ class MappedCondition:
 @dataclass(frozen=True)
 class CddProtocolMappingResult:
     name: str
+    description: str | None
+    category: str | None
     readouts: list[MappedReadout]
     conditions: list[MappedCondition]
     warnings: list[MappingWarning]
@@ -182,8 +184,15 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
         )
         readout_idx += 1
 
+    # CDD stores description and category in protocol_fields
+    pf = cdd_protocol.get("protocol_fields") or {}
+    description = pf.get("Description") or cdd_protocol.get("description")
+    category = pf.get("Category") or cdd_protocol.get("category")
+
     return CddProtocolMappingResult(
         name=cdd_protocol.get("name", f"CDD Protocol {cdd_protocol['id']}"),
+        description=description or None,
+        category=category or None,
         readouts=readouts,
         conditions=conditions,
         warnings=warnings,

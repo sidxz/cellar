@@ -119,10 +119,21 @@ class ImportCddProtocol:
                 for c in mapping.conditions
             ] or None
 
+            # Map CDD category to ProtocolType (case-insensitive)
+            protocol_type = ProtocolType.BIOCHEMICAL
+            if mapping.category:
+                cat_normalized = mapping.category.lower().replace(" ", "_").replace("-", "_")
+                try:
+                    protocol_type = ProtocolType(cat_normalized)
+                except ValueError:
+                    pass  # keep default BIOCHEMICAL
+
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
                 name=input.name_override or mapping.name,
-                protocol_type=ProtocolType.BIOCHEMICAL,
+                description=mapping.description,
+                protocol_type=protocol_type,
+                category=mapping.category,
                 created_by=auth.user_id,
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs,
