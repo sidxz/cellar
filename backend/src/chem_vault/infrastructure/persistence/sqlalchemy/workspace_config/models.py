@@ -154,6 +154,7 @@ class OntologySlotDefinitionModel(Base, EntityModelMixin, WorkspaceIdMixin, Vers
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
     ontology_sources: Mapped[list] = mapped_column(JSONB, nullable=False)
+    root_concept_id: Mapped[str | None] = mapped_column(String(500))
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     allow_free_text: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

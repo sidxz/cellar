@@ -14,14 +14,19 @@ export function useOntologySearch(
   query: string,
   ontologies: string[],
   enabled?: boolean,
+  subtreeRootId?: string | null,
 ) {
   return useQuery({
-    queryKey: ["ontology-search", query, ontologies],
+    queryKey: ["ontology-search", query, ontologies, subtreeRootId],
     queryFn: () =>
       customInstance<OntologyTerm[]>({
         url: "/api/v1/ontology/search",
         method: "GET",
-        params: { q: query, ontologies: ontologies.join(",") },
+        params: {
+          q: query,
+          ontologies: ontologies.join(","),
+          ...(subtreeRootId ? { subtree_root_id: subtreeRootId } : {}),
+        },
       }),
     enabled: enabled !== false && query.length >= 2,
   });

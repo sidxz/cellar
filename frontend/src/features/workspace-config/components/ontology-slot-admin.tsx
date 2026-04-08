@@ -47,6 +47,7 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
   const [name, setName] = useState("");
   const [label, setLabel] = useState("");
   const [ontologySources, setOntologySources] = useState("");
+  const [rootConceptId, setRootConceptId] = useState("");
   const [isRequired, setIsRequired] = useState(false);
   const [allowFreeText, setAllowFreeText] = useState(false);
   const [displayOrder, setDisplayOrder] = useState("0");
@@ -60,6 +61,7 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
       setName(editing.name);
       setLabel(editing.label);
       setOntologySources(editing.ontology_sources.join(", "));
+      setRootConceptId(editing.root_concept_id ?? "");
       setIsRequired(editing.is_required);
       setAllowFreeText(editing.allow_free_text);
       setDisplayOrder(String(editing.display_order));
@@ -67,6 +69,7 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
       setName("");
       setLabel("");
       setOntologySources("");
+      setRootConceptId("");
       setIsRequired(false);
       setAllowFreeText(false);
       setDisplayOrder("0");
@@ -84,6 +87,7 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
       const data: UpdateOntologySlotInput = {
         label: label.trim(),
         ontology_sources: sources,
+        root_concept_id: rootConceptId.trim() || null,
         is_required: isRequired,
         allow_free_text: allowFreeText,
         display_order: isNaN(order) ? 0 : order,
@@ -94,6 +98,7 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
         name: name.trim(),
         label: label.trim(),
         ontology_sources: sources,
+        root_concept_id: rootConceptId.trim() || null,
         is_required: isRequired,
         allow_free_text: allowFreeText,
         display_order: isNaN(order) ? 0 : order,
@@ -191,6 +196,19 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
             </div>
             <p className="text-xs text-muted-foreground">
               Select which ontologies to search for this slot.
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="slot-root-concept">Root Concept ID (optional)</Label>
+            <Input
+              id="slot-root-concept"
+              value={rootConceptId}
+              onChange={(e) => setRootConceptId(e.target.value)}
+              placeholder="e.g., http://www.bioassayontology.org/bao#BAO_0000008"
+            />
+            <p className="text-xs text-muted-foreground">
+              Constrain search to a subtree. Use the full URI from BioPortal.
             </p>
           </div>
 

@@ -415,6 +415,7 @@ export function CreateProtocolDialog({
                     </Label>
                     <OntologySearchInput
                       ontologySources={slot.ontology_sources}
+                      rootConceptId={slot.root_concept_id}
                       value={ontologyAnnotations[slot.name] ?? []}
                       onChange={(terms) =>
                         setOntologyAnnotations((prev) => ({

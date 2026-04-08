@@ -70,6 +70,7 @@ class OntologySlotResponse(BaseModel):
     name: str
     label: str
     ontology_sources: list[str]
+    root_concept_id: str | None = None
     is_required: bool
     allow_free_text: bool
     display_order: int
@@ -83,6 +84,7 @@ class OntologySlotResponse(BaseModel):
             name=slot.name,
             label=slot.label,
             ontology_sources=list(slot.ontology_sources),
+            root_concept_id=slot.root_concept_id,
             is_required=slot.is_required,
             allow_free_text=slot.allow_free_text,
             display_order=slot.display_order,
@@ -94,6 +96,7 @@ class CreateOntologySlotBody(BaseModel):
     name: str
     label: str
     ontology_sources: list[str]
+    root_concept_id: str | None = None
     is_required: bool = False
     allow_free_text: bool = True
     display_order: int = 0
@@ -102,6 +105,7 @@ class CreateOntologySlotBody(BaseModel):
 class UpdateOntologySlotBody(BaseModel):
     label: str | None = None
     ontology_sources: list[str] | None = None
+    root_concept_id: str | None = None
     is_required: bool | None = None
     allow_free_text: bool | None = None
     display_order: int | None = None
@@ -118,12 +122,14 @@ async def search_ontology(
     use_case: SearchOntologyDep,
     q: str = Query(..., min_length=1),
     ontologies: str = Query(default=""),
+    subtree_root_id: str | None = Query(default=None),
 ) -> list[OntologyTermResponse]:
     sources = [s.strip() for s in ontologies.split(",") if s.strip()] if ontologies else []
     query = SearchOntologyQuery(
         workspace_id=auth.workspace_id,
         query=q,
         ontology_sources=sources,
+        subtree_root_id=subtree_root_id,
     )
     terms = result_to_response(await use_case(query))
     return [OntologyTermResponse.from_domain(t) for t in terms]
@@ -155,6 +161,7 @@ async def create_ontology_slot(
         name=body.name,
         label=body.label,
         ontology_sources=body.ontology_sources,
+        root_concept_id=body.root_concept_id,
         is_required=body.is_required,
         allow_free_text=body.allow_free_text,
         display_order=body.display_order,
@@ -176,7 +183,7 @@ async def update_ontology_slot(
         "workspace_id": auth.workspace_id,
         "slot_id": slot_id,
     }
-    for attr in ("label", "ontology_sources", "is_required", "allow_free_text", "display_order"):
+    for attr in ("label", "ontology_sources", "root_concept_id", "is_required", "allow_free_text", "display_order"):
         cmd_fields[attr] = getattr(body, attr) if attr in body.model_fields_set else UNSET
 
     command = UpdateOntologySlotCommand(**cmd_fields)

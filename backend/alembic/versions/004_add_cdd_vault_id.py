@@ -19,6 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("workspace_settings", sa.Column("cdd_vault_id", sa.String(50), nullable=True))
+    op.add_column("ontology_slot_definitions", sa.Column("root_concept_id", sa.String(500), nullable=True))
 
     # Allow NULL for fields that are actually optional strings
     op.alter_column("workspace_settings", "audit_reason_policy", nullable=True)
@@ -36,4 +37,5 @@ def downgrade() -> None:
     op.alter_column("workspace_settings", "audit_reason_policy", nullable=False, server_default=sa.text("'{}'::json"))
     op.execute("UPDATE workspace_settings SET audit_reason_policy = '{}'::json WHERE audit_reason_policy IS NULL")
     op.execute("UPDATE workspace_settings SET formulation_number_scheme = '{}'::json WHERE formulation_number_scheme IS NULL")
+    op.drop_column("ontology_slot_definitions", "root_concept_id")
     op.drop_column("workspace_settings", "cdd_vault_id")

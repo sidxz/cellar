@@ -10,6 +10,7 @@ export interface OntologySlotDefinition {
   name: string;
   label: string;
   ontology_sources: string[];
+  root_concept_id: string | null;
   is_required: boolean;
   allow_free_text: boolean;
   display_order: number;
@@ -19,6 +20,7 @@ export interface CreateOntologySlotInput {
   name: string;
   label: string;
   ontology_sources: string[];
+  root_concept_id?: string | null;
   is_required?: boolean;
   allow_free_text?: boolean;
   display_order?: number;
@@ -27,6 +29,7 @@ export interface CreateOntologySlotInput {
 export interface UpdateOntologySlotInput {
   label?: string;
   ontology_sources?: string[];
+  root_concept_id?: string | null;
   is_required?: boolean;
   allow_free_text?: boolean;
   display_order?: number;

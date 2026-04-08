@@ -27,6 +27,7 @@ class SQLAlchemyOntologySlotDefinitionRepository(
             name=model.name,
             label=model.label,
             ontology_sources=list(model.ontology_sources),
+            root_concept_id=model.root_concept_id,
             is_required=model.is_required,
             allow_free_text=model.allow_free_text,
             display_order=model.display_order,
@@ -42,6 +43,7 @@ class SQLAlchemyOntologySlotDefinitionRepository(
             name=aggregate.name,
             label=aggregate.label,
             ontology_sources=list(aggregate.ontology_sources),
+            root_concept_id=aggregate.root_concept_id,
             is_required=aggregate.is_required,
             allow_free_text=aggregate.allow_free_text,
             display_order=aggregate.display_order,
@@ -51,6 +53,7 @@ class SQLAlchemyOntologySlotDefinitionRepository(
     def _update_model(self, model: OntologySlotDefinitionModel, aggregate: OntologySlotDefinition) -> None:
         model.label = aggregate.label
         model.ontology_sources = list(aggregate.ontology_sources)
+        model.root_concept_id = aggregate.root_concept_id
         model.is_required = aggregate.is_required
         model.allow_free_text = aggregate.allow_free_text
         model.display_order = aggregate.display_order

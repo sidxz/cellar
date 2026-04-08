@@ -22,6 +22,7 @@ class CreateOntologySlotCommand(Command):
     name: str
     label: str
     ontology_sources: list[str]
+    root_concept_id: str | None = None
     is_required: bool = False
     allow_free_text: bool = True
     display_order: int = 0
@@ -57,6 +58,7 @@ class CreateOntologySlot:
                 name=input.name,
                 label=input.label,
                 ontology_sources=input.ontology_sources,
+                root_concept_id=input.root_concept_id,
                 is_required=input.is_required,
                 allow_free_text=input.allow_free_text,
                 display_order=input.display_order,

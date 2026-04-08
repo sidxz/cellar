@@ -23,6 +23,7 @@ class UpdateOntologySlotCommand(Command):
     slot_id: uuid.UUID
     label: str | object = UNSET
     ontology_sources: list[str] | object = UNSET
+    root_concept_id: str | None | object = UNSET
     is_required: bool | object = UNSET
     allow_free_text: bool | object = UNSET
     display_order: int | object = UNSET
@@ -50,7 +51,7 @@ class UpdateOntologySlot:
                 return Failure(NotFoundError("OntologySlotDefinition", str(input.slot_id)))
 
             update_kwargs: dict = {}
-            for attr in ("label", "ontology_sources", "is_required", "allow_free_text", "display_order"):
+            for attr in ("label", "ontology_sources", "root_concept_id", "is_required", "allow_free_text", "display_order"):
                 val = getattr(input, attr)
                 if val is not UNSET:
                     update_kwargs[attr] = val

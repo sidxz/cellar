@@ -20,4 +20,5 @@ class OntologySearchService(Protocol):
         query: str,
         ontology_sources: list[str],
         page_size: int = 10,
+        subtree_root_id: str | None = None,
     ) -> list[OntologyTerm]: ...

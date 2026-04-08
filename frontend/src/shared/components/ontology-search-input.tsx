@@ -14,6 +14,7 @@ export type { OntologyTerm };
 
 export interface OntologySearchInputProps {
   ontologySources: string[];
+  rootConceptId?: string | null;
   value: OntologyTerm[];
   onChange: (terms: OntologyTerm[]) => void;
   allowFreeText?: boolean;
@@ -22,6 +23,7 @@ export interface OntologySearchInputProps {
 
 export function OntologySearchInput({
   ontologySources,
+  rootConceptId,
   value,
   onChange,
   allowFreeText = false,
@@ -42,6 +44,7 @@ export function OntologySearchInput({
     debouncedQuery,
     ontologySources,
     showDropdown,
+    rootConceptId,
   );
 
   // Close dropdown on outside click

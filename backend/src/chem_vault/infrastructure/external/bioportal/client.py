@@ -36,6 +36,7 @@ class BioPortalClient:
         query: str,
         ontology_sources: list[str],
         page_size: int = 10,
+        subtree_root_id: str | None = None,
         *,
         workspace_id: uuid.UUID | None = None,
     ) -> list[OntologyTerm]:
@@ -55,6 +56,8 @@ class BioPortalClient:
         }
         if ontology_sources:
             params["ontologies"] = ",".join(ontology_sources)
+        if subtree_root_id:
+            params["subtree_root_id"] = subtree_root_id
 
         headers = {"Authorization": f"apikey token={api_key}"}
 

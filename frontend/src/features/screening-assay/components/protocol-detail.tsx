@@ -330,6 +330,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     {status === "draft" ? (
                       <OntologySearchInput
                         ontologySources={slot.ontology_sources}
+                        rootConceptId={slot.root_concept_id}
                         value={currentTerms}
                         onChange={(terms) => {
                           if (terms.length === 0) {

@@ -18,6 +18,7 @@ class SearchOntologyQuery(Query):
     workspace_id: uuid.UUID
     query: str
     ontology_sources: list[str] = field(default_factory=list)
+    subtree_root_id: str | None = None
     page_size: int = 10
 
 
@@ -28,11 +29,11 @@ class SearchOntology:
     async def __call__(
         self, input: SearchOntologyQuery
     ) -> Result[list[OntologyTerm], DomainError]:
-        # BioPortalClient.search accepts workspace_id kwarg for key resolution
         results = await self._search_service.search(
             query=input.query,
             ontology_sources=input.ontology_sources,
             page_size=input.page_size,
+            subtree_root_id=input.subtree_root_id,
             workspace_id=input.workspace_id,  # type: ignore[call-arg]
         )
         return Success(results)

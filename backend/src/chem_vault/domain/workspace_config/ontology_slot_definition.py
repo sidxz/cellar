@@ -40,6 +40,7 @@ class OntologySlotDefinition(AggregateRoot):
         name: str,
         label: str,
         ontology_sources: list[str],
+        root_concept_id: str | None = None,
         is_required: bool = False,
         allow_free_text: bool = True,
         display_order: int = 0,
@@ -57,6 +58,7 @@ class OntologySlotDefinition(AggregateRoot):
         self.name = name
         self.label = label
         self.ontology_sources = ontology_sources
+        self.root_concept_id = root_concept_id
         self.is_required = is_required
         self.allow_free_text = allow_free_text
         self.display_order = display_order
@@ -73,6 +75,7 @@ class OntologySlotDefinition(AggregateRoot):
         name: str,
         label: str,
         ontology_sources: list[str],
+        root_concept_id: str | None = None,
         is_required: bool = False,
         allow_free_text: bool = True,
         display_order: int = 0,
@@ -91,6 +94,7 @@ class OntologySlotDefinition(AggregateRoot):
             name=name.strip(),
             label=label.strip(),
             ontology_sources=list(ontology_sources),
+            root_concept_id=root_concept_id.strip() if root_concept_id else None,
             is_required=is_required,
             allow_free_text=allow_free_text,
             display_order=display_order,
@@ -114,6 +118,7 @@ class OntologySlotDefinition(AggregateRoot):
         *,
         label: str | object = UNSET,
         ontology_sources: list[str] | object = UNSET,
+        root_concept_id: str | None | object = UNSET,
         is_required: bool | object = UNSET,
         allow_free_text: bool | object = UNSET,
         display_order: int | object = UNSET,
@@ -129,6 +134,8 @@ class OntologySlotDefinition(AggregateRoot):
             if not sources:
                 raise ValidationError("ontology_sources must have at least one entry")
             self.ontology_sources = sources
+        if root_concept_id is not UNSET:
+            self.root_concept_id = root_concept_id.strip() if isinstance(root_concept_id, str) and root_concept_id else None  # type: ignore[assignment]
         if is_required is not UNSET:
             self.is_required = bool(is_required)
         if allow_free_text is not UNSET:
