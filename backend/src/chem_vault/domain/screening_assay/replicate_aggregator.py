@@ -12,11 +12,9 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 
-from returns.result import Failure, Result, Success
-
 from chem_vault.domain.screening_assay.enums import ReadoutAggregation
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.shared.errors import DomainError, ValidationError
+from chem_vault.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -50,9 +48,10 @@ class ReplicateAggregator:
     ReadoutData entries with ``value is None`` are silently skipped.
 
     Returns:
-        ``Success(list[AggregatedValue])`` — one entry per group.
+        ``list[AggregatedValue]`` — one entry per group.
 
-        ``Failure(ValidationError)`` — when GEOMETRIC_MEAN is requested and any
+    Raises:
+        ``ValidationError`` — when GEOMETRIC_MEAN is requested and any
         value in a group is <= 0 (logarithm undefined for non-positive values).
     """
 
@@ -60,7 +59,7 @@ class ReplicateAggregator:
         self,
         readouts: list[ReadoutData],
         aggregation: ReadoutAggregation,
-    ) -> Result[list[AggregatedValue], DomainError]:
+    ) -> list[AggregatedValue]:
         """Aggregate replicate readouts using the specified strategy.
 
         Args:
@@ -68,10 +67,13 @@ class ReplicateAggregator:
             aggregation: Which aggregation method to apply.
 
         Returns:
-            Success with list of AggregatedValue, or Failure on domain error.
+            list of AggregatedValue.
+
+        Raises:
+            ValidationError: on domain error (e.g. non-positive values for GEOMETRIC_MEAN).
         """
         if aggregation == ReadoutAggregation.NONE:
-            return Success([])
+            return []
 
         # Group numeric values by (molecule_id, readout_definition_id)
         groups: dict[tuple[uuid.UUID, uuid.UUID], list[float]] = defaultdict(list)
@@ -86,19 +88,15 @@ class ReplicateAggregator:
             if not values:
                 continue
 
-            agg_result = self._apply(values, aggregation)
-            if isinstance(agg_result, Failure):
-                # Propagate failure with context about which group failed
-                err = agg_result.failure()
-                return Failure(
-                    ValidationError(
-                        f"GEOMETRIC_MEAN requires all values > 0 "
-                        f"(molecule_id={molecule_id}, "
-                        f"readout_definition_id={readout_definition_id}): {err.message}"
-                    )
-                )
+            try:
+                aggregated = self._apply(values, aggregation)
+            except ValidationError as exc:
+                raise ValidationError(
+                    f"GEOMETRIC_MEAN requires all values > 0 "
+                    f"(molecule_id={molecule_id}, "
+                    f"readout_definition_id={readout_definition_id}): {exc.message}"
+                ) from exc
 
-            aggregated = agg_result.unwrap()
             count = len(values)
             stdev = statistics.stdev(values) if count > 1 else None
 
@@ -112,7 +110,7 @@ class ReplicateAggregator:
                 )
             )
 
-        return Success(results)
+        return results
 
     # ------------------------------------------------------------------
     # Internal: strategy dispatch
@@ -122,31 +120,28 @@ class ReplicateAggregator:
     def _apply(
         values: list[float],
         aggregation: ReadoutAggregation,
-    ) -> Result[float, DomainError]:
+    ) -> float:
         """Apply a single aggregation strategy to a list of values."""
         if aggregation == ReadoutAggregation.MEAN:
-            return Success(statistics.mean(values))
+            return statistics.mean(values)
 
         if aggregation == ReadoutAggregation.MEDIAN:
-            return Success(statistics.median(values))
+            return statistics.median(values)
 
         if aggregation == ReadoutAggregation.GEOMETRIC_MEAN:
             non_positive = [v for v in values if v <= 0]
             if non_positive:
-                return Failure(
-                    ValidationError(
-                        f"GEOMETRIC_MEAN requires all values > 0; "
-                        f"found non-positive: {non_positive}"
-                    )
+                raise ValidationError(
+                    f"GEOMETRIC_MEAN requires all values > 0; "
+                    f"found non-positive: {non_positive}"
                 )
-            geo_mean = math.exp(statistics.mean(math.log(v) for v in values))
-            return Success(geo_mean)
+            return math.exp(statistics.mean(math.log(v) for v in values))
 
         if aggregation == ReadoutAggregation.MIN:
-            return Success(float(min(values)))
+            return float(min(values))
 
         if aggregation == ReadoutAggregation.MAX:
-            return Success(float(max(values)))
+            return float(max(values))
 
         # Defensive: unknown strategy — treat as MEAN
-        return Success(statistics.mean(values))
+        return statistics.mean(values)

@@ -11,6 +11,7 @@ from chem_vault.application.workspace_config.create_vocabulary import CreateVoca
 from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabularyCommand
 from chem_vault.application.workspace_config.list_vocabularies import ListVocabulariesQuery
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabularyCommand
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from chem_vault.interface.dependencies import (
     AuthDep,
@@ -90,11 +91,12 @@ async def update_vocabulary(
     auth: AuthDep,
     use_case: UpdateVocabularyDep,
 ) -> VocabularyResponse:
+    provided = body.model_fields_set
     command = UpdateVocabularyCommand(
         workspace_id=auth.workspace_id,
         vocab_id=vocab_id,
         name=body.name,
-        terms=body.terms,
+        terms=body.terms if "terms" in provided else UNSET,
         is_locked=body.is_locked,
     )
     vocab = result_to_response(await use_case(command, auth=auth))

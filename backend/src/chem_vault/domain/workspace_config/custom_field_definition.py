@@ -8,30 +8,18 @@ from datetime import datetime, timezone
 from typing import Any
 
 from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.events import DomainEvent
+from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.workspace_config.enums import FieldDataType, FieldTarget
+from chem_vault.domain.workspace_config.events import (
+    CustomFieldDefinitionCreated,
+    CustomFieldDefinitionDeactivated,
+    CustomFieldDefinitionUpdated,
+)
 
 __all__ = ["CustomFieldDefinition"]
 
 # Sentinel for "not provided" in update()
 UNSET = object()
-
-
-@dataclass(frozen=True)
-class CustomFieldDefinitionCreated(DomainEvent):
-    workspace_id: uuid.UUID
-    name: str
-    applies_to: str
-
-
-@dataclass(frozen=True)
-class CustomFieldDefinitionUpdated(DomainEvent):
-    workspace_id: uuid.UUID
-
-
-@dataclass(frozen=True)
-class CustomFieldDefinitionDeactivated(DomainEvent):
-    workspace_id: uuid.UUID
 
 
 class CustomFieldDefinition(AggregateRoot):
@@ -101,9 +89,9 @@ class CustomFieldDefinition(AggregateRoot):
     ) -> CustomFieldDefinition:
         """Create and validate a new CustomFieldDefinition."""
         if not name or not name.strip():
-            raise ValueError("name must not be empty")
+            raise ValidationError("name must not be empty")
         if not label or not label.strip():
-            raise ValueError("label must not be empty")
+            raise ValidationError("label must not be empty")
 
         cls._validate_picklist_config(data_type, pick_list_values, vocabulary_id)
 
@@ -143,12 +131,12 @@ class CustomFieldDefinition(AggregateRoot):
     ) -> None:
         if data_type != FieldDataType.PICKLIST:
             if pick_list_values or vocabulary_id:
-                raise ValueError(
+                raise ValidationError(
                     "pick_list_values/vocabulary_id only for picklist type"
                 )
             return
         if pick_list_values and vocabulary_id:
-            raise ValueError(
+            raise ValidationError(
                 "pick_list_values and vocabulary_id are mutually exclusive"
             )
 
@@ -169,7 +157,7 @@ class CustomFieldDefinition(AggregateRoot):
         """Partial update — only provided fields are changed."""
         if label is not UNSET:
             if not label or not str(label).strip():
-                raise ValueError("label must not be empty")
+                raise ValidationError("label must not be empty")
             self.label = str(label).strip()
         if is_required is not UNSET:
             self.is_required = bool(is_required)
@@ -183,6 +171,12 @@ class CustomFieldDefinition(AggregateRoot):
             )
         if vocabulary_id is not UNSET:
             self.vocabulary_id = vocabulary_id  # type: ignore[assignment]
+
+        # Re-validate picklist invariant if any picklist-related field changed
+        if pick_list_values is not UNSET or vocabulary_id is not UNSET:
+            self._validate_picklist_config(
+                self.data_type, self.pick_list_values, self.vocabulary_id
+            )
 
         self.updated_at = datetime.now(timezone.utc)
         self.register_event(

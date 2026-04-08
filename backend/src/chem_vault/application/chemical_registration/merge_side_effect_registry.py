@@ -10,15 +10,20 @@ from __future__ import annotations
 import uuid
 from typing import Protocol
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 class MergeSideEffectHandler(Protocol):
-    """Handler that relocates data from source to target molecule."""
+    """Handler that relocates data from source to target molecule.
+
+    Handlers receive the UnitOfWork so they can operate within the same
+    transaction as the merge. Infrastructure implementations extract the
+    session internally.
+    """
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None: ...
@@ -38,10 +43,10 @@ class MergeSideEffectRegistry:
 
     async def execute_all(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
         """Execute all registered handlers in order."""
         for handler in self._handlers:
-            await handler.on_merge(session, source_molecule_id, target_molecule_id)
+            await handler.on_merge(uow, source_molecule_id, target_molecule_id)

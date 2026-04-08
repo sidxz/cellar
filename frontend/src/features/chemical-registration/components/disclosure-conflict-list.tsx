@@ -6,6 +6,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { MoleculeName } from "@/shared/components/entity-name";
 import { useConflictDisclosures } from "../hooks/use-disclosures";
 import type { DisclosureRequest } from "../types/disclosure";
 import { ResolveConflictDialog } from "./resolve-conflict-dialog";
@@ -17,12 +18,12 @@ export function DisclosureConflictList() {
   const columnDefs = useMemo<ColDef<DisclosureRequest>[]>(
     () => [
       {
-        headerName: "Molecule ID",
+        headerName: "Compound",
         field: "molecule_id",
         flex: 1,
-        minWidth: 120,
-        cellClass: "font-mono text-xs",
-        valueFormatter: (p) => p.value?.slice(0, 8) ?? "",
+        minWidth: 160,
+        cellRenderer: (params: ICellRendererParams<DisclosureRequest>) =>
+          params.value ? <MoleculeName id={params.value} /> : "\u2014",
       },
       {
         headerName: "Disclosed SMILES",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from chem_vault.domain.inventory.enums import (
     VALID_PLATE_TRANSITIONS,
@@ -93,7 +94,7 @@ class RegisteredPlate(AggregateRoot):
         plate_type: PlateType,
         registered_by: uuid.UUID,
         status: PlateStatus = PlateStatus.REGISTERED,
-        well_map: dict | None = None,
+        well_map: dict[str, Any] | None = None,
         storage_location_id: uuid.UUID | None = None,
         parent_plate_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
@@ -115,7 +116,7 @@ class RegisteredPlate(AggregateRoot):
         self.plate_type = plate_type
         self.registered_by = registered_by
         self.status = status
-        self.well_map: dict = well_map if well_map is not None else {}
+        self.well_map: dict[str, Any] = well_map if well_map is not None else {}
         self.storage_location_id = storage_location_id
         self.parent_plate_id = parent_plate_id
         self.project_id = project_id
@@ -172,7 +173,7 @@ class RegisteredPlate(AggregateRoot):
     # Well mapping
     # ------------------------------------------------------------------
 
-    def map_wells(self, well_map: dict) -> None:
+    def map_wells(self, well_map: dict[str, Any]) -> None:
         """Assign batch/concentration data to individual wells.
 
         *well_map* is keyed by position string (e.g. "A1") and each value is a
@@ -294,9 +295,10 @@ class RegisteredPlate(AggregateRoot):
         format: PlateFormat | None = ...,  # type: ignore[assignment]
         plate_type: PlateType | None = None,
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        storage_location_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         template_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         notes: str | None = ...,  # type: ignore[assignment]
-        custom_fields: dict | None = ...,  # type: ignore[assignment]
+        custom_fields: dict[str, Any] | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields. Uses sentinel ``...`` for optional nullable fields."""
         if format is not ...:
@@ -314,6 +316,8 @@ class RegisteredPlate(AggregateRoot):
             self.plate_type = plate_type
         if project_id is not ...:
             self.project_id = project_id
+        if storage_location_id is not ...:
+            self.storage_location_id = storage_location_id
         if template_id is not ...:
             self.template_id = template_id
         if notes is not ...:

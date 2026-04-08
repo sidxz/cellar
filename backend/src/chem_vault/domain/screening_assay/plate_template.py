@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from chem_vault.domain.screening_assay.enums import PlateFormat
 from chem_vault.domain.shared.entity import Entity
@@ -29,7 +30,7 @@ class PlateTemplate(Entity):
         workspace_id: uuid.UUID,
         name: str,
         format: PlateFormat,
-        template_map: dict,
+        template_map: dict[str, Any],
         description: str | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
@@ -58,7 +59,7 @@ class PlateTemplate(Entity):
         workspace_id: uuid.UUID,
         name: str,
         format: PlateFormat,
-        template_map: dict,
+        template_map: dict[str, Any],
         description: str | None = None,
         created_by: uuid.UUID,
     ) -> PlateTemplate:
@@ -80,7 +81,7 @@ class PlateTemplate(Entity):
         *,
         name: str | None = None,
         format: PlateFormat | None = None,
-        template_map: dict | None = None,
+        template_map: dict[str, Any] | None = None,
         description: str | None = _UNSET,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields. Pass ``None`` for description to clear it."""

@@ -86,10 +86,11 @@ class SQLAlchemyCustomFieldDefinitionRepository(
             )
         stmt = stmt.order_by(CustomFieldDefinitionModel.display_order)
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(CustomFieldDefinitionModel).where(
-            CustomFieldDefinitionModel.id == id
+            CustomFieldDefinitionModel.workspace_id == workspace_id,
+            CustomFieldDefinitionModel.id == id,
         )
         await self._session.execute(stmt)

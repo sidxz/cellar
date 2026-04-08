@@ -9,6 +9,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 from chem_vault.domain.workspace_config.repository import (
@@ -29,10 +30,12 @@ class DeleteVocabulary:
         uow: UnitOfWork,
         repo: ControlledVocabularyRepository,
         settings_repo: WorkspaceSettingsRepository,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._settings_repo = settings_repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: DeleteVocabularyCommand, auth: AuthContext | None = None
@@ -40,8 +43,8 @@ class DeleteVocabulary:
         require_editor(auth)
 
         async with self._uow:
-            vocab = await self._repo.find_by_id(input.vocab_id)
-            if vocab is None or vocab.workspace_id != input.workspace_id:
+            vocab = await self._repo.find_by_id_in_workspace(input.workspace_id, input.vocab_id)
+            if vocab is None:
                 return Failure(NotFoundError("ControlledVocabulary", str(input.vocab_id)))
 
             if vocab.is_locked:
@@ -61,6 +64,7 @@ class DeleteVocabulary:
                             )
                         )
 
-            await self._repo.delete(input.vocab_id)
-            await self._uow.commit()
+            await self._repo.delete(input.workspace_id, input.vocab_id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(None)

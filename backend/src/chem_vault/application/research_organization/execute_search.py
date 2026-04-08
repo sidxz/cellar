@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from returns.result import Failure, Result, Success
@@ -60,8 +60,8 @@ class ExecuteSearch:
         async with self._uow:
             # Resolve query dict
             if input.saved_search_id is not None:
-                ss = await self._ss_repo.find_by_id(input.saved_search_id)
-                if ss is None or ss.workspace_id != input.workspace_id:
+                ss = await self._ss_repo.find_by_id_in_workspace(input.workspace_id, input.saved_search_id)
+                if ss is None:
                     return Failure(NotFoundError("SavedSearch", str(input.saved_search_id)))
                 query_dict = ss.query
             else:
@@ -95,7 +95,7 @@ class ExecuteSearch:
                 )
                 # Convert UUID keys to strings and ActivityValue to dicts for JSON
                 activity_data = {
-                    str(k): {ck: vars(v) for ck, v in cv.items()}
+                    str(k): {ck: asdict(v) for ck, v in cv.items()}
                     for k, cv in activity_data_raw.items()
                 }
 

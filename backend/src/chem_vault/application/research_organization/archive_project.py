@@ -40,8 +40,8 @@ class ArchiveProject:
         require_editor(auth)
 
         async with self._uow:
-            project = await self._repo.find_by_id(input.project_id)
-            if project is None or project.workspace_id != input.workspace_id:
+            project = await self._repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
+            if project is None:
                 return Failure(NotFoundError("Project", str(input.project_id)))
 
             project.archive(archived_by=input.archived_by)

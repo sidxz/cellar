@@ -97,18 +97,19 @@ class TestAuditRepositoryIntegration:
     async def test_find_by_entity(
         self, audit_repo: SQLAlchemyAuditRepository, db_session: AsyncSession
     ) -> None:
+        ws_id = uuid.uuid4()
         entity_id = uuid.uuid4()
 
-        op1 = _make_operation(entity_id=entity_id)
-        op2 = _make_operation(entity_id=entity_id)
-        op_other = _make_operation()  # different entity
+        op1 = _make_operation(workspace_id=ws_id, entity_id=entity_id)
+        op2 = _make_operation(workspace_id=ws_id, entity_id=entity_id)
+        op_other = _make_operation(workspace_id=ws_id)  # different entity
 
         await audit_repo.save(op1)
         await audit_repo.save(op2)
         await audit_repo.save(op_other)
         await db_session.flush()
 
-        results = await audit_repo.find_by_entity("molecule", entity_id)
+        results = await audit_repo.find_by_entity(ws_id, "molecule", entity_id)
         assert len(results) == 2
         result_ids = {r.id for r in results}
         assert op1.id in result_ids

@@ -26,6 +26,23 @@ class SQLAlchemyImportTemplateRepository:
         model = await self._uow.session.get(ImportTemplateModel, id)
         return self._to_domain(model) if model else None
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> ImportTemplate | None:
+        """Load by PK scoped to workspace."""
+        stmt = (
+            select(ImportTemplateModel)
+            .where(
+                ImportTemplateModel.id == id,
+                ImportTemplateModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._uow.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[ImportTemplate]:

@@ -76,35 +76,55 @@ class SQLAlchemyMergeEventRepository:
             return None
         return self._to_domain(model)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> MergeEvent | None:
+        """Load by PK scoped to workspace."""
+        stmt = (
+            select(MergeEventModel)
+            .where(
+                MergeEventModel.id == id,
+                MergeEventModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     async def find_by_source(
-        self, source_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID
     ) -> list[MergeEvent]:
         stmt = select(MergeEventModel).where(
+            MergeEventModel.workspace_id == workspace_id,
             MergeEventModel.source_molecule_id == source_molecule_id,
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
 
     async def find_by_target(
-        self, target_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, target_molecule_id: uuid.UUID
     ) -> list[MergeEvent]:
         stmt = select(MergeEventModel).where(
+            MergeEventModel.workspace_id == workspace_id,
             MergeEventModel.target_molecule_id == target_molecule_id,
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
 
     async def find_by_molecule(
-        self, molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[MergeEvent]:
         """Return merge events where the molecule is either source or target."""
         stmt = (
             select(MergeEventModel)
             .where(
+                MergeEventModel.workspace_id == workspace_id,
                 sa.or_(
                     MergeEventModel.source_molecule_id == molecule_id,
                     MergeEventModel.target_molecule_id == molecule_id,
-                )
+                ),
             )
             .order_by(MergeEventModel.merged_at.desc())
         )

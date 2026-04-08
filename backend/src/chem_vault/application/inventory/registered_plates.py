@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -11,6 +12,7 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.enums import PlateStatus, PlateType
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
@@ -23,9 +25,6 @@ from chem_vault.domain.shared.value_objects import Barcode
 # Commands
 # ---------------------------------------------------------------------------
 
-_SENTINEL = object()  # unique sentinel distinct from None and ...
-
-
 @dataclass(frozen=True, kw_only=True)
 class RegisterPlateCommand(Command):
     workspace_id: uuid.UUID
@@ -34,7 +33,7 @@ class RegisterPlateCommand(Command):
     format: str
     plate_type: str
     registered_by: uuid.UUID
-    well_map: dict | None = None
+    well_map: dict[str, Any] | None = None
     storage_location_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     template_id: uuid.UUID | None = None
@@ -48,17 +47,16 @@ class UpdatePlateCommand(Command):
     plate_id: uuid.UUID
     plate_label: str | None = None
     plate_type: str | None = None
-    # Sentinel-style optional nullable fields — default to ... to signal "not provided"
-    notes: str | None = ...  # type: ignore[assignment]
-    project_id: uuid.UUID | None = ...  # type: ignore[assignment]
-    storage_location_id: uuid.UUID | None = ...  # type: ignore[assignment]
+    notes: str | None | object = UNSET
+    project_id: uuid.UUID | None | object = UNSET
+    storage_location_id: uuid.UUID | None | object = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)
 class MapWellsCommand(Command):
     workspace_id: uuid.UUID
     plate_id: uuid.UUID
-    well_map: dict
+    well_map: dict[str, Any]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -122,7 +120,7 @@ class ListChildrenQuery(Query):
 
 
 def _not_found(plate_id: uuid.UUID) -> Failure:
-    return Failure(NotFoundError(f"RegisteredPlate {plate_id}"))
+    return Failure(NotFoundError("RegisteredPlate", str(plate_id)))
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +184,10 @@ class GetPlate:
         self, input: GetPlateQuery, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         async with self._uow:
-            plate = await self._repo.find_by_id(input.plate_id)
+            plate = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.plate_id
+            )
             if plate is None:
-                return _not_found(input.plate_id)
-            if plate.workspace_id != input.workspace_id:
                 return _not_found(input.plate_id)
             return Success(plate)
 
@@ -237,19 +235,24 @@ class UpdatePlate:
         require_editor(auth)
 
         async with self._uow:
-            plate = await self._repo.find_by_id(input.plate_id)
-            if plate is None or plate.workspace_id != input.workspace_id:
+            plate = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.plate_id
+            )
+            if plate is None:
                 return _not_found(input.plate_id)
 
             # Build kwargs — only include fields that were explicitly provided
-            kwargs: dict = {}
+            kwargs: dict[str, Any] = {}
             if input.plate_label is not None:
                 kwargs["plate_label"] = input.plate_label
             if input.plate_type is not None:
                 kwargs["plate_type"] = PlateType(input.plate_type)
-            # Sentinel-style: include if not the default ellipsis
-            if input.notes is not ...:
+            if input.notes is not UNSET:
                 kwargs["notes"] = input.notes
+            if input.project_id is not UNSET:
+                kwargs["project_id"] = input.project_id
+            if input.storage_location_id is not UNSET:
+                kwargs["storage_location_id"] = input.storage_location_id
 
             plate.update(**kwargs)
 
@@ -280,8 +283,10 @@ class MapWells:
         require_editor(auth)
 
         async with self._uow:
-            plate = await self._repo.find_by_id(input.plate_id)
-            if plate is None or plate.workspace_id != input.workspace_id:
+            plate = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.plate_id
+            )
+            if plate is None:
                 return _not_found(input.plate_id)
 
             # Validate and resolve batch references (accept UUID or batch number)
@@ -297,7 +302,9 @@ class MapWells:
                 # Try as UUID first
                 try:
                     bid = uuid.UUID(raw)
-                    batch = await self._batch_repo.find_by_id(bid)
+                    batch = await self._batch_repo.find_by_id_in_workspace(
+                        input.workspace_id, bid
+                    )
                 except ValueError:
                     # Not a UUID — resolve as batch number
                     batch = await self._batch_repo.find_by_batch_number(
@@ -335,8 +342,10 @@ class ChangeStatus:
         require_editor(auth)
 
         async with self._uow:
-            plate = await self._repo.find_by_id(input.plate_id)
-            if plate is None or plate.workspace_id != input.workspace_id:
+            plate = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.plate_id
+            )
+            if plate is None:
                 return _not_found(input.plate_id)
 
             plate.transition_status(PlateStatus(input.new_status))
@@ -366,9 +375,11 @@ class DerivePlate:
         require_editor(auth)
 
         async with self._uow:
-            parent = await self._repo.find_by_id(input.parent_plate_id)
-            if parent is None or parent.workspace_id != input.workspace_id:
-                return Failure(NotFoundError(f"RegisteredPlate {input.parent_plate_id}"))
+            parent = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.parent_plate_id
+            )
+            if parent is None:
+                return Failure(NotFoundError("RegisteredPlate", str(input.parent_plate_id)))
 
             # Barcode uniqueness check for child
             existing = await self._repo.find_by_barcode(input.workspace_id, input.barcode)
@@ -392,9 +403,15 @@ class DerivePlate:
 class DeletePlate:
     """Delete a registered plate if it has no child plates."""
 
-    def __init__(self, uow: UnitOfWork, repo: RegisteredPlateRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: RegisteredPlateRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: DeletePlateCommand, auth: AuthContext | None = None
@@ -402,11 +419,13 @@ class DeletePlate:
         require_editor(auth)
 
         async with self._uow:
-            plate = await self._repo.find_by_id(input.plate_id)
-            if plate is None or plate.workspace_id != input.workspace_id:
+            plate = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.plate_id
+            )
+            if plate is None:
                 return _not_found(input.plate_id)
 
-            children = await self._repo.find_children(input.plate_id)
+            children = await self._repo.find_children(input.workspace_id, input.plate_id)
             if children:
                 return Failure(
                     ConflictError(
@@ -415,7 +434,8 @@ class DeletePlate:
                 )
 
             await self._repo.delete(input.workspace_id, input.plate_id)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(None)
 
 
@@ -430,5 +450,5 @@ class ListChildren:
         self, input: ListChildrenQuery, auth: AuthContext | None = None
     ) -> Result[list[RegisteredPlate], DomainError]:
         async with self._uow:
-            children = await self._repo.find_children(input.parent_plate_id)
+            children = await self._repo.find_children(input.workspace_id, input.parent_plate_id)
             return Success(children)

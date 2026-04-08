@@ -28,16 +28,14 @@ from chem_vault.application.workspace_config.update_salt_entry import (
 from chem_vault.domain.workspace_config.salt_entry import SaltEntry
 from chem_vault.interface.dependencies import (
     AuthDep,
-    _get_use_case,
+    CreateSaltEntryDep,
+    DeleteSaltEntryDep,
+    ListSaltEntriesDep,
+    UpdateSaltEntryDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/salt-catalog", tags=["salt-catalog"])
-
-CreateSaltEntryDep = Annotated[CreateSaltEntry, Depends(_get_use_case(CreateSaltEntry))]
-ListSaltEntriesDep = Annotated[ListSaltEntries, Depends(_get_use_case(ListSaltEntries))]
-UpdateSaltEntryDep = Annotated[UpdateSaltEntry, Depends(_get_use_case(UpdateSaltEntry))]
-DeleteSaltEntryDep = Annotated[DeleteSaltEntry, Depends(_get_use_case(DeleteSaltEntry))]
 
 
 class SaltEntryResponse(BaseModel):

@@ -15,6 +15,11 @@ from chem_vault.domain.shared.errors import ValidationError
 
 
 @pytest.fixture
+def ws_id() -> uuid.UUID:
+    return uuid.uuid4()
+
+
+@pytest.fixture
 def source_id() -> uuid.UUID:
     return uuid.uuid4()
 
@@ -44,12 +49,14 @@ class TestMergeEventCreate:
 
     def test_create(
         self,
+        ws_id: uuid.UUID,
         source_id: uuid.UUID,
         target_id: uuid.UUID,
         user_id: uuid.UUID,
         snapshot: dict,
     ) -> None:
         event = MergeEvent.create(
+            workspace_id=ws_id,
             source_molecule_id=source_id,
             target_molecule_id=target_id,
             reason=MergeReason.MANUAL_MERGE,
@@ -68,6 +75,7 @@ class TestMergeEventCreate:
 
     def test_create_with_disclosure_ref(
         self,
+        ws_id: uuid.UUID,
         source_id: uuid.UUID,
         target_id: uuid.UUID,
         user_id: uuid.UUID,
@@ -75,6 +83,7 @@ class TestMergeEventCreate:
     ) -> None:
         disc_id = uuid.uuid4()
         event = MergeEvent.create(
+            workspace_id=ws_id,
             source_molecule_id=source_id,
             target_molecule_id=target_id,
             reason=MergeReason.DISCLOSURE_RESOLVED,
@@ -90,12 +99,14 @@ class TestMergeEventCreate:
 
     def test_self_merge_raises(
         self,
+        ws_id: uuid.UUID,
         user_id: uuid.UUID,
         snapshot: dict,
     ) -> None:
         same_id = uuid.uuid4()
         with pytest.raises(ValidationError, match="cannot merge into itself"):
             MergeEvent.create(
+                workspace_id=ws_id,
                 source_molecule_id=same_id,
                 target_molecule_id=same_id,
                 reason=MergeReason.DUPLICATE_CLEANUP,
@@ -105,11 +116,13 @@ class TestMergeEventCreate:
 
     def test_empty_snapshot_ok(
         self,
+        ws_id: uuid.UUID,
         source_id: uuid.UUID,
         target_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> None:
         event = MergeEvent.create(
+            workspace_id=ws_id,
             source_molecule_id=source_id,
             target_molecule_id=target_id,
             reason=MergeReason.STRUCTURE_CORRECTION,
@@ -121,12 +134,14 @@ class TestMergeEventCreate:
 
     def test_has_expected_attributes(
         self,
+        ws_id: uuid.UUID,
         source_id: uuid.UUID,
         target_id: uuid.UUID,
         user_id: uuid.UUID,
         snapshot: dict,
     ) -> None:
         event = MergeEvent.create(
+            workspace_id=ws_id,
             source_molecule_id=source_id,
             target_molecule_id=target_id,
             reason=MergeReason.MANUAL_MERGE,

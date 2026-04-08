@@ -48,8 +48,8 @@ class UpdateCustomField:
         require_editor(auth)
 
         async with self._uow:
-            cfd = await self._repo.find_by_id(input.field_id)
-            if cfd is None or cfd.workspace_id != input.workspace_id:
+            cfd = await self._repo.find_by_id_in_workspace(input.workspace_id, input.field_id)
+            if cfd is None:
                 return Failure(NotFoundError("CustomFieldDefinition", str(input.field_id)))
 
             # Build kwargs for update() from non-UNSET fields

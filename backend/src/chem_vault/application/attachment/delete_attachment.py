@@ -2,25 +2,26 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import require_editor
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.attachment.repository import AttachmentRepository
 from chem_vault.domain.attachment.storage import StorageClient
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteAttachmentCommand(Command):
+    workspace_id: uuid.UUID
     attachment_id: uuid.UUID
 
 
@@ -30,7 +31,7 @@ class DeleteAttachment:
         uow: UnitOfWork,
         repo: AttachmentRepository,
         storage: StorageClient,
-        dispatcher: EventDispatcher,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -38,12 +39,14 @@ class DeleteAttachment:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: DeleteAttachmentCommand, auth: object | None = None
+        self, input: DeleteAttachmentCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required for attachment operations"))
         require_editor(auth)
 
         async with self._uow:
-            attachment = await self._repo.find_by_id(input.attachment_id)
+            attachment = await self._repo.find_by_id_in_workspace(input.workspace_id, input.attachment_id)
             if attachment is None:
                 return Failure(
                     NotFoundError("Attachment", str(input.attachment_id))
@@ -51,10 +54,8 @@ class DeleteAttachment:
 
             try:
                 await self._storage.delete(attachment.storage_key)
-            except Exception:
-                logger.warning(
-                    "Failed to delete blob %s", attachment.storage_key, exc_info=True
-                )
+            except OSError:
+                logger.warning("Failed to delete blob %s", attachment.storage_key, exc_info=True)
 
             attachment.delete()
             await self._repo.delete(attachment)

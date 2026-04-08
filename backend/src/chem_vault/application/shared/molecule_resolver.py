@@ -98,8 +98,8 @@ class MoleculeResolver:
         except ValueError:
             return UnresolvedMolecule(ref=ref, reason="invalid")
 
-        mol = await self._molecule_repo.find_by_id(mol_id)
-        if mol is None or mol.workspace_id != workspace_id:
+        mol = await self._molecule_repo.find_by_id_in_workspace(workspace_id, mol_id)
+        if mol is None:
             return UnresolvedMolecule(ref=ref, reason="not_found")
         if mol.is_tombstone:
             return UnresolvedMolecule(ref=ref, reason="tombstone")

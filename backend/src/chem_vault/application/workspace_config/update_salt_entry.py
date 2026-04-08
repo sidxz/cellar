@@ -45,8 +45,8 @@ class UpdateSaltEntry:
         require_editor(auth)
 
         async with self._uow:
-            entry = await self._repo.find_by_id(input.entry_id)
-            if entry is None or entry.workspace_id != input.workspace_id:
+            entry = await self._repo.find_by_id_in_workspace(input.workspace_id, input.entry_id)
+            if entry is None:
                 return Failure(NotFoundError("SaltEntry", str(input.entry_id)))
 
             # Build kwargs for update() from non-UNSET fields

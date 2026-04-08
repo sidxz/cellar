@@ -21,6 +21,9 @@ class BatchRepository(Protocol):
     """Repository for Batch aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> Batch | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Batch | None: ...
     async def find_by_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[Batch]: ...
@@ -38,6 +41,9 @@ class SampleRepository(Protocol):
     """Repository for Sample aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> Sample | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Sample | None: ...
     async def find_by_batch(
         self, workspace_id: uuid.UUID, batch_id: uuid.UUID
     ) -> list[Sample]: ...
@@ -56,6 +62,9 @@ class StorageLocationRepository(Protocol):
     """Repository for StorageLocation entities."""
 
     async def find_by_id(self, id: uuid.UUID) -> StorageLocation | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> StorageLocation | None: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[StorageLocation]: ...
@@ -71,6 +80,9 @@ class SampleRequestRepository(Protocol):
     """Repository for SampleRequest aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> SampleRequest | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> SampleRequest | None: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[SampleRequest]: ...
@@ -82,6 +94,9 @@ class ShipmentRepository(Protocol):
     """Repository for Shipment aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> Shipment | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Shipment | None: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[Shipment]: ...
@@ -94,6 +109,9 @@ class SynthesisRequestRepository(Protocol):
     """Repository for SynthesisRequest aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> SynthesisRequest | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> SynthesisRequest | None: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[SynthesisRequest]: ...
@@ -109,17 +127,20 @@ class RegisteredPlateRepository(Protocol):
     """Repository for RegisteredPlate aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> RegisteredPlate | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> RegisteredPlate | None: ...
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None: ...
     async def find_by_location(
-        self, storage_location_id: uuid.UUID
+        self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
     ) -> list[RegisteredPlate]: ...
     async def find_children(
-        self, parent_plate_id: uuid.UUID
+        self, workspace_id: uuid.UUID, parent_plate_id: uuid.UUID
     ) -> list[RegisteredPlate]: ...
     async def find_by_project(
-        self, project_id: uuid.UUID
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
     ) -> list[RegisteredPlate]: ...
     async def search(
         self,
@@ -142,6 +163,9 @@ class ImportTemplateRepository(Protocol):
     """Repository for ImportTemplate entities."""
 
     async def find_by_id(self, id: uuid.UUID) -> ImportTemplate | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> ImportTemplate | None: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[ImportTemplate]: ...

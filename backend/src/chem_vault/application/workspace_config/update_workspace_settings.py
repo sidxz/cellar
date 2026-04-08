@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Result, Success
 
@@ -20,13 +21,13 @@ from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSetti
 @dataclass(frozen=True, kw_only=True)
 class UpdateWorkspaceSettingsCommand(Command):
     workspace_id: uuid.UUID
-    registration_rules: dict | object = UNSET
-    custom_field_definitions: dict | object = UNSET
+    registration_rules: dict[str, Any] | object = UNSET
+    custom_field_definitions: dict[str, Any] | object = UNSET
     default_molecule_type: str | None | object = UNSET
-    audit_reason_policy: dict | object = UNSET
+    audit_reason_policy: dict[str, Any] | object = UNSET
     signature_required_for: list[str] | object = UNSET
     audit_retention_days: int | None | object = UNSET
-    formulation_number_scheme: dict | object = UNSET
+    formulation_number_scheme: dict[str, Any] | object = UNSET
 
 
 class UpdateWorkspaceSettings:
@@ -51,7 +52,7 @@ class UpdateWorkspaceSettings:
                 settings = WorkspaceSettings.create_default(workspace_id=input.workspace_id)
 
             # Build kwargs — only include fields that were provided
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             for key in (
                 "registration_rules", "custom_field_definitions", "default_molecule_type",
                 "audit_reason_policy", "signature_required_for", "audit_retention_days",

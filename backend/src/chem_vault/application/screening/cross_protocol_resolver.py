@@ -19,6 +19,7 @@ import uuid
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import ProtocolStatus
 from chem_vault.domain.screening_assay.repository import (
     ProtocolRepository,
@@ -46,9 +47,11 @@ class CrossProtocolResolver:
     def __init__(
         self,
         *,
+        uow: UnitOfWork,
         protocol_repo: ProtocolRepository,
         readout_data_repo: ReadoutDataRepository,
     ) -> None:
+        self._uow = uow
         self._protocol_repo = protocol_repo
         self._readout_data_repo = readout_data_repo
 
@@ -80,6 +83,15 @@ class CrossProtocolResolver:
         if not refs:
             return Success({})
 
+        async with self._uow:
+            return await self._resolve_refs(workspace_id, molecule_id, refs)
+
+    async def _resolve_refs(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_id: uuid.UUID,
+        refs: list[tuple[str, str]],
+    ) -> Result[dict[str, float], DomainError]:
         bindings: dict[str, float] = {}
 
         for protocol_name, readout_name in refs:
@@ -118,7 +130,7 @@ class CrossProtocolResolver:
 
             # Fetch readout data for this molecule + definition
             data_points = await self._readout_data_repo.find_by_molecule_and_definition(
-                molecule_id, rd.id
+                workspace_id, molecule_id, rd.id
             )
             if not data_points:
                 return Failure(

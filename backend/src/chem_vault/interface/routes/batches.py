@@ -4,16 +4,25 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from lagom import Container
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
-from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
+from chem_vault.application.inventory.get_batch import (
+    GetBatch,
+    GetBatchQuery,
+    ListBatchesByMolecule,
+    ListBatchesByMoleculeQuery,
+)
 from chem_vault.application.inventory.update_batch import UpdateBatch, UpdateBatchCommand
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    CreateBatchDep,
+    GetBatchDep,
+    ListBatchesByMoleculeDep,
+    UpdateBatchDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["batches"])
@@ -108,24 +117,11 @@ class UpdateBatchRequest(BaseModel):
     custom_fields: dict | None = None
 
 
-def _get_create_batch(container: Annotated[Container, Depends(get_container)]) -> CreateBatch:
-    return container[CreateBatch]
-
-def _get_batch(container: Annotated[Container, Depends(get_container)]) -> GetBatch:
-    return container[GetBatch]
-
-def _get_list_batches(container: Annotated[Container, Depends(get_container)]) -> ListBatchesByMolecule:
-    return container[ListBatchesByMolecule]
-
-def _get_update_batch(container: Annotated[Container, Depends(get_container)]) -> UpdateBatch:
-    return container[UpdateBatch]
-
-
 @router.post("/batches", response_model=BatchResponse, status_code=201)
 async def create_batch(
     auth: AuthDep,
     body: CreateBatchRequest,
-    uc: Annotated[CreateBatch, Depends(_get_create_batch)],
+    uc: CreateBatchDep,
 ) -> BatchResponse:
     cmd = CreateBatchCommand(
         workspace_id=auth.workspace_id,
@@ -159,9 +155,12 @@ async def create_batch(
 async def get_batch(
     batch_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetBatch, Depends(_get_batch)],
+    uc: GetBatchDep,
 ) -> BatchResponse:
-    result = await uc(batch_id, auth=auth)
+    result = await uc(
+        GetBatchQuery(workspace_id=auth.workspace_id, batch_id=batch_id),
+        auth=auth,
+    )
     return BatchResponse.from_domain(result_to_response(result))
 
 
@@ -169,9 +168,12 @@ async def get_batch(
 async def list_batches_by_molecule(
     molecule_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[ListBatchesByMolecule, Depends(_get_list_batches)],
+    uc: ListBatchesByMoleculeDep,
 ) -> list[BatchResponse]:
-    result = await uc(molecule_id, auth=auth)
+    result = await uc(
+        ListBatchesByMoleculeQuery(workspace_id=auth.workspace_id, molecule_id=molecule_id),
+        auth=auth,
+    )
     batches = result_to_response(result)
     return [BatchResponse.from_domain(b) for b in batches]
 
@@ -181,7 +183,7 @@ async def update_batch(
     batch_id: uuid.UUID,
     body: UpdateBatchRequest,
     auth: AuthDep,
-    uc: Annotated[UpdateBatch, Depends(_get_update_batch)],
+    uc: UpdateBatchDep,
 ) -> BatchResponse:
     from chem_vault.application.shared.sentinel import UNSET
 

@@ -9,6 +9,7 @@ import {
   Refrigerator,
   ChevronRight,
   Pencil,
+  Plus,
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
@@ -29,6 +30,7 @@ import {
   useStorageLocations,
   useUpdateStorageLocation,
 } from "../hooks/use-storage-locations";
+import { CreateStorageLocationDialog } from "./create-storage-location-dialog";
 import type { StorageLocation, StorageLocationType } from "../types";
 
 const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
@@ -61,6 +63,7 @@ function LocationNode({
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const [editOpen, setEditOpen] = useState(false);
+  const [addChildOpen, setAddChildOpen] = useState(false);
   const deleteMutation = useDeleteStorageLocation();
   const children = getChildren(allLocations, location.id);
   const hasChildren = children.length > 0;
@@ -101,6 +104,15 @@ function LocationNode({
             variant="ghost"
             size="icon"
             className="h-6 w-6"
+            title="Add sub-location"
+            onClick={() => setAddChildOpen(true)}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
             onClick={() => setEditOpen(true)}
           >
             <Pencil className="h-3 w-3" />
@@ -131,6 +143,11 @@ function LocationNode({
         location={location}
         open={editOpen}
         onOpenChange={setEditOpen}
+      />
+      <CreateStorageLocationDialog
+        open={addChildOpen}
+        onOpenChange={setAddChildOpen}
+        defaultParentId={location.id}
       />
     </div>
   );

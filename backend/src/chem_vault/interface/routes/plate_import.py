@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from chem_vault.application.inventory.import_plate_data import (
     ImportExecutionResult,
+    ImportFileCache,
     ImportPlateDataService,
     ImportPreview,
     ValidationResult,
@@ -26,13 +27,6 @@ from chem_vault.application.inventory.import_templates import (
     ListImportTemplatesQuery,
 )
 from chem_vault.domain.inventory.import_template import ImportTemplate
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.import_template_repository import (
-    SQLAlchemyImportTemplateRepository,
-)
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
-    SQLAlchemyRegisteredPlateRepository,
-)
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -123,6 +117,12 @@ class CreateImportTemplateBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _import_file_cache(
+    c: Annotated[Container, Depends(get_container)],
+) -> ImportFileCache:
+    return c[ImportFileCache]
+
+
 def _import_plate_data_service(
     c: Annotated[Container, Depends(get_container)],
 ) -> ImportPlateDataService:
@@ -157,9 +157,12 @@ async def preview_import(
     auth: AuthDep,
     file: UploadFile = File(...),
     list_uc: Annotated[ListImportTemplates, Depends(_list_import_templates)] = ...,
+    cache: Annotated[ImportFileCache, Depends(_import_file_cache)] = ...,
 ) -> ImportPreviewResponse:
     content = await file.read()
-    preview: ImportPreview = preview_import_file(file.filename or "upload.csv", content)
+    preview: ImportPreview = result_to_response(
+        preview_import_file(file.filename or "upload.csv", content, cache)
+    )
 
     # Auto-match against saved templates using header similarity
     suggested_id: str | None = None
@@ -194,10 +197,12 @@ async def validate_import(
     auth: AuthDep,
     service: Annotated[ImportPlateDataService, Depends(_import_plate_data_service)],
 ) -> ValidationResultResponse:
-    result: ValidationResult = await service.validate(
-        file_id=body.file_id,
-        column_mappings=body.column_mappings,
-        workspace_id=auth.workspace_id,
+    result: ValidationResult = result_to_response(
+        await service.validate(
+            file_id=body.file_id,
+            column_mappings=body.column_mappings,
+            workspace_id=auth.workspace_id,
+        )
     )
 
     return ValidationResultResponse(
@@ -218,13 +223,15 @@ async def execute_import_data(
     auth: AuthDep,
     service: Annotated[ImportPlateDataService, Depends(_import_plate_data_service)],
 ) -> ExecuteImportResponse:
-    result: ImportExecutionResult = await service.execute(
-        file_id=body.file_id,
-        column_mappings=body.column_mappings,
-        workspace_id=auth.workspace_id,
-        protocol_id=body.protocol_id,
-        run_id=body.run_id,
-        auth=auth,
+    result: ImportExecutionResult = result_to_response(
+        await service.execute(
+            file_id=body.file_id,
+            column_mappings=body.column_mappings,
+            workspace_id=auth.workspace_id,
+            protocol_id=body.protocol_id,
+            run_id=body.run_id,
+            auth=auth,
+        )
     )
     return ExecuteImportResponse(
         imported_count=result.imported_count,

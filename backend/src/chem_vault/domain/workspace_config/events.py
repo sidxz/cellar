@@ -41,3 +41,52 @@ class VocabularyCreated(DomainEvent):
 class VocabularyUpdated(DomainEvent):
     workspace_id: uuid.UUID
     name: str
+
+
+# --- Custom Field Definitions ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class CustomFieldDefinitionCreated(DomainEvent):
+    workspace_id: uuid.UUID
+    name: str
+    applies_to: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CustomFieldDefinitionUpdated(DomainEvent):
+    workspace_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CustomFieldDefinitionDeactivated(DomainEvent):
+    workspace_id: uuid.UUID
+
+
+# --- Salt Catalog ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class SaltEntryCreated(DomainEvent):
+    workspace_id: uuid.UUID
+    code: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SaltEntryUpdated(DomainEvent):
+    workspace_id: uuid.UUID
+
+
+# --- Registration Forms ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class RegistrationFormCreated(DomainEvent):
+    workspace_id: uuid.UUID
+    name: str
+    applies_to: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class RegistrationFormUpdated(DomainEvent):
+    workspace_id: uuid.UUID

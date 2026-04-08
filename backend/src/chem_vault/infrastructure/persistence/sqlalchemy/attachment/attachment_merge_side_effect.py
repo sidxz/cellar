@@ -8,15 +8,12 @@ best-effort.
 
 from __future__ import annotations
 
-import logging
 import uuid
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.attachment.storage import StorageClient
-
-logger = logging.getLogger(__name__)
 
 
 class AttachmentMergeSideEffect:
@@ -27,10 +24,11 @@ class AttachmentMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = uow.session  # type: ignore[attr-defined]
         params = {"source": source_molecule_id, "target": target_molecule_id}
 
         # Step 1: Find storage keys for attachments that will be deduped
@@ -84,4 +82,4 @@ class AttachmentMergeSideEffect:
             try:
                 await self._storage.delete(key)
             except Exception:
-                logger.warning("Failed to clean up orphaned blob: %s", key)
+                pass  # Best-effort blob cleanup

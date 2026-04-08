@@ -27,6 +27,23 @@ class SQLAlchemyPlateTemplateRepository:
         model = await self._uow.session.get(PlateTemplateModel, id)
         return self._to_domain(model) if model else None
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> PlateTemplate | None:
+        """Load by PK scoped to workspace."""
+        stmt = (
+            select(PlateTemplateModel)
+            .where(
+                PlateTemplateModel.id == id,
+                PlateTemplateModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._uow.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[PlateTemplate]:
@@ -42,21 +59,27 @@ class SQLAlchemyPlateTemplateRepository:
         model = self._to_model(entity)
         await self._uow.session.merge(model)
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._uow.session.get(PlateTemplateModel, id)
-        if model is not None:
+        if model is not None and model.workspace_id == workspace_id:
             await self._uow.session.delete(model)
 
-    async def count_references(self, template_id: uuid.UUID) -> int:
-        """Count how many plates/runs reference this template."""
+    async def count_references(self, workspace_id: uuid.UUID, template_id: uuid.UUID) -> int:
+        """Count how many plates/runs reference this template within the workspace."""
         from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import PlateModel
         from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import RegisteredPlateModel
 
         run_result = await self._uow.session.execute(
-            select(func.count()).select_from(PlateModel).where(PlateModel.template_id == template_id)
+            select(func.count()).select_from(PlateModel).where(
+                PlateModel.template_id == template_id,
+                PlateModel.workspace_id == workspace_id,
+            )
         )
         plate_result = await self._uow.session.execute(
-            select(func.count()).select_from(RegisteredPlateModel).where(RegisteredPlateModel.template_id == template_id)
+            select(func.count()).select_from(RegisteredPlateModel).where(
+                RegisteredPlateModel.template_id == template_id,
+                RegisteredPlateModel.workspace_id == workspace_id,
+            )
         )
         return (run_result.scalar() or 0) + (plate_result.scalar() or 0)
 

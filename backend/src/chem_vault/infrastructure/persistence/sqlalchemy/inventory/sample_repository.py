@@ -31,7 +31,7 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
             .order_by(SampleModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_location(
         self, workspace_id: uuid.UUID, location_id: uuid.UUID
@@ -45,7 +45,7 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
             .order_by(SampleModel.barcode)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
@@ -56,7 +56,7 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None
 
     async def find_low_stock(self, workspace_id: uuid.UUID) -> list[Sample]:
         stmt = (
@@ -70,7 +70,7 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
             .order_by(SampleModel.amount_value)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     # ------------------------------------------------------------------
     # Mapping

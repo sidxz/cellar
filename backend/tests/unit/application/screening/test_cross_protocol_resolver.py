@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -66,8 +67,23 @@ def _make_readout_data(
     )
 
 
+class _FakeUoW:
+    async def commit(self) -> list:
+        return []
+
+    async def rollback(self) -> None:
+        pass
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+
 def _make_resolver(protocol_repo=None, readout_data_repo=None) -> CrossProtocolResolver:
     return CrossProtocolResolver(
+        uow=_FakeUoW(),
         protocol_repo=protocol_repo or AsyncMock(),
         readout_data_repo=readout_data_repo or AsyncMock(),
     )
@@ -111,7 +127,7 @@ class TestResolvesSimpleReference:
 
         protocol_repo.find_by_name.assert_awaited_once_with(WS, "TargetAssay")
         readout_data_repo.find_by_molecule_and_definition.assert_awaited_once_with(
-            mol_id, rd.id
+            WS, mol_id, rd.id
         )
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -50,11 +51,11 @@ class UpdateTarget:
         require_editor(auth)
 
         async with self._uow:
-            target = await self._repo.find_by_id(input.target_id)
-            if target is None or target.workspace_id != input.workspace_id:
+            target = await self._repo.find_by_id_in_workspace(input.workspace_id, input.target_id)
+            if target is None:
                 return Failure(NotFoundError("Target", str(input.target_id)))
 
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             if input.name is not None:
                 fields["name"] = input.name
             if input.target_type is not None:

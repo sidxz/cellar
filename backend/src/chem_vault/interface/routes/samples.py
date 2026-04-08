@@ -3,22 +3,40 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from lagom import Container
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.inventory.create_sample import CreateSample, CreateSampleCommand
-from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
+from chem_vault.application.inventory.get_sample import (
+    GetSample,
+    GetSampleQuery,
+    ListSamplesByBatch,
+    ListSamplesByBatchQuery,
+)
 from chem_vault.application.inventory.manage_sample import (
     AliquotSample,
+    AliquotSampleCommand,
     ClearQuarantineSample,
+    ClearQuarantineSampleCommand,
     DisposeSample,
+    DisposeSampleCommand,
     MoveSample,
+    MoveSampleCommand,
     QuarantineSample,
+    QuarantineSampleCommand,
 )
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.interface.dependencies import (
+    AliquotSampleDep,
+    AuthDep,
+    ClearQuarantineSampleDep,
+    CreateSampleDep,
+    DisposeSampleDep,
+    GetSampleDep,
+    ListSamplesByBatchDep,
+    MoveSampleDep,
+    QuarantineSampleDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["samples"])
@@ -85,33 +103,6 @@ class DisposeRequest(BaseModel):
     reason: str | None = None
 
 
-# --- Deps ---
-
-def _create_sample(c: Annotated[Container, Depends(get_container)]) -> CreateSample:
-    return c[CreateSample]
-
-def _get_sample(c: Annotated[Container, Depends(get_container)]) -> GetSample:
-    return c[GetSample]
-
-def _list_samples(c: Annotated[Container, Depends(get_container)]) -> ListSamplesByBatch:
-    return c[ListSamplesByBatch]
-
-def _aliquot(c: Annotated[Container, Depends(get_container)]) -> AliquotSample:
-    return c[AliquotSample]
-
-def _move(c: Annotated[Container, Depends(get_container)]) -> MoveSample:
-    return c[MoveSample]
-
-def _quarantine(c: Annotated[Container, Depends(get_container)]) -> QuarantineSample:
-    return c[QuarantineSample]
-
-def _clear_quarantine(c: Annotated[Container, Depends(get_container)]) -> ClearQuarantineSample:
-    return c[ClearQuarantineSample]
-
-def _dispose(c: Annotated[Container, Depends(get_container)]) -> DisposeSample:
-    return c[DisposeSample]
-
-
 # --- Routes ---
 
 
@@ -119,7 +110,7 @@ def _dispose(c: Annotated[Container, Depends(get_container)]) -> DisposeSample:
 async def create_sample(
     auth: AuthDep,
     body: CreateSampleRequest,
-    uc: Annotated[CreateSample, Depends(_create_sample)],
+    uc: CreateSampleDep,
 ) -> SampleResponse:
     cmd = CreateSampleCommand(
         workspace_id=auth.workspace_id,
@@ -142,9 +133,12 @@ async def create_sample(
 async def get_sample(
     sample_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetSample, Depends(_get_sample)],
+    uc: GetSampleDep,
 ) -> SampleResponse:
-    result = await uc(sample_id, auth=auth)
+    result = await uc(
+        GetSampleQuery(workspace_id=auth.workspace_id, sample_id=sample_id),
+        auth=auth,
+    )
     return SampleResponse.from_domain(result_to_response(result))
 
 
@@ -152,9 +146,12 @@ async def get_sample(
 async def list_samples_by_batch(
     batch_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[ListSamplesByBatch, Depends(_list_samples)],
+    uc: ListSamplesByBatchDep,
 ) -> list[SampleResponse]:
-    result = await uc(batch_id, auth=auth)
+    result = await uc(
+        ListSamplesByBatchQuery(workspace_id=auth.workspace_id, batch_id=batch_id),
+        auth=auth,
+    )
     samples = result_to_response(result)
     return [SampleResponse.from_domain(s) for s in samples]
 
@@ -164,9 +161,14 @@ async def aliquot_sample(
     sample_id: uuid.UUID,
     body: AliquotRequest,
     auth: AuthDep,
-    uc: Annotated[AliquotSample, Depends(_aliquot)],
+    uc: AliquotSampleDep,
 ) -> SampleResponse:
-    result = await uc(sample_id, body.amount, auth=auth)
+    result = await uc(
+        AliquotSampleCommand(
+            workspace_id=auth.workspace_id, sample_id=sample_id, amount=body.amount,
+        ),
+        auth=auth,
+    )
     return SampleResponse.from_domain(result_to_response(result))
 
 
@@ -175,9 +177,14 @@ async def move_sample(
     sample_id: uuid.UUID,
     body: MoveRequest,
     auth: AuthDep,
-    uc: Annotated[MoveSample, Depends(_move)],
+    uc: MoveSampleDep,
 ) -> SampleResponse:
-    result = await uc(sample_id, body.location_id, auth=auth)
+    result = await uc(
+        MoveSampleCommand(
+            workspace_id=auth.workspace_id, sample_id=sample_id, location_id=body.location_id,
+        ),
+        auth=auth,
+    )
     return SampleResponse.from_domain(result_to_response(result))
 
 
@@ -186,9 +193,14 @@ async def quarantine_sample(
     sample_id: uuid.UUID,
     body: QuarantineRequest,
     auth: AuthDep,
-    uc: Annotated[QuarantineSample, Depends(_quarantine)],
+    uc: QuarantineSampleDep,
 ) -> SampleResponse:
-    result = await uc(sample_id, body.reason, auth=auth)
+    result = await uc(
+        QuarantineSampleCommand(
+            workspace_id=auth.workspace_id, sample_id=sample_id, reason=body.reason,
+        ),
+        auth=auth,
+    )
     return SampleResponse.from_domain(result_to_response(result))
 
 
@@ -196,9 +208,12 @@ async def quarantine_sample(
 async def clear_quarantine_sample(
     sample_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[ClearQuarantineSample, Depends(_clear_quarantine)],
+    uc: ClearQuarantineSampleDep,
 ) -> SampleResponse:
-    result = await uc(sample_id, auth=auth)
+    result = await uc(
+        ClearQuarantineSampleCommand(workspace_id=auth.workspace_id, sample_id=sample_id),
+        auth=auth,
+    )
     return SampleResponse.from_domain(result_to_response(result))
 
 
@@ -207,7 +222,12 @@ async def dispose_sample(
     sample_id: uuid.UUID,
     body: DisposeRequest,
     auth: AuthDep,
-    uc: Annotated[DisposeSample, Depends(_dispose)],
+    uc: DisposeSampleDep,
 ) -> SampleResponse:
-    result = await uc(sample_id, body.reason, auth=auth)
+    result = await uc(
+        DisposeSampleCommand(
+            workspace_id=auth.workspace_id, sample_id=sample_id, reason=body.reason,
+        ),
+        auth=auth,
+    )
     return SampleResponse.from_domain(result_to_response(result))

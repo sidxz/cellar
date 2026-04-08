@@ -261,7 +261,7 @@ class TestUpdateCustomField:
         workspace_id = uuid.uuid4()
         cfd = _make_cfd(workspace_id, label="Old Label")
         repo = AsyncMock()
-        repo.find_by_id.return_value = cfd
+        repo.find_by_id_in_workspace.return_value = cfd
 
         uc = self._make_uc(repo)
         cmd = UpdateCustomFieldCommand(
@@ -280,7 +280,7 @@ class TestUpdateCustomField:
         cfd = _make_cfd(workspace_id)
         assert cfd.is_active is True
         repo = AsyncMock()
-        repo.find_by_id.return_value = cfd
+        repo.find_by_id_in_workspace.return_value = cfd
 
         uc = self._make_uc(repo)
         cmd = UpdateCustomFieldCommand(
@@ -299,7 +299,7 @@ class TestUpdateCustomField:
         cfd = _make_cfd(workspace_id)
         cfd.deactivate()
         repo = AsyncMock()
-        repo.find_by_id.return_value = cfd
+        repo.find_by_id_in_workspace.return_value = cfd
 
         uc = self._make_uc(repo)
         cmd = UpdateCustomFieldCommand(
@@ -318,7 +318,8 @@ class TestUpdateCustomField:
         other_workspace = uuid.uuid4()
         cfd = _make_cfd(workspace_id)
         repo = AsyncMock()
-        repo.find_by_id.return_value = cfd
+        # find_by_id_in_workspace returns None when workspace doesn't match
+        repo.find_by_id_in_workspace.return_value = None
 
         uc = self._make_uc(repo)
         cmd = UpdateCustomFieldCommand(
@@ -335,7 +336,7 @@ class TestUpdateCustomField:
     async def test_returns_not_found_for_missing_field(self):
         workspace_id = uuid.uuid4()
         repo = AsyncMock()
-        repo.find_by_id.return_value = None
+        repo.find_by_id_in_workspace.return_value = None
 
         uc = self._make_uc(repo)
         cmd = UpdateCustomFieldCommand(
@@ -359,6 +360,7 @@ class TestDeleteCustomField:
         return DeleteCustomField(
             uow=FakeUnitOfWork(),
             repo=repo,
+            dispatcher=AsyncMock(),
         )
 
     @pytest.mark.asyncio
@@ -366,7 +368,7 @@ class TestDeleteCustomField:
         workspace_id = uuid.uuid4()
         cfd = _make_cfd(workspace_id)
         repo = AsyncMock()
-        repo.find_by_id.return_value = cfd
+        repo.find_by_id_in_workspace.return_value = cfd
 
         uc = self._make_uc(repo)
         cmd = DeleteCustomFieldCommand(workspace_id=workspace_id, field_id=cfd.id)
@@ -374,13 +376,13 @@ class TestDeleteCustomField:
 
         assert isinstance(result, Success)
         assert result.unwrap() is None
-        repo.delete.assert_called_once_with(cfd.id)
+        repo.delete.assert_called_once_with(workspace_id, cfd.id)
 
     @pytest.mark.asyncio
     async def test_returns_not_found_when_missing(self):
         workspace_id = uuid.uuid4()
         repo = AsyncMock()
-        repo.find_by_id.return_value = None
+        repo.find_by_id_in_workspace.return_value = None
 
         uc = self._make_uc(repo)
         cmd = DeleteCustomFieldCommand(workspace_id=workspace_id, field_id=uuid.uuid4())
@@ -395,7 +397,8 @@ class TestDeleteCustomField:
         other_workspace = uuid.uuid4()
         cfd = _make_cfd(workspace_id)
         repo = AsyncMock()
-        repo.find_by_id.return_value = cfd
+        # find_by_id_in_workspace returns None when workspace doesn't match
+        repo.find_by_id_in_workspace.return_value = None
 
         uc = self._make_uc(repo)
         cmd = DeleteCustomFieldCommand(workspace_id=other_workspace, field_id=cfd.id)

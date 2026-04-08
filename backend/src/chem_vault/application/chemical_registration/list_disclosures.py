@@ -46,10 +46,10 @@ class ListDisclosures:
     ) -> Result[list[DisclosureRequest], DomainError]:
         async with self._uow:
             # Workspace isolation: verify molecule belongs to caller's workspace
-            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
-            if molecule is None or molecule.workspace_id != input.workspace_id:
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if molecule is None:
                 return Failure(
                     NotFoundError("Molecule", str(input.molecule_id))
                 )
-            disclosures = await self._disclosure_repo.find_by_molecule(input.molecule_id)
+            disclosures = await self._disclosure_repo.find_by_molecule(input.workspace_id, input.molecule_id)
             return Success(disclosures)

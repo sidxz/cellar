@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from lagom import Container
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.inventory.registered_plates import (
@@ -37,7 +35,19 @@ from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.inventory.enums import PlateStatus, PlateType
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
 from chem_vault.domain.screening_assay.enums import PlateFormat
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    ChangeStatusDep,
+    DeletePlateDep,
+    DerivePlateDep,
+    GetPlateDep,
+    ListChildrenDep,
+    ListPlatesDep,
+    MapWellsDep,
+    PlateReadModelServiceDep,
+    RegisterPlateDep,
+    UpdatePlateDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/plates", tags=["plates"])
@@ -151,53 +161,6 @@ class MoleculePlateResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Dependency functions
-# ---------------------------------------------------------------------------
-
-
-def _register_plate(c: Annotated[Container, Depends(get_container)]) -> RegisterPlate:
-    return c[RegisterPlate]
-
-
-def _get_plate(c: Annotated[Container, Depends(get_container)]) -> GetPlate:
-    return c[GetPlate]
-
-
-def _list_plates(c: Annotated[Container, Depends(get_container)]) -> ListPlates:
-    return c[ListPlates]
-
-
-def _update_plate(c: Annotated[Container, Depends(get_container)]) -> UpdatePlate:
-    return c[UpdatePlate]
-
-
-def _map_wells(c: Annotated[Container, Depends(get_container)]) -> MapWells:
-    return c[MapWells]
-
-
-def _change_status(c: Annotated[Container, Depends(get_container)]) -> ChangeStatus:
-    return c[ChangeStatus]
-
-
-def _derive_plate(c: Annotated[Container, Depends(get_container)]) -> DerivePlate:
-    return c[DerivePlate]
-
-
-def _list_children(c: Annotated[Container, Depends(get_container)]) -> ListChildren:
-    return c[ListChildren]
-
-
-def _delete_plate(c: Annotated[Container, Depends(get_container)]) -> DeletePlate:
-    return c[DeletePlate]
-
-
-def _plate_read_model(
-    c: Annotated[Container, Depends(get_container)],
-) -> PlateReadModelService:
-    return c[PlateReadModelService]
-
-
-# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -206,7 +169,7 @@ def _plate_read_model(
 async def register_plate(
     body: RegisterPlateBody,
     auth: AuthDep,
-    uc: Annotated[RegisterPlate, Depends(_register_plate)],
+    uc: RegisterPlateDep,
 ) -> PlateResponse:
     """Register a new physical plate in the inventory."""
     command = RegisterPlateCommand(
@@ -230,7 +193,7 @@ async def register_plate(
 @router.get("", response_model=list[PlateResponse])
 async def list_plates(
     auth: AuthDep,
-    uc: Annotated[ListPlates, Depends(_list_plates)],
+    uc: ListPlatesDep,
     barcode: str | None = None,
     plate_label: str | None = None,
     plate_type: str | None = None,
@@ -258,7 +221,7 @@ async def list_plates(
 async def get_plate(
     plate_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetPlate, Depends(_get_plate)],
+    uc: GetPlateDep,
 ) -> PlateResponse:
     """Retrieve a single registered plate by ID."""
     query = GetPlateQuery(workspace_id=auth.workspace_id, plate_id=plate_id)
@@ -271,7 +234,7 @@ async def update_plate(
     plate_id: uuid.UUID,
     body: UpdatePlateBody,
     auth: AuthDep,
-    uc: Annotated[UpdatePlate, Depends(_update_plate)],
+    uc: UpdatePlateDep,
 ) -> PlateResponse:
     """Update mutable fields on an existing plate."""
     provided = body.model_fields_set
@@ -280,9 +243,9 @@ async def update_plate(
         plate_id=plate_id,
         plate_label=body.plate_label if "plate_label" in provided else None,
         plate_type=body.plate_type.value if body.plate_type is not None and "plate_type" in provided else None,
-        notes=body.notes if "notes" in provided else ...,  # type: ignore[arg-type]
-        project_id=body.project_id if "project_id" in provided else ...,  # type: ignore[arg-type]
-        storage_location_id=body.storage_location_id if "storage_location_id" in provided else ...,  # type: ignore[arg-type]
+        notes=body.notes if "notes" in provided else UNSET,
+        project_id=body.project_id if "project_id" in provided else UNSET,
+        storage_location_id=body.storage_location_id if "storage_location_id" in provided else UNSET,
     )
     plate = result_to_response(await uc(command, auth=auth))
     return PlateResponse.from_domain(plate)
@@ -293,7 +256,7 @@ async def map_wells(
     plate_id: uuid.UUID,
     body: MapWellsBody,
     auth: AuthDep,
-    uc: Annotated[MapWells, Depends(_map_wells)],
+    uc: MapWellsDep,
 ) -> PlateResponse:
     """Assign batch/concentration data to wells on a plate."""
     command = MapWellsCommand(
@@ -310,7 +273,7 @@ async def change_status(
     plate_id: uuid.UUID,
     body: ChangeStatusBody,
     auth: AuthDep,
-    uc: Annotated[ChangeStatus, Depends(_change_status)],
+    uc: ChangeStatusDep,
 ) -> PlateResponse:
     """Transition a plate to a new lifecycle status."""
     command = ChangeStatusCommand(
@@ -327,7 +290,7 @@ async def derive_plate(
     plate_id: uuid.UUID,
     body: DerivePlateBody,
     auth: AuthDep,
-    uc: Annotated[DerivePlate, Depends(_derive_plate)],
+    uc: DerivePlateDep,
 ) -> PlateResponse:
     """Derive a child plate from a parent, copying the well map."""
     command = DerivePlateCommand(
@@ -349,7 +312,7 @@ async def derive_plate(
 async def list_children(
     plate_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[ListChildren, Depends(_list_children)],
+    uc: ListChildrenDep,
 ) -> list[PlateResponse]:
     """List child plates derived from a given parent plate."""
     query = ListChildrenQuery(
@@ -364,7 +327,7 @@ async def list_children(
 async def delete_plate(
     plate_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[DeletePlate, Depends(_delete_plate)],
+    uc: DeletePlateDep,
 ) -> None:
     """Delete a registered plate if it has no child plates."""
     command = DeletePlateCommand(

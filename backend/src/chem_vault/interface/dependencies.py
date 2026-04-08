@@ -18,6 +18,11 @@ from fastapi import Depends, Request
 from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from chem_vault.application.dashboard.get_dashboard_stats import GetDashboardStats
+from chem_vault.application.attachment.delete_attachment import DeleteAttachment
+from chem_vault.application.attachment.download_attachment import DownloadAttachment
+from chem_vault.application.attachment.list_attachments import ListAttachments
+from chem_vault.application.attachment.upload_attachment import UploadAttachment
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
@@ -47,14 +52,56 @@ from chem_vault.application.user.get_preferences import GetPreferences
 from chem_vault.application.user.update_preferences import UpdatePreferences
 from chem_vault.application.workspace_config.create_organization import CreateOrganization
 from chem_vault.application.workspace_config.create_vocabulary import CreateVocabulary
+from chem_vault.application.workspace_config.create_custom_field import CreateCustomField
+from chem_vault.application.workspace_config.create_registration_form import CreateRegistrationForm
+from chem_vault.application.workspace_config.get_registration_form import GetRegistrationForm
+from chem_vault.application.workspace_config.create_salt_entry import CreateSaltEntry
+from chem_vault.application.workspace_config.delete_custom_field import DeleteCustomField
+from chem_vault.application.workspace_config.delete_registration_form import DeleteRegistrationForm
+from chem_vault.application.workspace_config.delete_salt_entry import DeleteSaltEntry
 from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabulary
 from chem_vault.application.workspace_config.get_organization import GetOrganization
 from chem_vault.application.workspace_config.get_workspace_settings import GetWorkspaceSettings
 from chem_vault.application.workspace_config.list_organizations import ListOrganizations
+from chem_vault.application.workspace_config.list_custom_fields import ListCustomFields
+from chem_vault.application.workspace_config.list_registration_forms import ListRegistrationForms
+from chem_vault.application.workspace_config.list_salt_entries import ListSaltEntries
 from chem_vault.application.workspace_config.list_vocabularies import ListVocabularies
 from chem_vault.application.workspace_config.update_organization import UpdateOrganization
+from chem_vault.application.workspace_config.update_custom_field import UpdateCustomField
+from chem_vault.application.workspace_config.update_registration_form import UpdateRegistrationForm
+from chem_vault.application.workspace_config.update_salt_entry import UpdateSaltEntry
 from chem_vault.application.workspace_config.update_vocabulary import UpdateVocabulary
+from chem_vault.application.inventory.create_batch import CreateBatch
+from chem_vault.application.inventory.create_sample import CreateSample
 from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
+from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
+from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
+from chem_vault.application.inventory.manage_sample import (
+    AliquotSample,
+    ClearQuarantineSample,
+    DisposeSample,
+    MoveSample,
+    QuarantineSample,
+)
+from chem_vault.application.inventory.manage_storage import (
+    CreateStorageLocation,
+    GetStorageLocationChildren,
+    ListStorageLocations,
+)
+from chem_vault.application.inventory.plate_read_model import PlateReadModelService
+from chem_vault.application.inventory.registered_plates import (
+    ChangeStatus,
+    DeletePlate,
+    DerivePlate,
+    GetPlate,
+    ListChildren,
+    ListPlates,
+    MapWells,
+    RegisterPlate,
+    UpdatePlate,
+)
+from chem_vault.application.inventory.update_batch import UpdateBatch
 from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
 from chem_vault.application.research_organization.archive_project import ArchiveProject
 from chem_vault.application.research_organization.collection_membership import (
@@ -106,7 +153,24 @@ from chem_vault.application.screening.get_readout_data import ListReadoutDataByR
 from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
-from chem_vault.application.screening.manage_protocol import PublishProtocol, RetireProtocol, VersionProtocol
+from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
+from chem_vault.application.screening.delete_target import DeleteTarget
+from chem_vault.application.screening.manage_protocol import (
+    AddProtocolToProject,
+    DeleteProtocol,
+    ListProtocolsByProject,
+    PublishProtocol,
+    RemoveProtocolFromProject,
+    RetireProtocol,
+    UpdateProtocol,
+    VersionProtocol,
+)
+from chem_vault.application.screening.manage_readout_definitions import (
+    AddReadoutDefinition,
+    RemoveReadoutDefinition,
+)
+from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
@@ -194,7 +258,7 @@ async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
 
 # Convenience type aliases for route handler signatures
 AuthDep = Annotated[Any, Depends(get_auth)]
-UoWDep = Annotated[UnitOfWork, Depends(get_uow)]
+UoWDep = Annotated[AsyncUnitOfWork, Depends(get_uow)]
 SessionFactoryDep = Annotated[async_sessionmaker, Depends(get_session_factory)]
 EventDispatcherDep = Annotated[EventDispatcher, Depends(get_event_dispatcher)]
 AuditServiceDep = Annotated[AuditRecordingService, Depends(get_audit_service)]
@@ -224,6 +288,19 @@ CreateVocabularyDep = Annotated[CreateVocabulary, Depends(_get_use_case(CreateVo
 UpdateVocabularyDep = Annotated[UpdateVocabulary, Depends(_get_use_case(UpdateVocabulary))]
 ListVocabulariesDep = Annotated[ListVocabularies, Depends(_get_use_case(ListVocabularies))]
 DeleteVocabularyDep = Annotated[DeleteVocabulary, Depends(_get_use_case(DeleteVocabulary))]
+CreateCustomFieldDep = Annotated[CreateCustomField, Depends(_get_use_case(CreateCustomField))]
+ListCustomFieldsDep = Annotated[ListCustomFields, Depends(_get_use_case(ListCustomFields))]
+UpdateCustomFieldDep = Annotated[UpdateCustomField, Depends(_get_use_case(UpdateCustomField))]
+DeleteCustomFieldDep = Annotated[DeleteCustomField, Depends(_get_use_case(DeleteCustomField))]
+CreateSaltEntryDep = Annotated[CreateSaltEntry, Depends(_get_use_case(CreateSaltEntry))]
+ListSaltEntriesDep = Annotated[ListSaltEntries, Depends(_get_use_case(ListSaltEntries))]
+UpdateSaltEntryDep = Annotated[UpdateSaltEntry, Depends(_get_use_case(UpdateSaltEntry))]
+DeleteSaltEntryDep = Annotated[DeleteSaltEntry, Depends(_get_use_case(DeleteSaltEntry))]
+CreateRegistrationFormDep = Annotated[CreateRegistrationForm, Depends(_get_use_case(CreateRegistrationForm))]
+GetRegistrationFormDep = Annotated[GetRegistrationForm, Depends(_get_use_case(GetRegistrationForm))]
+ListRegistrationFormsDep = Annotated[ListRegistrationForms, Depends(_get_use_case(ListRegistrationForms))]
+UpdateRegistrationFormDep = Annotated[UpdateRegistrationForm, Depends(_get_use_case(UpdateRegistrationForm))]
+DeleteRegistrationFormDep = Annotated[DeleteRegistrationForm, Depends(_get_use_case(DeleteRegistrationForm))]
 
 # --- Chemical Registration dependencies ---
 RegisterMoleculeDep = Annotated[RegisterMolecule, Depends(_get_use_case(RegisterMolecule))]
@@ -251,8 +328,33 @@ GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHi
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]
 
 # --- Inventory dependencies ---
+CreateBatchDep = Annotated[CreateBatch, Depends(_get_use_case(CreateBatch))]
+GetBatchDep = Annotated[GetBatch, Depends(_get_use_case(GetBatch))]
+ListBatchesByMoleculeDep = Annotated[ListBatchesByMolecule, Depends(_get_use_case(ListBatchesByMolecule))]
+UpdateBatchDep = Annotated[UpdateBatch, Depends(_get_use_case(UpdateBatch))]
+CreateSampleDep = Annotated[CreateSample, Depends(_get_use_case(CreateSample))]
+GetSampleDep = Annotated[GetSample, Depends(_get_use_case(GetSample))]
+ListSamplesByBatchDep = Annotated[ListSamplesByBatch, Depends(_get_use_case(ListSamplesByBatch))]
+AliquotSampleDep = Annotated[AliquotSample, Depends(_get_use_case(AliquotSample))]
+MoveSampleDep = Annotated[MoveSample, Depends(_get_use_case(MoveSample))]
+QuarantineSampleDep = Annotated[QuarantineSample, Depends(_get_use_case(QuarantineSample))]
+ClearQuarantineSampleDep = Annotated[ClearQuarantineSample, Depends(_get_use_case(ClearQuarantineSample))]
+DisposeSampleDep = Annotated[DisposeSample, Depends(_get_use_case(DisposeSample))]
+CreateStorageLocationDep = Annotated[CreateStorageLocation, Depends(_get_use_case(CreateStorageLocation))]
+ListStorageLocationsDep = Annotated[ListStorageLocations, Depends(_get_use_case(ListStorageLocations))]
+GetStorageLocationChildrenDep = Annotated[GetStorageLocationChildren, Depends(_get_use_case(GetStorageLocationChildren))]
 UpdateStorageLocationDep = Annotated[UpdateStorageLocation, Depends(_get_use_case(UpdateStorageLocation))]
 DeleteStorageLocationDep = Annotated[DeleteStorageLocation, Depends(_get_use_case(DeleteStorageLocation))]
+RegisterPlateDep = Annotated[RegisterPlate, Depends(_get_use_case(RegisterPlate))]
+GetPlateDep = Annotated[GetPlate, Depends(_get_use_case(GetPlate))]
+ListPlatesDep = Annotated[ListPlates, Depends(_get_use_case(ListPlates))]
+UpdatePlateDep = Annotated[UpdatePlate, Depends(_get_use_case(UpdatePlate))]
+MapWellsDep = Annotated[MapWells, Depends(_get_use_case(MapWells))]
+ChangeStatusDep = Annotated[ChangeStatus, Depends(_get_use_case(ChangeStatus))]
+DerivePlateDep = Annotated[DerivePlate, Depends(_get_use_case(DerivePlate))]
+ListChildrenDep = Annotated[ListChildren, Depends(_get_use_case(ListChildren))]
+DeletePlateDep = Annotated[DeletePlate, Depends(_get_use_case(DeletePlate))]
+PlateReadModelServiceDep = Annotated[PlateReadModelService, Depends(_get_use_case(PlateReadModelService))]
 
 # --- Screening dependencies ---
 CreateProtocolDep = Annotated[CreateProtocol, Depends(_get_use_case(CreateProtocol))]
@@ -261,9 +363,19 @@ ListProtocolsDep = Annotated[ListProtocols, Depends(_get_use_case(ListProtocols)
 PublishProtocolDep = Annotated[PublishProtocol, Depends(_get_use_case(PublishProtocol))]
 RetireProtocolDep = Annotated[RetireProtocol, Depends(_get_use_case(RetireProtocol))]
 VersionProtocolDep = Annotated[VersionProtocol, Depends(_get_use_case(VersionProtocol))]
+ListProtocolsByProjectDep = Annotated[ListProtocolsByProject, Depends(_get_use_case(ListProtocolsByProject))]
+AddProtocolToProjectDep = Annotated[AddProtocolToProject, Depends(_get_use_case(AddProtocolToProject))]
+RemoveProtocolFromProjectDep = Annotated[RemoveProtocolFromProject, Depends(_get_use_case(RemoveProtocolFromProject))]
+UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
+AddReadoutDefinitionDep = Annotated[AddReadoutDefinition, Depends(_get_use_case(AddReadoutDefinition))]
+RemoveReadoutDefinitionDep = Annotated[RemoveReadoutDefinition, Depends(_get_use_case(RemoveReadoutDefinition))]
 CreateTargetDep = Annotated[CreateTarget, Depends(_get_use_case(CreateTarget))]
 GetTargetDep = Annotated[GetTarget, Depends(_get_use_case(GetTarget))]
 ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]
+UpdateTargetDep = Annotated[UpdateTarget, Depends(_get_use_case(UpdateTarget))]
+DeleteTargetDep = Annotated[DeleteTarget, Depends(_get_use_case(DeleteTarget))]
+ConditionGroupingServiceDep = Annotated[ConditionGroupingService, Depends(_get_use_case(ConditionGroupingService))]
 CreateRunDep = Annotated[CreateRun, Depends(_get_use_case(CreateRun))]
 GetRunDep = Annotated[GetRun, Depends(_get_use_case(GetRun))]
 ListRunsByProtocolDep = Annotated[ListRunsByProtocol, Depends(_get_use_case(ListRunsByProtocol))]
@@ -280,6 +392,7 @@ ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(
 CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
 ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]
 MoleculeActivityServiceDep = Annotated[MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))]
+ReadoutCalculationEngineDep = Annotated[ReadoutCalculationEngine, Depends(_get_use_case(ReadoutCalculationEngine))]
 
 # --- Plate Template dependencies ---
 CreatePlateTemplateDep = Annotated[CreatePlateTemplate, Depends(_get_use_case(CreatePlateTemplate))]
@@ -319,12 +432,10 @@ RemoveMoleculeFromProjectDep = Annotated[RemoveMoleculeFromProject, Depends(_get
 ListMoleculeProjectsDep = Annotated[ListMoleculeProjects, Depends(_get_use_case(ListMoleculeProjects))]
 
 # --- Attachment dependencies ---
-from chem_vault.application.attachment.upload_attachment import UploadAttachment
-from chem_vault.application.attachment.delete_attachment import DeleteAttachment
-from chem_vault.application.attachment.list_attachments import ListAttachments
-from chem_vault.application.attachment.download_attachment import DownloadAttachment
-
 UploadAttachmentDep = Annotated[UploadAttachment, Depends(_get_use_case(UploadAttachment))]
 DeleteAttachmentDep = Annotated[DeleteAttachment, Depends(_get_use_case(DeleteAttachment))]
 ListAttachmentsDep = Annotated[ListAttachments, Depends(_get_use_case(ListAttachments))]
 DownloadAttachmentDep = Annotated[DownloadAttachment, Depends(_get_use_case(DownloadAttachment))]
+
+# --- Dashboard dependencies ---
+GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]

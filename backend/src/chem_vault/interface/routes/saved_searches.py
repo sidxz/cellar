@@ -15,6 +15,7 @@ from chem_vault.application.research_organization.get_saved_search import (
     ListSavedSearchesQuery,
 )
 from chem_vault.application.research_organization.update_saved_search import UpdateSavedSearchCommand
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.research_organization.saved_search import SavedSearch, SearchVisibility
 from chem_vault.interface.dependencies import (
     AuthDep,
@@ -134,9 +135,9 @@ async def update_saved_search(
         saved_search_id=search_id,
         name=body.name if "name" in provided else None,
         query=body.query if "query" in provided else None,
-        columns=body.columns if "columns" in provided else ...,
+        columns=body.columns if "columns" in provided else UNSET,
         visibility=body.visibility if "visibility" in provided else None,
-        project_id=body.project_id if "project_id" in provided else ...,
+        project_id=body.project_id if "project_id" in provided else UNSET,
     )
     search = result_to_response(await use_case(command, auth=auth))
     return SavedSearchResponse.from_domain(search)

@@ -102,12 +102,13 @@ from chem_vault.application.inventory.registered_plates import (
     UpdatePlate,
 )
 from chem_vault.application.inventory.plate_read_model import PlateReadModelService
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.plate_read_model_reader import SQLAlchemyPlateReadModelService
 from chem_vault.application.inventory.import_templates import (
     CreateImportTemplate,
     DeleteImportTemplate,
     ListImportTemplates,
 )
-from chem_vault.application.inventory.import_plate_data import ImportPlateDataService
+from chem_vault.application.inventory.import_plate_data import ImportFileCache, ImportPlateDataService
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
 )
@@ -128,7 +129,16 @@ from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.update_target import UpdateTarget
-from chem_vault.application.screening.manage_protocol import DeleteProtocol, PublishProtocol, RetireProtocol, UpdateProtocol, VersionProtocol
+from chem_vault.application.screening.manage_protocol import (
+    AddProtocolToProject,
+    DeleteProtocol,
+    ListProtocolsByProject,
+    PublishProtocol,
+    RemoveProtocolFromProject,
+    RetireProtocol,
+    UpdateProtocol,
+    VersionProtocol,
+)
 from chem_vault.application.screening.manage_readout_definitions import AddReadoutDefinition, RemoveReadoutDefinition
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
@@ -172,6 +182,7 @@ from chem_vault.application.workspace_config.delete_salt_entry import DeleteSalt
 from chem_vault.application.workspace_config.create_registration_form import CreateRegistrationForm
 from chem_vault.application.workspace_config.update_registration_form import UpdateRegistrationForm
 from chem_vault.application.workspace_config.delete_registration_form import DeleteRegistrationForm
+from chem_vault.application.workspace_config.get_registration_form import GetRegistrationForm
 from chem_vault.application.workspace_config.list_registration_forms import ListRegistrationForms
 from chem_vault.application.workspace_config.create_vocabulary import CreateVocabulary
 from chem_vault.application.workspace_config.delete_vocabulary import DeleteVocabulary
@@ -210,7 +221,7 @@ from chem_vault.application.research_organization.collection_membership import (
     ListCollectionMolecules,
     RemoveMoleculesFromCollection,
 )
-from chem_vault.application.research_organization.collection_merge_side_effect import CollectionMergeSideEffect
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_merge_side_effect import CollectionMergeSideEffect
 from chem_vault.application.research_organization.compose_collections import ComposeCollections
 from chem_vault.application.research_organization.create_collection import CreateCollection
 from chem_vault.application.research_organization.execute_search import ExecuteSearch
@@ -349,7 +360,7 @@ from chem_vault.application.attachment.upload_attachment import UploadAttachment
 from chem_vault.application.attachment.delete_attachment import DeleteAttachment
 from chem_vault.application.attachment.list_attachments import ListAttachments
 from chem_vault.application.attachment.download_attachment import DownloadAttachment
-from chem_vault.application.attachment.attachment_merge_side_effect import AttachmentMergeSideEffect
+from chem_vault.infrastructure.persistence.sqlalchemy.attachment.attachment_merge_side_effect import AttachmentMergeSideEffect
 from chem_vault.infrastructure.persistence.sqlalchemy.attachment.attachment_repository import SQLAlchemyAttachmentRepository
 from chem_vault.infrastructure.storage.fsspec_client import FsspecStorageClient, StorageSettings
 
@@ -472,6 +483,7 @@ def create_container(
             uow,
             SQLAlchemyControlledVocabularyRepository(uow),
             SQLAlchemyWorkspaceSettingsRepository(uow),
+            c[EventDispatcher],
         )
 
     container.define(DeleteVocabulary, _delete_vocabulary)
@@ -535,7 +547,7 @@ def create_container(
 
     def _delete_salt_entry(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeleteSaltEntry(uow, SQLAlchemySaltEntryRepository(uow))
+        return DeleteSaltEntry(uow, SQLAlchemySaltEntryRepository(uow), c[EventDispatcher])
 
     container.define(CreateSaltEntry, _salt_cmd(CreateSaltEntry))
     container.define(UpdateSaltEntry, _salt_cmd(UpdateSaltEntry))
@@ -566,10 +578,11 @@ def create_container(
 
     def _delete_registration_form(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeleteRegistrationForm(uow, SQLAlchemyRegistrationFormRepository(uow))
+        return DeleteRegistrationForm(uow, SQLAlchemyRegistrationFormRepository(uow), c[EventDispatcher])
 
     container.define(CreateRegistrationForm, _regform_cmd(CreateRegistrationForm))
     container.define(UpdateRegistrationForm, _regform_cmd(UpdateRegistrationForm))
+    container.define(GetRegistrationForm, _regform_query(GetRegistrationForm))
     container.define(ListRegistrationForms, _regform_query(ListRegistrationForms))
     container.define(DeleteRegistrationForm, _delete_registration_form)
 
@@ -617,7 +630,7 @@ def create_container(
 
     def _export_sdf(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return ExportMoleculesSDF(uow, SQLAlchemyMoleculeRepository(uow))
+        return ExportMoleculesSDF(uow, SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
 
     container.define(ExportMoleculesSDF, _export_sdf)
 
@@ -695,18 +708,24 @@ def create_container(
 
     container.define(DisclosureService, _disclosure_service)
 
-    def _disclosure_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(
-                uow=uow,
-                disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
-                molecule_repo=SQLAlchemyMoleculeRepository(uow),
-            )
-        return _f
+    def _get_disclosure(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetDisclosure(
+            uow=uow,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+        )
 
-    container.define(GetDisclosure, _disclosure_query(GetDisclosure))
-    container.define(ListDisclosures, _disclosure_query(ListDisclosures))
+    container.define(GetDisclosure, _get_disclosure)
+
+    def _list_disclosures(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListDisclosures(
+            uow=uow,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+        )
+
+    container.define(ListDisclosures, _list_disclosures)
 
     def _list_disclosures_by_workspace(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -979,7 +998,16 @@ def create_container(
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
     container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
-    container.define(AddReadoutDefinition, _protocol_cmd(AddReadoutDefinition))
+    container.define(ListProtocolsByProject, _protocol_query(ListProtocolsByProject))
+    container.define(AddProtocolToProject, _protocol_cmd(AddProtocolToProject))
+    container.define(RemoveProtocolFromProject, _protocol_cmd(RemoveProtocolFromProject))
+
+    def _add_readout_def(c):  # type: ignore[no-untyped-def]
+        from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator as FE
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddReadoutDefinition(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], c[FE])
+
+    container.define(AddReadoutDefinition, _add_readout_def)
     container.define(RemoveReadoutDefinition, _protocol_cmd(RemoveReadoutDefinition))
 
     def _target_cmd(uc_cls):  # type: ignore[no-untyped-def]
@@ -1082,10 +1110,14 @@ def create_container(
     def _pt_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyPlateTemplateRepository(uow))
+            return uc_cls(uow, SQLAlchemyPlateTemplateRepository(uow), c[EventDispatcher])
         return _f
 
-    _pt_query = _pt_cmd  # Same signature — uow + repo, no dispatcher
+    def _pt_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyPlateTemplateRepository(uow))
+        return _f
 
     container.define(CreatePlateTemplate, _pt_cmd(CreatePlateTemplate))
     container.define(UpdatePlateTemplate, _pt_cmd(UpdatePlateTemplate))
@@ -1123,6 +1155,7 @@ def create_container(
     def _cross_protocol_resolver(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CrossProtocolResolver(
+            uow=uow,
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
         )
@@ -1132,6 +1165,7 @@ def create_container(
     def _condition_grouping_service(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ConditionGroupingService(
+            uow=uow,
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
         )
@@ -1171,14 +1205,14 @@ def create_container(
 
     def _delete_reg_plate(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeletePlate(uow, SQLAlchemyRegisteredPlateRepository(uow))
+        return DeletePlate(uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher])
 
     container.define(DeletePlate, _delete_reg_plate)
 
     # --- Plate Read Model ---
     container.define(
         PlateReadModelService,
-        lambda c: PlateReadModelService(c[async_sessionmaker]()),
+        lambda c: SQLAlchemyPlateReadModelService(c[async_sessionmaker]()),
     )
 
     # --- Research Organization ---
@@ -1233,7 +1267,7 @@ def create_container(
 
     container.define(AddProjectMember, _member_cmd(AddProjectMember))
     container.define(RemoveProjectMember, _member_cmd(RemoveProjectMember))
-    container.define(UpdateProjectMemberRole, _member_query(UpdateProjectMemberRole))
+    container.define(UpdateProjectMemberRole, _member_cmd(UpdateProjectMemberRole))
     container.define(ListProjectMembers, _member_query(ListProjectMembers))
 
     # -- Molecule-project association --
@@ -1272,7 +1306,7 @@ def create_container(
 
     def _delete_collection(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow))
+        return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher])
 
     container.define(CreateCollection, _collection_cmd(CreateCollection))
     container.define(ComposeCollections, _collection_cmd(ComposeCollections))
@@ -1313,7 +1347,7 @@ def create_container(
 
     def _delete_saved_search(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeleteSavedSearch(uow, SQLAlchemySavedSearchRepository(uow))
+        return DeleteSavedSearch(uow, SQLAlchemySavedSearchRepository(uow), c[EventDispatcher])
 
     container.define(CreateSavedSearch, _ss_cmd(CreateSavedSearch))
     container.define(UpdateSavedSearch, _ss_cmd(UpdateSavedSearch))
@@ -1349,23 +1383,32 @@ def create_container(
     container.define(ExecuteSearch, _execute_search)
 
     # --- Import Templates ---
-    def _import_tmpl_uc(uc_cls):  # type: ignore[no-untyped-def]
+    def _import_tmpl_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyImportTemplateRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _import_tmpl_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyImportTemplateRepository(uow))
         return _f
 
-    container.define(CreateImportTemplate, _import_tmpl_uc(CreateImportTemplate))
-    container.define(ListImportTemplates, _import_tmpl_uc(ListImportTemplates))
-    container.define(DeleteImportTemplate, _import_tmpl_uc(DeleteImportTemplate))
+    container.define(CreateImportTemplate, _import_tmpl_cmd(CreateImportTemplate))
+    container.define(ListImportTemplates, _import_tmpl_query(ListImportTemplates))
+    container.define(DeleteImportTemplate, _import_tmpl_cmd(DeleteImportTemplate))
 
     # --- Import Plate Data Service ---
+    container.define(ImportFileCache, Singleton(ImportFileCache))
+
     def _import_plate_data_service(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportPlateDataService(
             uow=uow,
             plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            cache=c[ImportFileCache],
             create_run=c[CreateRun],
             bulk_create_readout_data=c[BulkCreateReadoutData],
         )
@@ -1395,5 +1438,14 @@ def create_container(
     container.define(DeleteAttachment, _attach_cmd(DeleteAttachment))
     container.define(ListAttachments, _attach_query(ListAttachments))
     container.define(DownloadAttachment, _attach_query_with_storage(DownloadAttachment))
+
+    # --- Dashboard ---
+    from chem_vault.application.dashboard.get_dashboard_stats import GetDashboardStats
+    from chem_vault.infrastructure.persistence.sqlalchemy.dashboard_reader import SQLAlchemyDashboardReader
+
+    container.define(
+        GetDashboardStats,
+        lambda c: GetDashboardStats(SQLAlchemyDashboardReader(c[async_sessionmaker])),
+    )
 
     return container

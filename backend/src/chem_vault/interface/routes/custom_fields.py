@@ -28,18 +28,14 @@ from chem_vault.application.workspace_config.update_custom_field import (
 from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
 from chem_vault.interface.dependencies import (
     AuthDep,
-    _get_use_case,
+    CreateCustomFieldDep,
+    DeleteCustomFieldDep,
+    ListCustomFieldsDep,
+    UpdateCustomFieldDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
-from typing import Annotated
-from fastapi import Depends
 
 router = APIRouter(prefix="/api/v1/custom-fields", tags=["custom-fields"])
-
-CreateCustomFieldDep = Annotated[CreateCustomField, Depends(_get_use_case(CreateCustomField))]
-ListCustomFieldsDep = Annotated[ListCustomFields, Depends(_get_use_case(ListCustomFields))]
-UpdateCustomFieldDep = Annotated[UpdateCustomField, Depends(_get_use_case(UpdateCustomField))]
-DeleteCustomFieldDep = Annotated[DeleteCustomField, Depends(_get_use_case(DeleteCustomField))]
 
 
 class CustomFieldResponse(BaseModel):

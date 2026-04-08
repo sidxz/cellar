@@ -60,6 +60,14 @@ class FakeShipmentRepo:
     async def find_by_id(self, id: uuid.UUID) -> Shipment | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Shipment | None:
+        item = self._store.get(id)
+        if item is not None and item.workspace_id == workspace_id:
+            return item
+        return None
+
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[Shipment]:
@@ -254,7 +262,7 @@ class TestGetShipment:
         uc = GetShipment(uow, repo)
 
         auth = FakeAuth(workspace_id=WS)
-        query = GetShipmentQuery(shipment_id=shipment.id)
+        query = GetShipmentQuery(workspace_id=WS, shipment_id=shipment.id)
 
         result = await uc(query, auth)
 
@@ -268,7 +276,7 @@ class TestGetShipment:
         uc = GetShipment(uow, repo)
 
         auth = FakeAuth(workspace_id=WS)
-        query = GetShipmentQuery(shipment_id=uuid.uuid4())
+        query = GetShipmentQuery(workspace_id=WS, shipment_id=uuid.uuid4())
 
         result = await uc(query, auth)
 
@@ -276,17 +284,17 @@ class TestGetShipment:
         assert isinstance(result.failure(), NotFoundError)
 
     @pytest.mark.asyncio
-    async def test_get_wrong_workspace_raises(self) -> None:
+    async def test_get_wrong_workspace_returns_failure(self) -> None:
         shipment = _make_shipment(workspace_id=OTHER_WS)
         repo = FakeShipmentRepo([shipment])
         uow = FakeUoW()
         uc = GetShipment(uow, repo)
 
         auth = FakeAuth(workspace_id=WS)
-        query = GetShipmentQuery(shipment_id=shipment.id)
+        query = GetShipmentQuery(workspace_id=WS, shipment_id=shipment.id)
 
-        with pytest.raises(Exception):
-            await uc(query, auth)
+        result = await uc(query, auth)
+        assert isinstance(result, Failure)
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +372,7 @@ class TestShipShipment:
 
         auth = FakeAuth(workspace_id=WS)
         cmd = ShipShipmentCommand(
+            workspace_id=WS,
             shipment_id=shipment.id,
             tracking_number="TRACK-XYZ-001",
         )
@@ -384,6 +393,7 @@ class TestShipShipment:
 
         auth = FakeAuth(workspace_id=WS)
         cmd = ShipShipmentCommand(
+            workspace_id=WS,
             shipment_id=uuid.uuid4(),
             tracking_number="TRACK-001",
         )
@@ -404,6 +414,7 @@ class TestShipShipment:
         auth = FakeAuth(workspace_id=WS)
         shipping_date = date(2026, 4, 10)
         cmd = ShipShipmentCommand(
+            workspace_id=WS,
             shipment_id=shipment.id,
             tracking_number="TRACK-002",
             shipping_date=shipping_date,
@@ -430,7 +441,7 @@ class TestMarkShipmentInTransit:
         uc = MarkShipmentInTransit(uow, repo, dispatcher)
 
         auth = FakeAuth(workspace_id=WS)
-        cmd = MarkInTransitCommand(shipment_id=shipment.id)
+        cmd = MarkInTransitCommand(workspace_id=WS, shipment_id=shipment.id)
 
         result = await uc(cmd, auth)
 
@@ -445,7 +456,7 @@ class TestMarkShipmentInTransit:
         uc = MarkShipmentInTransit(uow, repo, dispatcher)
 
         auth = FakeAuth(workspace_id=WS)
-        cmd = MarkInTransitCommand(shipment_id=uuid.uuid4())
+        cmd = MarkInTransitCommand(workspace_id=WS, shipment_id=uuid.uuid4())
 
         result = await uc(cmd, auth)
 
@@ -468,7 +479,7 @@ class TestDeliverShipment:
         uc = DeliverShipment(uow, repo, dispatcher)
 
         auth = FakeAuth(workspace_id=WS)
-        cmd = DeliverShipmentCommand(shipment_id=shipment.id)
+        cmd = DeliverShipmentCommand(workspace_id=WS, shipment_id=shipment.id)
 
         result = await uc(cmd, auth)
 
@@ -485,7 +496,7 @@ class TestDeliverShipment:
 
         auth = FakeAuth(workspace_id=WS)
         received = date(2026, 4, 20)
-        cmd = DeliverShipmentCommand(shipment_id=shipment.id, received_date=received)
+        cmd = DeliverShipmentCommand(workspace_id=WS, shipment_id=shipment.id, received_date=received)
 
         result = await uc(cmd, auth)
 
@@ -500,7 +511,7 @@ class TestDeliverShipment:
         uc = DeliverShipment(uow, repo, dispatcher)
 
         auth = FakeAuth(workspace_id=WS)
-        cmd = DeliverShipmentCommand(shipment_id=uuid.uuid4())
+        cmd = DeliverShipmentCommand(workspace_id=WS, shipment_id=uuid.uuid4())
 
         result = await uc(cmd, auth)
 
@@ -523,7 +534,7 @@ class TestReturnShipment:
         uc = ReturnShipment(uow, repo, dispatcher)
 
         auth = FakeAuth(workspace_id=WS)
-        cmd = ReturnShipmentCommand(shipment_id=shipment.id)
+        cmd = ReturnShipmentCommand(workspace_id=WS, shipment_id=shipment.id)
 
         result = await uc(cmd, auth)
 
@@ -538,7 +549,7 @@ class TestReturnShipment:
         uc = ReturnShipment(uow, repo, dispatcher)
 
         auth = FakeAuth(workspace_id=WS)
-        cmd = ReturnShipmentCommand(shipment_id=uuid.uuid4())
+        cmd = ReturnShipmentCommand(workspace_id=WS, shipment_id=uuid.uuid4())
 
         result = await uc(cmd, auth)
 
@@ -564,6 +575,7 @@ class TestAddShipmentItem:
         auth = FakeAuth(workspace_id=WS)
         new_sample_id = uuid.uuid4()
         cmd = AddShipmentItemCommand(
+            workspace_id=WS,
             shipment_id=shipment.id,
             sample_id=new_sample_id,
             amount_value=3.0,
@@ -589,6 +601,7 @@ class TestAddShipmentItem:
 
         auth = FakeAuth(workspace_id=WS)
         cmd = AddShipmentItemCommand(
+            workspace_id=WS,
             shipment_id=uuid.uuid4(),
             sample_id=uuid.uuid4(),
             amount_value=1.0,
@@ -610,6 +623,7 @@ class TestAddShipmentItem:
 
         auth = FakeAuth(workspace_id=WS)
         cmd = AddShipmentItemCommand(
+            workspace_id=WS,
             shipment_id=shipment.id,
             sample_id=uuid.uuid4(),
             amount_value=1.0,

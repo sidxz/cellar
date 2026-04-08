@@ -60,14 +60,24 @@ class SQLAlchemyCollectionRepository(
         model.visibility = aggregate.visibility.value
 
     # ------------------------------------------------------------------
-    # Override find_by_id to populate molecule_count
+    # Workspace-scoped lookup (overrides base to include molecule_count)
     # ------------------------------------------------------------------
 
-    async def find_by_id(self, id: uuid.UUID) -> Collection | None:
-        model = await self._session.get(CollectionModel, id)
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Collection | None:
+        stmt = (
+            select(CollectionModel)
+            .where(
+                CollectionModel.id == id,
+                CollectionModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
         if model is None:
             return None
-        count = await self.count_molecules(id)
+        count = await self.count_molecules(workspace_id, id)
         domain_entity = self._to_domain(model, molecule_count=count)
         self._uow.track(domain_entity)
         return domain_entity
@@ -107,8 +117,11 @@ class SQLAlchemyCollectionRepository(
             for row in result.all()
         ]
 
-    async def delete(self, id: uuid.UUID) -> None:
-        stmt = delete(CollectionModel).where(CollectionModel.id == id)
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = delete(CollectionModel).where(
+            CollectionModel.workspace_id == workspace_id,
+            CollectionModel.id == id,
+        )
         await self._session.execute(stmt)
 
     # ------------------------------------------------------------------
@@ -116,9 +129,17 @@ class SQLAlchemyCollectionRepository(
     # ------------------------------------------------------------------
 
     async def add_molecules(
-        self, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> int:
         if not molecule_ids:
+            return 0
+        # Defense-in-depth: verify collection belongs to workspace before inserting
+        ownership_stmt = select(CollectionModel.id).where(
+            CollectionModel.id == collection_id,
+            CollectionModel.workspace_id == workspace_id,
+        )
+        ownership_result = await self._session.execute(ownership_stmt)
+        if ownership_result.scalar_one_or_none() is None:
             return 0
         values = [
             {"collection_id": collection_id, "molecule_id": mid}
@@ -129,19 +150,26 @@ class SQLAlchemyCollectionRepository(
         return result.rowcount  # type: ignore[return-value]
 
     async def remove_molecules(
-        self, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> int:
         if not molecule_ids:
             return 0
+        # Defense-in-depth: only delete if collection belongs to workspace
         stmt = delete(CollectionMoleculeModel).where(
             CollectionMoleculeModel.collection_id == collection_id,
             CollectionMoleculeModel.molecule_id.in_(molecule_ids),
+            CollectionMoleculeModel.collection_id.in_(
+                select(CollectionModel.id).where(
+                    CollectionModel.workspace_id == workspace_id
+                )
+            ),
         )
         result = await self._session.execute(stmt)
         return result.rowcount  # type: ignore[return-value]
 
     async def get_molecule_ids(
         self,
+        workspace_id: uuid.UUID,
         collection_id: uuid.UUID,
         *,
         offset: int = 0,
@@ -149,7 +177,11 @@ class SQLAlchemyCollectionRepository(
     ) -> list[uuid.UUID]:
         stmt = (
             select(CollectionMoleculeModel.molecule_id)
-            .where(CollectionMoleculeModel.collection_id == collection_id)
+            .join(CollectionModel, CollectionMoleculeModel.collection_id == CollectionModel.id)
+            .where(
+                CollectionMoleculeModel.collection_id == collection_id,
+                CollectionModel.workspace_id == workspace_id,
+            )
             .order_by(CollectionMoleculeModel.added_at)
             .offset(offset)
             .limit(limit)
@@ -157,11 +189,15 @@ class SQLAlchemyCollectionRepository(
         result = await self._session.execute(stmt)
         return list(result.scalars())
 
-    async def count_molecules(self, collection_id: uuid.UUID) -> int:
+    async def count_molecules(self, workspace_id: uuid.UUID, collection_id: uuid.UUID) -> int:
         stmt = (
             select(func.count())
             .select_from(CollectionMoleculeModel)
-            .where(CollectionMoleculeModel.collection_id == collection_id)
+            .join(CollectionModel, CollectionMoleculeModel.collection_id == CollectionModel.id)
+            .where(
+                CollectionMoleculeModel.collection_id == collection_id,
+                CollectionModel.workspace_id == workspace_id,
+            )
         )
         result = await self._session.execute(stmt)
         return result.scalar_one()
@@ -198,31 +234,45 @@ class SQLAlchemyCollectionRepository(
 
     async def compose_molecule_ids(
         self,
+        workspace_id: uuid.UUID,
         operation: str,
         collection_ids: list[uuid.UUID],
     ) -> list[uuid.UUID]:
-        """Execute set operation across collection memberships."""
+        """Execute set operation across collection memberships.
+
+        Only considers collections belonging to the specified workspace.
+        """
         from sqlalchemy import func as sa_func
+
+        # Restrict to collections in this workspace (defense-in-depth)
+        valid_stmt = select(CollectionModel.id).where(
+            CollectionModel.id.in_(collection_ids),
+            CollectionModel.workspace_id == workspace_id,
+        )
+        valid_result = await self._session.execute(valid_stmt)
+        ws_ids = list(valid_result.scalars())
+        if not ws_ids:
+            return []
 
         if operation == "union":
             stmt = (
                 select(CollectionMoleculeModel.molecule_id)
-                .where(CollectionMoleculeModel.collection_id.in_(collection_ids))
+                .where(CollectionMoleculeModel.collection_id.in_(ws_ids))
                 .group_by(CollectionMoleculeModel.molecule_id)
             )
         elif operation == "intersect":
             stmt = (
                 select(CollectionMoleculeModel.molecule_id)
-                .where(CollectionMoleculeModel.collection_id.in_(collection_ids))
+                .where(CollectionMoleculeModel.collection_id.in_(ws_ids))
                 .group_by(CollectionMoleculeModel.molecule_id)
                 .having(
                     sa_func.count(sa_func.distinct(CollectionMoleculeModel.collection_id))
-                    == len(collection_ids)
+                    == len(ws_ids)
                 )
             )
         elif operation == "difference":
-            first_id = collection_ids[0]
-            rest_ids = collection_ids[1:]
+            first_id = ws_ids[0]
+            rest_ids = ws_ids[1:]
             first = select(CollectionMoleculeModel.molecule_id).where(
                 CollectionMoleculeModel.collection_id == first_id
             )
@@ -233,7 +283,7 @@ class SQLAlchemyCollectionRepository(
         elif operation == "symmetric_difference":
             stmt = (
                 select(CollectionMoleculeModel.molecule_id)
-                .where(CollectionMoleculeModel.collection_id.in_(collection_ids))
+                .where(CollectionMoleculeModel.collection_id.in_(ws_ids))
                 .group_by(CollectionMoleculeModel.molecule_id)
                 .having(
                     sa_func.count(sa_func.distinct(CollectionMoleculeModel.collection_id)) == 1
@@ -248,10 +298,11 @@ class SQLAlchemyCollectionRepository(
 
     async def replace_molecule(
         self,
+        workspace_id: uuid.UUID,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> int:
-        """Replace source molecule with target in all collections.
+        """Replace source molecule with target in workspace collections.
 
         Two-step process to avoid unique constraint violations:
         1. DELETE rows where both source and target exist in the same collection.
@@ -259,27 +310,38 @@ class SQLAlchemyCollectionRepository(
 
         Returns the number of rows updated in step 2.
         """
-        params = {"source": source_molecule_id, "target": target_molecule_id}
+        params = {
+            "source": source_molecule_id,
+            "target": target_molecule_id,
+            "ws": workspace_id,
+        }
 
         # Step 1: Remove duplicate entries — collections that already have
         # the target molecule; the source entry would cause a PK conflict.
+        # Scoped to workspace via JOIN to collections table.
         await self._session.execute(
             sa.text(
                 "DELETE FROM collection_molecules cm1 "
                 "USING collection_molecules cm2 "
+                "JOIN collections c ON c.id = cm1.collection_id "
                 "WHERE cm1.molecule_id = :source "
                 "AND cm2.molecule_id = :target "
-                "AND cm1.collection_id = cm2.collection_id"
+                "AND cm1.collection_id = cm2.collection_id "
+                "AND c.workspace_id = :ws"
             ),
             params,
         )
 
-        # Step 2: Re-point remaining source references to target.
+        # Step 2: Re-point remaining source references to target,
+        # scoped to workspace via JOIN to collections table.
         result = await self._session.execute(
             sa.text(
-                "UPDATE collection_molecules "
+                "UPDATE collection_molecules cm "
                 "SET molecule_id = :target "
-                "WHERE molecule_id = :source"
+                "FROM collections c "
+                "WHERE cm.molecule_id = :source "
+                "AND cm.collection_id = c.id "
+                "AND c.workspace_id = :ws"
             ),
             params,
         )

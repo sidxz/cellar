@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class ProtocolActivitySummary:
     protocol_name: str
     protocol_type: str
     readouts: list[AggregatedReadout] = field(default_factory=list)
-    best_curves: list[dict] = field(default_factory=list)
+    best_curves: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

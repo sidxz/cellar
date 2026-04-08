@@ -54,6 +54,14 @@ class FakeMoleculeRepository:
     async def find_by_id(self, id: uuid.UUID) -> Molecule | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Molecule | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
+
     async def save(self, aggregate: Molecule) -> None:
         self._store[aggregate.id] = aggregate
 
@@ -171,6 +179,7 @@ def _make_command(
     reason: MergeReason = MergeReason.MANUAL_MERGE,
 ) -> MergeCommand:
     return MergeCommand(
+        workspace_id=WS_ID,
         source_molecule_id=source_id,
         target_molecule_id=target_id,
         reason=reason,
@@ -402,7 +411,7 @@ class TestMergeServiceSideEffects:
         await _deps["service"](cmd, auth=FakeAuth())
 
         handler.on_merge.assert_awaited_once_with(
-            _deps["uow"].session,
+            _deps["uow"],
             source.id,
             target.id,
         )

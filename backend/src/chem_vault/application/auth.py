@@ -11,7 +11,7 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.research_organization.project_membership import ProjectRole
-from chem_vault.domain.shared.errors import AuthorizationError
+from chem_vault.domain.shared.errors import AuthorizationError, NotFoundError
 
 # Role hierarchy (ascending privilege)
 _ROLE_HIERARCHY: dict[str, int] = {
@@ -72,11 +72,11 @@ def require_same_workspace(auth: AuthContext | None, workspace_id: uuid.UUID | N
 
     Returns NotFoundError-style message to avoid leaking entity existence.
     """
-    if auth is None or workspace_id is None:
-        return
+    if auth is None:
+        return  # Workers / system calls bypass
+    if workspace_id is None:
+        raise AuthorizationError("workspace_id must not be None")
     if auth.workspace_id != workspace_id:
-        from chem_vault.domain.shared.errors import NotFoundError
-
         raise NotFoundError("Entity")
 
 

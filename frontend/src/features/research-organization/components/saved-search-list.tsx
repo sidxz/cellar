@@ -8,6 +8,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { MemberName } from "@/shared/components/entity-name";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { useProjects } from "../hooks/use-projects";
 import { CreateSavedSearchDialog } from "./create-saved-search-dialog";
@@ -57,15 +58,15 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
         valueGetter: (params) => {
           const pid = params.data?.project_id;
           if (!pid) return "\u2014";
-          return projectLookup.get(pid) ?? pid.slice(0, 8) + "...";
+          return projectLookup.get(pid) ?? "\u2014";
         },
       },
       {
         headerName: "Created By",
         field: "created_by",
-        width: 140,
-        valueFormatter: (p) =>
-          p.value ? String(p.value).slice(0, 8) + "..." : "\u2014",
+        width: 160,
+        cellRenderer: (params: ICellRendererParams<SavedSearch>) =>
+          params.value ? <MemberName id={params.value} /> : "\u2014",
       },
     ],
     [projectLookup]

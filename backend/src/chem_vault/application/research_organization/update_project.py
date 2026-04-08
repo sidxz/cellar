@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -11,6 +12,7 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.research_organization.project import Project
 from chem_vault.domain.research_organization.repository import ProjectRepository
 from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
@@ -21,7 +23,7 @@ class UpdateProjectCommand(Command):
     workspace_id: uuid.UUID
     project_id: uuid.UUID
     name: str | None = None
-    description: str | None = ...  # type: ignore[assignment]
+    description: str | None | object = UNSET
 
 
 class UpdateProject:
@@ -41,8 +43,8 @@ class UpdateProject:
         require_editor(auth)
 
         async with self._uow:
-            project = await self._repo.find_by_id(input.project_id)
-            if project is None or project.workspace_id != input.workspace_id:
+            project = await self._repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
+            if project is None:
                 return Failure(NotFoundError("Project", str(input.project_id)))
 
             # Name uniqueness check
@@ -56,10 +58,10 @@ class UpdateProject:
                     )
 
             # Build kwargs — only include fields that were provided
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             if input.name is not None:
                 fields["name"] = input.name
-            if input.description is not ...:
+            if input.description is not UNSET:
                 fields["description"] = input.description
 
             if fields:

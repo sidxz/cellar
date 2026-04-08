@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -39,8 +40,9 @@ class ComposeCollections:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: ComposeCollectionsCommand
+        self, input: ComposeCollectionsCommand, auth: AuthContext | None = None
     ) -> Result[Collection, DomainError]:
+        require_editor(auth)
         if len(input.collection_ids) < 2:
             return Failure(ValidationError("At least 2 collections required."))
 
@@ -51,7 +53,7 @@ class ComposeCollections:
 
         async with self._uow:
             molecule_ids = await self._repo.compose_molecule_ids(
-                input.operation, input.collection_ids
+                input.workspace_id, input.operation, input.collection_ids
             )
 
             collection = Collection.create(
@@ -62,7 +64,7 @@ class ComposeCollections:
             await self._repo.save(collection)
 
             if molecule_ids:
-                await self._repo.add_molecules(collection.id, molecule_ids)
+                await self._repo.add_molecules(input.workspace_id, collection.id, molecule_ids)
             collection.molecule_count = len(molecule_ids)
 
             events = await self._uow.commit()

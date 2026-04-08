@@ -98,6 +98,13 @@ export type SearchResult = {
   similarity: number | null;
 };
 
+interface StructureSearchResponse {
+  search_type: string;
+  molecules: Molecule[] | null;
+  similarity_results: SimilaritySearchResult[] | null;
+  count: number;
+}
+
 export function useSearchMolecules(params: {
   search_type: string;
   query: string;
@@ -118,20 +125,21 @@ export function useSearchMolecules(params: {
   return useQuery({
     queryKey: [...MOLECULES_KEY, "search", params],
     queryFn: async () => {
-      if (isSimilarity) {
-        const data = await customInstance<SimilaritySearchResult[]>({
-          url: "/api/v1/molecules/search",
-          method: "GET",
-          params: queryParams,
-        });
-        return data.map((r) => ({ molecule: r.molecule, similarity: r.similarity }));
-      }
-      const data = await customInstance<Molecule[]>({
+      const data = await customInstance<StructureSearchResponse>({
         url: "/api/v1/molecules/search",
         method: "GET",
         params: queryParams,
       });
-      return data.map((m) => ({ molecule: m, similarity: null }));
+      if (isSimilarity && data.similarity_results) {
+        return data.similarity_results.map((r) => ({
+          molecule: r.molecule,
+          similarity: r.similarity,
+        }));
+      }
+      return (data.molecules ?? []).map((m) => ({
+        molecule: m,
+        similarity: null,
+      }));
     },
     enabled: !!params?.query,
   });

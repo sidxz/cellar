@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -11,6 +12,7 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.research_organization.collection import Collection, CollectionVisibility
 from chem_vault.domain.research_organization.repository import CollectionRepository
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
@@ -21,9 +23,9 @@ class UpdateCollectionCommand(Command):
     workspace_id: uuid.UUID
     collection_id: uuid.UUID
     name: str | None = None
-    description: str | None = ...  # type: ignore[assignment]
-    project_id: uuid.UUID | None = ...  # type: ignore[assignment]
-    owned_by_org_id: uuid.UUID | None = ...  # type: ignore[assignment]
+    description: str | None | object = UNSET
+    project_id: uuid.UUID | None | object = UNSET
+    owned_by_org_id: uuid.UUID | None | object = UNSET
     visibility: str | None = None
 
 
@@ -44,19 +46,19 @@ class UpdateCollection:
         require_editor(auth)
 
         async with self._uow:
-            collection = await self._repo.find_by_id(input.collection_id)
-            if collection is None or collection.workspace_id != input.workspace_id:
+            collection = await self._repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
+            if collection is None:
                 return Failure(NotFoundError("Collection", str(input.collection_id)))
 
             # Build kwargs — only include fields that were provided
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             if input.name is not None:
                 fields["name"] = input.name
-            if input.description is not ...:
+            if input.description is not UNSET:
                 fields["description"] = input.description
-            if input.project_id is not ...:
+            if input.project_id is not UNSET:
                 fields["project_id"] = input.project_id
-            if input.owned_by_org_id is not ...:
+            if input.owned_by_org_id is not UNSET:
                 fields["owned_by_org_id"] = input.owned_by_org_id
             if input.visibility is not None:
                 fields["visibility"] = CollectionVisibility(input.visibility)

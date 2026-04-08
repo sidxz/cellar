@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -13,7 +14,8 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import ConflictError, DomainError
 from chem_vault.domain.workspace_config.enums import FieldTarget
-from chem_vault.domain.workspace_config.registration_form import FieldOverride, RegistrationForm
+from chem_vault.domain.workspace_config.registration_form import RegistrationForm
+from chem_vault.domain.workspace_config.value_objects import FieldOverride
 from chem_vault.domain.workspace_config.repository import RegistrationFormRepository
 
 
@@ -23,7 +25,7 @@ class CreateRegistrationFormCommand(Command):
     name: str
     applies_to: FieldTarget
     is_default: bool = False
-    field_overrides: list[dict] = field(default_factory=list)
+    field_overrides: list[dict[str, Any]] = field(default_factory=list)
 
 
 class CreateRegistrationForm:

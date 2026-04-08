@@ -99,7 +99,7 @@ export function DoseResponseChart({ curves, className }: DoseResponseChartProps)
     const curve = curves[i];
     const color = TRACE_COLORS[i % TRACE_COLORS.length];
     const group = `curve-${curve.id}`;
-    const label = `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} (${curve.molecule_id.slice(0, 8)})`;
+    const label = CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type;
 
     // Collect all x values to determine range for curve
     const included = extractPoints(curve.raw_data);

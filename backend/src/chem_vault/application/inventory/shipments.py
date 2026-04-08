@@ -8,7 +8,7 @@ from datetime import date
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -55,6 +55,7 @@ class CreateShipmentCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class ShipShipmentCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
     tracking_number: str
     shipping_date: date | None = None
@@ -62,22 +63,26 @@ class ShipShipmentCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class MarkInTransitCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeliverShipmentCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
     received_date: date | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class ReturnShipmentCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class AddShipmentItemCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
     sample_id: uuid.UUID
     amount_value: float
@@ -86,6 +91,7 @@ class AddShipmentItemCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class UpdateShipmentCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
     carrier: str | None | object = UNSET
     expected_arrival_date: date | None | object = UNSET
@@ -95,6 +101,7 @@ class UpdateShipmentCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteShipmentCommand(Command):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
 
 
@@ -105,6 +112,7 @@ class DeleteShipmentCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class GetShipmentQuery(Query):
+    workspace_id: uuid.UUID
     shipment_id: uuid.UUID
 
 
@@ -177,10 +185,11 @@ class GetShipment:
         self, input: GetShipmentQuery, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
             return Success(shipment)
 
 
@@ -192,7 +201,6 @@ class ListShipments:
     async def __call__(
         self, input: ListShipmentsQuery, auth: AuthContext | None = None
     ) -> Result[list[Shipment], DomainError]:
-        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             shipments = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status
@@ -217,10 +225,11 @@ class ShipShipment:
         require_editor(auth)
 
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             shipment.ship(input.tracking_number, shipping_date=input.shipping_date)
 
@@ -247,10 +256,11 @@ class MarkShipmentInTransit:
         require_editor(auth)
 
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             shipment.mark_in_transit()
 
@@ -277,10 +287,11 @@ class DeliverShipment:
         require_editor(auth)
 
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             shipment.deliver(received_date=input.received_date)
 
@@ -307,10 +318,11 @@ class ReturnShipment:
         require_editor(auth)
 
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             shipment.return_shipment()
 
@@ -337,10 +349,11 @@ class AddShipmentItem:
         require_editor(auth)
 
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             item = ShipmentItem(
                 shipment_id=shipment.id,
@@ -374,10 +387,11 @@ class UpdateShipment:
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             if shipment.status != ShipmentStatus.PREPARING:
                 return Failure(ValidationError("Can only update shipments in preparing status"))
@@ -413,10 +427,11 @@ class DeleteShipment:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            shipment = await self._repo.find_by_id(input.shipment_id)
+            shipment = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.shipment_id
+            )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
-            require_same_workspace(auth, shipment.workspace_id)
 
             if shipment.status != ShipmentStatus.PREPARING:
                 return Failure(ValidationError("Can only delete shipments in preparing status"))

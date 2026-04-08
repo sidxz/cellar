@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { EntityLink } from "@/shared/components/entity-link";
+import { MoleculeName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -123,11 +123,12 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <EntityLink
-                            type="compound"
-                            id={relatedId}
-                            label={relatedId.slice(0, 8)}
-                          />
+                          <a
+                            href={`/compounds/${relatedId}`}
+                            className="text-primary hover:underline underline-offset-4 text-sm"
+                          >
+                            <MoleculeName id={relatedId} />
+                          </a>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {rel.notes ?? "\u2014"}
@@ -256,9 +257,9 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                     <p className="text-xs text-muted-foreground mt-1">
                       {new Date(m.merged_at).toLocaleDateString()}
                       {" \u2022 "}
-                      Source: <span className="font-mono">{m.source_molecule_id.slice(0, 8)}</span>
+                      Source: <MoleculeName id={m.source_molecule_id} />
                       {" \u2192 "}
-                      Target: <span className="font-mono">{m.target_molecule_id.slice(0, 8)}</span>
+                      Target: <MoleculeName id={m.target_molecule_id} />
                     </p>
                     {m.notes && (
                       <p className="text-xs text-muted-foreground mt-1">

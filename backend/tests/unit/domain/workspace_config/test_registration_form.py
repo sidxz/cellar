@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.workspace_config.registration_form import (
     FieldOverride,
     RegistrationForm,
@@ -98,7 +99,7 @@ class TestRegistrationFormCreate:
         assert form.field_overrides[0].is_required is True
 
     def test_empty_name_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="name"):
+        with pytest.raises(ValidationError, match="name"):
             RegistrationForm.create(
                 workspace_id=ws_id,
                 name="",
@@ -106,7 +107,7 @@ class TestRegistrationFormCreate:
             )
 
     def test_whitespace_name_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="name"):
+        with pytest.raises(ValidationError, match="name"):
             RegistrationForm.create(
                 workspace_id=ws_id,
                 name="   ",
@@ -178,15 +179,17 @@ class TestRegistrationFormUpdate:
 
     def test_update_empty_name_raises(self, ws_id: uuid.UUID) -> None:
         form = self._make(ws_id)
-        with pytest.raises(ValueError, match="name"):
+        with pytest.raises(ValidationError, match="name"):
             form.update(name="")
 
     def test_update_no_args_is_noop(self, ws_id: uuid.UUID) -> None:
         form = self._make(ws_id)
+        form.clear_events()
         original_name = form.name
         form.update()
         # Name unchanged, but event is still registered
         assert form.name == original_name
+        assert len(form.collect_events()) == 1
 
     def test_set_default_true(self, ws_id: uuid.UUID) -> None:
         form = self._make(ws_id)

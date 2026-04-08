@@ -51,6 +51,7 @@ class Attachment(AggregateRoot):
     def create(
         cls,
         *,
+        id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         file_name: str,
         mime_type: str,
@@ -62,6 +63,7 @@ class Attachment(AggregateRoot):
     ) -> Attachment:
         """Factory method — creates attachment and registers domain event."""
         attachment = cls(
+            id=id,
             workspace_id=workspace_id,
             file_name=file_name,
             mime_type=mime_type,

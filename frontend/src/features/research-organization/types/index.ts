@@ -22,8 +22,8 @@ export type RefType =
   | "inchi_key"
   | "name";
 
-export const REF_TYPE_LABELS: Record<RefType, string> = {
-  uuid: "UUID",
+/** User-facing labels — excludes "uuid" which is only used internally */
+export const REF_TYPE_LABELS: Record<Exclude<RefType, "uuid">, string> = {
   registration_number: "Registration Number",
   external_id: "External ID",
   smiles: "SMILES",

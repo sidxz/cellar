@@ -340,7 +340,7 @@ async def preview_shipment_import(
 async def get_shipment(
     shipment_id: uuid.UUID, auth: AuthDep, uc: GetShipmentDep
 ) -> ShipmentResponse:
-    result = await uc(GetShipmentQuery(shipment_id=shipment_id), auth=auth)
+    result = await uc(GetShipmentQuery(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth)
     shipment = result_to_response(result)
     return ShipmentResponse.from_domain(shipment)
 
@@ -355,6 +355,7 @@ async def update_shipment(
     from chem_vault.application.shared.sentinel import UNSET
 
     cmd = UpdateShipmentCommand(
+        workspace_id=auth.workspace_id,
         shipment_id=shipment_id,
         carrier=body.carrier if "carrier" in body.model_fields_set else UNSET,
         expected_arrival_date=body.expected_arrival_date if "expected_arrival_date" in body.model_fields_set else UNSET,
@@ -370,7 +371,7 @@ async def update_shipment(
 async def delete_shipment(
     shipment_id: uuid.UUID, auth: AuthDep, uc: DeleteShipmentDep
 ) -> None:
-    result = await uc(DeleteShipmentCommand(shipment_id=shipment_id), auth=auth)
+    result = await uc(DeleteShipmentCommand(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth)
     result_to_response(result)
 
 
@@ -380,6 +381,7 @@ async def ship_shipment(
 ) -> ShipmentResponse:
     result = await uc(
         ShipShipmentCommand(
+            workspace_id=auth.workspace_id,
             shipment_id=shipment_id,
             tracking_number=body.tracking_number,
             shipping_date=body.shipping_date,
@@ -394,7 +396,7 @@ async def ship_shipment(
 async def mark_in_transit(
     shipment_id: uuid.UUID, auth: AuthDep, uc: MarkShipmentInTransitDep
 ) -> ShipmentResponse:
-    result = await uc(MarkInTransitCommand(shipment_id=shipment_id), auth=auth)
+    result = await uc(MarkInTransitCommand(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth)
     shipment = result_to_response(result)
     return ShipmentResponse.from_domain(shipment)
 
@@ -405,6 +407,7 @@ async def deliver_shipment(
 ) -> ShipmentResponse:
     result = await uc(
         DeliverShipmentCommand(
+            workspace_id=auth.workspace_id,
             shipment_id=shipment_id,
             received_date=body.received_date,
         ),
@@ -418,7 +421,7 @@ async def deliver_shipment(
 async def return_shipment(
     shipment_id: uuid.UUID, auth: AuthDep, uc: ReturnShipmentDep
 ) -> ShipmentResponse:
-    result = await uc(ReturnShipmentCommand(shipment_id=shipment_id), auth=auth)
+    result = await uc(ReturnShipmentCommand(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth)
     shipment = result_to_response(result)
     return ShipmentResponse.from_domain(shipment)
 
@@ -429,6 +432,7 @@ async def add_shipment_item(
 ) -> ShipmentResponse:
     result = await uc(
         AddShipmentItemCommand(
+            workspace_id=auth.workspace_id,
             shipment_id=shipment_id,
             sample_id=body.sample_id,
             amount_value=body.amount_value,

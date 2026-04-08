@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from lagom import Container
@@ -207,7 +207,7 @@ class ProtocolActivityResponse(BaseModel):
     protocol_name: str
     protocol_type: str
     readouts: list[ActivityValueResponse] = []
-    best_curves: list[dict] = []
+    best_curves: list[dict[str, Any]] = []
 
 
 class ActivitySummaryResponse(BaseModel):
@@ -228,6 +228,15 @@ class ActivitySummaryResponse(BaseModel):
                 for p in summary.protocols
             ],
         )
+
+
+class StructureSearchResponse(BaseModel):
+    """Wrapper for structure search results (exact, substructure, or similarity)."""
+
+    search_type: str
+    molecules: list[MoleculeResponse] | None = None
+    similarity_results: list[SimilaritySearchResult] | None = None
+    count: int
 
 
 class RegistrationResponse(BaseModel):
@@ -397,15 +406,20 @@ async def list_molecules(
     )
 
 
-@router.get("/search")
+@router.get("/search", response_model=StructureSearchResponse)
 async def search_molecules(
     auth: AuthDep,
     use_case: SearchMoleculesDep,
     search_type: str,
     query: str,
     threshold: float = 0.7,
-) -> list[MoleculeResponse] | list[SimilaritySearchResult]:
-    """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES)."""
+    limit: int = 100,
+) -> StructureSearchResponse:
+    """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES).
+
+    Results are capped at ``limit`` (max 500, default 100).
+    """
+    capped_limit = max(1, min(limit, 500))
     q = SearchMoleculesQuery(
         workspace_id=auth.workspace_id,
         search_type=search_type,
@@ -417,11 +431,21 @@ async def search_molecules(
     if search_type == "similarity":
         from chem_vault.application.chemical_registration.search_molecules import SimilarityResult
 
-        return [
+        items = [
             SimilaritySearchResult.from_domain(r.molecule, r.similarity)
-            for r in results
+            for r in results[:capped_limit]
         ]
-    return [MoleculeResponse.from_domain(m) for m in results]
+        return StructureSearchResponse(
+            search_type=search_type,
+            similarity_results=items,
+            count=len(items),
+        )
+    mol_items = [MoleculeResponse.from_domain(m) for m in results[:capped_limit]]
+    return StructureSearchResponse(
+        search_type=search_type,
+        molecules=mol_items,
+        count=len(mol_items),
+    )
 
 
 @router.get("/by-identifier/{identifier}", response_model=MoleculeResponse)

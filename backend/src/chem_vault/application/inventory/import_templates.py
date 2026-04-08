@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.import_template import ImportTemplate
@@ -20,7 +22,7 @@ from chem_vault.domain.shared.errors import DomainError, NotFoundError
 class CreateImportTemplateCommand(Command):
     workspace_id: uuid.UUID
     name: str
-    column_mappings: dict
+    column_mappings: dict[str, Any]
     description: str | None = None
     default_protocol_id: uuid.UUID | None = None
     created_by: uuid.UUID
@@ -38,9 +40,10 @@ class DeleteImportTemplateCommand(Command):
 
 
 class CreateImportTemplate:
-    def __init__(self, uow: UnitOfWork, repo: ImportTemplateRepository) -> None:
+    def __init__(self, uow: UnitOfWork, repo: ImportTemplateRepository, dispatcher: EventDispatcherProtocol) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: CreateImportTemplateCommand, auth: AuthContext | None = None
@@ -56,7 +59,8 @@ class CreateImportTemplate:
                 created_by=input.created_by,
             )
             await self._repo.save(template)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(template)
 
 
@@ -74,18 +78,22 @@ class ListImportTemplates:
 
 
 class DeleteImportTemplate:
-    def __init__(self, uow: UnitOfWork, repo: ImportTemplateRepository) -> None:
+    def __init__(self, uow: UnitOfWork, repo: ImportTemplateRepository, dispatcher: EventDispatcherProtocol) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: DeleteImportTemplateCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            template = await self._repo.find_by_id(input.template_id)
-            if template is None or template.workspace_id != input.workspace_id:
+            template = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.template_id
+            )
+            if template is None:
                 return Failure(NotFoundError("ImportTemplate", str(input.template_id)))
             await self._repo.delete(input.workspace_id, input.template_id)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(None)

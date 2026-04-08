@@ -74,8 +74,6 @@ def register_error_handlers(app: FastAPI) -> None:
 
 def result_to_response(
     result: Result[Any, DomainError],
-    *,
-    status_code: int = 200,
 ) -> Any:
     """Convert a Result to an HTTP response.
 

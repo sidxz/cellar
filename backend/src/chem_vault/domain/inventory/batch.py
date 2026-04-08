@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
+from typing import Any
 
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.inventory.events import BatchCreated, BatchReassigned
@@ -47,7 +48,7 @@ class Batch(AggregateRoot):
         storage_conditions: StorageCondition | None = None,
         storage_conditions_notes: str | None = None,
         appearance: str | None = None,
-        custom_fields: dict | None = None,
+        custom_fields: dict[str, Any] | None = None,
         synthesis_route_id: uuid.UUID | None = None,
         synthesis_step_id: uuid.UUID | None = None,
         synthesis_request_id: uuid.UUID | None = None,
@@ -121,7 +122,7 @@ class Batch(AggregateRoot):
         storage_conditions: StorageCondition | None = None,
         storage_conditions_notes: str | None = None,
         appearance: str | None = None,
-        custom_fields: dict | None = None,
+        custom_fields: dict[str, Any] | None = None,
     ) -> Batch:
         batch = cls(
             workspace_id=workspace_id,
@@ -211,7 +212,7 @@ class Batch(AggregateRoot):
         notebook_reference: str | None = ...,  # type: ignore[assignment]
         storage_conditions: StorageCondition | None = ...,  # type: ignore[assignment]
         storage_conditions_notes: str | None = ...,  # type: ignore[assignment]
-        custom_fields: dict | None = ...,  # type: ignore[assignment]
+        custom_fields: dict[str, Any] | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields. Uses sentinel ``...`` for optional nullable fields."""
         if purity is not ...:

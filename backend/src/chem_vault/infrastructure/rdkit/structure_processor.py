@@ -94,3 +94,13 @@ class StructureProcessor:
                 qc_result=qc_result,
             )
         )
+
+    def smiles_to_mol_block(self, smiles: str) -> str | None:
+        """Convert a SMILES string to a V2000 MOL block, or None if invalid."""
+        from rdkit import Chem
+        from rdkit.Chem import MolToMolBlock
+
+        rdmol = Chem.MolFromSmiles(smiles)
+        if rdmol is None:
+            return None
+        return MolToMolBlock(rdmol)

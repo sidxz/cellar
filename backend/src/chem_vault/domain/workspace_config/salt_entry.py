@@ -7,23 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.events import DomainEvent
+from chem_vault.domain.shared.errors import ValidationError
+from chem_vault.domain.workspace_config.events import SaltEntryCreated, SaltEntryUpdated
 
 __all__ = ["SaltEntry", "SaltEntryCreated", "SaltEntryUpdated"]
 
 # Sentinel for "not provided" in update()
 UNSET = object()
-
-
-@dataclass(frozen=True)
-class SaltEntryCreated(DomainEvent):
-    workspace_id: uuid.UUID
-    code: str
-
-
-@dataclass(frozen=True)
-class SaltEntryUpdated(DomainEvent):
-    workspace_id: uuid.UUID
 
 
 class SaltEntry(AggregateRoot):
@@ -83,13 +73,13 @@ class SaltEntry(AggregateRoot):
     ) -> SaltEntry:
         """Create and validate a new SaltEntry."""
         if not code or not code.strip():
-            raise ValueError("code must not be empty")
+            raise ValidationError("code must not be empty")
         if not name or not name.strip():
-            raise ValueError("name must not be empty")
+            raise ValidationError("name must not be empty")
         if not smiles or not smiles.strip():
-            raise ValueError("smiles must not be empty")
+            raise ValidationError("smiles must not be empty")
         if molecular_weight <= 0:
-            raise ValueError("molecular_weight must be greater than 0")
+            raise ValidationError("molecular_weight must be greater than 0")
 
         entry = cls(
             id=uuid.uuid4(),
@@ -123,13 +113,19 @@ class SaltEntry(AggregateRoot):
     ) -> None:
         """Partial update — only provided fields are changed."""
         if name is not UNSET:
-            self.name = str(name)
+            name_str = str(name).strip()
+            if not name_str:
+                raise ValidationError("name must not be empty")
+            self.name = name_str
         if smiles is not UNSET:
-            self.smiles = str(smiles)
+            smiles_str = str(smiles).strip()
+            if not smiles_str:
+                raise ValidationError("smiles must not be empty")
+            self.smiles = smiles_str
         if molecular_weight is not UNSET:
             mw = float(molecular_weight)  # type: ignore[arg-type]
             if mw <= 0:
-                raise ValueError("molecular_weight must be greater than 0")
+                raise ValidationError("molecular_weight must be greater than 0")
             self.molecular_weight = mw
 
         self.updated_at = datetime.now(timezone.utc)

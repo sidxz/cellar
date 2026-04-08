@@ -23,8 +23,8 @@ import {
 } from "@/shared/components/ui/select";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StructureThumbnail } from "@/shared/components/chemistry";
-import { downloadFile } from "@/shared/lib/api/download";
 import { showSuccess } from "@/shared/lib/toast";
+import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
 import type {
   Molecule,
   LifecycleStage,
@@ -337,17 +337,11 @@ export function SearchPage() {
     [savedSearches, handleSearch]
   );
 
+  const { exportSdf } = useSdfExport();
   const handleExportSdf = useCallback(() => {
-    if (!currentQuery) return;
-    downloadFile({
-      url: "/api/v1/molecules/export/sdf",
-      method: "POST",
-      data: {
-        molecule_ids: results.map((m) => m.id),
-      },
-      filename: "search-results.sdf",
-    });
-  }, [currentQuery, results]);
+    if (!currentQuery || !results.length) return;
+    exportSdf(results.map((m) => m.id), "search-results.sdf");
+  }, [currentQuery, results, exportSdf]);
 
   const handleSaveSearch = useCallback(() => {
     if (!saveName.trim() || !currentQuery) return;

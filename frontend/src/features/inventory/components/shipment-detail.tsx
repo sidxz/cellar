@@ -8,6 +8,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import { OrgName, SampleName } from "@/shared/components/entity-name";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import {
   Dialog,
   DialogContent,
@@ -281,6 +282,13 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Attachments */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-4">Files</h2>
+        <FileUploadZone entityType="shipment" entityId={shipmentId} />
+        <AttachmentList entityType="shipment" entityId={shipmentId} />
+      </Card>
 
       {/* Dialogs */}
       {shipment.status === "preparing" && (

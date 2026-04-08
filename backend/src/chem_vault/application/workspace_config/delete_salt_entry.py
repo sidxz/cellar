@@ -9,6 +9,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.workspace_config.repository import SaltEntryRepository
@@ -25,9 +26,11 @@ class DeleteSaltEntry:
         self,
         uow: UnitOfWork,
         repo: SaltEntryRepository,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: DeleteSaltEntryCommand, auth: AuthContext | None = None
@@ -35,13 +38,14 @@ class DeleteSaltEntry:
         require_editor(auth)
 
         async with self._uow:
-            entry = await self._repo.find_by_id(input.entry_id)
-            if entry is None or entry.workspace_id != input.workspace_id:
+            entry = await self._repo.find_by_id_in_workspace(input.workspace_id, input.entry_id)
+            if entry is None:
                 return Failure(NotFoundError("SaltEntry", str(input.entry_id)))
 
             if entry.is_default:
                 return Failure(ValidationError("Cannot delete default salt entries"))
 
-            await self._repo.delete(input.entry_id)
-            await self._uow.commit()
+            await self._repo.delete(input.workspace_id, input.entry_id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(None)

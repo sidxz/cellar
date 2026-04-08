@@ -13,6 +13,7 @@ from chem_vault.domain.shared.value_objects import Barcode
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import escape_like
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
     RegisteredPlateModel,
 )
@@ -43,43 +44,52 @@ class SQLAlchemyRegisteredPlateRepository(
         return domain
 
     async def find_by_location(
-        self, storage_location_id: uuid.UUID
+        self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
     ) -> list[RegisteredPlate]:
         stmt = (
             select(RegisteredPlateModel)
-            .where(RegisteredPlateModel.storage_location_id == storage_location_id)
+            .where(
+                RegisteredPlateModel.workspace_id == workspace_id,
+                RegisteredPlateModel.storage_location_id == storage_location_id,
+            )
             .order_by(RegisteredPlateModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        plates = [self._to_domain(m) for m in result.scalars().all()]
+        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
         for p in plates:
             self._uow.track(p)
         return plates
 
     async def find_children(
-        self, parent_plate_id: uuid.UUID
+        self, workspace_id: uuid.UUID, parent_plate_id: uuid.UUID
     ) -> list[RegisteredPlate]:
         stmt = (
             select(RegisteredPlateModel)
-            .where(RegisteredPlateModel.parent_plate_id == parent_plate_id)
+            .where(
+                RegisteredPlateModel.workspace_id == workspace_id,
+                RegisteredPlateModel.parent_plate_id == parent_plate_id,
+            )
             .order_by(RegisteredPlateModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        plates = [self._to_domain(m) for m in result.scalars().all()]
+        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
         for p in plates:
             self._uow.track(p)
         return plates
 
     async def find_by_project(
-        self, project_id: uuid.UUID
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
     ) -> list[RegisteredPlate]:
         stmt = (
             select(RegisteredPlateModel)
-            .where(RegisteredPlateModel.project_id == project_id)
+            .where(
+                RegisteredPlateModel.workspace_id == workspace_id,
+                RegisteredPlateModel.project_id == project_id,
+            )
             .order_by(RegisteredPlateModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        plates = [self._to_domain(m) for m in result.scalars().all()]
+        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
         for p in plates:
             self._uow.track(p)
         return plates
@@ -100,9 +110,9 @@ class SQLAlchemyRegisteredPlateRepository(
             RegisteredPlateModel.workspace_id == workspace_id
         )
         if barcode is not None:
-            stmt = stmt.where(RegisteredPlateModel.barcode.ilike(f"%{barcode}%"))
+            stmt = stmt.where(RegisteredPlateModel.barcode.ilike(f"%{escape_like(barcode)}%", escape="\\"))
         if plate_label is not None:
-            stmt = stmt.where(RegisteredPlateModel.plate_label.ilike(f"%{plate_label}%"))
+            stmt = stmt.where(RegisteredPlateModel.plate_label.ilike(f"%{escape_like(plate_label)}%", escape="\\"))
         if plate_type is not None:
             stmt = stmt.where(RegisteredPlateModel.plate_type == plate_type)
         if status is not None:
@@ -117,7 +127,7 @@ class SQLAlchemyRegisteredPlateRepository(
             stmt = stmt.where(RegisteredPlateModel.project_id == project_id)
         stmt = stmt.order_by(RegisteredPlateModel.created_at.desc())
         result = await self._session.execute(stmt)
-        plates = [self._to_domain(m) for m in result.scalars().all()]
+        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
         for p in plates:
             self._uow.track(p)
         return plates

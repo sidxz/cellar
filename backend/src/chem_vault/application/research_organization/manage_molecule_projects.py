@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_project_role
+from chem_vault.application.auth import AuthContext, require_editor, require_project_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -57,37 +57,36 @@ class AddMoleculeToProject:
     async def __call__(
         self, input: AddMoleculeToProjectCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
+        require_editor(auth)
         async with self._uow:
-            project = await self._project_repo.find_by_id(input.project_id)
+            project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
-                return Failure(NotFoundError("Project"))
+                return Failure(NotFoundError("Project", str(input.project_id)))
 
-            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
             if molecule is None:
-                return Failure(NotFoundError("Molecule"))
+                return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             # Check caller has at least editor-level project access (or is admin)
             if auth is not None:
                 caller_role = await self._member_repo.get_role(
-                    input.project_id, auth.user_id
+                    input.workspace_id, input.project_id, auth.user_id
                 )
                 require_project_role(auth, caller_role, ProjectRole.EDITOR)
 
-            await self._molecule_repo.add_to_project(input.molecule_id, input.project_id)
+            await self._molecule_repo.add_to_project(input.workspace_id, input.molecule_id, input.project_id)
 
             events = await self._uow.commit()
+            events.append(EntityAddedToProject(
+                aggregate_id=input.project_id,
+                aggregate_type="Project",
+                entity_type="molecule",
+                entity_id=input.molecule_id,
+                project_id=input.project_id,
+            ))
+            await self._dispatcher.dispatch_all(events)
 
-        event = EntityAddedToProject(
-            aggregate_id=input.project_id,
-            aggregate_type="Project",
-            entity_type="molecule",
-            entity_id=input.molecule_id,
-            project_id=input.project_id,
-        )
-        await self._dispatcher.dispatch(event)
-        await self._dispatcher.dispatch_all(events)
-
-        return Success(None)
+            return Success(None)
 
 
 # ---------------------------------------------------------------------------
@@ -122,39 +121,38 @@ class RemoveMoleculeFromProject:
     async def __call__(
         self, input: RemoveMoleculeFromProjectCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
+        require_editor(auth)
         async with self._uow:
-            project = await self._project_repo.find_by_id(input.project_id)
+            project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
-                return Failure(NotFoundError("Project"))
+                return Failure(NotFoundError("Project", str(input.project_id)))
 
-            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
             if molecule is None:
-                return Failure(NotFoundError("Molecule"))
+                return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             # Check caller has at least editor-level project access (or is admin)
             if auth is not None:
                 caller_role = await self._member_repo.get_role(
-                    input.project_id, auth.user_id
+                    input.workspace_id, input.project_id, auth.user_id
                 )
                 require_project_role(auth, caller_role, ProjectRole.EDITOR)
 
             await self._molecule_repo.remove_from_project(
-                input.molecule_id, input.project_id
+                input.workspace_id, input.molecule_id, input.project_id
             )
 
             events = await self._uow.commit()
+            events.append(EntityRemovedFromProject(
+                aggregate_id=input.project_id,
+                aggregate_type="Project",
+                entity_type="molecule",
+                entity_id=input.molecule_id,
+                project_id=input.project_id,
+            ))
+            await self._dispatcher.dispatch_all(events)
 
-        event = EntityRemovedFromProject(
-            aggregate_id=input.project_id,
-            aggregate_type="Project",
-            entity_type="molecule",
-            entity_id=input.molecule_id,
-            project_id=input.project_id,
-        )
-        await self._dispatcher.dispatch(event)
-        await self._dispatcher.dispatch_all(events)
-
-        return Success(None)
+            return Success(None)
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +181,9 @@ class ListMoleculeProjects:
         self, input: ListMoleculeProjectsQuery, auth: AuthContext | None = None
     ) -> Result[list[uuid.UUID], DomainError]:
         async with self._uow:
-            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
             if molecule is None:
-                return Failure(NotFoundError("Molecule"))
+                return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
-            project_ids = await self._molecule_repo.find_project_ids(input.molecule_id)
-
-        return Success(project_ids)
+            project_ids = await self._molecule_repo.find_project_ids(input.workspace_id, input.molecule_id)
+            return Success(project_ids)

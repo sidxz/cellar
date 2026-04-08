@@ -37,6 +37,7 @@ class BulkDisclosure(AggregateRoot):
         self,
         *,
         id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID,
         source_file: str,
         partner_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
@@ -59,6 +60,7 @@ class BulkDisclosure(AggregateRoot):
         if total_count <= 0:
             raise ValidationError("total_count must be greater than zero")
 
+        self.workspace_id = workspace_id
         self.source_file = source_file.strip()
         self.partner_org_id = partner_org_id
         self.submitted_by = submitted_by
@@ -79,6 +81,7 @@ class BulkDisclosure(AggregateRoot):
     def create(
         cls,
         *,
+        workspace_id: uuid.UUID,
         source_file: str,
         partner_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
@@ -86,6 +89,7 @@ class BulkDisclosure(AggregateRoot):
     ) -> BulkDisclosure:
         """Create a new bulk disclosure in PENDING status."""
         return cls(
+            workspace_id=workspace_id,
             source_file=source_file,
             partner_org_id=partner_org_id,
             submitted_by=submitted_by,

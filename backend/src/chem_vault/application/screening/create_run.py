@@ -16,7 +16,7 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import PlateFormat, ProtocolStatus, RunRelationshipType
 from chem_vault.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
+from chem_vault.domain.shared.errors import AuthorizationError, ConflictError, DomainError, NotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -49,11 +49,13 @@ class CreateRun:
     async def __call__(
         self, input: CreateRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required to create a run"))
         require_editor(auth)
 
         async with self._uow:
-            # Guard: protocol must exist and be ACTIVE
-            protocol = await self._protocol_repo.find_by_id(input.protocol_id)
+            # Guard: protocol must exist, belong to same workspace, and be ACTIVE
+            protocol = await self._protocol_repo.find_by_id_in_workspace(input.workspace_id, input.protocol_id)
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             if protocol.status != ProtocolStatus.ACTIVE:
@@ -67,7 +69,7 @@ class CreateRun:
                 workspace_id=input.workspace_id,
                 protocol_id=input.protocol_id,
                 run_date=input.run_date,
-                operator=auth.user_id if auth else uuid.uuid4(),
+                operator=auth.user_id,
                 performed_at_org_id=input.performed_at_org_id,
                 parent_run_id=input.parent_run_id,
                 run_relationship_type=(

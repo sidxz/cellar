@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -42,17 +42,20 @@ class CreateSynthesisRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class SubmitSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class ApproveSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     approved_by: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class RejectSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     reason: str
     rejected_by: uuid.UUID
@@ -60,6 +63,7 @@ class RejectSynthesisRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class AssignSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     assignment_type: str
     assigned_to: uuid.UUID | None = None
@@ -68,12 +72,14 @@ class AssignSynthesisRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class StartSynthesisCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     proposed_route_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class FlagInfeasibleCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     feasibility_status: str
     feasibility_notes: str | None = None
@@ -81,6 +87,7 @@ class FlagInfeasibleCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class CompleteSynthesisCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     actual_cost_value: float | None = None
     actual_cost_unit: str | None = None
@@ -88,23 +95,27 @@ class CompleteSynthesisCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class FulfillSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     batch_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class FailSynthesisCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     reason: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class CancelSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class UpdateSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     purpose: str | object = UNSET
     priority: str | object = UNSET
@@ -115,6 +126,7 @@ class UpdateSynthesisRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteSynthesisRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
@@ -125,6 +137,7 @@ class DeleteSynthesisRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class GetSynthesisRequestQuery(Query):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
@@ -193,10 +206,11 @@ class SubmitSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.submit()
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -220,10 +234,11 @@ class ApproveSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.approve(approved_by=input.approved_by)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -247,10 +262,11 @@ class RejectSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.reject(reason=input.reason, rejected_by=input.rejected_by)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -274,10 +290,11 @@ class AssignSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             assignment = SynthesisAssignment(
                 assignment_type=AssignmentType(input.assignment_type),
                 assigned_to=input.assigned_to,
@@ -306,10 +323,11 @@ class StartSynthesis:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.start(proposed_route_id=input.proposed_route_id)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -333,10 +351,11 @@ class FlagInfeasible:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.flag_infeasible(
                 feasibility_status=FeasibilityStatus(input.feasibility_status),
                 feasibility_notes=input.feasibility_notes,
@@ -363,10 +382,11 @@ class CompleteSynthesis:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             actual_cost = None
             if input.actual_cost_value is not None and input.actual_cost_unit is not None:
                 actual_cost = Amount(
@@ -396,10 +416,11 @@ class FulfillSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.fulfill(batch_id=input.batch_id)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -423,10 +444,11 @@ class FailSynthesis:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.fail(reason=input.reason)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -450,10 +472,11 @@ class CancelSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.cancel()
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -470,10 +493,11 @@ class GetSynthesisRequest:
         self, input: GetSynthesisRequestQuery, auth: AuthContext | None = None
     ) -> Result[SynthesisRequest, DomainError]:
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             return Success(request)
 
 
@@ -485,7 +509,6 @@ class ListSynthesisRequests:
     async def __call__(
         self, input: ListSynthesisRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SynthesisRequest], DomainError]:
-        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             if input.molecule_id is not None:
                 requests = await self._repo.find_by_molecule(
@@ -514,10 +537,11 @@ class UpdateSynthesisRequest:
     ) -> Result[SynthesisRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
 
             if request.status != SynthesisRequestStatus.DRAFT:
                 return Failure(ValidationError("Can only update draft synthesis requests"))
@@ -556,10 +580,11 @@ class DeleteSynthesisRequest:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
 
             if request.status != SynthesisRequestStatus.DRAFT:
                 return Failure(ValidationError("Can only delete draft synthesis requests"))

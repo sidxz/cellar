@@ -42,13 +42,13 @@ class TestProjectMemberRepository:
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.add_member(project.id, user_a, ProjectRole.MANAGER)
-            await repo.add_member(project.id, user_b, ProjectRole.VIEWER)
+            await repo.add_member(ws_id, project.id, user_a, ProjectRole.MANAGER)
+            await repo.add_member(ws_id, project.id, user_b, ProjectRole.VIEWER)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            members = await repo.find_members(project.id)
+            members = await repo.find_members(ws_id, project.id)
             assert len(members) == 2
             roles = {m.user_id: m.role for m in members}
             assert roles[user_a] == ProjectRole.MANAGER
@@ -62,18 +62,18 @@ class TestProjectMemberRepository:
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.add_member(project.id, user_a, ProjectRole.MANAGER)
-            await repo.add_member(project.id, user_b, ProjectRole.EDITOR)
+            await repo.add_member(ws_id, project.id, user_a, ProjectRole.MANAGER)
+            await repo.add_member(ws_id, project.id, user_b, ProjectRole.EDITOR)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.remove_member(project.id, user_b)
+            await repo.remove_member(ws_id, project.id, user_b)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            members = await repo.find_members(project.id)
+            members = await repo.find_members(ws_id, project.id)
             assert len(members) == 1
             assert members[0].user_id == user_a
 
@@ -84,17 +84,17 @@ class TestProjectMemberRepository:
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.add_member(project.id, user_a, ProjectRole.VIEWER)
+            await repo.add_member(ws_id, project.id, user_a, ProjectRole.VIEWER)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.update_role(project.id, user_a, ProjectRole.MANAGER)
+            await repo.update_role(ws_id, project.id, user_a, ProjectRole.MANAGER)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            role = await repo.get_role(project.id, user_a)
+            role = await repo.get_role(ws_id, project.id, user_a)
             assert role == ProjectRole.MANAGER
 
     async def test_find_accessible_project_ids(self, uow: AsyncUnitOfWork) -> None:
@@ -107,8 +107,8 @@ class TestProjectMemberRepository:
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.add_member(p1.id, user_b, ProjectRole.VIEWER)
-            await repo.add_member(p2.id, user_b, ProjectRole.EDITOR)
+            await repo.add_member(ws_id, p1.id, user_b, ProjectRole.VIEWER)
+            await repo.add_member(ws_id, p2.id, user_b, ProjectRole.EDITOR)
             # user_b is NOT in p3
             await uow.commit()
 
@@ -124,13 +124,13 @@ class TestProjectMemberRepository:
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            await repo.add_member(project.id, user_a, ProjectRole.MANAGER)
-            await repo.add_member(project.id, user_a, ProjectRole.MANAGER)  # duplicate
+            await repo.add_member(ws_id, project.id, user_a, ProjectRole.MANAGER)
+            await repo.add_member(ws_id, project.id, user_a, ProjectRole.MANAGER)  # duplicate
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            members = await repo.find_members(project.id)
+            members = await repo.find_members(ws_id, project.id)
             assert len(members) == 1
 
     async def test_get_role_returns_none_for_nonmember(
@@ -142,7 +142,7 @@ class TestProjectMemberRepository:
 
         async with uow:
             repo = SQLAlchemyProjectMemberRepository(uow)
-            role = await repo.get_role(project.id, uuid.uuid4())
+            role = await repo.get_role(ws_id, project.id, uuid.uuid4())
             assert role is None
 
 
@@ -214,8 +214,8 @@ class TestMoleculeProjectAssociation:
 
         async with uow:
             mol_repo = SQLAlchemyMoleculeRepository(uow)
-            await mol_repo.add_to_project(m1_id, p1.id)
-            await mol_repo.add_to_project(m2_id, p2.id)
+            await mol_repo.add_to_project(ws_id, m1_id, p1.id)
+            await mol_repo.add_to_project(ws_id, m2_id, p2.id)
             await uow.commit()
 
         return ws_id, p1, p2, m1_id, m2_id, m3_id
@@ -225,10 +225,10 @@ class TestMoleculeProjectAssociation:
 
         async with uow:
             mol_repo = SQLAlchemyMoleculeRepository(uow)
-            ids = await mol_repo.find_project_ids(m1_id)
+            ids = await mol_repo.find_project_ids(ws_id, m1_id)
             assert ids == [p1.id]
 
-            ids = await mol_repo.find_project_ids(m3_id)
+            ids = await mol_repo.find_project_ids(ws_id, m3_id)
             assert ids == []
 
     async def test_add_to_project_idempotent(self, uow: AsyncUnitOfWork) -> None:
@@ -236,12 +236,12 @@ class TestMoleculeProjectAssociation:
 
         async with uow:
             mol_repo = SQLAlchemyMoleculeRepository(uow)
-            await mol_repo.add_to_project(m1_id, p1.id)  # duplicate
+            await mol_repo.add_to_project(ws_id, m1_id, p1.id)  # duplicate
             await uow.commit()
 
         async with uow:
             mol_repo = SQLAlchemyMoleculeRepository(uow)
-            ids = await mol_repo.find_project_ids(m1_id)
+            ids = await mol_repo.find_project_ids(ws_id, m1_id)
             assert ids == [p1.id]
 
     async def test_remove_from_project(self, uow: AsyncUnitOfWork) -> None:
@@ -249,12 +249,12 @@ class TestMoleculeProjectAssociation:
 
         async with uow:
             mol_repo = SQLAlchemyMoleculeRepository(uow)
-            await mol_repo.remove_from_project(m1_id, p1.id)
+            await mol_repo.remove_from_project(ws_id, m1_id, p1.id)
             await uow.commit()
 
         async with uow:
             mol_repo = SQLAlchemyMoleculeRepository(uow)
-            ids = await mol_repo.find_project_ids(m1_id)
+            ids = await mol_repo.find_project_ids(ws_id, m1_id)
             assert ids == []
 
     async def test_find_active_with_project_filter(self, uow: AsyncUnitOfWork) -> None:

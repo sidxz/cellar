@@ -227,7 +227,7 @@ class TestCollectionRepository:
         # Add molecule to first collection
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c1.id, [mol_id])
+            await repo.add_molecules(ws_id, c1.id, [mol_id])
             await uow.commit()
 
         async with uow:
@@ -257,19 +257,19 @@ class TestCollectionRepository:
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c.id, [mol_id])
+            await repo.add_molecules(ws_id, c.id, [mol_id])
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.delete(c.id)
+            await repo.delete(ws_id, c.id)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
             assert await repo.find_by_id(c.id) is None
             # Membership rows also gone (CASCADE)
-            count = await repo.count_molecules(c.id)
+            count = await repo.count_molecules(ws_id, c.id)
             assert count == 0
 
 
@@ -298,13 +298,13 @@ class TestCollectionMembership:
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            added = await repo.add_molecules(c.id, [mol1, mol2])
+            added = await repo.add_molecules(ws_id, c.id, [mol1, mol2])
             assert added == 2
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            assert await repo.count_molecules(c.id) == 2
+            assert await repo.count_molecules(ws_id, c.id) == 2
 
     async def test_add_duplicate_ignored(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()
@@ -323,19 +323,19 @@ class TestCollectionMembership:
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c.id, [mol_id])
+            await repo.add_molecules(ws_id, c.id, [mol_id])
             await uow.commit()
 
         # Adding same molecule again — should be ignored
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            added = await repo.add_molecules(c.id, [mol_id])
+            added = await repo.add_molecules(ws_id, c.id, [mol_id])
             assert added == 0
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            assert await repo.count_molecules(c.id) == 1
+            assert await repo.count_molecules(ws_id, c.id) == 1
 
     async def test_remove(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()
@@ -356,18 +356,18 @@ class TestCollectionMembership:
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c.id, [mol1, mol2])
+            await repo.add_molecules(ws_id, c.id, [mol1, mol2])
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            removed = await repo.remove_molecules(c.id, [mol1])
+            removed = await repo.remove_molecules(ws_id, c.id, [mol1])
             assert removed == 1
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            assert await repo.count_molecules(c.id) == 1
+            assert await repo.count_molecules(ws_id, c.id) == 1
 
     async def test_get_molecule_ids_paginated(
         self, uow: AsyncUnitOfWork
@@ -389,14 +389,14 @@ class TestCollectionMembership:
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c.id, mols)
+            await repo.add_molecules(ws_id, c.id, mols)
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            page1 = await repo.get_molecule_ids(c.id, offset=0, limit=3)
+            page1 = await repo.get_molecule_ids(ws_id, c.id, offset=0, limit=3)
             assert len(page1) == 3
-            page2 = await repo.get_molecule_ids(c.id, offset=3, limit=3)
+            page2 = await repo.get_molecule_ids(ws_id, c.id, offset=3, limit=3)
             assert len(page2) == 2
             # All 5 molecules accounted for
             assert set(page1 + page2) == set(mols)
@@ -421,18 +421,18 @@ class TestCollectionMembership:
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c.id, [source])
+            await repo.add_molecules(ws_id, c.id, [source])
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            updated = await repo.replace_molecule(source, target)
+            updated = await repo.replace_molecule(ws_id, source, target)
             assert updated == 1
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            mol_ids = await repo.get_molecule_ids(c.id)
+            mol_ids = await repo.get_molecule_ids(ws_id, c.id)
             assert target in mol_ids
             assert source not in mol_ids
 
@@ -457,21 +457,21 @@ class TestCollectionMembership:
         # Add both to the same collection
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            await repo.add_molecules(c.id, [source, target])
+            await repo.add_molecules(ws_id, c.id, [source, target])
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            updated = await repo.replace_molecule(source, target)
+            updated = await repo.replace_molecule(ws_id, source, target)
             # Source row deleted in step 1 (dedup), no rows left to update
             assert updated == 0
             await uow.commit()
 
         async with uow:
             repo = SQLAlchemyCollectionRepository(uow)
-            mol_ids = await repo.get_molecule_ids(c.id)
+            mol_ids = await repo.get_molecule_ids(ws_id, c.id)
             assert mol_ids == [target]
-            assert await repo.count_molecules(c.id) == 1
+            assert await repo.count_molecules(ws_id, c.id) == 1
 
 
 # ---------------------------------------------------------------------------

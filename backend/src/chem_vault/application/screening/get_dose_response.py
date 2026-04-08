@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
-from returns.result import Failure, Result, Success
+from returns.result import Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_same_workspace
+from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from chem_vault.domain.screening_assay.repository import DoseResponseCurveRepository
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.domain.shared.errors import DomainError
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListDoseResponseByRunQuery(Query):
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
 
 
 class ListDoseResponseByRun:
@@ -20,11 +28,10 @@ class ListDoseResponseByRun:
 
     async def __call__(
         self,
-        run_id: uuid.UUID,
+        input: ListDoseResponseByRunQuery,
         auth: AuthContext | None = None,
     ) -> Result[list[DoseResponseCurve], DomainError]:
-        if auth is None:
-            return Failure(NotFoundError("DoseResponseCurve"))
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
-            curves = await self._repo.find_by_run(auth.workspace_id, run_id)
+            curves = await self._repo.find_by_run(input.workspace_id, input.run_id)
             return Success(curves)

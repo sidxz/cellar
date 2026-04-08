@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from rdkit import Chem
-from rdkit.Chem import MolToMolBlock
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.shared.command import Command
+from chem_vault.application.auth import AuthContext
+from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
+from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.shared.errors import DomainError, ValidationError
@@ -18,7 +18,7 @@ MAX_SDF_EXPORT = 10_000
 
 
 @dataclass(frozen=True, kw_only=True)
-class ExportSDFCommand(Command):
+class ExportSDFQuery(Query):
     workspace_id: uuid.UUID
     molecule_ids: list[uuid.UUID]
 
@@ -30,12 +30,18 @@ class ExportMoleculesSDF:
     Molecules without SMILES (undisclosed) are skipped.
     """
 
-    def __init__(self, uow: UnitOfWork, repo: MoleculeRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: MoleculeRepository,
+        processor: StructureProcessorProtocol,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._processor = processor
 
     async def __call__(
-        self, input: ExportSDFCommand, *, auth: object | None = None
+        self, input: ExportSDFQuery, *, auth: AuthContext | None = None
     ) -> Result[str, DomainError]:
         if len(input.molecule_ids) > MAX_SDF_EXPORT:
             return Failure(
@@ -48,19 +54,17 @@ class ExportMoleculesSDF:
             return Success("")
 
         async with self._uow:
+            molecules = await self._repo.find_by_ids(
+                input.workspace_id, input.molecule_ids
+            )
             parts: list[str] = []
-            for mol_id in input.molecule_ids:
-                mol = await self._repo.find_by_id(mol_id)
-                if mol is None or mol.workspace_id != input.workspace_id:
-                    continue
+            for mol in molecules:
                 if not mol.structure or not mol.structure.smiles:
                     continue
 
-                rdmol = Chem.MolFromSmiles(mol.structure.smiles)
-                if rdmol is None:
+                mol_block = self._processor.smiles_to_mol_block(mol.structure.smiles)
+                if mol_block is None:
                     continue
-
-                mol_block = MolToMolBlock(rdmol)
 
                 # Build SDF entry: molblock + data fields + $$$$
                 entry = mol_block

@@ -64,7 +64,7 @@ class CreateProject:
             # Auto-add creator as project manager
             if self._member_repo is not None:
                 await self._member_repo.add_member(
-                    project.id, input.created_by, ProjectRole.MANAGER
+                    input.workspace_id, project.id, input.created_by, ProjectRole.MANAGER
                 )
 
             events = await self._uow.commit()

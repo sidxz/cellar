@@ -8,20 +8,17 @@ by protocol.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from chem_vault.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
     ProtocolActivitySummary,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
-    SQLAlchemyDoseResponseCurveRepository,
-)
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
-    SQLAlchemyReadoutDataRepository,
-)
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
-    SQLAlchemyProtocolRepository,
+from chem_vault.domain.screening_assay.repository import (
+    DoseResponseCurveRepository,
+    ProtocolRepository,
+    ReadoutDataRepository,
 )
 
 
@@ -30,9 +27,9 @@ class MoleculeActivityService:
 
     def __init__(
         self,
-        readout_repo: SQLAlchemyReadoutDataRepository,
-        curve_repo: SQLAlchemyDoseResponseCurveRepository,
-        protocol_repo: SQLAlchemyProtocolRepository,
+        readout_repo: ReadoutDataRepository,
+        curve_repo: DoseResponseCurveRepository,
+        protocol_repo: ProtocolRepository,
     ) -> None:
         self._readout_repo = readout_repo
         self._curve_repo = curve_repo
@@ -46,7 +43,7 @@ class MoleculeActivityService:
         curves = await self._curve_repo.find_by_molecule(workspace_id, molecule_id)
 
         # Group curves by protocol
-        curves_by_proto: dict[uuid.UUID, list[dict]] = {}
+        curves_by_proto: dict[uuid.UUID, list[dict[str, Any]]] = {}
         proto_ids: set[uuid.UUID] = set()
         for curve in curves:
             proto_ids.add(curve.protocol_id)
@@ -62,12 +59,12 @@ class MoleculeActivityService:
                 }
             )
 
-        # Fetch protocol metadata
+        # Fetch protocol metadata (single query)
         protocols_by_id: dict[uuid.UUID, tuple[str, str]] = {}
-        for pid in proto_ids:
-            proto = await self._protocol_repo.find_by_id(pid)
-            if proto:
-                protocols_by_id[pid] = (proto.name, proto.protocol_type.value)
+        if proto_ids:
+            protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
+            for proto in protos:
+                protocols_by_id[proto.id] = (proto.name, proto.protocol_type.value)
 
         summaries: list[ProtocolActivitySummary] = []
         for pid in sorted(proto_ids):

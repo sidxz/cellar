@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.workspace_config.salt_entry import (
     SaltEntry,
     SaltEntryCreated,
@@ -64,7 +65,7 @@ class TestSaltEntryCreate:
         assert entry.is_default is True
 
     def test_empty_code_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="code"):
+        with pytest.raises(ValidationError, match="code"):
             SaltEntry.create(
                 workspace_id=ws_id,
                 code="",
@@ -74,7 +75,7 @@ class TestSaltEntryCreate:
             )
 
     def test_whitespace_code_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="code"):
+        with pytest.raises(ValidationError, match="code"):
             SaltEntry.create(
                 workspace_id=ws_id,
                 code="   ",
@@ -84,7 +85,7 @@ class TestSaltEntryCreate:
             )
 
     def test_empty_name_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="name"):
+        with pytest.raises(ValidationError, match="name"):
             SaltEntry.create(
                 workspace_id=ws_id,
                 code="HCl",
@@ -94,7 +95,7 @@ class TestSaltEntryCreate:
             )
 
     def test_empty_smiles_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="smiles"):
+        with pytest.raises(ValidationError, match="smiles"):
             SaltEntry.create(
                 workspace_id=ws_id,
                 code="HCl",
@@ -104,7 +105,7 @@ class TestSaltEntryCreate:
             )
 
     def test_zero_molecular_weight_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="molecular_weight"):
+        with pytest.raises(ValidationError, match="molecular_weight"):
             SaltEntry.create(
                 workspace_id=ws_id,
                 code="HCl",
@@ -114,7 +115,7 @@ class TestSaltEntryCreate:
             )
 
     def test_negative_molecular_weight_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="molecular_weight"):
+        with pytest.raises(ValidationError, match="molecular_weight"):
             SaltEntry.create(
                 workspace_id=ws_id,
                 code="HCl",
@@ -156,12 +157,12 @@ class TestSaltEntryUpdate:
 
     def test_update_negative_mw_raises(self, ws_id: uuid.UUID) -> None:
         entry = self._make(ws_id)
-        with pytest.raises(ValueError, match="molecular_weight"):
+        with pytest.raises(ValidationError, match="molecular_weight"):
             entry.update(molecular_weight=-1.0)
 
     def test_update_zero_mw_raises(self, ws_id: uuid.UUID) -> None:
         entry = self._make(ws_id)
-        with pytest.raises(ValueError, match="molecular_weight"):
+        with pytest.raises(ValidationError, match="molecular_weight"):
             entry.update(molecular_weight=0.0)
 
     def test_update_no_args_emits_event(self, ws_id: uuid.UUID) -> None:

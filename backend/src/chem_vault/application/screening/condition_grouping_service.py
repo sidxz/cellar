@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.repository import (
     ProtocolRepository,
     ReadoutDataRepository,
@@ -60,9 +61,11 @@ class ConditionGroupingService:
     def __init__(
         self,
         *,
+        uow: UnitOfWork,
         readout_data_repo: ReadoutDataRepository,
         protocol_repo: ProtocolRepository,
     ) -> None:
+        self._uow = uow
         self._readout_data_repo = readout_data_repo
         self._protocol_repo = protocol_repo
 
@@ -88,71 +91,71 @@ class ConditionGroupingService:
         Returns:
             Success(list[ConditionGroup]) sorted by condition_value, or Failure.
         """
-        # Step 1 — load protocol
-        protocol = await self._protocol_repo.find_by_id(protocol_id)
-        if protocol is None:
-            return Failure(NotFoundError("Protocol", str(protocol_id)))
+        async with self._uow:
+            # Step 1 — load protocol + workspace check
+            protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, protocol_id)
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(protocol_id)))
 
-        # Step 2 — validate condition_name
-        available_names = [cd.name for cd in protocol.condition_definitions]
-        if condition_name not in available_names:
-            return Failure(
-                ValidationError(
-                    f"Condition '{condition_name}' not found in protocol "
-                    f"'{protocol.name}'. Available conditions: {available_names}"
-                )
-            )
-
-        # Step 3 — fetch grouped DB rows
-        rows = await self._readout_data_repo.find_grouped_by_condition(
-            protocol_id, condition_name
-        )
-
-        # Step 4 — handle empty result
-        if not rows:
-            return Success([])
-
-        # Step 5 — group rows by condition_value
-        groups_map: dict[str, list] = {}
-        for row in rows:
-            groups_map.setdefault(row.condition_value, []).append(row)
-
-        condition_groups: list[ConditionGroup] = []
-        for condition_value in sorted(groups_map):
-            group_rows = groups_map[condition_value]
-
-            aggregated_readouts: list[AggregatedReadout] = []
-            run_count = 0
-
-            for row in group_rows:
-                # Determine the aggregated scalar value
-                agg_lower = (row.aggregation or "").lower()
-                if agg_lower == "min":
-                    value = row.min_val
-                elif agg_lower == "max":
-                    value = row.max_val
-                else:
-                    value = row.avg_val
-
-                aggregated_readouts.append(
-                    AggregatedReadout(
-                        readout_definition_id=row.readout_definition_id,
-                        name=row.readout_name,
-                        value=float(value),
-                        unit=row.unit,
-                        aggregation=row.aggregation or "none",
-                        count=row.cnt,
+            # Step 2 — validate condition_name
+            available_names = [cd.name for cd in protocol.condition_definitions]
+            if condition_name not in available_names:
+                return Failure(
+                    ValidationError(
+                        f"Condition '{condition_name}' not found in protocol "
+                        f"'{protocol.name}'. Available conditions: {available_names}"
                     )
                 )
-                if row.cnt > run_count:
-                    run_count = row.cnt
 
-            condition_groups.append(
-                ConditionGroup(
-                    condition_value=condition_value,
-                    run_count=run_count,
-                    aggregated_readouts=aggregated_readouts,
-                )
+            # Step 3 — fetch grouped DB rows
+            rows = await self._readout_data_repo.find_grouped_by_condition(
+                workspace_id, protocol_id, condition_name
             )
 
-        return Success(condition_groups)
+            # Step 4 — handle empty result
+            if not rows:
+                return Success([])
+
+            # Step 5 — group rows by condition_value
+            groups_map: dict[str, list] = {}
+            for row in rows:
+                groups_map.setdefault(row.condition_value, []).append(row)
+
+            condition_groups: list[ConditionGroup] = []
+            for condition_value in sorted(groups_map):
+                group_rows = groups_map[condition_value]
+
+                aggregated_readouts: list[AggregatedReadout] = []
+                run_count = 0
+
+                for row in group_rows:
+                    agg_lower = (row.aggregation or "").lower()
+                    if agg_lower == "min":
+                        value = row.min_val
+                    elif agg_lower == "max":
+                        value = row.max_val
+                    else:
+                        value = row.avg_val
+
+                    aggregated_readouts.append(
+                        AggregatedReadout(
+                            readout_definition_id=row.readout_definition_id,
+                            name=row.readout_name,
+                            value=float(value),
+                            unit=row.unit,
+                            aggregation=row.aggregation or "none",
+                            count=row.cnt,
+                        )
+                    )
+                    if row.cnt > run_count:
+                        run_count = row.cnt
+
+                condition_groups.append(
+                    ConditionGroup(
+                        condition_value=condition_value,
+                        run_count=run_count,
+                        aggregated_readouts=aggregated_readouts,
+                    )
+                )
+
+            return Success(condition_groups)

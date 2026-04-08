@@ -9,6 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { MemberName } from "@/shared/components/entity-name";
 import { useProjects } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 import type { Project, ProjectStatus } from "../types";
@@ -54,9 +55,9 @@ export function ProjectListPage() {
       {
         headerName: "Created By",
         field: "created_by",
-        width: 140,
-        valueFormatter: (p) =>
-          p.value ? String(p.value).slice(0, 8) + "..." : "\u2014",
+        width: 160,
+        cellRenderer: (params: ICellRendererParams<Project>) =>
+          params.value ? <MemberName id={params.value} /> : "\u2014",
       },
     ],
     []

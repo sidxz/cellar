@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -28,7 +30,7 @@ class CreatePlateTemplateCommand(Command):
     workspace_id: uuid.UUID
     name: str
     format: PlateFormat
-    template_map: dict
+    template_map: dict[str, Any]
     description: str | None = None
     created_by: uuid.UUID
 
@@ -39,7 +41,7 @@ class UpdatePlateTemplateCommand(Command):
     template_id: uuid.UUID
     name: str | None = None
     format: PlateFormat | None = None
-    template_map: dict | None = None
+    template_map: dict[str, Any] | None = None
     description: str | None = UNSET
 
 
@@ -71,9 +73,12 @@ class ListPlateTemplatesQuery(Query):
 
 
 class CreatePlateTemplate:
-    def __init__(self, uow: UnitOfWork, repo: PlateTemplateRepository) -> None:
+    def __init__(
+        self, uow: UnitOfWork, repo: PlateTemplateRepository, dispatcher: EventDispatcherProtocol
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: CreatePlateTemplateCommand, auth: AuthContext | None = None
@@ -90,14 +95,18 @@ class CreatePlateTemplate:
                 created_by=input.created_by,
             )
             await self._repo.save(template)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(template)
 
 
 class UpdatePlateTemplate:
-    def __init__(self, uow: UnitOfWork, repo: PlateTemplateRepository) -> None:
+    def __init__(
+        self, uow: UnitOfWork, repo: PlateTemplateRepository, dispatcher: EventDispatcherProtocol
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: UpdatePlateTemplateCommand, auth: AuthContext | None = None
@@ -105,12 +114,12 @@ class UpdatePlateTemplate:
         require_editor(auth)
 
         async with self._uow:
-            template = await self._repo.find_by_id(input.template_id)
-            if template is None or template.workspace_id != input.workspace_id:
+            template = await self._repo.find_by_id_in_workspace(input.workspace_id, input.template_id)
+            if template is None:
                 return Failure(NotFoundError("PlateTemplate", str(input.template_id)))
 
             # Build kwargs — only include description when explicitly provided
-            kwargs: dict = {}
+            kwargs: dict[str, Any] = {}
             if input.name is not None:
                 kwargs["name"] = input.name
             if input.format is not None:
@@ -123,14 +132,18 @@ class UpdatePlateTemplate:
             if kwargs:
                 template.update(**kwargs)
                 await self._repo.save(template)
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(template)
 
 
 class DeletePlateTemplate:
-    def __init__(self, uow: UnitOfWork, repo: PlateTemplateRepository) -> None:
+    def __init__(
+        self, uow: UnitOfWork, repo: PlateTemplateRepository, dispatcher: EventDispatcherProtocol
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: DeletePlateTemplateCommand, auth: AuthContext | None = None
@@ -138,11 +151,11 @@ class DeletePlateTemplate:
         require_editor(auth)
 
         async with self._uow:
-            template = await self._repo.find_by_id(input.template_id)
-            if template is None or template.workspace_id != input.workspace_id:
+            template = await self._repo.find_by_id_in_workspace(input.workspace_id, input.template_id)
+            if template is None:
                 return Failure(NotFoundError("PlateTemplate", str(input.template_id)))
 
-            ref_count = await self._repo.count_references(input.template_id)
+            ref_count = await self._repo.count_references(input.workspace_id, input.template_id)
             if ref_count > 0:
                 return Failure(
                     ConflictError(
@@ -150,8 +163,9 @@ class DeletePlateTemplate:
                     )
                 )
 
-            await self._repo.delete(input.template_id)
-            await self._uow.commit()
+            await self._repo.delete(input.workspace_id, input.template_id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(None)
 
 
@@ -164,8 +178,8 @@ class GetPlateTemplate:
         self, input: GetPlateTemplateQuery
     ) -> Result[PlateTemplate, DomainError]:
         async with self._uow:
-            template = await self._repo.find_by_id(input.template_id)
-            if template is None or template.workspace_id != input.workspace_id:
+            template = await self._repo.find_by_id_in_workspace(input.workspace_id, input.template_id)
+            if template is None:
                 return Failure(NotFoundError("PlateTemplate", str(input.template_id)))
             return Success(template)
 

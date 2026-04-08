@@ -7,11 +7,14 @@ import io
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from returns.result import Failure, Result, Success
 
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.import_template import ImportTemplate
 from chem_vault.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
+from chem_vault.domain.shared.errors import DomainError, ValidationError
 
 if TYPE_CHECKING:
     from chem_vault.application.auth import AuthContext
@@ -35,11 +38,54 @@ class ImportPreview:
     suggested_template_name: str | None = None
 
 
-# In-memory file cache — keyed by file_id, stores (headers, data_rows)
-_file_cache: dict[str, tuple[list[str], list[list[str]]]] = {}
+class ImportFileCache:
+    """In-process cache for uploaded import files between preview/validate/execute.
+
+    Registered as a DI singleton so it survives across requests within the same
+    worker process. A future migration can swap this for a Valkey-backed
+    implementation without changing callers.
+
+    Entries expire after ``ttl_seconds`` (default 30 minutes) to prevent memory
+    leaks from abandoned imports.
+    """
+
+    def __init__(self, ttl_seconds: int = 1800) -> None:
+        import time
+        self._time = time
+        self._ttl = ttl_seconds
+        self._store: dict[str, tuple[float, list[str], list[list[str]]]] = {}
+
+    def _evict_expired(self) -> None:
+        now = self._time.monotonic()
+        expired = [k for k, (ts, _, _) in self._store.items() if now - ts > self._ttl]
+        for k in expired:
+            del self._store[k]
+
+    def put(self, file_id: str, headers: list[str], data_rows: list[list[str]]) -> None:
+        self._evict_expired()
+        self._store[file_id] = (self._time.monotonic(), headers, data_rows)
+
+    def get(self, file_id: str) -> tuple[list[str], list[list[str]]] | None:
+        self._evict_expired()
+        entry = self._store.get(file_id)
+        if entry is None:
+            return None
+        return (entry[1], entry[2])
+
+    def pop(self, file_id: str) -> tuple[list[str], list[list[str]]] | None:
+        entry = self._store.pop(file_id, None)
+        if entry is None:
+            return None
+        return (entry[1], entry[2])
+
+    def __contains__(self, file_id: str) -> bool:
+        self._evict_expired()
+        return file_id in self._store
 
 
-def preview_import_file(filename: str, content: bytes) -> ImportPreview:
+def preview_import_file(
+    filename: str, content: bytes, cache: ImportFileCache
+) -> Result[ImportPreview, DomainError]:
     """Parse CSV/TSV, cache content, return preview."""
     file_id = str(uuid.uuid4())
 
@@ -55,21 +101,20 @@ def preview_import_file(filename: str, content: bytes) -> ImportPreview:
     rows = list(reader)
 
     if len(rows) < 1:
-        raise ValueError("File is empty")
+        return Failure(ValidationError("File is empty"))
 
     headers = rows[0]
     data_rows = rows[1:]
 
-    # Cache (headers, data_rows) — both phases need the full content
-    _file_cache[file_id] = (headers, data_rows)
+    cache.put(file_id, headers, data_rows)
 
-    return ImportPreview(
+    return Success(ImportPreview(
         file_id=file_id,
         filename=filename,
         headers=headers,
         preview_rows=data_rows[:10],
         row_count=len(data_rows),
-    )
+    ))
 
 
 def auto_match_template(
@@ -139,12 +184,14 @@ class ImportPlateDataService:
         uow: UnitOfWork,
         plate_repo: RegisteredPlateRepository,
         batch_repo: BatchRepository,
+        cache: ImportFileCache,
         create_run: CreateRun | None = None,
         bulk_create_readout_data: BulkCreateReadoutData | None = None,
     ) -> None:
         self._uow = uow
         self._plate_repo = plate_repo
         self._batch_repo = batch_repo
+        self._cache = cache
         self._create_run = create_run
         self._bulk_create = bulk_create_readout_data
 
@@ -209,13 +256,14 @@ class ImportPlateDataService:
         file_id: str,
         column_mappings: dict[str, str],
         workspace_id: uuid.UUID,
-    ) -> ValidationResult:
+    ) -> Result[ValidationResult, DomainError]:
         """Validate column mappings against cached data rows."""
-        if file_id not in _file_cache:
-            raise ValueError(f"File {file_id!r} not found in cache (expired or invalid)")
+        cached = self._cache.get(file_id)
+        if cached is None:
+            return Failure(ValidationError(f"File {file_id!r} not found in cache (expired or invalid)"))
 
         async with self._uow:
-            headers, data_rows = _file_cache[file_id]
+            headers, data_rows = cached
             barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
 
             details: list[ValidationDetail] = []
@@ -256,13 +304,13 @@ class ImportPlateDataService:
 
                 matched += 1
 
-            return ValidationResult(
+            return Success(ValidationResult(
                 total_rows=len(data_rows),
                 matched=matched,
                 unresolved=unresolved,
                 errors=error_count,
                 details=details[:100],
-            )
+            ))
 
     # ------------------------------------------------------------------
     # Phase 3: Execute
@@ -276,7 +324,7 @@ class ImportPlateDataService:
         protocol_id: uuid.UUID | None,
         run_id: uuid.UUID | None,
         auth: AuthContext | None = None,
-    ) -> ImportExecutionResult:
+    ) -> Result[ImportExecutionResult, DomainError]:
         """Execute import — resolve wells to batches/molecules, create ReadoutData.
 
         For each data row:
@@ -285,20 +333,21 @@ class ImportPlateDataService:
         - Extract readout values from mapped columns
         - If protocol_id provided: auto-create Run if needed, then BulkCreateReadoutData
         """
-        if file_id not in _file_cache:
-            raise ValueError(f"File {file_id!r} not found in cache (expired or invalid)")
+        cached = self._cache.get(file_id)
+        if cached is None:
+            return Failure(ValidationError(f"File {file_id!r} not found in cache (expired or invalid)"))
 
-        headers, data_rows = _file_cache[file_id]
+        headers, data_rows = cached
         barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
         readout_indices = self._find_readout_indices(headers, column_mappings)
         qualifier_idx = self._find_qualifier_index(headers, column_mappings)
 
         # Phase 1: Resolve plate → well → batch → molecule (read-only)
-        resolved_rows: list[dict] = []
+        resolved_rows: list[dict[str, Any]] = []
         imported = 0
         skipped = 0
         errors: list[str] = []
-        plate_cache: dict[str, object] = {}
+        plate_cache: dict[str, Any] = {}
 
         async with self._uow:
             for row_num, row in enumerate(data_rows, start=2):
@@ -345,7 +394,9 @@ class ImportPlateDataService:
                         skipped += 1
                         continue
 
-                    batch = await self._batch_repo.find_by_id(batch_id)
+                    batch = await self._batch_repo.find_by_id_in_workspace(
+                        workspace_id, batch_id
+                    )
                     if batch is None:
                         errors.append(f"Row {row_num}: Batch {batch_id} not found")
                         skipped += 1
@@ -377,7 +428,7 @@ class ImportPlateDataService:
                     errors.append(f"Row {row_num}: {exc}")
                     skipped += 1
 
-        del _file_cache[file_id]
+        self._cache.pop(file_id)
 
         # Phase 2: Create ReadoutData if protocol + readout columns present
         readout_count = 0
@@ -397,25 +448,23 @@ class ImportPlateDataService:
                 errors=errors,
             )
 
-        return ImportExecutionResult(
+        return Success(ImportExecutionResult(
             imported_count=imported,
             skipped_count=skipped,
             readout_count=readout_count,
             errors=errors[:50],
-        )
+        ))
 
     async def _create_readout_data(
         self,
         workspace_id: uuid.UUID,
         protocol_id: uuid.UUID,
         run_id: uuid.UUID | None,
-        resolved_rows: list[dict],
+        resolved_rows: list[dict[str, Any]],
         auth: AuthContext | None,
         errors: list[str],
     ) -> int:
         """Auto-create Run (if needed) and bulk-insert ReadoutData."""
-        from returns.result import Failure
-
         from chem_vault.application.screening.bulk_create_readout_data import (
             BulkCreateReadoutDataCommand,
             ReadoutDataItem,
@@ -424,7 +473,9 @@ class ImportPlateDataService:
 
         # Auto-create a Run if none provided
         if run_id is None:
-            assert self._create_run is not None
+            if self._create_run is None:
+                errors.append("CreateRun service not configured for plate import")
+                return 0
             run_result = await self._create_run(
                 CreateRunCommand(
                     workspace_id=workspace_id,
@@ -458,7 +509,9 @@ class ImportPlateDataService:
         if not items:
             return 0
 
-        assert self._bulk_create is not None
+        if self._bulk_create is None:
+            errors.append("BulkCreateReadoutData service not configured for plate import")
+            return 0
         bulk_result = await self._bulk_create(
             BulkCreateReadoutDataCommand(
                 workspace_id=workspace_id,
@@ -477,6 +530,3 @@ class ImportPlateDataService:
         return result.success_count
 
 
-def clear_file_cache(file_id: str) -> None:
-    """Remove a file from the in-memory cache."""
-    _file_cache.pop(file_id, None)

@@ -29,8 +29,8 @@ class GetSavedSearch:
         self, input: GetSavedSearchQuery
     ) -> Result[SavedSearch, DomainError]:
         async with self._uow:
-            search = await self._repo.find_by_id(input.saved_search_id)
-            if search is None or search.workspace_id != input.workspace_id:
+            search = await self._repo.find_by_id_in_workspace(input.workspace_id, input.saved_search_id)
+            if search is None:
                 return Failure(
                     NotFoundError("SavedSearch", str(input.saved_search_id))
                 )
@@ -58,7 +58,7 @@ class ListSavedSearches:
                     input.workspace_id, input.created_by
                 )
             elif input.project_id is not None:
-                searches = await self._repo.find_by_project(input.project_id)
+                searches = await self._repo.find_by_project(input.workspace_id, input.project_id)
             else:
                 searches = await self._repo.find_by_workspace(input.workspace_id)
             return Success(searches)

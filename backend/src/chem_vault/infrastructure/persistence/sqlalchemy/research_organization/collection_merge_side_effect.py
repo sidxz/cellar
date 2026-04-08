@@ -10,7 +10,8 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 
 
 class CollectionMergeSideEffect:
@@ -18,10 +19,11 @@ class CollectionMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = uow.session  # type: ignore[attr-defined]
         params = {"source": source_molecule_id, "target": target_molecule_id}
 
         # Step 1: DELETE rows where both source and target exist in the same

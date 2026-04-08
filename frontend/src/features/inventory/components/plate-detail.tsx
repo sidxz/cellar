@@ -3,10 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
+import { ArrowLeft, Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,6 +25,8 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { usePlate, usePlateChildren, useChangeStatus, useDerivePlate } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels, plateStatusLabels } from "../types/plates";
@@ -164,6 +176,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
   const { data: plate, isLoading } = usePlate(plateId);
   const { data: children } = usePlateChildren(plateId);
   const [wellMapOpen, setWellMapOpen] = useState(false);
+  const [deriveOpen, setDeriveOpen] = useState(false);
   const changeStatus = useChangeStatus(plateId);
 
   if (isLoading) {
@@ -235,6 +248,15 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           >
             <FileUp className="mr-1.5 h-3.5 w-3.5" />
             Import Data
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeriveOpen(true)}
+            disabled={plate.status === "disposed"}
+          >
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            Derive Plate
           </Button>
           <Select
             value="__current__"
@@ -376,6 +398,17 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
         </Card>
       )}
 
+      {/* Attachments */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Files</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FileUploadZone entityType="plate" entityId={plateId} />
+          <AttachmentList entityType="plate" entityId={plateId} />
+        </CardContent>
+      </Card>
+
       {/* Well mapping dialog */}
       <WellMappingDialog
         open={wellMapOpen}
@@ -384,6 +417,151 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
         format={plate.format}
         initialWellMap={plate.well_map}
       />
+
+      {/* Derive plate dialog */}
+      <DerivePlateDialog
+        parentPlateId={plateId}
+        open={deriveOpen}
+        onOpenChange={setDeriveOpen}
+      />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DerivePlateDialog
+// ---------------------------------------------------------------------------
+
+function DerivePlateDialog({
+  parentPlateId,
+  open,
+  onOpenChange,
+}: {
+  parentPlateId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const router = useRouter();
+  const deriveMutation = useDerivePlate(parentPlateId);
+  const { data: locations } = useStorageLocations();
+  const [barcode, setBarcode] = useState("");
+  const [label, setLabel] = useState("");
+  const [plateType, setPlateType] = useState<string>("daughter");
+  const [storageId, setStorageId] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const reset = () => {
+    setBarcode("");
+    setLabel("");
+    setPlateType("daughter");
+    setStorageId("");
+    setNotes("");
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) reset();
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Derive Daughter Plate</DialogTitle>
+          <DialogDescription>
+            Create a new plate from this parent. The well map will be copied.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Barcode *</Label>
+            <Input
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="e.g. PL-2026-0501"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Label *</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Daughter plate for screen #3"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Plate Type</Label>
+            <Select value={plateType} onValueChange={setPlateType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.entries(plateTypeLabels) as [PlateType, string][]).map(
+                  ([value, lbl]) => (
+                    <SelectItem key={value} value={value}>
+                      {lbl}
+                    </SelectItem>
+                  )
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Storage Location</Label>
+            <Select value={storageId} onValueChange={setStorageId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select location..." />
+              </SelectTrigger>
+              <SelectContent>
+                {locations?.map((loc) => (
+                  <SelectItem key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!barcode.trim() || !label.trim() || deriveMutation.isPending}
+            onClick={() => {
+              deriveMutation.mutate(
+                {
+                  barcode: barcode.trim(),
+                  plate_label: label.trim(),
+                  plate_type: plateType,
+                  storage_location_id: storageId || null,
+                  notes: notes.trim() || null,
+                },
+                {
+                  onSuccess: (newPlate) => {
+                    reset();
+                    onOpenChange(false);
+                    router.push(`/inventory/plates/${newPlate.id}`);
+                  },
+                }
+              );
+            }}
+          >
+            {deriveMutation.isPending ? "Creating..." : "Derive"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

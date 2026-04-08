@@ -93,7 +93,7 @@ class SavedSearch(AggregateRoot):
         self,
         *,
         name: str | None = None,
-        query: dict | None = None,
+        query: dict[str, Any] | None = None,
         columns: dict[str, Any] | None = ...,  # type: ignore[assignment]
         visibility: SearchVisibility | None = None,
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]

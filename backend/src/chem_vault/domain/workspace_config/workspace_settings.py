@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.workspace_config.events import WorkspaceSettingsUpdated
@@ -24,13 +25,13 @@ class WorkspaceSettings(AggregateRoot):
         self,
         *,
         id: uuid.UUID,
-        registration_rules: dict | None = None,
-        custom_field_definitions: dict | None = None,
+        registration_rules: dict[str, Any] | None = None,
+        custom_field_definitions: dict[str, Any] | None = None,
         default_molecule_type: str | None = None,
-        audit_reason_policy: dict | None = None,
+        audit_reason_policy: dict[str, Any] | None = None,
         signature_required_for: list[str] | None = None,
         audit_retention_days: int | None = None,
-        formulation_number_scheme: dict | None = None,
+        formulation_number_scheme: dict[str, Any] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,

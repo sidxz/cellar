@@ -5,8 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
-from lagom import Container
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from chem_vault.application.screening.bulk_create_readout_data import (
@@ -22,10 +21,18 @@ from chem_vault.application.screening.create_readout_data import (
     CreateReadoutData,
     CreateReadoutDataCommand,
 )
-from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
-from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
+from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun, ListDoseResponseByRunQuery
+from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun, ListReadoutDataByRunQuery
 from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    BulkCreateReadoutDataDep,
+    CreateDoseResponseCurveDep,
+    CreateReadoutDataDep,
+    ListDoseResponseByRunDep,
+    ListReadoutDataByRunDep,
+    ReadoutCalculationEngineDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["readout-data"])
@@ -162,7 +169,7 @@ class BulkReadoutDataResponse(BaseModel):
     total_count: int
     success_count: int
     error_count: int
-    errors: list[dict] = []
+    errors: list[dict[str, Any]] = []
 
 
 class CreateDoseResponseCurveRequest(BaseModel):
@@ -186,30 +193,6 @@ class CreateDoseResponseCurveRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Dependency resolvers
-# ---------------------------------------------------------------------------
-
-
-def _create_readout(c: Annotated[Container, Depends(get_container)]) -> CreateReadoutData:
-    return c[CreateReadoutData]
-
-def _bulk_create_readout(c: Annotated[Container, Depends(get_container)]) -> BulkCreateReadoutData:
-    return c[BulkCreateReadoutData]
-
-def _list_readout(c: Annotated[Container, Depends(get_container)]) -> ListReadoutDataByRun:
-    return c[ListReadoutDataByRun]
-
-def _create_dose_response(c: Annotated[Container, Depends(get_container)]) -> CreateDoseResponseCurve:
-    return c[CreateDoseResponseCurve]
-
-def _list_dose_response(c: Annotated[Container, Depends(get_container)]) -> ListDoseResponseByRun:
-    return c[ListDoseResponseByRun]
-
-def _calc_engine(c: Annotated[Container, Depends(get_container)]) -> ReadoutCalculationEngine:
-    return c[ReadoutCalculationEngine]
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -218,7 +201,7 @@ def _calc_engine(c: Annotated[Container, Depends(get_container)]) -> ReadoutCalc
 async def create_readout_data(
     auth: AuthDep,
     body: CreateReadoutDataRequest,
-    uc: Annotated[CreateReadoutData, Depends(_create_readout)],
+    uc: CreateReadoutDataDep,
 ) -> ReadoutDataResponse:
     cmd = CreateReadoutDataCommand(
         workspace_id=auth.workspace_id,
@@ -240,8 +223,8 @@ async def create_readout_data(
 async def bulk_create_readout_data(
     auth: AuthDep,
     body: BulkReadoutDataRequest,
-    uc: Annotated[BulkCreateReadoutData, Depends(_bulk_create_readout)],
-    engine: Annotated[ReadoutCalculationEngine, Depends(_calc_engine)],
+    uc: BulkCreateReadoutDataDep,
+    engine: ReadoutCalculationEngineDep,
 ) -> BulkReadoutDataResponse:
     cmd = BulkCreateReadoutDataCommand(
         workspace_id=auth.workspace_id,
@@ -269,7 +252,7 @@ async def bulk_create_readout_data(
     # Trigger computation pipeline for each affected run
     run_ids = {item.run_id for item in body.items}
     for run_id in run_ids:
-        await engine.compute_for_run(run_id)
+        await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
 
     return BulkReadoutDataResponse(
         total_count=data.total_count,
@@ -283,9 +266,10 @@ async def bulk_create_readout_data(
 async def list_readout_data(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
-    uc: Annotated[ListReadoutDataByRun, Depends(_list_readout)],
+    uc: ListReadoutDataByRunDep,
 ) -> list[ReadoutDataResponse]:
-    result = await uc(run_id, auth=auth)
+    query = ListReadoutDataByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
+    result = await uc(query, auth=auth)
     data = result_to_response(result)
     return [ReadoutDataResponse.from_domain(rd) for rd in data]
 
@@ -294,7 +278,7 @@ async def list_readout_data(
 async def create_dose_response_curve(
     auth: AuthDep,
     body: CreateDoseResponseCurveRequest,
-    uc: Annotated[CreateDoseResponseCurve, Depends(_create_dose_response)],
+    uc: CreateDoseResponseCurveDep,
 ) -> DoseResponseCurveResponse:
     cmd = CreateDoseResponseCurveCommand(
         workspace_id=auth.workspace_id,
@@ -324,8 +308,9 @@ async def create_dose_response_curve(
 async def list_dose_response_curves(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
-    uc: Annotated[ListDoseResponseByRun, Depends(_list_dose_response)],
+    uc: ListDoseResponseByRunDep,
 ) -> list[DoseResponseCurveResponse]:
-    result = await uc(run_id, auth=auth)
+    query = ListDoseResponseByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
+    result = await uc(query, auth=auth)
     curves = result_to_response(result)
     return [DoseResponseCurveResponse.from_domain(c) for c in curves]

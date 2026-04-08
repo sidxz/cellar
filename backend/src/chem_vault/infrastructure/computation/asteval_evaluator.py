@@ -11,10 +11,8 @@ import re
 from typing import Any
 
 import asteval
-from returns.result import Failure, Result, Success
 
 from chem_vault.domain.screening_assay.formula_evaluator import FormulaValidationError
-from chem_vault.domain.shared.errors import DomainError
 
 # ---------------------------------------------------------------------------
 # Whitelisted math symbols injected into every interpreter instance
@@ -72,21 +70,19 @@ class AstevalFormulaEvaluator:
         self,
         formula: str,
         bindings: dict[str, float],
-    ) -> Result[float, DomainError]:
+    ) -> float:
         """Evaluate *formula* with the provided variable *bindings*.
 
-        Handles:
-        - Empty formula → FormulaValidationError
-        - Syntax errors → FormulaValidationError
-        - Undefined variables → FormulaValidationError
-        - Division by zero → FormulaValidationError
-        - Non-numeric result (None or non-float) → FormulaValidationError
+        Raises FormulaValidationError on:
+        - Empty formula
+        - Syntax errors
+        - Undefined variables
+        - Division by zero
+        - Non-numeric result (None or non-float)
         """
         stripped = formula.strip()
         if not stripped:
-            return Failure(
-                FormulaValidationError(formula, "Formula must not be empty")
-            )
+            raise FormulaValidationError(formula, "Formula must not be empty")
 
         interp = _make_interpreter()
         interp.symtable.update(bindings)
@@ -99,65 +95,50 @@ class AstevalFormulaEvaluator:
             exc_type = first.exc
 
             if exc_type is ZeroDivisionError:
-                return Failure(
-                    FormulaValidationError(formula, "Division by zero")
-                )
+                raise FormulaValidationError(formula, "Division by zero")
 
             undefined = _extract_undefined_variables(interp.error)
             if undefined:
-                return Failure(
-                    FormulaValidationError(
-                        formula,
-                        f"Undefined variable(s): {', '.join(undefined)}",
-                        undefined_variables=undefined,
-                    )
+                raise FormulaValidationError(
+                    formula,
+                    f"Undefined variable(s): {', '.join(undefined)}",
+                    undefined_variables=undefined,
                 )
 
-            return Failure(
-                FormulaValidationError(formula, first.msg)
-            )
+            raise FormulaValidationError(formula, first.msg)
 
         if result is None:
-            return Failure(
-                FormulaValidationError(formula, "Formula produced no result")
-            )
+            raise FormulaValidationError(formula, "Formula produced no result")
 
         if not isinstance(result, (int, float)):
-            return Failure(
-                FormulaValidationError(
-                    formula,
-                    f"Formula must return a numeric value, got {type(result).__name__}",
-                )
+            raise FormulaValidationError(
+                formula,
+                f"Formula must return a numeric value, got {type(result).__name__}",
             )
 
         float_result = float(result)
         if math.isnan(float_result) or math.isinf(float_result):
-            return Failure(
-                FormulaValidationError(
-                    formula,
-                    f"Formula produced a non-finite value: {float_result}",
-                )
+            raise FormulaValidationError(
+                formula,
+                f"Formula produced a non-finite value: {float_result}",
             )
 
-        return Success(float_result)
+        return float_result
 
     def validate(
         self,
         formula: str,
         available_variables: list[str],
-    ) -> Result[None, DomainError]:
+    ) -> None:
         """Validate *formula* without real data by substituting 1.0 for each variable.
 
-        Returns:
-            Success(None) if the formula is valid.
-            Failure(FormulaValidationError) with ``undefined_variables`` populated
+        Raises:
+            FormulaValidationError with ``undefined_variables`` populated
                 if any variable referenced in the formula is not in *available_variables*.
         """
         stripped = formula.strip()
         if not stripped:
-            return Failure(
-                FormulaValidationError(formula, "Formula must not be empty")
-            )
+            raise FormulaValidationError(formula, "Formula must not be empty")
 
         dummy_bindings = {var: 1.0 for var in available_variables}
         interp = _make_interpreter()
@@ -170,20 +151,15 @@ class AstevalFormulaEvaluator:
 
             undefined = _extract_undefined_variables(interp.error)
             if undefined:
-                return Failure(
-                    FormulaValidationError(
-                        formula,
-                        f"Undefined variable(s): {', '.join(undefined)}",
-                        undefined_variables=undefined,
-                    )
+                raise FormulaValidationError(
+                    formula,
+                    f"Undefined variable(s): {', '.join(undefined)}",
+                    undefined_variables=undefined,
                 )
 
-            return Failure(
-                FormulaValidationError(formula, first.msg)
-            )
+            raise FormulaValidationError(formula, first.msg)
 
         # A None result here could mean division by zero with all-1.0 inputs
         # (e.g. `x - x`). That's still a syntactically valid formula, so we
         # only reject None when it accompanies errors (already handled above).
         _ = result  # noqa: F841
-        return Success(None)

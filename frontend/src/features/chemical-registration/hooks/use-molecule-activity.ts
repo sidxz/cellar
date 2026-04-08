@@ -1,3 +1,5 @@
+"use client";
+
 import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 
@@ -30,9 +32,11 @@ export interface ActivitySummaryResponse {
   protocols: ProtocolActivityResponse[];
 }
 
+const MOLECULES_KEY = ["molecules"];
+
 export function useMoleculeActivity(moleculeId: string | undefined) {
   return useQuery({
-    queryKey: ["molecule-activity", moleculeId],
+    queryKey: [...MOLECULES_KEY, moleculeId, "activity"],
     queryFn: () =>
       customInstance<ActivitySummaryResponse>({
         url: `/api/v1/molecules/${moleculeId}/activity`,

@@ -3,15 +3,61 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import SampleRepository, StorageLocationRepository
 from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class AliquotSampleCommand(Command):
+    workspace_id: uuid.UUID
+    sample_id: uuid.UUID
+    amount: float
+
+
+@dataclass(frozen=True, kw_only=True)
+class MoveSampleCommand(Command):
+    workspace_id: uuid.UUID
+    sample_id: uuid.UUID
+    location_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class QuarantineSampleCommand(Command):
+    workspace_id: uuid.UUID
+    sample_id: uuid.UUID
+    reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClearQuarantineSampleCommand(Command):
+    workspace_id: uuid.UUID
+    sample_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class DisposeSampleCommand(Command):
+    workspace_id: uuid.UUID
+    sample_id: uuid.UUID
+    reason: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Use Cases
+# ---------------------------------------------------------------------------
 
 
 class AliquotSample:
@@ -26,15 +72,16 @@ class AliquotSample:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, sample_id: uuid.UUID, amount: float, auth: AuthContext | None = None
+        self, input: AliquotSampleCommand, auth: AuthContext | None = None
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
         async with self._uow:
-            sample = await self._repo.find_by_id(sample_id)
+            sample = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.sample_id
+            )
             if sample is None:
-                return Failure(NotFoundError("Sample"))
-            require_same_workspace(auth, sample.workspace_id)
-            sample.aliquot(amount)
+                return Failure(NotFoundError("Sample", str(input.sample_id)))
+            sample.aliquot(input.amount)
             await self._repo.save(sample)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -56,21 +103,23 @@ class MoveSample:
 
     async def __call__(
         self,
-        sample_id: uuid.UUID,
-        location_id: uuid.UUID | None,
+        input: MoveSampleCommand,
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
         async with self._uow:
-            sample = await self._repo.find_by_id(sample_id)
+            sample = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.sample_id
+            )
             if sample is None:
-                return Failure(NotFoundError("Sample"))
-            require_same_workspace(auth, sample.workspace_id)
-            if location_id is not None:
-                location = await self._location_repo.find_by_id(location_id)
+                return Failure(NotFoundError("Sample", str(input.sample_id)))
+            if input.location_id is not None:
+                location = await self._location_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.location_id
+                )
                 if location is None:
-                    return Failure(NotFoundError("StorageLocation", str(location_id)))
-            sample.move_to(location_id)
+                    return Failure(NotFoundError("StorageLocation", str(input.location_id)))
+            sample.move_to(input.location_id)
             await self._repo.save(sample)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -90,17 +139,17 @@ class QuarantineSample:
 
     async def __call__(
         self,
-        sample_id: uuid.UUID,
-        reason: str,
+        input: QuarantineSampleCommand,
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
         async with self._uow:
-            sample = await self._repo.find_by_id(sample_id)
+            sample = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.sample_id
+            )
             if sample is None:
-                return Failure(NotFoundError("Sample"))
-            require_same_workspace(auth, sample.workspace_id)
-            sample.quarantine(reason=reason)
+                return Failure(NotFoundError("Sample", str(input.sample_id)))
+            sample.quarantine(reason=input.reason)
             await self._repo.save(sample)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -120,15 +169,16 @@ class ClearQuarantineSample:
 
     async def __call__(
         self,
-        sample_id: uuid.UUID,
+        input: ClearQuarantineSampleCommand,
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
         async with self._uow:
-            sample = await self._repo.find_by_id(sample_id)
+            sample = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.sample_id
+            )
             if sample is None:
-                return Failure(NotFoundError("Sample"))
-            require_same_workspace(auth, sample.workspace_id)
+                return Failure(NotFoundError("Sample", str(input.sample_id)))
             sample.clear_quarantine()
             await self._repo.save(sample)
             events = await self._uow.commit()
@@ -149,17 +199,17 @@ class DisposeSample:
 
     async def __call__(
         self,
-        sample_id: uuid.UUID,
-        reason: str | None = None,
+        input: DisposeSampleCommand,
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
         async with self._uow:
-            sample = await self._repo.find_by_id(sample_id)
+            sample = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.sample_id
+            )
             if sample is None:
-                return Failure(NotFoundError("Sample"))
-            require_same_workspace(auth, sample.workspace_id)
-            sample.dispose(reason=reason)
+                return Failure(NotFoundError("Sample", str(input.sample_id)))
+            sample.dispose(reason=input.reason)
             await self._repo.save(sample)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)

@@ -56,20 +56,39 @@ class SQLAlchemyMoleculeRelationshipRepository:
         model = await self._session.get(MoleculeRelationshipModel, id)
         return self._to_domain(model) if model else None
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> MoleculeRelationship | None:
+        """Load by PK scoped to workspace."""
+        stmt = (
+            select(MoleculeRelationshipModel)
+            .where(
+                MoleculeRelationshipModel.id == id,
+                MoleculeRelationshipModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     async def find_by_source(
-        self, source_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID
     ) -> list[MoleculeRelationship]:
         stmt = select(MoleculeRelationshipModel).where(
-            MoleculeRelationshipModel.source_molecule_id == source_molecule_id
+            MoleculeRelationshipModel.workspace_id == workspace_id,
+            MoleculeRelationshipModel.source_molecule_id == source_molecule_id,
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
 
     async def find_by_target(
-        self, target_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, target_molecule_id: uuid.UUID
     ) -> list[MoleculeRelationship]:
         stmt = select(MoleculeRelationshipModel).where(
-            MoleculeRelationshipModel.target_molecule_id == target_molecule_id
+            MoleculeRelationshipModel.workspace_id == workspace_id,
+            MoleculeRelationshipModel.target_molecule_id == target_molecule_id,
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
@@ -79,8 +98,9 @@ class SQLAlchemyMoleculeRelationshipRepository:
         self._session.add(model)
         await self._session.flush()
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(MoleculeRelationshipModel).where(
-            MoleculeRelationshipModel.id == id
+            MoleculeRelationshipModel.workspace_id == workspace_id,
+            MoleculeRelationshipModel.id == id,
         )
         await self._session.execute(stmt)

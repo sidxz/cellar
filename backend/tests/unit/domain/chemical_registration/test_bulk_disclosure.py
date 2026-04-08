@@ -8,6 +8,7 @@ from chem_vault.domain.chemical_registration.bulk_disclosure import BulkDisclosu
 from chem_vault.domain.chemical_registration.enums import BulkDisclosureStatus
 from chem_vault.domain.shared.errors import ValidationError
 
+WS_ID = uuid.uuid4()
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -32,6 +33,7 @@ def _make(
 ) -> BulkDisclosure:
     """Create a BulkDisclosure in PROCESSING state for transition tests."""
     bd = BulkDisclosure.create(
+        workspace_id=WS_ID,
         source_file="compounds.csv",
         partner_org_id=org_id,
         submitted_by=user_id,
@@ -51,12 +53,14 @@ class TestBulkDisclosureCreation:
         self, org_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         bd = BulkDisclosure.create(
+            workspace_id=WS_ID,
             source_file="compounds.csv",
             partner_org_id=org_id,
             submitted_by=user_id,
             total_count=10,
         )
 
+        assert bd.workspace_id == WS_ID
         assert bd.source_file == "compounds.csv"
         assert bd.partner_org_id == org_id
         assert bd.submitted_by == user_id
@@ -76,6 +80,7 @@ class TestBulkDisclosureCreation:
     ) -> None:
         with pytest.raises(ValidationError, match="total_count must be greater than zero"):
             BulkDisclosure.create(
+                workspace_id=WS_ID,
                 source_file="compounds.csv",
                 partner_org_id=org_id,
                 submitted_by=user_id,
@@ -87,6 +92,7 @@ class TestBulkDisclosureCreation:
     ) -> None:
         with pytest.raises(ValidationError, match="total_count must be greater than zero"):
             BulkDisclosure.create(
+                workspace_id=WS_ID,
                 source_file="compounds.csv",
                 partner_org_id=org_id,
                 submitted_by=user_id,
@@ -98,6 +104,7 @@ class TestBulkDisclosureCreation:
     ) -> None:
         with pytest.raises(ValidationError, match="source_file must not be empty"):
             BulkDisclosure.create(
+                workspace_id=WS_ID,
                 source_file="",
                 partner_org_id=org_id,
                 submitted_by=user_id,
@@ -109,6 +116,7 @@ class TestBulkDisclosureCreation:
     ) -> None:
         with pytest.raises(ValidationError, match="source_file must not be empty"):
             BulkDisclosure.create(
+                workspace_id=WS_ID,
                 source_file="   ",
                 partner_org_id=org_id,
                 submitted_by=user_id,
@@ -119,6 +127,7 @@ class TestBulkDisclosureCreation:
         self, org_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         bd = BulkDisclosure.create(
+            workspace_id=WS_ID,
             source_file="  compounds.csv  ",
             partner_org_id=org_id,
             submitted_by=user_id,
@@ -137,6 +146,7 @@ class TestBulkDisclosureProgress:
         self, org_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         bd = BulkDisclosure.create(
+            workspace_id=WS_ID,
             source_file="compounds.csv",
             partner_org_id=org_id,
             submitted_by=user_id,
@@ -255,6 +265,7 @@ class TestBulkDisclosureProgress:
         self, org_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         bd = BulkDisclosure.create(
+            workspace_id=WS_ID,
             source_file="compounds.csv",
             partner_org_id=org_id,
             submitted_by=user_id,
@@ -295,6 +306,7 @@ class TestBulkDisclosureProgress:
         self, org_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         bd = BulkDisclosure.create(
+            workspace_id=WS_ID,
             source_file="compounds.csv",
             partner_org_id=org_id,
             submitted_by=user_id,

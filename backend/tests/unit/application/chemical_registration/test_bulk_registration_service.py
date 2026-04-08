@@ -82,7 +82,7 @@ class TestBulkRegistrationService:
             originating_org_id=org_id,
         )
 
-        result = await service.execute(cmd)
+        result = await service(cmd)
         assert isinstance(result, Failure)
         assert "Unsupported file format" in str(result.failure())
 
@@ -99,7 +99,7 @@ class TestBulkRegistrationService:
             originating_org_id=org_id,
         )
 
-        result = await service.execute(cmd)
+        result = await service(cmd)
         assert isinstance(result, Failure)
         assert "no records" in str(result.failure()).lower()
 
@@ -126,7 +126,7 @@ class TestBulkRegistrationService:
             "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
         ) as MockRegClass:
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
-            result = await service.execute(cmd)
+            result = await service(cmd)
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -164,7 +164,7 @@ class TestBulkRegistrationService:
             "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
         ) as MockRegClass:
             MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
-            result = await service.execute(cmd)
+            result = await service(cmd)
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -200,7 +200,7 @@ class TestBulkRegistrationService:
             "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
         ) as MockRegClass:
             MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
-            result = await service.execute(cmd)
+            result = await service(cmd)
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -229,4 +229,4 @@ class TestBulkRegistrationService:
         viewer_auth.has_role = lambda min_role: False
 
         with pytest.raises(AuthorizationError):
-            await service.execute(cmd, auth=viewer_auth)
+            await service(cmd, auth=viewer_auth)

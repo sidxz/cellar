@@ -380,7 +380,6 @@ function CsvTab({
     if (parsedRows.length === 0) return;
 
     const validTypes: RefType[] = [
-      "uuid",
       "registration_number",
       "external_id",
       "smiles",

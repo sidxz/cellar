@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.sentinel import UNSET
@@ -43,12 +43,11 @@ class UpdateRun:
         require_editor(auth)
 
         async with self._uow:
-            run = await self._repo.find_by_id(input.run_id)
+            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
-            require_same_workspace(auth, run.workspace_id)
 
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             if input.qc_metrics is not UNSET:
                 fields["qc_metrics"] = input.qc_metrics
             if input.notes is not UNSET:

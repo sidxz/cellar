@@ -20,19 +20,20 @@ export function usePlates(params?: {
   status?: string;
   format?: string;
 }) {
-  const searchParams = new URLSearchParams();
-  if (params?.barcode) searchParams.set("barcode", params.barcode);
-  if (params?.plate_type) searchParams.set("plate_type", params.plate_type);
-  if (params?.status) searchParams.set("status", params.status);
-  if (params?.format) searchParams.set("format", params.format);
-  const qs = searchParams.toString();
+  // Build clean params object (omit undefined values)
+  const cleanParams: Record<string, string> = {};
+  if (params?.barcode) cleanParams.barcode = params.barcode;
+  if (params?.plate_type) cleanParams.plate_type = params.plate_type;
+  if (params?.status) cleanParams.status = params.status;
+  if (params?.format) cleanParams.format = params.format;
 
   return useQuery({
     queryKey: [...PLATES_KEY, params],
     queryFn: () =>
       customInstance<RegisteredPlate[]>({
-        url: `/api/v1/plates${qs ? `?${qs}` : ""}`,
+        url: "/api/v1/plates",
         method: "GET",
+        params: Object.keys(cleanParams).length > 0 ? cleanParams : undefined,
       }),
   });
 }
@@ -156,9 +157,11 @@ export function usePlateChildren(parentId: string | undefined) {
   });
 }
 
+const MOLECULES_KEY = ["molecules"];
+
 export function useMoleculePlates(moleculeId: string | undefined) {
   return useQuery({
-    queryKey: ["molecules", moleculeId, "plates"],
+    queryKey: [...MOLECULES_KEY, moleculeId, "plates"],
     queryFn: () =>
       customInstance<MoleculePlateEntry[]>({
         url: `/api/v1/molecules/${moleculeId}/plates`,

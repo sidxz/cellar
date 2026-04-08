@@ -53,9 +53,10 @@ class CreateReadoutData:
 
         async with self._uow:
             # Guard against locked runs
-            guard_result = await self._guard.guard_write(input.run_id)
-            if isinstance(guard_result, Failure):
-                return guard_result
+            try:
+                await self._guard.guard_write(input.workspace_id, input.run_id)
+            except DomainError as exc:
+                return Failure(exc)
 
             value = None
             if input.value_numeric is not None:

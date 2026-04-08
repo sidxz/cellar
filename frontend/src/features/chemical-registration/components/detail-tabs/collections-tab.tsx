@@ -33,7 +33,7 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
         data: { molecule_ids: [moleculeId] },
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["molecule-collections", moleculeId] });
+      qc.invalidateQueries({ queryKey: ["molecules", moleculeId, "collections"] });
       qc.invalidateQueries({ queryKey: ["collections"] });
       showSuccess("Removed from collection");
     },
@@ -116,7 +116,7 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
         onOpenChange={setPickerOpen}
         moleculeIds={[moleculeId]}
         onComplete={() => {
-          qc.invalidateQueries({ queryKey: ["molecule-collections", moleculeId] });
+          qc.invalidateQueries({ queryKey: ["molecules", moleculeId, "collections"] });
         }}
       />
     </div>

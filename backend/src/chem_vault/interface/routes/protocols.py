@@ -3,26 +3,34 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Response
-from lagom import Container
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
 from chem_vault.application.screening.create_protocol import CreateProtocol, CreateProtocolCommand
 from chem_vault.application.screening.create_target import CreateTarget, CreateTargetCommand
 from chem_vault.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
-from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
-from chem_vault.application.screening.get_target import GetTarget, ListTargets
+from chem_vault.application.screening.get_protocol import GetProtocol, GetProtocolQuery, ListProtocols, ListProtocolsQuery
+from chem_vault.application.screening.get_target import GetTarget, GetTargetQuery, ListTargets, ListTargetsQuery
 from chem_vault.application.screening.manage_protocol import (
+    AddProtocolToProject,
+    AddProtocolToProjectCommand,
     DeleteProtocol,
+    DeleteProtocolCommand,
+    ListProtocolsByProject,
+    ListProtocolsByProjectQuery,
     PublishProtocol,
+    PublishProtocolCommand,
+    RemoveProtocolFromProject,
+    RemoveProtocolFromProjectCommand,
     RetireProtocol,
+    RetireProtocolCommand,
     UpdateProtocol,
     UpdateProtocolCommand,
     VersionProtocol,
+    VersionProtocolCommand,
 )
 from chem_vault.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
@@ -31,12 +39,28 @@ from chem_vault.application.screening.manage_readout_definitions import (
     RemoveReadoutDefinitionCommand,
 )
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
-from chem_vault.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
-    SQLAlchemyProtocolRepository,
+from chem_vault.interface.dependencies import (
+    AddProtocolToProjectDep,
+    AddReadoutDefinitionDep,
+    AuthDep,
+    ConditionGroupingServiceDep,
+    CreateProtocolDep,
+    CreateTargetDep,
+    DeleteProtocolDep,
+    DeleteTargetDep,
+    GetProtocolDep,
+    GetTargetDep,
+    ListProtocolsByProjectDep,
+    ListProtocolsDep,
+    ListTargetsDep,
+    PublishProtocolDep,
+    RemoveProtocolFromProjectDep,
+    RemoveReadoutDefinitionDep,
+    RetireProtocolDep,
+    UpdateProtocolDep,
+    UpdateTargetDep,
+    VersionProtocolDep,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from chem_vault.interface.dependencies import AuthDep, get_container
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1")
@@ -191,8 +215,8 @@ class CreateProtocolRequest(BaseModel):
     protocol_type: str
     target_id: uuid.UUID | None = None
     category: str | None = None
-    readout_definitions: list[dict]
-    condition_definitions: list[dict] | None = None
+    readout_definitions: list[dict[str, Any]]
+    condition_definitions: list[dict[str, Any]] | None = None
 
 
 class RetireRequest(BaseModel):
@@ -236,60 +260,6 @@ class UpdateTargetRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Dependency resolvers
-# ---------------------------------------------------------------------------
-
-
-def _create_protocol(c: Annotated[Container, Depends(get_container)]) -> CreateProtocol:
-    return c[CreateProtocol]
-
-def _get_protocol(c: Annotated[Container, Depends(get_container)]) -> GetProtocol:
-    return c[GetProtocol]
-
-def _list_protocols(c: Annotated[Container, Depends(get_container)]) -> ListProtocols:
-    return c[ListProtocols]
-
-def _publish_protocol(c: Annotated[Container, Depends(get_container)]) -> PublishProtocol:
-    return c[PublishProtocol]
-
-def _retire_protocol(c: Annotated[Container, Depends(get_container)]) -> RetireProtocol:
-    return c[RetireProtocol]
-
-def _version_protocol(c: Annotated[Container, Depends(get_container)]) -> VersionProtocol:
-    return c[VersionProtocol]
-
-def _update_protocol(c: Annotated[Container, Depends(get_container)]) -> UpdateProtocol:
-    return c[UpdateProtocol]
-
-def _delete_protocol(c: Annotated[Container, Depends(get_container)]) -> DeleteProtocol:
-    return c[DeleteProtocol]
-
-def _add_readout_definition(c: Annotated[Container, Depends(get_container)]) -> AddReadoutDefinition:
-    return c[AddReadoutDefinition]
-
-def _remove_readout_definition(c: Annotated[Container, Depends(get_container)]) -> RemoveReadoutDefinition:
-    return c[RemoveReadoutDefinition]
-
-def _create_target(c: Annotated[Container, Depends(get_container)]) -> CreateTarget:
-    return c[CreateTarget]
-
-def _get_target(c: Annotated[Container, Depends(get_container)]) -> GetTarget:
-    return c[GetTarget]
-
-def _list_targets(c: Annotated[Container, Depends(get_container)]) -> ListTargets:
-    return c[ListTargets]
-
-def _get_update_target(c: Annotated[Container, Depends(get_container)]) -> UpdateTarget:
-    return c[UpdateTarget]
-
-def _get_delete_target(c: Annotated[Container, Depends(get_container)]) -> DeleteTarget:
-    return c[DeleteTarget]
-
-def _condition_grouping(c: Annotated[Container, Depends(get_container)]) -> ConditionGroupingService:
-    return c[ConditionGroupingService]
-
-
-# ---------------------------------------------------------------------------
 # Protocol routes
 # ---------------------------------------------------------------------------
 
@@ -298,7 +268,7 @@ def _condition_grouping(c: Annotated[Container, Depends(get_container)]) -> Cond
 async def create_protocol(
     auth: AuthDep,
     body: CreateProtocolRequest,
-    uc: Annotated[CreateProtocol, Depends(_create_protocol)],
+    uc: CreateProtocolDep,
 ) -> ProtocolResponse:
     cmd = CreateProtocolCommand(
         workspace_id=auth.workspace_id,
@@ -317,18 +287,18 @@ async def create_protocol(
 @router.get("/protocols", response_model=list[ProtocolResponse], tags=["protocols"])
 async def list_protocols(
     auth: AuthDep,
-    uc: Annotated[ListProtocols, Depends(_list_protocols)],
-    c: Annotated[Container, Depends(get_container)],
+    uc: ListProtocolsDep,
+    uc_by_project: ListProtocolsByProjectDep,
     project_id: uuid.UUID | None = Query(default=None),
 ) -> list[ProtocolResponse]:
     if project_id is not None:
-        # Filter by project: use protocol repo directly
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
-        repo = SQLAlchemyProtocolRepository(uow)
-        async with uow:
-            protocols = await repo.find_by_project(auth.workspace_id, project_id)
+        result = await uc_by_project(
+            ListProtocolsByProjectQuery(workspace_id=auth.workspace_id, project_id=project_id),
+            auth=auth,
+        )
+        protocols = result_to_response(result)
         return [ProtocolResponse.from_domain(p) for p in protocols]
-    result = await uc(auth=auth)
+    result = await uc(ListProtocolsQuery(workspace_id=auth.workspace_id), auth=auth)
     protocols = result_to_response(result)
     return [ProtocolResponse.from_domain(p) for p in protocols]
 
@@ -337,9 +307,12 @@ async def list_protocols(
 async def get_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetProtocol, Depends(_get_protocol)],
+    uc: GetProtocolDep,
 ) -> ProtocolResponse:
-    result = await uc(protocol_id, auth=auth)
+    result = await uc(
+        GetProtocolQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+        auth=auth,
+    )
     return ProtocolResponse.from_domain(result_to_response(result))
 
 
@@ -347,9 +320,9 @@ async def get_protocol(
 async def publish_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[PublishProtocol, Depends(_publish_protocol)],
+    uc: PublishProtocolDep,
 ) -> ProtocolResponse:
-    result = await uc(protocol_id, auth=auth)
+    result = await uc(PublishProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id), auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
 
 
@@ -358,9 +331,9 @@ async def retire_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     body: RetireRequest,
-    uc: Annotated[RetireProtocol, Depends(_retire_protocol)],
+    uc: RetireProtocolDep,
 ) -> ProtocolResponse:
-    result = await uc(protocol_id, reason=body.reason, auth=auth)
+    result = await uc(RetireProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id, reason=body.reason), auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
 
 
@@ -368,9 +341,9 @@ async def retire_protocol(
 async def version_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[VersionProtocol, Depends(_version_protocol)],
+    uc: VersionProtocolDep,
 ) -> ProtocolResponse:
-    result = await uc(protocol_id, auth=auth)
+    result = await uc(VersionProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id), auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
 
 
@@ -386,7 +359,7 @@ async def update_protocol(
     protocol_id: uuid.UUID,
     body: UpdateProtocolRequest,
     auth: AuthDep,
-    uc: Annotated[UpdateProtocol, Depends(_update_protocol)],
+    uc: UpdateProtocolDep,
 ) -> ProtocolResponse:
     """Update a DRAFT protocol's metadata."""
     from chem_vault.application.shared.sentinel import UNSET
@@ -406,10 +379,13 @@ async def update_protocol(
 async def delete_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[DeleteProtocol, Depends(_delete_protocol)],
+    uc: DeleteProtocolDep,
 ) -> None:
     """Delete a DRAFT protocol. Only drafts can be deleted."""
-    result_to_response(await uc(protocol_id, auth=auth))
+    result_to_response(await uc(
+        DeleteProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+        auth=auth,
+    ))
 
 
 # ---------------------------------------------------------------------------
@@ -427,19 +403,9 @@ async def add_readout_definition(
     protocol_id: uuid.UUID,
     body: AddReadoutDefinitionRequest,
     auth: AuthDep,
-    uc: Annotated[AddReadoutDefinition, Depends(_add_readout_definition)],
-    get_proto: Annotated[GetProtocol, Depends(_get_protocol)],
+    uc: AddReadoutDefinitionDep,
 ) -> ProtocolResponse:
     """Add a readout definition to a DRAFT protocol."""
-    # Validate formula if this is a calculated readout
-    if body.is_calculated and body.calculation_formula:
-        proto_result = await get_proto(protocol_id, auth=auth)
-        proto = result_to_response(proto_result)
-        available_names = [rd.name for rd in proto.readout_definitions]
-        evaluator = AstevalFormulaEvaluator()
-        val_result = evaluator.validate(body.calculation_formula, available_names)
-        result_to_response(val_result)
-
     cmd = AddReadoutDefinitionCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
@@ -466,7 +432,7 @@ async def remove_readout_definition(
     protocol_id: uuid.UUID,
     definition_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[RemoveReadoutDefinition, Depends(_remove_readout_definition)],
+    uc: RemoveReadoutDefinitionDep,
 ) -> ProtocolResponse:
     """Remove a readout definition from a DRAFT protocol."""
     cmd = RemoveReadoutDefinitionCommand(
@@ -492,14 +458,16 @@ async def add_protocol_to_project(
     protocol_id: uuid.UUID,
     project_id: uuid.UUID,
     auth: AuthDep,
-    c: Annotated[Container, Depends(get_container)],
+    uc: AddProtocolToProjectDep,
 ) -> Response:
     """Link a protocol to a project (idempotent)."""
-    uow = AsyncUnitOfWork(c[async_sessionmaker])
-    repo = SQLAlchemyProtocolRepository(uow)
-    async with uow:
-        await repo.add_to_project(protocol_id, project_id)
-        await uow.commit()
+    result = await uc(
+        AddProtocolToProjectCommand(
+            workspace_id=auth.workspace_id, protocol_id=protocol_id, project_id=project_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
     return Response(status_code=204)
 
 
@@ -512,14 +480,16 @@ async def remove_protocol_from_project(
     protocol_id: uuid.UUID,
     project_id: uuid.UUID,
     auth: AuthDep,
-    c: Annotated[Container, Depends(get_container)],
+    uc: RemoveProtocolFromProjectDep,
 ) -> Response:
     """Unlink a protocol from a project."""
-    uow = AsyncUnitOfWork(c[async_sessionmaker])
-    repo = SQLAlchemyProtocolRepository(uow)
-    async with uow:
-        await repo.remove_from_project(protocol_id, project_id)
-        await uow.commit()
+    result = await uc(
+        RemoveProtocolFromProjectCommand(
+            workspace_id=auth.workspace_id, protocol_id=protocol_id, project_id=project_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
     return Response(status_code=204)
 
 
@@ -537,7 +507,7 @@ async def get_condition_groups(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     condition_name: Annotated[str, Query(...)],
-    svc: Annotated[ConditionGroupingService, Depends(_condition_grouping)],
+    svc: ConditionGroupingServiceDep,
 ) -> ConditionGroupsResponse:
     """Aggregate readout data grouped by a condition value."""
     result = await svc.group_by_condition(auth.workspace_id, protocol_id, condition_name)
@@ -574,7 +544,7 @@ async def get_condition_groups(
 async def create_target(
     auth: AuthDep,
     body: CreateTargetRequest,
-    uc: Annotated[CreateTarget, Depends(_create_target)],
+    uc: CreateTargetDep,
 ) -> TargetResponse:
     cmd = CreateTargetCommand(
         workspace_id=auth.workspace_id,
@@ -595,9 +565,9 @@ async def create_target(
 @router.get("/targets", response_model=list[TargetResponse], tags=["targets"])
 async def list_targets(
     auth: AuthDep,
-    uc: Annotated[ListTargets, Depends(_list_targets)],
+    uc: ListTargetsDep,
 ) -> list[TargetResponse]:
-    result = await uc(auth=auth)
+    result = await uc(ListTargetsQuery(workspace_id=auth.workspace_id), auth=auth)
     targets = result_to_response(result)
     return [TargetResponse.from_domain(t) for t in targets]
 
@@ -606,9 +576,12 @@ async def list_targets(
 async def get_target(
     target_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetTarget, Depends(_get_target)],
+    uc: GetTargetDep,
 ) -> TargetResponse:
-    result = await uc(target_id, auth=auth)
+    result = await uc(
+        GetTargetQuery(workspace_id=auth.workspace_id, target_id=target_id),
+        auth=auth,
+    )
     return TargetResponse.from_domain(result_to_response(result))
 
 
@@ -617,7 +590,7 @@ async def update_target(
     target_id: uuid.UUID,
     body: UpdateTargetRequest,
     auth: AuthDep,
-    uc: Annotated[UpdateTarget, Depends(_get_update_target)],
+    uc: UpdateTargetDep,
 ) -> TargetResponse:
     from chem_vault.application.shared.sentinel import UNSET
 
@@ -642,7 +615,7 @@ async def update_target(
 async def delete_target(
     target_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[DeleteTarget, Depends(_get_delete_target)],
+    uc: DeleteTargetDep,
 ) -> None:
     cmd = DeleteTargetCommand(workspace_id=auth.workspace_id, target_id=target_id)
     result_to_response(await uc(cmd, auth=auth))

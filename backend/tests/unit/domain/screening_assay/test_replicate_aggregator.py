@@ -17,7 +17,6 @@ from chem_vault.domain.screening_assay.replicate_aggregator import (
 )
 from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.shared.value_objects import QualifiedValue
-from returns.result import Failure, Success
 
 
 # ---------------------------------------------------------------------------
@@ -56,10 +55,8 @@ class TestMean:
             _make_readout_data(mol, rd, 30.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         assert values[0].value == pytest.approx(20.0)
         assert values[0].count == 3
@@ -74,10 +71,8 @@ class TestMean:
         rd = uuid4()
         readouts = [_make_readout_data(mol, rd, 42.0)]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         assert values[0].value == pytest.approx(42.0)
         assert values[0].count == 1
@@ -92,10 +87,8 @@ class TestMean:
             _make_readout_data(mol, rd, 15.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert values[0].value == pytest.approx(10.0)
         assert values[0].count == 2
         assert values[0].stdev == pytest.approx(statistics.stdev([5.0, 15.0]))
@@ -117,10 +110,8 @@ class TestMean:
             value=None,
         )
 
-        result = aggregator.aggregate([r1, r2], ReadoutAggregation.MEAN)
+        values = aggregator.aggregate([r1, r2], ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         assert values[0].value == pytest.approx(100.0)
         assert values[0].count == 1
@@ -142,10 +133,8 @@ class TestMedian:
             _make_readout_data(mol, rd, 3.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEDIAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEDIAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         # median of [1, 5, 3] = 3
         assert values[0].value == pytest.approx(3.0)
@@ -163,10 +152,8 @@ class TestMedian:
             _make_readout_data(mol, rd, 4.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEDIAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEDIAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         # median of [1, 2, 3, 4] = 2.5
         assert values[0].value == pytest.approx(2.5)
         assert values[0].count == 4
@@ -177,10 +164,8 @@ class TestMedian:
         rd = uuid4()
         readouts = [_make_readout_data(mol, rd, 7.0)]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEDIAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEDIAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert values[0].value == pytest.approx(7.0)
         assert values[0].count == 1
         assert values[0].stdev is None
@@ -202,10 +187,8 @@ class TestGeometricMean:
             _make_readout_data(mol, rd, 16.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         assert values[0].value == pytest.approx(8.0)
         assert values[0].count == 2
@@ -221,15 +204,13 @@ class TestGeometricMean:
             _make_readout_data(mol, rd, 32.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         expected = math.exp(statistics.mean([math.log(2.0), math.log(8.0), math.log(32.0)]))
         assert values[0].value == pytest.approx(expected)
 
-    def test_negative_value_fails(self) -> None:
-        """Negative value → log undefined → Failure(ValidationError)."""
+    def test_negative_value_raises(self) -> None:
+        """Negative value → log undefined → ValidationError."""
         aggregator = ReplicateAggregator()
         mol = uuid4()
         rd = uuid4()
@@ -238,13 +219,11 @@ class TestGeometricMean:
             _make_readout_data(mol, rd, -1.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
+        with pytest.raises(ValidationError):
+            aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
 
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), ValidationError)
-
-    def test_zero_value_fails(self) -> None:
-        """Zero value → log(0) undefined → Failure(ValidationError)."""
+    def test_zero_value_raises(self) -> None:
+        """Zero value → log(0) undefined → ValidationError."""
         aggregator = ReplicateAggregator()
         mol = uuid4()
         rd = uuid4()
@@ -253,10 +232,8 @@ class TestGeometricMean:
             _make_readout_data(mol, rd, 0.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), ValidationError)
+        with pytest.raises(ValidationError):
+            aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
 
     def test_single_positive_value_passthrough(self) -> None:
         aggregator = ReplicateAggregator()
@@ -264,10 +241,8 @@ class TestGeometricMean:
         rd = uuid4()
         readouts = [_make_readout_data(mol, rd, 9.0)]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert values[0].value == pytest.approx(9.0)
         assert values[0].count == 1
         assert values[0].stdev is None
@@ -289,10 +264,8 @@ class TestMinMax:
             _make_readout_data(mol, rd, 30.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MIN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MIN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         assert values[0].value == pytest.approx(10.0)
         assert values[0].count == 3
@@ -307,10 +280,8 @@ class TestMinMax:
             _make_readout_data(mol, rd, 30.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MAX)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MAX)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 1
         assert values[0].value == pytest.approx(50.0)
         assert values[0].count == 3
@@ -321,10 +292,8 @@ class TestMinMax:
         rd = uuid4()
         readouts = [_make_readout_data(mol, rd, 7.0)]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MIN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MIN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert values[0].value == pytest.approx(7.0)
         assert values[0].count == 1
         assert values[0].stdev is None
@@ -335,10 +304,8 @@ class TestMinMax:
         rd = uuid4()
         readouts = [_make_readout_data(mol, rd, 7.0)]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MAX)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MAX)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert values[0].value == pytest.approx(7.0)
         assert values[0].count == 1
         assert values[0].stdev is None
@@ -352,10 +319,8 @@ class TestMinMax:
             _make_readout_data(mol, rd, 8.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MIN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MIN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert values[0].stdev == pytest.approx(statistics.stdev([2.0, 8.0]))
 
 
@@ -374,18 +339,16 @@ class TestNone:
             _make_readout_data(mol, rd, 20.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.NONE)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.NONE)
 
-        assert isinstance(result, Success)
-        assert result.unwrap() == []
+        assert values == []
 
     def test_returns_empty_list_with_no_readouts(self) -> None:
         aggregator = ReplicateAggregator()
 
-        result = aggregator.aggregate([], ReadoutAggregation.NONE)
+        values = aggregator.aggregate([], ReadoutAggregation.NONE)
 
-        assert isinstance(result, Success)
-        assert result.unwrap() == []
+        assert values == []
 
     def test_returns_empty_list_regardless_of_readouts(self) -> None:
         """NONE always returns empty, even with lots of readouts."""
@@ -394,10 +357,9 @@ class TestNone:
         rd = uuid4()
         readouts = [_make_readout_data(mol, rd, float(i)) for i in range(10)]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.NONE)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.NONE)
 
-        assert isinstance(result, Success)
-        assert result.unwrap() == []
+        assert values == []
 
 
 # ---------------------------------------------------------------------------
@@ -420,10 +382,8 @@ class TestMultipleMolecules:
             _make_readout_data(mol_b, rd, 15.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 2
 
         by_mol = {v.molecule_id: v for v in values}
@@ -444,10 +404,8 @@ class TestMultipleMolecules:
             _make_readout_data(mol, rd_2, 15.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 2
 
         by_rd = {v.readout_definition_id: v for v in values}
@@ -476,10 +434,8 @@ class TestMultipleMolecules:
             _make_readout_data(mol_b, rd_2, 20.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         assert len(values) == 4
 
         by_key = {(v.molecule_id, v.readout_definition_id): v for v in values}
@@ -488,8 +444,8 @@ class TestMultipleMolecules:
         assert by_key[(mol_b, rd_1)].value == pytest.approx(11.0)
         assert by_key[(mol_b, rd_2)].value == pytest.approx(20.0)
 
-    def test_geometric_mean_fails_on_one_bad_group(self) -> None:
-        """If any group contains a non-positive value, the whole call fails."""
+    def test_geometric_mean_raises_on_one_bad_group(self) -> None:
+        """If any group contains a non-positive value, the whole call raises."""
         aggregator = ReplicateAggregator()
         mol_a = uuid4()
         mol_b = uuid4()
@@ -502,10 +458,8 @@ class TestMultipleMolecules:
             _make_readout_data(mol_b, rd, 8.0),
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), ValidationError)
+        with pytest.raises(ValidationError):
+            aggregator.aggregate(readouts, ReadoutAggregation.GEOMETRIC_MEAN)
 
     def test_counts_per_group_are_independent(self) -> None:
         """Each group tracks its own count independently."""
@@ -521,10 +475,8 @@ class TestMultipleMolecules:
             _make_readout_data(mol_b, rd, 5.0),   # count=1
         ]
 
-        result = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
+        values = aggregator.aggregate(readouts, ReadoutAggregation.MEAN)
 
-        assert isinstance(result, Success)
-        values = result.unwrap()
         by_mol = {v.molecule_id: v for v in values}
 
         assert by_mol[mol_a].count == 3

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from chem_vault.domain.shared.entity import Entity
 from chem_vault.domain.shared.errors import ValidationError
@@ -24,7 +25,7 @@ class ImportTemplate(Entity):
         workspace_id: uuid.UUID,
         name: str,
         description: str | None = None,
-        column_mappings: dict,
+        column_mappings: dict[str, Any],
         default_protocol_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
@@ -48,7 +49,7 @@ class ImportTemplate(Entity):
         *,
         workspace_id: uuid.UUID,
         name: str,
-        column_mappings: dict,
+        column_mappings: dict[str, Any],
         description: str | None = None,
         default_protocol_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
@@ -66,7 +67,7 @@ class ImportTemplate(Entity):
         self,
         *,
         name: str | None = None,
-        column_mappings: dict | None = None,
+        column_mappings: dict[str, Any] | None = None,
         description: str | None = _UNSET,  # type: ignore[assignment]
         default_protocol_id: uuid.UUID | None = _UNSET,  # type: ignore[assignment]
     ) -> None:

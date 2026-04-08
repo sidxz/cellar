@@ -56,22 +56,23 @@ class SQLAlchemyAttachmentRepository(
         model.updated_at = aggregate.updated_at
 
     async def delete(self, attachment: Attachment) -> None:
-        """Hard-delete an attachment record."""
+        """Hard-delete an attachment record (workspace-scoped)."""
         model = await self._session.get(AttachmentModel, attachment.id)
-        if model is not None:
+        if model is not None and model.workspace_id == attachment.workspace_id:
             await self._session.delete(model)
 
     async def find_by_entity(
-        self, attachable_type: AttachableType, attachable_id: uuid.UUID
+        self, workspace_id: uuid.UUID, attachable_type: AttachableType, attachable_id: uuid.UUID
     ) -> list[Attachment]:
         """List all attachments for a given entity."""
         stmt = (
             select(AttachmentModel)
             .where(
+                AttachmentModel.workspace_id == workspace_id,
                 AttachmentModel.attachable_type == attachable_type.value,
                 AttachmentModel.attachable_id == attachable_id,
             )
             .order_by(AttachmentModel.created_at)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]

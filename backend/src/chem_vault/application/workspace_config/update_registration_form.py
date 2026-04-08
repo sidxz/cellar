@@ -14,7 +14,8 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
-from chem_vault.domain.workspace_config.registration_form import FieldOverride, RegistrationForm
+from chem_vault.domain.workspace_config.registration_form import RegistrationForm
+from chem_vault.domain.workspace_config.value_objects import FieldOverride
 from chem_vault.domain.workspace_config.repository import RegistrationFormRepository
 
 
@@ -24,7 +25,7 @@ class UpdateRegistrationFormCommand(Command):
     form_id: uuid.UUID
     name: str | object = UNSET
     is_default: bool | object = UNSET
-    field_overrides: list[dict] | object = UNSET
+    field_overrides: list[dict[str, Any]] | object = UNSET
 
 
 class UpdateRegistrationForm:
@@ -44,8 +45,8 @@ class UpdateRegistrationForm:
         require_editor(auth)
 
         async with self._uow:
-            form = await self._repo.find_by_id(input.form_id)
-            if form is None or form.workspace_id != input.workspace_id:
+            form = await self._repo.find_by_id_in_workspace(input.workspace_id, input.form_id)
+            if form is None:
                 return Failure(NotFoundError("RegistrationForm", str(input.form_id)))
 
             # If setting as default, unset the previous default for this applies_to

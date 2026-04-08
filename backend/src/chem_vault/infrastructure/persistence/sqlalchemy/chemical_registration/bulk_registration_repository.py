@@ -34,7 +34,7 @@ class SQLAlchemyBulkRegistrationRepository(
         )
         result = await self._session.execute(stmt)
         models = result.scalars().all()
-        return [self._to_domain(m) for m in models]
+        return [self._to_domain_tracked(m) for m in models]
 
     # ------------------------------------------------------------------
     # Mapping: SA model -> domain aggregate

@@ -5,6 +5,8 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import type { Protocol } from "../types";
 
+const PROTOCOLS_KEY = ["protocols"];
+
 export function useAddProtocolToProject(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -14,8 +16,8 @@ export function useAddProtocolToProject(protocolId: string) {
         method: "POST",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["protocols"] });
-      qc.invalidateQueries({ queryKey: ["protocols", protocolId] });
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      qc.invalidateQueries({ queryKey: [...PROTOCOLS_KEY, protocolId] });
       showSuccess("Protocol added to project");
     },
   });
@@ -30,8 +32,8 @@ export function useRemoveProtocolFromProject(protocolId: string) {
         method: "DELETE",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["protocols"] });
-      qc.invalidateQueries({ queryKey: ["protocols", protocolId] });
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      qc.invalidateQueries({ queryKey: [...PROTOCOLS_KEY, protocolId] });
       showSuccess("Protocol removed from project");
     },
   });

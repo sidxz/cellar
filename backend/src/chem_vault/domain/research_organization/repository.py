@@ -42,7 +42,7 @@ class CollectionRepository(Protocol):
 
     async def save(self, aggregate: Collection) -> None: ...
 
-    async def delete(self, id: uuid.UUID) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
     async def find_by_workspace(
         self,
@@ -52,22 +52,23 @@ class CollectionRepository(Protocol):
     ) -> list[Collection]: ...
 
     async def add_molecules(
-        self, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> int: ...
 
     async def remove_molecules(
-        self, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> int: ...
 
     async def get_molecule_ids(
         self,
+        workspace_id: uuid.UUID,
         collection_id: uuid.UUID,
         *,
         offset: int = 0,
         limit: int = 100,
     ) -> list[uuid.UUID]: ...
 
-    async def count_molecules(self, collection_id: uuid.UUID) -> int: ...
+    async def count_molecules(self, workspace_id: uuid.UUID, collection_id: uuid.UUID) -> int: ...
 
     async def find_collections_containing(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
@@ -82,6 +83,7 @@ class CollectionRepository(Protocol):
 
     async def compose_molecule_ids(
         self,
+        workspace_id: uuid.UUID,
         operation: str,
         collection_ids: list[uuid.UUID],
     ) -> list[uuid.UUID]: ...
@@ -95,14 +97,14 @@ class SavedSearchRepository(Protocol):
 
     async def save(self, aggregate: SavedSearch) -> None: ...
 
-    async def delete(self, id: uuid.UUID) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[SavedSearch]: ...
 
     async def find_by_project(
-        self, project_id: uuid.UUID
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
     ) -> list[SavedSearch]: ...
 
     async def find_by_creator(
@@ -112,26 +114,32 @@ class SavedSearchRepository(Protocol):
 
 @runtime_checkable
 class ProjectMemberRepository(Protocol):
-    """Repository for project membership records."""
+    """Repository for project membership records.
+
+    All mutation/query methods take ``workspace_id`` as the first parameter
+    for defense-in-depth workspace scoping.
+    """
 
     async def find_accessible_project_ids(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> list[uuid.UUID]: ...
 
-    async def find_members(self, project_id: uuid.UUID) -> list[ProjectMember]: ...
+    async def find_members(
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+    ) -> list[ProjectMember]: ...
 
     async def add_member(
-        self, project_id: uuid.UUID, user_id: uuid.UUID, role: ProjectRole
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID, role: ProjectRole
     ) -> None: ...
 
     async def remove_member(
-        self, project_id: uuid.UUID, user_id: uuid.UUID
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID
     ) -> None: ...
 
     async def update_role(
-        self, project_id: uuid.UUID, user_id: uuid.UUID, role: ProjectRole
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID, role: ProjectRole
     ) -> None: ...
 
     async def get_role(
-        self, project_id: uuid.UUID, user_id: uuid.UUID
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID
     ) -> ProjectRole | None: ...

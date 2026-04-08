@@ -76,6 +76,7 @@ async def merge_molecules(
     use_case: MergeServiceDep,
 ) -> MergeEventResponse:
     command = MergeCommand(
+        workspace_id=auth.workspace_id,
         source_molecule_id=source_molecule_id,
         target_molecule_id=body.target_molecule_id,
         reason=body.reason,

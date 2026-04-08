@@ -10,9 +10,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from returns.result import Result
-
-from chem_vault.domain.shared.errors import DomainError, ValidationError
+from chem_vault.domain.shared.errors import ValidationError
 
 
 class FormulaValidationError(ValidationError):
@@ -58,12 +56,14 @@ class FormulaEvaluator(Protocol):
         self,
         formula: str,
         bindings: dict[str, float],
-    ) -> Result[float, DomainError]:
+    ) -> float:
         """Evaluate *formula* with the given variable *bindings*.
 
         Returns:
-            Success(float) — the numeric result.
-            Failure(FormulaValidationError) — syntax error, undefined variable,
+            float — the numeric result.
+
+        Raises:
+            FormulaValidationError — syntax error, undefined variable,
                 division by zero, or non-numeric result.
         """
         ...
@@ -72,14 +72,13 @@ class FormulaEvaluator(Protocol):
         self,
         formula: str,
         available_variables: list[str],
-    ) -> Result[None, DomainError]:
+    ) -> None:
         """Validate *formula* against the declared *available_variables*.
 
         Does not need real data — uses dummy values (1.0) for each variable.
 
-        Returns:
-            Success(None) — formula is valid.
-            Failure(FormulaValidationError) — syntax error or undefined variable
+        Raises:
+            FormulaValidationError — syntax error or undefined variable
                 (check ``err.undefined_variables`` for the offending names).
         """
         ...

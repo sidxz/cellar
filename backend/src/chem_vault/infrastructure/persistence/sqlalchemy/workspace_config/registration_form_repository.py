@@ -7,7 +7,8 @@ import uuid
 from sqlalchemy import delete, select
 
 from chem_vault.domain.workspace_config.enums import FieldTarget
-from chem_vault.domain.workspace_config.registration_form import FieldOverride, RegistrationForm
+from chem_vault.domain.workspace_config.registration_form import RegistrationForm
+from chem_vault.domain.workspace_config.value_objects import FieldOverride
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -69,8 +70,11 @@ class SQLAlchemyRegistrationFormRepository(
             stmt = stmt.where(RegistrationFormModel.applies_to == applies_to.value)
         stmt = stmt.order_by(RegistrationFormModel.name)
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
 
-    async def delete(self, id: uuid.UUID) -> None:
-        stmt = delete(RegistrationFormModel).where(RegistrationFormModel.id == id)
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = delete(RegistrationFormModel).where(
+            RegistrationFormModel.workspace_id == workspace_id,
+            RegistrationFormModel.id == id,
+        )
         await self._session.execute(stmt)

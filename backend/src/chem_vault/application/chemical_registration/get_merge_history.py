@@ -43,9 +43,9 @@ class GetMergeHistory:
         self, input: GetMergeHistoryQuery
     ) -> Result[list[MergeEvent], DomainError]:
         async with self._uow:
-            mol = await self._molecule_repo.find_by_id(input.molecule_id)
-            if mol is None or mol.workspace_id != input.workspace_id:
+            mol = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
-            events = await self._merge_event_repo.find_by_molecule(input.molecule_id)
+            events = await self._merge_event_repo.find_by_molecule(input.workspace_id, input.molecule_id)
             return Success(events)

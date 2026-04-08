@@ -9,4 +9,4 @@ export interface AttachmentResponse {
   created_at: string;
 }
 
-export type AttachableType = "molecule" | "batch" | "protocol" | "run";
+export type AttachableType = "molecule" | "batch" | "sample" | "plate" | "shipment" | "protocol" | "run";

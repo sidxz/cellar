@@ -29,7 +29,7 @@ class GetOrganization:
         self, input: GetOrganizationQuery
     ) -> Result[Organization, DomainError]:
         async with self._uow:
-            org = await self._repo.find_by_id(input.org_id)
-            if org is None or org.workspace_id != input.workspace_id:
+            org = await self._repo.find_by_id_in_workspace(input.workspace_id, input.org_id)
+            if org is None:
                 return Failure(NotFoundError("Organization", str(input.org_id)))
             return Success(org)

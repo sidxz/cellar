@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -21,7 +22,10 @@ from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
+from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
 from chem_vault.domain.shared.errors import ConflictError, DomainError, ValidationError
+from chem_vault.domain.workspace_config.enums import FieldTarget
+from returns.pipeline import is_successful
 
 
 @dataclass(frozen=True)
@@ -48,7 +52,7 @@ class RegisterMoleculeCommand(Command):
     external_ids: list[ExternalId] = field(default_factory=list)
     originating_org_id: uuid.UUID
     registered_by: uuid.UUID
-    custom_fields: dict | None = None
+    custom_fields: dict[str, Any] | None = None
     qc_reject_threshold: int | None = None
     qc_warn_threshold: int | None = None
     promote_name_as_identifier: bool = True  # False for auto-generated names
@@ -73,7 +77,7 @@ class RegisterMolecule:
         repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
         structure_processor: StructureProcessorProtocol,
-        custom_field_validator=None,
+        custom_field_validator: CustomFieldValidator | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -174,7 +178,7 @@ class RegisterMolecule:
             qc_reject_threshold=input.qc_reject_threshold,
         )
         if isinstance(proc_result, Failure):
-            return proc_result  # type: ignore[return-value]
+            return Failure(proc_result.failure())
 
         processed = proc_result.unwrap()
         qc_warnings: list[str] = []
@@ -182,7 +186,8 @@ class RegisterMolecule:
             qc_warnings = processed.qc_result.issues
 
         inchi_key = processed.structure.inchi_key
-        assert inchi_key is not None
+        if inchi_key is None:
+            return Failure(ValidationError("Structure processor returned no InChI key"))
 
         # 2. Check InChIKey against existing active molecules
         existing_by_inchi = await self._repo.find_by_inchi_key(
@@ -195,7 +200,7 @@ class RegisterMolecule:
             allowed_molecule_id=existing_by_inchi.id if existing_by_inchi else None,
         )
         if isinstance(conflict_check, Failure):
-            return conflict_check  # type: ignore[return-value]
+            return Failure(conflict_check.failure())
 
         # 4a. Duplicate InChIKey — add identifiers to existing molecule
         if existing_by_inchi is not None:
@@ -211,13 +216,11 @@ class RegisterMolecule:
 
         # 4b. New molecule
         if self._custom_field_validator and input.custom_fields:
-            from chem_vault.domain.workspace_config.enums import FieldTarget
-            from returns.pipeline import is_successful
             validation = await self._custom_field_validator.validate(
                 input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
             )
             if not is_successful(validation):
-                return validation  # type: ignore[return-value]
+                return Failure(validation.failure())
 
         reg_number = await self._repo.next_registration_number(input.workspace_id)
         mol = Molecule.register_disclosed(
@@ -263,7 +266,7 @@ class RegisterMolecule:
                 )
 
         if matched_id is not None:
-            matched_molecule = await self._repo.find_by_id(matched_id)
+            matched_molecule = await self._repo.find_by_id_in_workspace(input.workspace_id, matched_id)
             if matched_molecule is not None and matched_molecule.structure_status.value == "disclosed":
                 # One of our identifiers/name is claimed by a disclosed molecule
                 conflict_id = next(
@@ -286,22 +289,13 @@ class RegisterMolecule:
                 RegistrationOutcome(molecule=matched_molecule, is_new=False)
             )
 
-        # 3b. Check for conflicts on identifiers not in existing_map
-        #     (name might conflict with a different molecule's identifier)
-        if existing_map:
-            # All conflicts already handled above — only reached here if
-            # all existing_map entries point to the same matched molecule.
-            pass
-
         # 4. New undisclosed molecule
         if self._custom_field_validator and input.custom_fields:
-            from chem_vault.domain.workspace_config.enums import FieldTarget
-            from returns.pipeline import is_successful
             validation = await self._custom_field_validator.validate(
                 input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
             )
             if not is_successful(validation):
-                return validation  # type: ignore[return-value]
+                return Failure(validation.failure())
 
         reg_number = await self._repo.next_registration_number(input.workspace_id)
         mol = Molecule.register_undisclosed(

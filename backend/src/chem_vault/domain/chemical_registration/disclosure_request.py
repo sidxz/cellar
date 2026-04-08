@@ -57,6 +57,7 @@ class DisclosureRequest(AggregateRoot):
         self,
         *,
         id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID,
         bulk_disclosure_id: uuid.UUID | None = None,
         molecule_id: uuid.UUID,
         disclosed_smiles: str,
@@ -80,6 +81,7 @@ class DisclosureRequest(AggregateRoot):
         if not disclosed_smiles or not disclosed_smiles.strip():
             raise ValidationError("disclosed_smiles must not be empty")
 
+        self.workspace_id = workspace_id
         self.bulk_disclosure_id = bulk_disclosure_id
         self.molecule_id = molecule_id
         self.disclosed_smiles = disclosed_smiles.strip()
@@ -103,6 +105,7 @@ class DisclosureRequest(AggregateRoot):
     def create(
         cls,
         *,
+        workspace_id: uuid.UUID,
         molecule_id: uuid.UUID,
         disclosed_smiles: str,
         requested_by: uuid.UUID,
@@ -112,6 +115,7 @@ class DisclosureRequest(AggregateRoot):
     ) -> DisclosureRequest:
         """Create a new disclosure request in PENDING status."""
         req = cls(
+            workspace_id=workspace_id,
             molecule_id=molecule_id,
             disclosed_smiles=disclosed_smiles,
             requested_by=requested_by,

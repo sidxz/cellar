@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.workspace_config.custom_field_definition import (
     CustomFieldDefinition,
 )
@@ -50,7 +51,7 @@ class TestCustomFieldDefinitionCreate:
         assert events[0].aggregate_type == "CustomFieldDefinition"
 
     def test_empty_name_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="name"):
+        with pytest.raises(ValidationError, match="name"):
             CustomFieldDefinition.create(
                 workspace_id=ws_id,
                 name="",
@@ -60,7 +61,7 @@ class TestCustomFieldDefinitionCreate:
             )
 
     def test_empty_label_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="label"):
+        with pytest.raises(ValidationError, match="label"):
             CustomFieldDefinition.create(
                 workspace_id=ws_id,
                 name="x",
@@ -70,7 +71,7 @@ class TestCustomFieldDefinitionCreate:
             )
 
     def test_picklist_with_vocabulary_id_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="mutually exclusive"):
+        with pytest.raises(ValidationError, match="mutually exclusive"):
             CustomFieldDefinition.create(
                 workspace_id=ws_id,
                 name="x",
@@ -82,7 +83,7 @@ class TestCustomFieldDefinitionCreate:
             )
 
     def test_non_picklist_with_values_raises(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="only for picklist"):
+        with pytest.raises(ValidationError, match="only for picklist"):
             CustomFieldDefinition.create(
                 workspace_id=ws_id,
                 name="x",

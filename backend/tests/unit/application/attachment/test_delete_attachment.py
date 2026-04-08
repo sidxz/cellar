@@ -49,19 +49,23 @@ class TestDeleteAttachment:
     async def test_success(self, deps):
         uow, repo, storage, dispatcher = deps
         att = _make_attachment()
-        repo.find_by_id = AsyncMock(return_value=att)
+        repo.find_by_id_in_workspace = AsyncMock(return_value=att)
         uc = DeleteAttachment(uow, repo, storage, dispatcher)
-        result = await uc(DeleteAttachmentCommand(attachment_id=att.id), auth=MagicMock())
+        auth = MagicMock()
+        auth.workspace_id = WS
+        result = await uc(DeleteAttachmentCommand(workspace_id=WS, attachment_id=att.id), auth=auth)
         assert isinstance(result, Success)
         storage.delete.assert_called_once_with(att.storage_key)
         repo.delete.assert_called_once()
 
     async def test_not_found(self, deps):
         uow, repo, storage, dispatcher = deps
-        repo.find_by_id = AsyncMock(return_value=None)
+        repo.find_by_id_in_workspace = AsyncMock(return_value=None)
         uc = DeleteAttachment(uow, repo, storage, dispatcher)
+        auth = MagicMock()
+        auth.workspace_id = WS
         result = await uc(
-            DeleteAttachmentCommand(attachment_id=uuid.uuid4()), auth=MagicMock()
+            DeleteAttachmentCommand(workspace_id=WS, attachment_id=uuid.uuid4()), auth=auth
         )
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)

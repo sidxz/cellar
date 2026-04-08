@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_project_role
+from chem_vault.application.auth import AuthContext, require_editor, require_project_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -58,6 +58,7 @@ class AddProjectMember:
     async def __call__(
         self, input: AddProjectMemberCommand, auth: AuthContext | None = None
     ) -> Result[ProjectMember, DomainError]:
+        require_editor(auth)
         # Validate role string early — before any I/O
         try:
             role = ProjectRole(input.role)
@@ -70,37 +71,37 @@ class AddProjectMember:
             )
 
         async with self._uow:
-            project = await self._project_repo.find_by_id(input.project_id)
+            project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
-                return Failure(NotFoundError("Project"))
+                return Failure(NotFoundError("Project", str(input.project_id)))
 
             # Check caller has manager-level access (or is admin)
             if auth is not None:
                 caller_role = await self._member_repo.get_role(
-                    input.project_id, auth.user_id
+                    input.workspace_id, input.project_id, auth.user_id
                 )
                 require_project_role(auth, caller_role, ProjectRole.MANAGER)
 
-            await self._member_repo.add_member(input.project_id, input.user_id, role)
+            await self._member_repo.add_member(input.workspace_id, input.project_id, input.user_id, role)
 
             events = await self._uow.commit()
+            events.append(
+                ProjectMemberAdded(
+                    aggregate_id=input.project_id,
+                    aggregate_type="Project",
+                    project_id=input.project_id,
+                    user_id=input.user_id,
+                    role=role.value,
+                )
+            )
+            await self._dispatcher.dispatch_all(events)
 
-        event = ProjectMemberAdded(
-            aggregate_id=input.project_id,
-            aggregate_type="Project",
-            project_id=input.project_id,
-            user_id=input.user_id,
-            role=role.value,
-        )
-        await self._dispatcher.dispatch(event)
-        await self._dispatcher.dispatch_all(events)
-
-        member = ProjectMember(
-            project_id=input.project_id,
-            user_id=input.user_id,
-            role=role,
-        )
-        return Success(member)
+            member = ProjectMember(
+                project_id=input.project_id,
+                user_id=input.user_id,
+                role=role,
+            )
+            return Success(member)
 
 
 # ---------------------------------------------------------------------------
@@ -133,32 +134,33 @@ class RemoveProjectMember:
     async def __call__(
         self, input: RemoveProjectMemberCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
+        require_editor(auth)
         async with self._uow:
-            project = await self._project_repo.find_by_id(input.project_id)
+            project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
-                return Failure(NotFoundError("Project"))
+                return Failure(NotFoundError("Project", str(input.project_id)))
 
             # Check caller has manager-level access (or is admin)
             if auth is not None:
                 caller_role = await self._member_repo.get_role(
-                    input.project_id, auth.user_id
+                    input.workspace_id, input.project_id, auth.user_id
                 )
                 require_project_role(auth, caller_role, ProjectRole.MANAGER)
 
-            await self._member_repo.remove_member(input.project_id, input.user_id)
+            await self._member_repo.remove_member(input.workspace_id, input.project_id, input.user_id)
 
             events = await self._uow.commit()
+            events.append(
+                ProjectMemberRemoved(
+                    aggregate_id=input.project_id,
+                    aggregate_type="Project",
+                    project_id=input.project_id,
+                    user_id=input.user_id,
+                )
+            )
+            await self._dispatcher.dispatch_all(events)
 
-        event = ProjectMemberRemoved(
-            aggregate_id=input.project_id,
-            aggregate_type="Project",
-            project_id=input.project_id,
-            user_id=input.user_id,
-        )
-        await self._dispatcher.dispatch(event)
-        await self._dispatcher.dispatch_all(events)
-
-        return Success(None)
+            return Success(None)
 
 
 # ---------------------------------------------------------------------------
@@ -182,14 +184,17 @@ class UpdateProjectMemberRole:
         uow: UnitOfWork,
         project_repo: ProjectRepository,
         member_repo: ProjectMemberRepository,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._project_repo = project_repo
         self._member_repo = member_repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: UpdateProjectMemberRoleCommand, auth: AuthContext | None = None
     ) -> Result[ProjectMember, DomainError]:
+        require_editor(auth)
         # Validate role string early
         try:
             role = ProjectRole(input.role)
@@ -202,20 +207,20 @@ class UpdateProjectMemberRole:
             )
 
         async with self._uow:
-            project = await self._project_repo.find_by_id(input.project_id)
+            project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
-                return Failure(NotFoundError("Project"))
+                return Failure(NotFoundError("Project", str(input.project_id)))
 
             # Check caller has manager-level access (or is admin)
             if auth is not None:
                 caller_role = await self._member_repo.get_role(
-                    input.project_id, auth.user_id
+                    input.workspace_id, input.project_id, auth.user_id
                 )
                 require_project_role(auth, caller_role, ProjectRole.MANAGER)
 
             # Verify target user is already a member
             existing_role = await self._member_repo.get_role(
-                input.project_id, input.user_id
+                input.workspace_id, input.project_id, input.user_id
             )
             if existing_role is None:
                 return Failure(
@@ -224,16 +229,17 @@ class UpdateProjectMemberRole:
                     )
                 )
 
-            await self._member_repo.update_role(input.project_id, input.user_id, role)
+            await self._member_repo.update_role(input.workspace_id, input.project_id, input.user_id, role)
 
-            await self._uow.commit()
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
 
-        member = ProjectMember(
-            project_id=input.project_id,
-            user_id=input.user_id,
-            role=role,
-        )
-        return Success(member)
+            member = ProjectMember(
+                project_id=input.project_id,
+                user_id=input.user_id,
+                role=role,
+            )
+            return Success(member)
 
 
 # ---------------------------------------------------------------------------
@@ -264,10 +270,9 @@ class ListProjectMembers:
         self, input: ListProjectMembersQuery, auth: AuthContext | None = None
     ) -> Result[list[ProjectMember], DomainError]:
         async with self._uow:
-            project = await self._project_repo.find_by_id(input.project_id)
+            project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
-                return Failure(NotFoundError("Project"))
+                return Failure(NotFoundError("Project", str(input.project_id)))
 
-            members = await self._member_repo.find_members(input.project_id)
-
-        return Success(members)
+            members = await self._member_repo.find_members(input.workspace_id, input.project_id)
+            return Success(members)

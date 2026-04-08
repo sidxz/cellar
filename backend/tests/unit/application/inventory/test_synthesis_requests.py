@@ -63,6 +63,14 @@ class FakeSynthesisRequestRepo:
     async def find_by_id(self, id: uuid.UUID) -> SynthesisRequest | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> SynthesisRequest | None:
+        item = self._store.get(id)
+        if item is not None and item.workspace_id == workspace_id:
+            return item
+        return None
+
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[SynthesisRequest]:
@@ -278,7 +286,7 @@ class TestSubmitSynthesisRequest:
         uc = SubmitSynthesisRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(SubmitSynthesisRequestCommand(request_id=req.id), auth)
+        result = await uc(SubmitSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SynthesisRequestStatus.SUBMITTED
@@ -289,7 +297,7 @@ class TestSubmitSynthesisRequest:
         uc = SubmitSynthesisRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(SubmitSynthesisRequestCommand(request_id=uuid.uuid4()), auth)
+        result = await uc(SubmitSynthesisRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
@@ -302,7 +310,7 @@ class TestSubmitSynthesisRequest:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(SubmitSynthesisRequestCommand(request_id=req.id), auth)
+            await uc(SubmitSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +327,7 @@ class TestApproveSynthesisRequest:
         auth = _make_auth()
 
         result = await uc(
-            ApproveSynthesisRequestCommand(request_id=req.id, approved_by=auth.user_id),
+            ApproveSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id, approved_by=auth.user_id),
             auth,
         )
 
@@ -335,7 +343,7 @@ class TestApproveSynthesisRequest:
         auth = _make_auth()
 
         result = await uc(
-            ApproveSynthesisRequestCommand(request_id=uuid.uuid4(), approved_by=auth.user_id),
+            ApproveSynthesisRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4(), approved_by=auth.user_id),
             auth,
         )
 
@@ -351,7 +359,7 @@ class TestApproveSynthesisRequest:
 
         with pytest.raises(ValidationError):
             await uc(
-                ApproveSynthesisRequestCommand(request_id=req.id, approved_by=auth.user_id),
+                ApproveSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id, approved_by=auth.user_id),
                 auth,
             )
 
@@ -371,7 +379,7 @@ class TestRejectSynthesisRequest:
 
         result = await uc(
             RejectSynthesisRequestCommand(
-                request_id=req.id, reason="Not feasible", rejected_by=auth.user_id
+                workspace_id=WS_ID, request_id=req.id, reason="Not feasible", rejected_by=auth.user_id
             ),
             auth,
         )
@@ -389,7 +397,7 @@ class TestRejectSynthesisRequest:
 
         result = await uc(
             RejectSynthesisRequestCommand(
-                request_id=uuid.uuid4(), reason="No stock", rejected_by=auth.user_id
+                workspace_id=WS_ID, request_id=uuid.uuid4(), reason="No stock", rejected_by=auth.user_id
             ),
             auth,
         )
@@ -407,7 +415,7 @@ class TestRejectSynthesisRequest:
         with pytest.raises(ValidationError):
             await uc(
                 RejectSynthesisRequestCommand(
-                    request_id=req.id, reason="   ", rejected_by=auth.user_id
+                    workspace_id=WS_ID, request_id=req.id, reason="   ", rejected_by=auth.user_id
                 ),
                 auth,
             )
@@ -429,6 +437,7 @@ class TestAssignSynthesisRequest:
 
         result = await uc(
             AssignSynthesisRequestCommand(
+                workspace_id=WS_ID,
                 request_id=req.id,
                 assignment_type="internal",
                 assigned_to=assignee,
@@ -453,6 +462,7 @@ class TestAssignSynthesisRequest:
 
         result = await uc(
             AssignSynthesisRequestCommand(
+                workspace_id=WS_ID,
                 request_id=req.id,
                 assignment_type="cro",
                 assigned_org_id=org_id,
@@ -475,6 +485,7 @@ class TestAssignSynthesisRequest:
 
         result = await uc(
             AssignSynthesisRequestCommand(
+                workspace_id=WS_ID,
                 request_id=uuid.uuid4(),
                 assignment_type="internal",
                 assigned_to=uuid.uuid4(),
@@ -495,6 +506,7 @@ class TestAssignSynthesisRequest:
         with pytest.raises(ValidationError):
             await uc(
                 AssignSynthesisRequestCommand(
+                    workspace_id=WS_ID,
                     request_id=req.id,
                     assignment_type="internal",
                     assigned_to=uuid.uuid4(),
@@ -516,7 +528,7 @@ class TestStartSynthesis:
         uc = StartSynthesis(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(StartSynthesisCommand(request_id=req.id), auth)
+        result = await uc(StartSynthesisCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SynthesisRequestStatus.IN_PROGRESS
@@ -530,7 +542,7 @@ class TestStartSynthesis:
         route_id = uuid.uuid4()
 
         result = await uc(
-            StartSynthesisCommand(request_id=req.id, proposed_route_id=route_id), auth
+            StartSynthesisCommand(workspace_id=WS_ID, request_id=req.id, proposed_route_id=route_id), auth
         )
 
         assert isinstance(result, Success)
@@ -542,7 +554,7 @@ class TestStartSynthesis:
         uc = StartSynthesis(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(StartSynthesisCommand(request_id=uuid.uuid4()), auth)
+        result = await uc(StartSynthesisCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
@@ -555,7 +567,7 @@ class TestStartSynthesis:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(StartSynthesisCommand(request_id=req.id), auth)
+            await uc(StartSynthesisCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +585,7 @@ class TestFlagInfeasible:
 
         result = await uc(
             FlagInfeasibleCommand(
+                workspace_id=WS_ID,
                 request_id=req.id,
                 feasibility_status="infeasible",
                 feasibility_notes="Route too complex",
@@ -594,7 +607,7 @@ class TestFlagInfeasible:
 
         result = await uc(
             FlagInfeasibleCommand(
-                request_id=uuid.uuid4(), feasibility_status="infeasible"
+                workspace_id=WS_ID, request_id=uuid.uuid4(), feasibility_status="infeasible"
             ),
             auth,
         )
@@ -616,7 +629,7 @@ class TestCompleteSynthesis:
         uc = CompleteSynthesis(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CompleteSynthesisCommand(request_id=req.id), auth)
+        result = await uc(CompleteSynthesisCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SynthesisRequestStatus.SYNTHESIS_COMPLETE
@@ -630,7 +643,7 @@ class TestCompleteSynthesis:
 
         result = await uc(
             CompleteSynthesisCommand(
-                request_id=req.id, actual_cost_value=150.0, actual_cost_unit="mg"
+                workspace_id=WS_ID, request_id=req.id, actual_cost_value=150.0, actual_cost_unit="mg"
             ),
             auth,
         )
@@ -647,7 +660,7 @@ class TestCompleteSynthesis:
         uc = CompleteSynthesis(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CompleteSynthesisCommand(request_id=uuid.uuid4()), auth)
+        result = await uc(CompleteSynthesisCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
@@ -660,7 +673,7 @@ class TestCompleteSynthesis:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(CompleteSynthesisCommand(request_id=req.id), auth)
+            await uc(CompleteSynthesisCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
 
 # ---------------------------------------------------------------------------
@@ -678,7 +691,7 @@ class TestFulfillSynthesisRequest:
         batch_id = uuid.uuid4()
 
         result = await uc(
-            FulfillSynthesisRequestCommand(request_id=req.id, batch_id=batch_id), auth
+            FulfillSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id, batch_id=batch_id), auth
         )
 
         assert isinstance(result, Success)
@@ -693,7 +706,7 @@ class TestFulfillSynthesisRequest:
         auth = _make_auth()
 
         result = await uc(
-            FulfillSynthesisRequestCommand(request_id=uuid.uuid4(), batch_id=uuid.uuid4()),
+            FulfillSynthesisRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4(), batch_id=uuid.uuid4()),
             auth,
         )
 
@@ -709,7 +722,7 @@ class TestFulfillSynthesisRequest:
 
         with pytest.raises(ValidationError):
             await uc(
-                FulfillSynthesisRequestCommand(request_id=req.id, batch_id=uuid.uuid4()),
+                FulfillSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id, batch_id=uuid.uuid4()),
                 auth,
             )
 
@@ -728,7 +741,7 @@ class TestFailSynthesis:
         auth = _make_auth()
 
         result = await uc(
-            FailSynthesisCommand(request_id=req.id, reason="Yield too low"), auth
+            FailSynthesisCommand(workspace_id=WS_ID, request_id=req.id, reason="Yield too low"), auth
         )
 
         assert isinstance(result, Success)
@@ -743,7 +756,7 @@ class TestFailSynthesis:
         auth = _make_auth()
 
         result = await uc(
-            FailSynthesisCommand(request_id=uuid.uuid4(), reason="No reason"), auth
+            FailSynthesisCommand(workspace_id=WS_ID, request_id=uuid.uuid4(), reason="No reason"), auth
         )
 
         assert isinstance(result, Failure)
@@ -758,7 +771,7 @@ class TestFailSynthesis:
 
         with pytest.raises(ValidationError):
             await uc(
-                FailSynthesisCommand(request_id=req.id, reason="   "), auth
+                FailSynthesisCommand(workspace_id=WS_ID, request_id=req.id, reason="   "), auth
             )
 
 
@@ -775,7 +788,7 @@ class TestCancelSynthesisRequest:
         uc = CancelSynthesisRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSynthesisRequestCommand(request_id=req.id), auth)
+        result = await uc(CancelSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SynthesisRequestStatus.CANCELLED
@@ -787,7 +800,7 @@ class TestCancelSynthesisRequest:
         uc = CancelSynthesisRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSynthesisRequestCommand(request_id=req.id), auth)
+        result = await uc(CancelSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SynthesisRequestStatus.CANCELLED
@@ -799,7 +812,7 @@ class TestCancelSynthesisRequest:
         uc = CancelSynthesisRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSynthesisRequestCommand(request_id=req.id), auth)
+        result = await uc(CancelSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SynthesisRequestStatus.CANCELLED
@@ -810,7 +823,7 @@ class TestCancelSynthesisRequest:
         uc = CancelSynthesisRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSynthesisRequestCommand(request_id=uuid.uuid4()), auth)
+        result = await uc(CancelSynthesisRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
@@ -823,7 +836,7 @@ class TestCancelSynthesisRequest:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(CancelSynthesisRequestCommand(request_id=req.id), auth)
+            await uc(CancelSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
     @pytest.mark.asyncio
     async def test_cannot_cancel_in_progress(self) -> None:
@@ -833,7 +846,7 @@ class TestCancelSynthesisRequest:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(CancelSynthesisRequestCommand(request_id=req.id), auth)
+            await uc(CancelSynthesisRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
 
 # ---------------------------------------------------------------------------
@@ -849,7 +862,7 @@ class TestGetSynthesisRequest:
         uc = GetSynthesisRequest(FakeUoW(), repo)
         auth = _make_auth()
 
-        result = await uc(GetSynthesisRequestQuery(request_id=req.id), auth)
+        result = await uc(GetSynthesisRequestQuery(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().id == req.id
@@ -860,20 +873,20 @@ class TestGetSynthesisRequest:
         uc = GetSynthesisRequest(FakeUoW(), repo)
         auth = _make_auth()
 
-        result = await uc(GetSynthesisRequestQuery(request_id=uuid.uuid4()), auth)
+        result = await uc(GetSynthesisRequestQuery(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
 
     @pytest.mark.asyncio
-    async def test_cross_workspace_raises(self) -> None:
+    async def test_cross_workspace_returns_failure(self) -> None:
         req = _make_request(workspace_id=OTHER_WS_ID)
         repo = FakeSynthesisRequestRepo([req])
         uc = GetSynthesisRequest(FakeUoW(), repo)
         auth = _make_auth(workspace_id=WS_ID)
 
-        with pytest.raises(NotFoundError):
-            await uc(GetSynthesisRequestQuery(request_id=req.id), auth)
+        result = await uc(GetSynthesisRequestQuery(workspace_id=WS_ID, request_id=req.id), auth)
+        assert isinstance(result, Failure)
 
 
 # ---------------------------------------------------------------------------

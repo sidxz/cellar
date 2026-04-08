@@ -15,7 +15,10 @@ from chem_vault.domain.chemical_registration.enums import LifecycleStage
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.application.shared.sentinel import UNSET
+from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from chem_vault.domain.workspace_config.enums import FieldTarget
+from returns.pipeline import is_successful
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -31,7 +34,7 @@ class UpdateMoleculeCommand(Command):
     # Custom fields
     custom_fields: dict | None = field(default=UNSET)  # type: ignore[assignment]
     # Actor
-    changed_by: uuid.UUID = field(default_factory=uuid.uuid4)
+    changed_by: uuid.UUID
 
 
 class UpdateMolecule:
@@ -40,7 +43,7 @@ class UpdateMolecule:
         uow: UnitOfWork,
         repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
-        custom_field_validator=None,
+        custom_field_validator: CustomFieldValidator | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -55,8 +58,8 @@ class UpdateMolecule:
         require_editor(auth)
 
         async with self._uow:
-            mol = await self._repo.find_by_id(input.molecule_id)
-            if mol is None or mol.workspace_id != input.workspace_id:
+            mol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             try:
@@ -72,14 +75,12 @@ class UpdateMolecule:
 
                 if input.custom_fields is not UNSET:
                     if self._custom_field_validator and input.custom_fields is not None:
-                        from chem_vault.domain.workspace_config.enums import FieldTarget
-                        from returns.pipeline import is_successful
                         validation = await self._custom_field_validator.validate(
                             input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
                         )
                         if not is_successful(validation):
-                            return validation  # type: ignore[return-value]
-                    mol.update_custom_fields(input.custom_fields)  # type: ignore[arg-type]
+                            return Failure(validation.failure())
+                    mol.update_custom_fields(input.custom_fields if input.custom_fields is not None else {})
             except ValidationError as exc:
                 return Failure(exc)
 

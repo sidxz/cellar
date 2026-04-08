@@ -65,7 +65,7 @@ export function ReadoutDataTable({
         const mol = molMap.get(row.molecule_id);
         group = {
           key,
-          label: mol ? `${mol.reg} \u2014 ${mol.name}` : row.molecule_id.slice(0, 8),
+          label: mol ? `${mol.reg} \u2014 ${mol.name}` : "Unknown compound",
           moleculeId: row.molecule_id,
           batchId: row.batch_id,
           values: new Map(),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from rdkit import Chem
@@ -160,6 +161,9 @@ class StructureStandardizer:
             molblock = MolToMolBlock(mol)  # type: ignore[arg-type]
             results = checker.check_molblock(molblock)
         except Exception:
+            logging.getLogger(__name__).warning(
+                "QC check failed — returning zero penalty", exc_info=True,
+            )
             return QCResult(total_penalty=0, issues=[])
 
         total_penalty = 0

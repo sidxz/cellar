@@ -88,6 +88,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             protocols.append(domain)
         return protocols
 
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[Protocol]:
+        """Bulk-fetch protocols by a list of IDs within a workspace."""
+        if not ids:
+            return []
+        stmt = select(ProtocolModel).where(
+            ProtocolModel.workspace_id == workspace_id,
+            ProtocolModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a protocol by ID (only for DRAFT protocols)."""
         model = await self._session.get(ProtocolModel, id)
@@ -99,9 +112,20 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     # ------------------------------------------------------------------
 
     async def add_to_project(
-        self, protocol_id: uuid.UUID, project_id: uuid.UUID
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, project_id: uuid.UUID
     ) -> None:
-        """Link a protocol to a project (idempotent via ON CONFLICT DO NOTHING)."""
+        """Link a protocol to a project (idempotent via ON CONFLICT DO NOTHING).
+
+        Defense-in-depth: only inserts if the protocol belongs to the workspace.
+        """
+        # Verify protocol belongs to workspace before inserting
+        ownership_stmt = select(ProtocolModel.id).where(
+            ProtocolModel.id == protocol_id,
+            ProtocolModel.workspace_id == workspace_id,
+        )
+        ownership_result = await self._session.execute(ownership_stmt)
+        if ownership_result.scalar_one_or_none() is None:
+            return
         stmt = (
             pg_insert(protocol_projects)
             .values(protocol_id=protocol_id, project_id=project_id)
@@ -110,12 +134,20 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         await self._session.execute(stmt)
 
     async def remove_from_project(
-        self, protocol_id: uuid.UUID, project_id: uuid.UUID
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, project_id: uuid.UUID
     ) -> None:
-        """Unlink a protocol from a project."""
+        """Unlink a protocol from a project.
+
+        Defense-in-depth: only deletes if the protocol belongs to the workspace.
+        """
         stmt = protocol_projects.delete().where(
             protocol_projects.c.protocol_id == protocol_id,
             protocol_projects.c.project_id == project_id,
+            protocol_projects.c.protocol_id.in_(
+                select(ProtocolModel.id).where(
+                    ProtocolModel.workspace_id == workspace_id
+                )
+            ),
         )
         await self._session.execute(stmt)
 
@@ -142,10 +174,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             protocols.append(domain)
         return protocols
 
-    async def find_project_ids(self, protocol_id: uuid.UUID) -> list[uuid.UUID]:
-        """Return all project IDs linked to a given protocol."""
-        stmt = select(protocol_projects.c.project_id).where(
-            protocol_projects.c.protocol_id == protocol_id
+    async def find_project_ids(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return all project IDs linked to a given protocol, scoped to workspace."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+            ProjectModel,
+        )
+
+        stmt = (
+            select(protocol_projects.c.project_id)
+            .join(ProjectModel, protocol_projects.c.project_id == ProjectModel.id)
+            .where(
+                protocol_projects.c.protocol_id == protocol_id,
+                ProjectModel.workspace_id == workspace_id,
+            )
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

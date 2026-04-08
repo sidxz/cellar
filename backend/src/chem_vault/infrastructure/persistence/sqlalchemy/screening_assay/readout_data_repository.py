@@ -28,6 +28,23 @@ class SQLAlchemyReadoutDataRepository:
         model = await self._uow.session.get(ReadoutDataModel, id)
         return self._to_domain(model) if model else None
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> ReadoutData | None:
+        """Load by PK scoped to workspace."""
+        stmt = (
+            select(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.id == id,
+                ReadoutDataModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._uow.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     async def find_by_run(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[ReadoutData]:
@@ -135,6 +152,7 @@ class SQLAlchemyReadoutDataRepository:
 
     async def find_by_molecule_and_definition(
         self,
+        workspace_id: uuid.UUID,
         molecule_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
     ) -> list[ReadoutData]:
@@ -142,6 +160,7 @@ class SQLAlchemyReadoutDataRepository:
         stmt = (
             select(ReadoutDataModel)
             .where(
+                ReadoutDataModel.workspace_id == workspace_id,
                 ReadoutDataModel.molecule_id == molecule_id,
                 ReadoutDataModel.readout_definition_id == readout_definition_id,
                 ReadoutDataModel.is_outlier.is_(False),
@@ -154,6 +173,7 @@ class SQLAlchemyReadoutDataRepository:
 
     async def find_grouped_by_condition(
         self,
+        workspace_id: uuid.UUID,
         protocol_id: uuid.UUID,
         condition_name: str,
     ) -> list:
@@ -183,6 +203,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
             )
             .where(
+                ReadoutDataModel.workspace_id == workspace_id,
                 RunModel.protocol_id == protocol_id,
                 RunModel.conditions[condition_name].as_string() != None,  # noqa: E711
                 ReadoutDataModel.is_outlier.is_(False),
@@ -194,9 +215,12 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         return result.all()
 
-    async def delete_computed_for_run(self, run_id: uuid.UUID) -> int:
+    async def delete_computed_for_run(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> int:
         """Delete all computed readout data rows for a run. Returns deleted count."""
         stmt = delete(ReadoutDataModel).where(
+            ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.run_id == run_id,
             ReadoutDataModel.is_computed.is_(True),
         )

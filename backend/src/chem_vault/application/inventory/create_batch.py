@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -19,6 +20,9 @@ from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit
 from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from chem_vault.domain.shared.value_objects import Amount, Concentration
+from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
+from chem_vault.domain.workspace_config.enums import FieldTarget
+from returns.pipeline import is_successful
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,7 +48,7 @@ class CreateBatchCommand(Command):
     expiry_date: date | None = None
     notebook_reference: str | None = None
     appearance: str | None = None
-    custom_fields: dict | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class CreateBatch:
@@ -54,7 +58,7 @@ class CreateBatch:
         repo: BatchRepository,
         molecule_repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
-        custom_field_validator=None,
+        custom_field_validator: CustomFieldValidator | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -69,10 +73,11 @@ class CreateBatch:
 
         async with self._uow:
             # Validate molecule exists, belongs to workspace, and is not tombstoned
-            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(
+                input.workspace_id, input.molecule_id
+            )
             if molecule is None:
-                return Failure(NotFoundError("Molecule"))
-            require_same_workspace(auth, molecule.workspace_id)
+                return Failure(NotFoundError("Molecule", str(input.molecule_id)))
             if molecule.is_tombstone:
                 return Failure(
                     ConflictError("Cannot create batch for a merged molecule")
@@ -89,13 +94,11 @@ class CreateBatch:
                 )
 
             if self._custom_field_validator and input.custom_fields:
-                from chem_vault.domain.workspace_config.enums import FieldTarget
-                from returns.pipeline import is_successful
                 validation = await self._custom_field_validator.validate(
                     input.custom_fields, FieldTarget.BATCH, input.workspace_id
                 )
                 if not is_successful(validation):
-                    return validation  # type: ignore[return-value]
+                    return Failure(validation.failure())
 
             batch = Batch.create(
                 workspace_id=input.workspace_id,

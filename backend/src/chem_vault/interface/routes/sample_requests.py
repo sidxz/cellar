@@ -166,7 +166,7 @@ async def list_sample_requests(
 async def get_sample_request(
     request_id: uuid.UUID, auth: AuthDep, uc: GetSampleRequestDep
 ) -> SampleRequestResponse:
-    result = await uc(GetSampleRequestQuery(request_id=request_id), auth=auth)
+    result = await uc(GetSampleRequestQuery(workspace_id=auth.workspace_id, request_id=request_id), auth=auth)
     request = result_to_response(result)
     return SampleRequestResponse.from_domain(request)
 
@@ -181,6 +181,7 @@ async def update_sample_request(
     from chem_vault.application.shared.sentinel import UNSET
 
     cmd = UpdateSampleRequestCommand(
+        workspace_id=auth.workspace_id,
         request_id=request_id,
         purpose=body.purpose if "purpose" in body.model_fields_set else UNSET,
         priority=body.priority if "priority" in body.model_fields_set else UNSET,
@@ -199,7 +200,7 @@ async def approve_sample_request(
     # Auto-fill assigned_to with current user when not specified
     assigned_to = body.assigned_to if body.assigned_to is not None else auth.user_id
     result = await uc(
-        ApproveSampleRequestCommand(request_id=request_id, assigned_to=assigned_to),
+        ApproveSampleRequestCommand(workspace_id=auth.workspace_id, request_id=request_id, assigned_to=assigned_to),
         auth=auth,
     )
     request = result_to_response(result)
@@ -211,7 +212,7 @@ async def reject_sample_request(
     request_id: uuid.UUID, body: RejectRequest, auth: AuthDep, uc: RejectSampleRequestDep
 ) -> SampleRequestResponse:
     result = await uc(
-        RejectSampleRequestCommand(request_id=request_id, reason=body.reason),
+        RejectSampleRequestCommand(workspace_id=auth.workspace_id, request_id=request_id, reason=body.reason),
         auth=auth,
     )
     request = result_to_response(result)
@@ -223,7 +224,7 @@ async def start_preparing_sample_request(
     request_id: uuid.UUID, auth: AuthDep, uc: StartPreparingSampleRequestDep
 ) -> SampleRequestResponse:
     result = await uc(
-        StartPreparingSampleRequestCommand(request_id=request_id),
+        StartPreparingSampleRequestCommand(workspace_id=auth.workspace_id, request_id=request_id),
         auth=auth,
     )
     request = result_to_response(result)
@@ -235,7 +236,7 @@ async def fulfill_sample_request(
     request_id: uuid.UUID, body: FulfillRequest, auth: AuthDep, uc: FulfillSampleRequestDep
 ) -> SampleRequestResponse:
     result = await uc(
-        FulfillSampleRequestCommand(request_id=request_id, sample_id=body.sample_id),
+        FulfillSampleRequestCommand(workspace_id=auth.workspace_id, request_id=request_id, sample_id=body.sample_id),
         auth=auth,
     )
     request = result_to_response(result)
@@ -247,7 +248,7 @@ async def cancel_sample_request(
     request_id: uuid.UUID, auth: AuthDep, uc: CancelSampleRequestDep
 ) -> SampleRequestResponse:
     result = await uc(
-        CancelSampleRequestCommand(request_id=request_id),
+        CancelSampleRequestCommand(workspace_id=auth.workspace_id, request_id=request_id),
         auth=auth,
     )
     request = result_to_response(result)

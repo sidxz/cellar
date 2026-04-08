@@ -32,14 +32,14 @@ import {
 } from "@/shared/components/ui/card";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { MoleculeName, OrgName } from "@/shared/components/entity-name";
+import { MemberName, MoleculeName, OrgName } from "@/shared/components/entity-name";
 import {
   useCollection,
   useDeleteCollection,
 } from "../hooks/use-collections";
 import { useCollectionMolecules, useRemoveMolecules } from "../hooks/use-collection-molecules";
 import { useProject } from "../hooks/use-projects";
-import { downloadFile } from "@/shared/lib/api/download";
+import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 
@@ -82,14 +82,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
           data ? <MoleculeName id={data.id} /> : null,
       },
       {
-        headerName: "ID",
-        field: "id",
-        width: 280,
-        cellClass: "font-mono text-xs",
-        valueFormatter: (p) =>
-          p.value ? String(p.value).slice(0, 12) + "..." : "",
-      },
-      {
         headerName: "",
         width: 80,
         sortable: false,
@@ -110,14 +102,11 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     [router]
   );
 
+  const { exportSdf } = useSdfExport();
   const handleExportSdf = useCallback(() => {
     if (!moleculeIds?.length) return;
-    downloadFile({
-      url: "/api/v1/molecules/export/sdf",
-      data: { molecule_ids: moleculeIds },
-      filename: `${collection?.name ?? "collection"}.sdf`,
-    });
-  }, [moleculeIds, collection?.name]);
+    exportSdf(moleculeIds, `${collection?.name ?? "collection"}.sdf`);
+  }, [moleculeIds, collection?.name, exportSdf]);
 
   // --- Loading ---
   if (isLoading) {
@@ -258,8 +247,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Created By</p>
-              <p className="font-mono text-sm">
-                {collection.created_by.slice(0, 8)}...
+              <p className="text-sm font-medium">
+                <MemberName id={collection.created_by} />
               </p>
             </div>
           </div>

@@ -31,7 +31,7 @@ import {
 import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { EntityLink } from "@/shared/components/entity-link";
+import { MemberName, ProtocolName } from "@/shared/components/entity-name";
 import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import {
   useRun,
@@ -258,11 +258,12 @@ export function RunDetail({ runId }: RunDetailProps) {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">Protocol</p>
-              <EntityLink
-                type="protocol"
-                id={run.protocol_id}
-                label={run.protocol_id.slice(0, 8)}
-              />
+              <a
+                href={`/assays/protocols/${run.protocol_id}`}
+                className="text-sm text-primary hover:underline underline-offset-4"
+              >
+                <ProtocolName id={run.protocol_id} />
+              </a>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Run Date</p>

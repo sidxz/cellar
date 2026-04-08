@@ -1,14 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Clock, FileSignature } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, Clock, ExternalLink, FileSignature } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/shared/components/ui/card";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { MemberName } from "@/shared/components/entity-name";
 import { useAuditOperations, useAuditByEntity } from "../hooks/use-audit";
 import type { AuditOperation } from "../types";
+
+// Map backend entity_type strings to browsable paths
+const ENTITY_TYPE_PATHS: Record<string, string> = {
+  Molecule: "/compounds",
+  Batch: "/inventory/batches",
+  Sample: "/inventory/samples",
+  Protocol: "/assays/protocols",
+  Run: "/assays/runs",
+  Organization: "/admin/organizations",
+  Project: "/projects",
+  Collection: "/collections",
+  Plate: "/inventory/plates",
+  Shipment: "/inventory/shipments",
+  SampleRequest: "/inventory/sample-requests",
+  SynthesisRequest: "/inventory/synthesis-requests",
+};
 
 // ─── Operation type → badge variant mapping ──────────────────────────────────
 
@@ -73,9 +91,15 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
             <span className="text-sm font-medium">
               {operation.entity_type}
             </span>
-            <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px]" title={operation.entity_id}>
-              {operation.entity_id.slice(0, 8)}
-            </span>
+            {ENTITY_TYPE_PATHS[operation.entity_type] ? (
+              <Link
+                href={`${ENTITY_TYPE_PATHS[operation.entity_type]}/${operation.entity_id}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                View <ExternalLink className="size-3" />
+              </Link>
+            ) : null}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Clock className="size-3" />
@@ -84,7 +108,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
         </div>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xs text-muted-foreground">
-            by <span className="font-mono">{operation.performed_by.slice(0, 8)}</span>
+            by <MemberName id={operation.performed_by} />
           </span>
           {operation.reason && (
             <>
@@ -128,7 +152,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
               <div className="flex items-center gap-2 rounded-md border p-3 text-sm">
                 <FileSignature className="size-4 text-muted-foreground shrink-0" />
                 <span className="text-muted-foreground">Signed by</span>
-                <span className="font-mono text-xs">{operation.signature.signer_id.slice(0, 8)}</span>
+                <span className="text-xs"><MemberName id={operation.signature.signer_id} /></span>
                 <Separator orientation="vertical" className="h-3" />
                 <span className="italic text-muted-foreground truncate" title={operation.signature.reason}>
                   {operation.signature.reason}

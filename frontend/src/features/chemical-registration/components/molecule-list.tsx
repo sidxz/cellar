@@ -8,8 +8,8 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { downloadFile } from "@/shared/lib/api/download";
 import { useMolecules } from "../hooks/use-molecules";
+import { useSdfExport } from "../hooks/use-sdf-export";
 import {
   LIFECYCLE_LABELS,
   MOLECULE_TYPE_LABELS,
@@ -52,14 +52,11 @@ export function MoleculeList() {
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
+  const { exportSdf } = useSdfExport();
   const handleSdfExport = useCallback(() => {
     if (!molecules?.length) return;
-    downloadFile({
-      url: "/api/v1/molecules/export/sdf",
-      data: { molecule_ids: molecules.map((m) => m.id) },
-      filename: "compounds.sdf",
-    });
-  }, [molecules]);
+    exportSdf(molecules.map((m) => m.id));
+  }, [molecules, exportSdf]);
 
   const columnDefs = useMemo<ColDef<Molecule>[]>(
     () => [

@@ -43,8 +43,8 @@ class UpdateVocabulary:
         require_editor(auth)
 
         async with self._uow:
-            vocab = await self._repo.find_by_id(input.vocab_id)
-            if vocab is None or vocab.workspace_id != input.workspace_id:
+            vocab = await self._repo.find_by_id_in_workspace(input.workspace_id, input.vocab_id)
+            if vocab is None:
                 return Failure(NotFoundError("ControlledVocabulary", str(input.vocab_id)))
 
             if input.name is not None:

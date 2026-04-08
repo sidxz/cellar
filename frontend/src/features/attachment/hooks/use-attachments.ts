@@ -6,7 +6,7 @@ import {
   getApiBaseUrl,
 } from "@/shared/lib/api/custom-instance";
 import { getSentinelClient } from "@/shared/lib/auth/config";
-import { showError, showSuccess } from "@/shared/lib/toast";
+import { showSuccess } from "@/shared/lib/toast";
 import type { AttachableType, AttachmentResponse } from "../types";
 
 function attachmentsKey(entityType: AttachableType, entityId: string) {
@@ -44,9 +44,6 @@ export function useUploadAttachment(
       qc.invalidateQueries({ queryKey: attachmentsKey(entityType, entityId) });
       showSuccess("File uploaded");
     },
-    onError: (err: Error) => {
-      showError(err.message);
-    },
   });
 }
 
@@ -64,9 +61,6 @@ export function useDeleteAttachment(
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: attachmentsKey(entityType, entityId) });
       showSuccess("File deleted");
-    },
-    onError: (err: Error) => {
-      showError(err.message);
     },
   });
 }

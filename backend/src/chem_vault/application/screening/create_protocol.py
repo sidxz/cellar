@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
@@ -24,7 +25,7 @@ from chem_vault.domain.screening_assay.protocol import (
     ReadoutDefinition,
 )
 from chem_vault.domain.screening_assay.repository import ProtocolRepository
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,8 +36,8 @@ class CreateProtocolCommand(Command):
     protocol_type: str
     target_id: uuid.UUID | None = None
     category: str | None = None
-    readout_definitions: list[dict] = field(default_factory=list)
-    condition_definitions: list[dict] = field(default_factory=list)
+    readout_definitions: list[dict[str, Any]] = field(default_factory=list)
+    condition_definitions: list[dict[str, Any]] = field(default_factory=list)
 
 
 class CreateProtocol:
@@ -53,6 +54,8 @@ class CreateProtocol:
     async def __call__(
         self, input: CreateProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required to create a protocol"))
         require_editor(auth)
 
         # Use a temporary protocol_id for building owned entities;
@@ -94,7 +97,7 @@ class CreateProtocol:
                 protocol_type=ProtocolType(input.protocol_type),
                 target_id=input.target_id,
                 category=input.category,
-                created_by=auth.user_id if auth else uuid.uuid4(),
+                created_by=auth.user_id,
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs or None,
             )

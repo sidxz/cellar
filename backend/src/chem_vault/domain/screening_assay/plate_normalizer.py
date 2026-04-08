@@ -10,11 +10,9 @@ import statistics
 import uuid
 from dataclasses import dataclass
 
-from returns.result import Failure, Result, Success
-
 from chem_vault.domain.screening_assay.enums import ReadoutNormalization, WellType
 from chem_vault.domain.screening_assay.run import Well
-from chem_vault.domain.shared.errors import DomainError, ValidationError
+from chem_vault.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -46,10 +44,11 @@ class PlateNormalizer:
     value; control and blank wells are used only as reference points.
 
     Returns:
-        ``Success(list[NormalizedValue])`` — normalized values for all sample
+        ``list[NormalizedValue]`` — normalized values for all sample
         wells that have a raw value entry.
 
-        ``Failure(ValidationError)`` — when required controls are missing,
+    Raises:
+        ``ValidationError`` — when required controls are missing,
         raw values are absent for controls, or a mathematical constraint is
         violated (e.g., zero denominator, zero stdev).
     """
@@ -59,10 +58,10 @@ class PlateNormalizer:
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
         normalization: ReadoutNormalization,
-    ) -> Result[list[NormalizedValue], DomainError]:
+    ) -> list[NormalizedValue]:
         """Dispatch to the appropriate normalization strategy."""
         if normalization == ReadoutNormalization.NONE:
-            return Success([])
+            return []
         if normalization == ReadoutNormalization.PERCENT_INHIBITION:
             return self._percent_inhibition(wells, raw_values)
         if normalization == ReadoutNormalization.PERCENT_ACTIVATION:
@@ -72,7 +71,7 @@ class PlateNormalizer:
         if normalization == ReadoutNormalization.Z_SCORE:
             return self._z_score(wells, raw_values)
         # Defensive: unknown strategy — treat as NONE
-        return Success([])
+        return []
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -111,7 +110,7 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
-    ) -> Result[list[NormalizedValue], DomainError]:
+    ) -> list[NormalizedValue]:
         """100 * (1 - (sample - blank_mean) / (neg_ctrl_mean - blank_mean)).
 
         Requires: negative_control wells.
@@ -119,10 +118,8 @@ class PlateNormalizer:
         """
         neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
         if not neg_vals:
-            return Failure(
-                ValidationError(
-                    "PERCENT_INHIBITION requires at least one negative control well with data"
-                )
+            raise ValidationError(
+                "PERCENT_INHIBITION requires at least one negative control well with data"
             )
 
         blank_vals = self._values_for_type(wells, raw_values, WellType.BLANK)
@@ -131,10 +128,8 @@ class PlateNormalizer:
 
         denominator = neg_ctrl_mean - blank_mean
         if denominator == 0.0:
-            return Failure(
-                ValidationError(
-                    "PERCENT_INHIBITION: denominator (neg_ctrl_mean - blank_mean) is zero"
-                )
+            raise ValidationError(
+                "PERCENT_INHIBITION: denominator (neg_ctrl_mean - blank_mean) is zero"
             )
 
         results: list[NormalizedValue] = []
@@ -150,13 +145,13 @@ class PlateNormalizer:
                     normalized_value=normalized,
                 )
             )
-        return Success(results)
+        return results
 
     def _percent_activation(
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
-    ) -> Result[list[NormalizedValue], DomainError]:
+    ) -> list[NormalizedValue]:
         """100 * ((sample - neg_ctrl_mean) / (pos_ctrl_mean - neg_ctrl_mean)).
 
         Requires: positive_control AND negative_control wells.
@@ -165,16 +160,12 @@ class PlateNormalizer:
         pos_vals = self._values_for_type(wells, raw_values, WellType.POSITIVE_CONTROL)
 
         if not neg_vals:
-            return Failure(
-                ValidationError(
-                    "PERCENT_ACTIVATION requires at least one negative control well with data"
-                )
+            raise ValidationError(
+                "PERCENT_ACTIVATION requires at least one negative control well with data"
             )
         if not pos_vals:
-            return Failure(
-                ValidationError(
-                    "PERCENT_ACTIVATION requires at least one positive control well with data"
-                )
+            raise ValidationError(
+                "PERCENT_ACTIVATION requires at least one positive control well with data"
             )
 
         neg_ctrl_mean = statistics.mean(neg_vals)
@@ -182,10 +173,8 @@ class PlateNormalizer:
 
         denominator = pos_ctrl_mean - neg_ctrl_mean
         if denominator == 0.0:
-            return Failure(
-                ValidationError(
-                    "PERCENT_ACTIVATION: denominator (pos_ctrl_mean - neg_ctrl_mean) is zero"
-                )
+            raise ValidationError(
+                "PERCENT_ACTIVATION: denominator (pos_ctrl_mean - neg_ctrl_mean) is zero"
             )
 
         results: list[NormalizedValue] = []
@@ -201,31 +190,27 @@ class PlateNormalizer:
                     normalized_value=normalized,
                 )
             )
-        return Success(results)
+        return results
 
     def _percent_control(
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
-    ) -> Result[list[NormalizedValue], DomainError]:
+    ) -> list[NormalizedValue]:
         """100 * (sample / neg_ctrl_mean).
 
         Requires: negative_control wells.
         """
         neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
         if not neg_vals:
-            return Failure(
-                ValidationError(
-                    "PERCENT_CONTROL requires at least one negative control well with data"
-                )
+            raise ValidationError(
+                "PERCENT_CONTROL requires at least one negative control well with data"
             )
 
         neg_ctrl_mean = statistics.mean(neg_vals)
         if neg_ctrl_mean == 0.0:
-            return Failure(
-                ValidationError(
-                    "PERCENT_CONTROL: neg_ctrl_mean is zero — cannot divide"
-                )
+            raise ValidationError(
+                "PERCENT_CONTROL: neg_ctrl_mean is zero — cannot divide"
             )
 
         results: list[NormalizedValue] = []
@@ -241,34 +226,30 @@ class PlateNormalizer:
                     normalized_value=normalized,
                 )
             )
-        return Success(results)
+        return results
 
     def _z_score(
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
-    ) -> Result[list[NormalizedValue], DomainError]:
+    ) -> list[NormalizedValue]:
         """(sample - neg_ctrl_mean) / neg_ctrl_stdev.
 
         Requires: at least 2 negative control wells (stdev requires n >= 2).
-        Fails if stdev is zero.
+        Raises if stdev is zero.
         """
         neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
         if len(neg_vals) < 2:
-            return Failure(
-                ValidationError(
-                    "Z_SCORE requires at least 2 negative control wells with data"
-                )
+            raise ValidationError(
+                "Z_SCORE requires at least 2 negative control wells with data"
             )
 
         neg_ctrl_mean = statistics.mean(neg_vals)
         neg_ctrl_stdev = statistics.stdev(neg_vals)
 
         if neg_ctrl_stdev == 0.0:
-            return Failure(
-                ValidationError(
-                    "Z_SCORE: negative control stdev is zero — cannot compute Z-score"
-                )
+            raise ValidationError(
+                "Z_SCORE: negative control stdev is zero — cannot compute Z-score"
             )
 
         results: list[NormalizedValue] = []
@@ -284,4 +265,4 @@ class PlateNormalizer:
                     normalized_value=normalized,
                 )
             )
-        return Success(results)
+        return results

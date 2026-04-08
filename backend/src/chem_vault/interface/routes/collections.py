@@ -21,6 +21,7 @@ from chem_vault.application.research_organization.get_collection import (
 )
 from chem_vault.application.research_organization.update_collection import UpdateCollectionCommand
 from chem_vault.application.shared.molecule_resolver import MoleculeReference, RefType
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.research_organization.collection import Collection
 from chem_vault.interface.dependencies import (
     AddMoleculesToCollectionDep,
@@ -129,7 +130,7 @@ async def list_collections(
     return [CollectionResponse.from_domain(c) for c in collections]
 
 
-@router.post("/compose", response_model=CollectionResponse)
+@router.post("/compose", response_model=CollectionResponse, status_code=201)
 async def compose_collections(
     body: ComposeCollectionsBody,
     auth: AuthDep,
@@ -143,7 +144,7 @@ async def compose_collections(
         result_name=body.result_name,
         created_by=auth.user_id,
     )
-    collection = result_to_response(await use_case(cmd))
+    collection = result_to_response(await use_case(cmd, auth=auth))
     return CollectionResponse.from_domain(collection)
 
 
@@ -191,9 +192,9 @@ async def update_collection(
         workspace_id=auth.workspace_id,
         collection_id=collection_id,
         name=body.name if "name" in provided else None,
-        description=body.description if "description" in provided else ...,
-        project_id=body.project_id if "project_id" in provided else ...,
-        owned_by_org_id=body.owned_by_org_id if "owned_by_org_id" in provided else ...,
+        description=body.description if "description" in provided else UNSET,
+        project_id=body.project_id if "project_id" in provided else UNSET,
+        owned_by_org_id=body.owned_by_org_id if "owned_by_org_id" in provided else UNSET,
         visibility=body.visibility if "visibility" in provided else None,
     )
     collection = result_to_response(await use_case(command, auth=auth))
@@ -215,6 +216,7 @@ async def delete_collection(
 @router.post(
     "/{collection_id}/molecules",
     response_model=MembershipResultResponse,
+    status_code=201,
 )
 async def add_molecules_to_collection(
     collection_id: uuid.UUID,

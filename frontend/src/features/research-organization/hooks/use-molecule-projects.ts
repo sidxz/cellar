@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 
-const moleculeProjectsKey = (moleculeId: string) => ["molecules", moleculeId, "projects"];
+const MOLECULES_KEY = ["molecules"];
+const moleculeProjectsKey = (moleculeId: string) => [...MOLECULES_KEY, moleculeId, "projects"];
 
 export function useMoleculeProjects(moleculeId: string | undefined) {
   return useQuery({
@@ -27,7 +28,7 @@ export function useAddMoleculeToProject(projectId: string) {
         method: "POST",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["molecules"] });
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
       showSuccess("Compound added to project");
     },
   });
@@ -42,7 +43,7 @@ export function useRemoveMoleculeFromProject(projectId: string) {
         method: "DELETE",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["molecules"] });
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
       showSuccess("Compound removed from project");
     },
   });

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from chem_vault.application.chemical_registration.synthesis_routes import (
     DeleteSynthesisRoute,
     DeleteSynthesisRouteCommand,
     DeprecateSynthesisRoute,
+    DeprecateSynthesisRouteCommand,
     GetSynthesisRoute,
     GetSynthesisRouteQuery,
     ListSynthesisRoutesByMolecule,
@@ -25,9 +26,11 @@ from chem_vault.application.chemical_registration.synthesis_routes import (
     RemoveReactionStep,
     RemoveReactionStepCommand,
     SetPreferredRoute,
+    SetPreferredRouteCommand,
     UpdateSynthesisRoute,
     UpdateSynthesisRouteCommand,
     ValidateSynthesisRoute,
+    ValidateSynthesisRouteCommand,
 )
 from chem_vault.interface.dependencies import AuthDep, _get_use_case
 from chem_vault.interface.error_handlers import result_to_response
@@ -209,8 +212,8 @@ class AddStepRequest(BaseModel):
     reaction_smarts: str | None = None
     product_molecule_id: uuid.UUID | None = None
     product_description: str | None = None
-    conditions: dict | None = None
-    reagents: list[dict] = []
+    conditions: dict[str, Any] | None = None
+    reagents: list[dict[str, Any]] = []
     preceding_step_ids: list[uuid.UUID] = []
     notes: str | None = None
 
@@ -293,7 +296,7 @@ async def list_synthesis_routes(
 async def get_synthesis_route(
     route_id: uuid.UUID, auth: AuthDep, uc: GetSynthesisRouteDep
 ) -> SynthesisRouteResponse:
-    result = await uc(GetSynthesisRouteQuery(route_id=route_id), auth=auth)
+    result = await uc(GetSynthesisRouteQuery(workspace_id=auth.workspace_id, route_id=route_id), auth=auth)
     route = result_to_response(result)
     return SynthesisRouteResponse.from_domain(route)
 
@@ -308,6 +311,7 @@ async def update_synthesis_route(
     from chem_vault.application.shared.sentinel import UNSET
 
     cmd = UpdateSynthesisRouteCommand(
+        workspace_id=auth.workspace_id,
         route_id=route_id,
         name=body.name if "name" in body.model_fields_set else UNSET,
         description=body.description if "description" in body.model_fields_set else UNSET,
@@ -322,7 +326,7 @@ async def update_synthesis_route(
 async def delete_synthesis_route(
     route_id: uuid.UUID, auth: AuthDep, uc: DeleteSynthesisRouteDep
 ) -> None:
-    result = await uc(DeleteSynthesisRouteCommand(route_id=route_id), auth=auth)
+    result = await uc(DeleteSynthesisRouteCommand(workspace_id=auth.workspace_id, route_id=route_id), auth=auth)
     result_to_response(result)
 
 
@@ -396,7 +400,7 @@ async def remove_reaction_step(
     uc: RemoveReactionStepDep,
 ) -> SynthesisRouteResponse:
     result = await uc(
-        RemoveReactionStepCommand(route_id=route_id, step_id=step_id),
+        RemoveReactionStepCommand(workspace_id=auth.workspace_id, route_id=route_id, step_id=step_id),
         auth=auth,
     )
     route = result_to_response(result)
@@ -407,7 +411,10 @@ async def remove_reaction_step(
 async def validate_route(
     route_id: uuid.UUID, auth: AuthDep, uc: ValidateSynthesisRouteDep
 ) -> SynthesisRouteResponse:
-    result = await uc(route_id, auth=auth)
+    result = await uc(
+        ValidateSynthesisRouteCommand(workspace_id=auth.workspace_id, route_id=route_id),
+        auth=auth,
+    )
     route = result_to_response(result)
     return SynthesisRouteResponse.from_domain(route)
 
@@ -416,7 +423,10 @@ async def validate_route(
 async def set_preferred(
     route_id: uuid.UUID, auth: AuthDep, uc: SetPreferredRouteDep
 ) -> SynthesisRouteResponse:
-    result = await uc(route_id, auth=auth)
+    result = await uc(
+        SetPreferredRouteCommand(workspace_id=auth.workspace_id, route_id=route_id),
+        auth=auth,
+    )
     route = result_to_response(result)
     return SynthesisRouteResponse.from_domain(route)
 
@@ -425,6 +435,11 @@ async def set_preferred(
 async def deprecate_route(
     route_id: uuid.UUID, body: DeprecateRequest, auth: AuthDep, uc: DeprecateSynthesisRouteDep
 ) -> SynthesisRouteResponse:
-    result = await uc(route_id, reason=body.reason, auth=auth)
+    result = await uc(
+        DeprecateSynthesisRouteCommand(
+            workspace_id=auth.workspace_id, route_id=route_id, reason=body.reason,
+        ),
+        auth=auth,
+    )
     route = result_to_response(result)
     return SynthesisRouteResponse.from_domain(route)

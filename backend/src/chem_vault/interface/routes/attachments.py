@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import Response
@@ -88,6 +89,7 @@ async def list_attachments(
     use_case: ListAttachmentsDep,
 ) -> list[AttachmentResponse]:
     query = ListAttachmentsQuery(
+        workspace_id=auth.workspace_id,
         attachable_type=entity_type,
         attachable_id=entity_id,
     )
@@ -101,13 +103,13 @@ async def download_attachment(
     auth: AuthDep,
     use_case: DownloadAttachmentDep,
 ) -> Response:
-    query = DownloadAttachmentQuery(attachment_id=attachment_id)
+    query = DownloadAttachmentQuery(workspace_id=auth.workspace_id, attachment_id=attachment_id)
     attachment, data = result_to_response(await use_case(query, auth=auth))
     return Response(
         content=data,
         media_type=attachment.mime_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{attachment.file_name}"',
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(attachment.file_name),
         },
     )
 
@@ -118,5 +120,5 @@ async def delete_attachment(
     auth: AuthDep,
     use_case: DeleteAttachmentDep,
 ) -> None:
-    command = DeleteAttachmentCommand(attachment_id=attachment_id)
+    command = DeleteAttachmentCommand(workspace_id=auth.workspace_id, attachment_id=attachment_id)
     result_to_response(await use_case(command, auth=auth))

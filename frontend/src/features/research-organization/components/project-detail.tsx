@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/shared/components/ui/card";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { MemberName } from "@/shared/components/entity-name";
 import { useProject, useArchiveProject } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 import { CollectionList } from "./collection-list";
@@ -142,8 +143,8 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Created By</p>
-              <p className="font-mono text-sm">
-                {project.created_by.slice(0, 8)}...
+              <p className="text-sm font-medium">
+                <MemberName id={project.created_by} />
               </p>
             </div>
           </div>

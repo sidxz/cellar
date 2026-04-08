@@ -9,6 +9,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 from chem_vault.domain.workspace_config.repository import CustomFieldDefinitionRepository
@@ -25,9 +26,11 @@ class DeleteCustomField:
         self,
         uow: UnitOfWork,
         repo: CustomFieldDefinitionRepository,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: DeleteCustomFieldCommand, auth: AuthContext | None = None
@@ -35,10 +38,11 @@ class DeleteCustomField:
         require_editor(auth)
 
         async with self._uow:
-            cfd = await self._repo.find_by_id(input.field_id)
-            if cfd is None or cfd.workspace_id != input.workspace_id:
+            cfd = await self._repo.find_by_id_in_workspace(input.workspace_id, input.field_id)
+            if cfd is None:
                 return Failure(NotFoundError("CustomFieldDefinition", str(input.field_id)))
 
-            await self._repo.delete(input.field_id)
-            await self._uow.commit()
+            await self._repo.delete(input.workspace_id, input.field_id)
+            events = await self._uow.commit()
+            await self._dispatcher.dispatch_all(events)
             return Success(None)

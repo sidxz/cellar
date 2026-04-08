@@ -6,6 +6,7 @@ criteria (text, property, structure).
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import sqlalchemy as sa
@@ -24,7 +25,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
     RunModel,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    CollectionModel,
     CollectionMoleculeModel,
+    ProjectModel,
     molecule_projects,
 )
 
@@ -50,11 +53,16 @@ PROPERTY_FIELDS: dict[str, Any] = {
 }
 
 
-def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
+def compose_criteria(
+    query: dict[str, Any], *, workspace_id: uuid.UUID
+) -> ColumnElement | None:
     """Translate a query dict into a SQLAlchemy WHERE clause.
 
     Returns ``None`` if no criteria are present.
     Raises ``ValueError`` for invalid field names or operators.
+
+    Args:
+        workspace_id: Passed to cross-table subqueries for tenant isolation.
     """
     criteria = query.get("criteria", [])
     if not criteria:
@@ -70,17 +78,17 @@ def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
         elif ctype == "structure":
             clauses.append(_structure_clause(criterion))
         elif ctype == "activity":
-            clauses.append(_activity_clause(criterion))
+            clauses.append(_activity_clause(criterion, workspace_id))
         elif ctype == "collection":
-            clauses.append(_collection_clause(criterion))
+            clauses.append(_collection_clause(criterion, workspace_id))
         elif ctype == "project":
-            clauses.append(_project_clause(criterion))
+            clauses.append(_project_clause(criterion, workspace_id))
         elif ctype == "keyword_list":
             clauses.append(_keyword_list_clause(criterion))
         elif ctype == "run_date":
-            clauses.append(_run_date_clause(criterion))
+            clauses.append(_run_date_clause(criterion, workspace_id))
         elif ctype == "batch":
-            clauses.append(_batch_clause(criterion))
+            clauses.append(_batch_clause(criterion, workspace_id))
         else:
             msg = f"Unknown criterion type: {ctype}"
             raise ValueError(msg)
@@ -94,7 +102,7 @@ def compose_criteria(query: dict[str, Any]) -> ColumnElement | None:
     return sa.and_(*clauses)
 
 
-def _escape_like(value: str) -> str:
+def escape_like(value: str) -> str:
     """Escape SQL LIKE metacharacters so they match literally."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -110,11 +118,11 @@ def _text_clause(criterion: dict[str, Any]) -> ColumnElement:
     value = criterion["value"]
 
     if operator == "contains":
-        return column.ilike(f"%{_escape_like(value)}%", escape="\\")
+        return column.ilike(f"%{escape_like(value)}%", escape="\\")
     elif operator == "equals":
         return column == value
     elif operator == "starts_with":
-        return column.ilike(f"{_escape_like(value)}%", escape="\\")
+        return column.ilike(f"{escape_like(value)}%", escape="\\")
     else:
         msg = f"Unknown text operator: {operator}"
         raise ValueError(msg)
@@ -168,7 +176,9 @@ def _structure_clause(criterion: dict[str, Any]) -> ColumnElement:
         raise ValueError(msg)
 
 
-def _activity_clause(criterion: dict[str, Any]) -> ColumnElement:
+def _activity_clause(
+    criterion: dict[str, Any], workspace_id: uuid.UUID
+) -> ColumnElement:
     """Filter molecules by biological activity values."""
     protocol_id = criterion["protocol_id"]
     operator = criterion.get("operator", "lt")
@@ -189,56 +199,71 @@ def _activity_clause(criterion: dict[str, Any]) -> ColumnElement:
     # Dose-response curve filtering
     if "curve_type" in criterion:
         col = DoseResponseCurveModel.fitted_value
+        filters: list[ColumnElement] = [
+            DoseResponseCurveModel.workspace_id == workspace_id,
+            DoseResponseCurveModel.protocol_id == protocol_id,
+            DoseResponseCurveModel.curve_type == criterion["curve_type"],
+            getattr(col, op_name)(value),
+        ]
         return MoleculeModel.id.in_(
-            sa.select(DoseResponseCurveModel.molecule_id).where(
-                DoseResponseCurveModel.protocol_id == protocol_id,
-                DoseResponseCurveModel.curve_type == criterion["curve_type"],
-                getattr(col, op_name)(value),
-            )
+            sa.select(DoseResponseCurveModel.molecule_id).where(*filters)
         )
 
     # Raw readout filtering
     readout_def_id = criterion["readout_definition_id"]
     col = ReadoutDataModel.value_numeric
+    filters = [
+        ReadoutDataModel.workspace_id == workspace_id,
+        ReadoutDataModel.readout_definition_id == readout_def_id,
+        ReadoutDataModel.is_outlier == False,  # noqa: E712
+        getattr(col, op_name)(value),
+    ]
     return MoleculeModel.id.in_(
-        sa.select(ReadoutDataModel.molecule_id).where(
-            ReadoutDataModel.readout_definition_id == readout_def_id,
-            ReadoutDataModel.is_outlier == False,  # noqa: E712
-            getattr(col, op_name)(value),
-        )
+        sa.select(ReadoutDataModel.molecule_id).where(*filters)
     )
 
 
-def _collection_clause(criterion: dict[str, Any]) -> ColumnElement:
-    """Filter molecules to those in a specific collection."""
+def _collection_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
+    """Filter molecules to those in a specific collection, scoped to workspace."""
     collection_id = criterion["collection_id"]
     return MoleculeModel.id.in_(
-        sa.select(CollectionMoleculeModel.molecule_id).where(
+        sa.select(CollectionMoleculeModel.molecule_id)
+        .join(CollectionModel, CollectionMoleculeModel.collection_id == CollectionModel.id)
+        .where(
             CollectionMoleculeModel.collection_id == collection_id,
+            CollectionModel.workspace_id == workspace_id,
         )
     )
 
 
-def _project_clause(criterion: dict[str, Any]) -> ColumnElement:
-    """Filter molecules by project membership.
+def _project_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
+    """Filter molecules by project membership, scoped to workspace.
 
     - No project_ids selected: return unscoped molecules only.
     - project_ids provided: return unscoped + molecules in the specified projects.
+
+    Defense-in-depth: project_ids are validated against the workspace via a
+    join to the projects table.
     """
     project_ids = criterion.get("project_ids", [])
+    # Subquery: valid project IDs in this workspace
+    ws_project_ids = sa.select(ProjectModel.id).where(
+        ProjectModel.workspace_id == workspace_id,
+    )
+    # Molecules that belong to any project within this workspace
+    molecules_in_ws_projects = sa.select(molecule_projects.c.molecule_id).where(
+        molecule_projects.c.project_id.in_(ws_project_ids),
+    )
     if not project_ids:
         # No projects selected — return unscoped molecules only
-        return ~MoleculeModel.id.in_(
-            sa.select(molecule_projects.c.molecule_id)
-        )
-    # Return unscoped + molecules in the specified projects
+        return ~MoleculeModel.id.in_(molecules_in_ws_projects)
+    # Return unscoped + molecules in the specified projects (validated against workspace)
     return sa.or_(
-        ~MoleculeModel.id.in_(
-            sa.select(molecule_projects.c.molecule_id)
-        ),
+        ~MoleculeModel.id.in_(molecules_in_ws_projects),
         MoleculeModel.id.in_(
             sa.select(molecule_projects.c.molecule_id).where(
-                molecule_projects.c.project_id.in_(project_ids)
+                molecule_projects.c.project_id.in_(project_ids),
+                molecule_projects.c.project_id.in_(ws_project_ids),
             )
         ),
     )
@@ -266,14 +291,19 @@ def _keyword_list_clause(criterion: dict[str, Any]) -> ColumnElement:
         raise ValueError(msg)
 
 
-def _run_date_clause(criterion: dict[str, Any]) -> ColumnElement:
+def _run_date_clause(
+    criterion: dict[str, Any], workspace_id: uuid.UUID
+) -> ColumnElement:
     """Filter molecules to those with data in a date range."""
     from datetime import date
 
     date_from = criterion.get("date_from")
     date_to = criterion.get("date_to")
 
-    conditions: list[ColumnElement] = []
+    conditions: list[ColumnElement] = [
+        ReadoutDataModel.workspace_id == workspace_id,
+        RunModel.workspace_id == workspace_id,
+    ]
     if date_from:
         conditions.append(RunModel.run_date >= date.fromisoformat(date_from))
     if date_to:
@@ -302,7 +332,9 @@ BATCH_NUMERIC_FIELDS: dict[str, Any] = {
 }
 
 
-def _batch_clause(criterion: dict[str, Any]) -> ColumnElement:
+def _batch_clause(
+    criterion: dict[str, Any], workspace_id: uuid.UUID
+) -> ColumnElement:
     """Filter molecules by batch-level fields.
 
     Supported sub-types:
@@ -313,6 +345,7 @@ def _batch_clause(criterion: dict[str, Any]) -> ColumnElement:
     from datetime import date
 
     field_type = criterion.get("field_type", "text")
+    ws_filter = [BatchModel.workspace_id == workspace_id]
 
     if field_type == "text":
         field_name = criterion["field"]
@@ -325,17 +358,17 @@ def _batch_clause(criterion: dict[str, Any]) -> ColumnElement:
         value = criterion["value"]
 
         if operator == "contains":
-            cond = column.ilike(f"%{_escape_like(value)}%", escape="\\")
+            cond = column.ilike(f"%{escape_like(value)}%", escape="\\")
         elif operator == "equals":
             cond = column == value
         elif operator == "starts_with":
-            cond = column.ilike(f"{_escape_like(value)}%", escape="\\")
+            cond = column.ilike(f"{escape_like(value)}%", escape="\\")
         else:
             msg = f"Unknown batch text operator: {operator}"
             raise ValueError(msg)
 
         return MoleculeModel.id.in_(
-            sa.select(BatchModel.molecule_id).where(cond)
+            sa.select(BatchModel.molecule_id).where(*ws_filter, cond)
         )
 
     elif field_type == "numeric":
@@ -365,20 +398,20 @@ def _batch_clause(criterion: dict[str, Any]) -> ColumnElement:
             raise ValueError(msg)
 
         return MoleculeModel.id.in_(
-            sa.select(BatchModel.molecule_id).where(cond)
+            sa.select(BatchModel.molecule_id).where(*ws_filter, cond)
         )
 
     elif field_type == "date":
         date_from = criterion.get("date_from")
         date_to = criterion.get("date_to")
 
-        conditions: list[ColumnElement] = []
+        conditions: list[ColumnElement] = list(ws_filter)
         if date_from:
             conditions.append(BatchModel.synthesis_date >= date.fromisoformat(date_from))
         if date_to:
             conditions.append(BatchModel.synthesis_date <= date.fromisoformat(date_to))
 
-        if not conditions:
+        if len(conditions) <= len(ws_filter):
             msg = "batch date criterion requires at least date_from or date_to"
             raise ValueError(msg)
 

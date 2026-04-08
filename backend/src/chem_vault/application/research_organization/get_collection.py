@@ -29,8 +29,8 @@ class GetCollection:
         self, input: GetCollectionQuery
     ) -> Result[Collection, DomainError]:
         async with self._uow:
-            collection = await self._repo.find_by_id(input.collection_id)
-            if collection is None or collection.workspace_id != input.workspace_id:
+            collection = await self._repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
+            if collection is None:
                 return Failure(NotFoundError("Collection", str(input.collection_id)))
             return Success(collection)
 

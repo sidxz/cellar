@@ -42,3 +42,7 @@ class StructureProcessorProtocol(Protocol):
         *,
         qc_reject_threshold: int | None = None,
     ) -> Result[ProcessedStructureDTO, DomainError]: ...
+
+    def smiles_to_mol_block(self, smiles: str) -> str | None:
+        """Convert a SMILES string to a V2000 MOL block, or None if invalid."""
+        ...

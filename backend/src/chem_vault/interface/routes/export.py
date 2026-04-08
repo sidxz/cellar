@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, field_validator
 
 from chem_vault.application.chemical_registration.export_sdf import (
-    ExportSDFCommand,
+    ExportSDFQuery,
     MAX_SDF_EXPORT,
 )
 from chem_vault.interface.dependencies import AuthDep, ExportMoleculesSDFDep
@@ -36,7 +36,7 @@ async def export_sdf(
     auth: AuthDep,
     use_case: ExportMoleculesSDFDep,
 ) -> Response:
-    command = ExportSDFCommand(
+    command = ExportSDFQuery(
         workspace_id=auth.workspace_id,
         molecule_ids=body.molecule_ids,
     )

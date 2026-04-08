@@ -31,7 +31,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             .order_by(BatchModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_batch_number(
         self, workspace_id: uuid.UUID, batch_number: str
@@ -42,7 +42,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None
 
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
@@ -158,6 +158,17 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         model.amount_unit = aggregate.amount.unit.value
         model.concentration_value = aggregate.concentration.value if aggregate.concentration else None
         model.concentration_unit = aggregate.concentration.unit.value if aggregate.concentration else None
+        model.source = aggregate.source.value
+        model.supplier_org_id = aggregate.supplier_org_id
+        model.vendor_catalog_number = aggregate.vendor_catalog_number
+        model.vendor_lot_number = aggregate.vendor_lot_number
+        model.chemist = aggregate.chemist
+        model.synthesis_date = aggregate.synthesis_date
+        model.expiry_date = aggregate.expiry_date
+        model.notebook_reference = aggregate.notebook_reference
+        model.synthesis_route_id = aggregate.synthesis_route_id
+        model.synthesis_step_id = aggregate.synthesis_step_id
+        model.synthesis_request_id = aggregate.synthesis_request_id
         model.appearance = aggregate.appearance
         model.custom_fields = aggregate.custom_fields
         model.storage_conditions_notes = aggregate.storage_conditions_notes

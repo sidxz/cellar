@@ -55,6 +55,8 @@ class SQLAlchemyUserPreferencesRepository:
             )
             self._session.add(model)
 
+        # This repo uses its own dedicated session (not shared with UoW),
+        # so commit() is safe — it only affects this repo's transaction.
         await self._session.commit()
         await self._session.refresh(model)
         return self._to_domain(model)

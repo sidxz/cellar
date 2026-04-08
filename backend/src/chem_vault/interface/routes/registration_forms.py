@@ -3,25 +3,24 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.workspace_config.create_registration_form import (
-    CreateRegistrationForm,
     CreateRegistrationFormCommand,
 )
 from chem_vault.application.workspace_config.delete_registration_form import (
-    DeleteRegistrationForm,
     DeleteRegistrationFormCommand,
 )
+from chem_vault.application.workspace_config.get_registration_form import (
+    GetRegistrationFormQuery,
+)
 from chem_vault.application.workspace_config.list_registration_forms import (
-    ListRegistrationForms,
     ListRegistrationFormsQuery,
 )
 from chem_vault.application.workspace_config.update_registration_form import (
-    UpdateRegistrationForm,
     UpdateRegistrationFormCommand,
     UNSET,
 )
@@ -29,24 +28,15 @@ from chem_vault.domain.workspace_config.enums import FieldTarget
 from chem_vault.domain.workspace_config.registration_form import RegistrationForm
 from chem_vault.interface.dependencies import (
     AuthDep,
-    _get_use_case,
+    CreateRegistrationFormDep,
+    DeleteRegistrationFormDep,
+    GetRegistrationFormDep,
+    ListRegistrationFormsDep,
+    UpdateRegistrationFormDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/registration-forms", tags=["registration-forms"])
-
-CreateRegistrationFormDep = Annotated[
-    CreateRegistrationForm, Depends(_get_use_case(CreateRegistrationForm))
-]
-ListRegistrationFormsDep = Annotated[
-    ListRegistrationForms, Depends(_get_use_case(ListRegistrationForms))
-]
-UpdateRegistrationFormDep = Annotated[
-    UpdateRegistrationForm, Depends(_get_use_case(UpdateRegistrationForm))
-]
-DeleteRegistrationFormDep = Annotated[
-    DeleteRegistrationForm, Depends(_get_use_case(DeleteRegistrationForm))
-]
 
 
 class RegistrationFormResponse(BaseModel):
@@ -55,7 +45,7 @@ class RegistrationFormResponse(BaseModel):
     name: str
     applies_to: str
     is_default: bool
-    field_overrides: list[dict]
+    field_overrides: list[dict[str, Any]]
     version: int
 
     @classmethod
@@ -75,13 +65,13 @@ class CreateRegistrationFormBody(BaseModel):
     name: str
     applies_to: FieldTarget
     is_default: bool = False
-    field_overrides: list[dict] = []
+    field_overrides: list[dict[str, Any]] = []
 
 
 class UpdateRegistrationFormBody(BaseModel):
     name: str | None = None
     is_default: bool | None = None
-    field_overrides: list[dict] | None = None
+    field_overrides: list[dict[str, Any]] | None = None
 
 
 @router.get("", response_model=list[RegistrationFormResponse])
@@ -102,20 +92,11 @@ async def list_registration_forms(
 async def get_registration_form(
     form_id: uuid.UUID,
     auth: AuthDep,
-    use_case: ListRegistrationFormsDep,
+    use_case: GetRegistrationFormDep,
 ) -> RegistrationFormResponse:
-    # List all and find by id — avoids a separate GetById use case
-    query = ListRegistrationFormsQuery(workspace_id=auth.workspace_id)
-    forms = result_to_response(await use_case(query))
-    for form in forms:
-        if form.id == form_id:
-            return RegistrationFormResponse.from_domain(form)
-    from chem_vault.domain.shared.errors import NotFoundError
-    from chem_vault.interface.error_handlers import result_to_response as rtr
-    from returns.result import Failure
-    result_to_response(Failure(NotFoundError("RegistrationForm", str(form_id))))
-    # unreachable — result_to_response raises for Failure
-    raise AssertionError("unreachable")  # pragma: no cover
+    query = GetRegistrationFormQuery(workspace_id=auth.workspace_id, form_id=form_id)
+    form = result_to_response(await use_case(query))
+    return RegistrationFormResponse.from_domain(form)
 
 
 @router.post("", response_model=RegistrationFormResponse, status_code=201)

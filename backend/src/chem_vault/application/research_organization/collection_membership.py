@@ -70,8 +70,8 @@ class AddMoleculesToCollection:
         require_editor(auth)
 
         async with self._uow:
-            collection = await self._collection_repo.find_by_id(input.collection_id)
-            if collection is None or collection.workspace_id != input.workspace_id:
+            collection = await self._collection_repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
+            if collection is None:
                 return Failure(
                     NotFoundError("Collection", str(input.collection_id))
                 )
@@ -88,7 +88,7 @@ class AddMoleculesToCollection:
 
             molecule_ids = [r.molecule_id for r in resolved]
             added_count = await self._collection_repo.add_molecules(
-                input.collection_id, molecule_ids
+                input.workspace_id, input.collection_id, molecule_ids
             )
 
             already_present = len(molecule_ids) - added_count
@@ -147,14 +147,14 @@ class RemoveMoleculesFromCollection:
         require_editor(auth)
 
         async with self._uow:
-            collection = await self._collection_repo.find_by_id(input.collection_id)
-            if collection is None or collection.workspace_id != input.workspace_id:
+            collection = await self._collection_repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
+            if collection is None:
                 return Failure(
                     NotFoundError("Collection", str(input.collection_id))
                 )
 
             removed_count = await self._collection_repo.remove_molecules(
-                input.collection_id, input.molecule_ids
+                input.workspace_id, input.collection_id, input.molecule_ids
             )
 
             if removed_count > 0:
@@ -199,13 +199,13 @@ class ListCollectionMolecules:
         self, input: ListCollectionMoleculesQuery
     ) -> Result[list[uuid.UUID], DomainError]:
         async with self._uow:
-            collection = await self._collection_repo.find_by_id(input.collection_id)
-            if collection is None or collection.workspace_id != input.workspace_id:
+            collection = await self._collection_repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
+            if collection is None:
                 return Failure(
                     NotFoundError("Collection", str(input.collection_id))
                 )
 
             molecule_ids = await self._collection_repo.get_molecule_ids(
-                input.collection_id, offset=input.offset, limit=input.limit
+                input.workspace_id, input.collection_id, offset=input.offset, limit=input.limit
             )
             return Success(molecule_ids)

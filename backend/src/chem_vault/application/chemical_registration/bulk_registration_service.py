@@ -91,29 +91,29 @@ class BulkRegistrationService:
         self._dispatcher = dispatcher
         self._structure_processor = structure_processor
 
-    async def execute(
+    async def __call__(
         self,
-        cmd: StartBulkRegistrationCommand,
+        input: StartBulkRegistrationCommand,
         auth: AuthContext | None = None,
     ) -> Result[BulkRegistrationOutcome, DomainError]:
         require_editor(auth)
 
         try:
-            file_format = BulkRegistrationFileFormat(cmd.file_format)
+            file_format = BulkRegistrationFileFormat(input.file_format)
         except ValueError:
-            return Failure(ValidationError(f"Unsupported file format: {cmd.file_format}"))
+            return Failure(ValidationError(f"Unsupported file format: {input.file_format}"))
 
-        if not cmd.items:
+        if not input.items:
             return Failure(ValidationError("File contains no records"))
 
         # 1. Create BulkRegistration tracking aggregate
         async with self._uow:
             bulk_reg = BulkRegistration.create(
-                workspace_id=cmd.workspace_id,
-                source_file=cmd.source_file,
+                workspace_id=input.workspace_id,
+                source_file=input.source_file,
                 file_format=file_format,
-                submitted_by=cmd.submitted_by,
-                total_count=len(cmd.items),
+                submitted_by=input.submitted_by,
+                total_count=len(input.items),
             )
             bulk_reg.start_processing()
             await self._bulk_reg_repo.save(bulk_reg)
@@ -122,11 +122,11 @@ class BulkRegistrationService:
 
         # 2. Process each item sequentially (within-batch dedup)
         item_results = await self._process_items(
-            items=cmd.items,
+            items=input.items,
             bulk_reg=bulk_reg,
-            workspace_id=cmd.workspace_id,
-            originating_org_id=cmd.originating_org_id,
-            submitted_by=cmd.submitted_by,
+            workspace_id=input.workspace_id,
+            originating_org_id=input.originating_org_id,
+            submitted_by=input.submitted_by,
         )
 
         # 3. Complete

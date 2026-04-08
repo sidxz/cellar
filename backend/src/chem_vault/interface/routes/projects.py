@@ -22,6 +22,7 @@ from chem_vault.application.research_organization.manage_molecule_projects impor
     RemoveMoleculeFromProjectCommand,
 )
 from chem_vault.application.research_organization.update_project import UpdateProjectCommand
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.research_organization.project import Project, ProjectStatus
 from chem_vault.interface.dependencies import (
     AddMoleculeToProjectDep,
@@ -125,7 +126,7 @@ async def update_project(
         workspace_id=auth.workspace_id,
         project_id=project_id,
         name=body.name if "name" in provided else None,
-        description=body.description if "description" in provided else ...,
+        description=body.description if "description" in provided else UNSET,
     )
     project = result_to_response(await use_case(command, auth=auth))
     return ProjectResponse.from_domain(project)

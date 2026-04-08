@@ -2,6 +2,9 @@
 
 Each handler re-points its context's molecule references from the source
 (being tombstoned) to the target molecule within the same transaction.
+
+All handlers accept UnitOfWork and extract the session internally, keeping
+the application-layer MergeSideEffectHandler Protocol free of SA types.
 """
 
 from __future__ import annotations
@@ -9,7 +12,17 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from chem_vault.application.shared.unit_of_work import UnitOfWork
+
+
+def _session(uow: UnitOfWork) -> sa.ext.asyncio.AsyncSession:
+    """Extract the async session from a UnitOfWork (infrastructure bridge).
+
+    Uses duck typing: works with both AsyncUnitOfWork and test fakes that
+    expose a `session` attribute.
+    """
+    return uow.session  # type: ignore[attr-defined]
 
 
 class BatchMergeSideEffect:
@@ -17,10 +30,11 @@ class BatchMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = _session(uow)
         await session.execute(
             sa.text(
                 "UPDATE batches SET molecule_id = :target "
@@ -35,10 +49,11 @@ class ReadoutDataMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = _session(uow)
         await session.execute(
             sa.text(
                 "UPDATE readout_data SET molecule_id = :target "
@@ -53,10 +68,11 @@ class DoseResponseCurveMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = _session(uow)
         await session.execute(
             sa.text(
                 "UPDATE dose_response_curves SET molecule_id = :target "
@@ -77,10 +93,11 @@ class MoleculeRelationshipMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = _session(uow)
         params = {"source": source_molecule_id, "target": target_molecule_id}
 
         # 1. Delete relationships that would become self-referential:
@@ -147,10 +164,11 @@ class SynthesisRouteMergeSideEffect:
 
     async def on_merge(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
     ) -> None:
+        session = _session(uow)
         await session.execute(
             sa.text(
                 "UPDATE synthesis_routes SET target_molecule_id = :target "

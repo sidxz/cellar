@@ -68,7 +68,7 @@ class SQLAlchemySaltEntryRepository(
             stmt = stmt.where(SaltEntryModel.is_active.is_(True))
         stmt = stmt.order_by(SaltEntryModel.code)
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
 
     async def find_by_code(
         self, workspace_id: uuid.UUID, code: str
@@ -79,7 +79,7 @@ class SQLAlchemySaltEntryRepository(
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None
 
     async def find_by_smiles(
         self, workspace_id: uuid.UUID, smiles: str
@@ -90,8 +90,11 @@ class SQLAlchemySaltEntryRepository(
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None
 
-    async def delete(self, id: uuid.UUID) -> None:
-        stmt = delete(SaltEntryModel).where(SaltEntryModel.id == id)
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        stmt = delete(SaltEntryModel).where(
+            SaltEntryModel.workspace_id == workspace_id,
+            SaltEntryModel.id == id,
+        )
         await self._session.execute(stmt)

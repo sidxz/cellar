@@ -98,7 +98,7 @@ async def start_bulk_registration(
         originating_org_id=originating_org_id,
     )
 
-    result = await service.execute(cmd, auth=auth)
+    result = await service(cmd, auth=auth)
     outcome = result_to_response(result)
 
     return BulkRegistrationResponse(

@@ -80,6 +80,7 @@ class TestAddProjectMember:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         member_repo.get_role = AsyncMock(return_value=ProjectRole.MANAGER)
@@ -104,7 +105,13 @@ class TestAddProjectMember:
         assert isinstance(member, ProjectMember)
         assert member.role == ProjectRole.EDITOR
         member_repo.add_member.assert_awaited_once()
-        dispatcher.dispatch.assert_awaited_once()
+        dispatcher.dispatch_all.assert_awaited_once()
+        # Verify the ProjectMemberAdded event was included
+        dispatched_events = dispatcher.dispatch_all.call_args[0][0]
+        assert any(
+            hasattr(e, "user_id") and e.aggregate_type == "Project"
+            for e in dispatched_events
+        )
 
     @pytest.mark.asyncio
     async def test_project_not_found(self) -> None:
@@ -112,6 +119,7 @@ class TestAddProjectMember:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=None)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         member_repo = AsyncMock()
         dispatcher = AsyncMock()
@@ -157,6 +165,7 @@ class TestAddProjectMember:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         member_repo.add_member = AsyncMock()
@@ -191,6 +200,7 @@ class TestRemoveProjectMember:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         member_repo.get_role = AsyncMock(return_value=ProjectRole.MANAGER)
@@ -212,7 +222,7 @@ class TestRemoveProjectMember:
         assert isinstance(result, Success)
         assert result.unwrap() is None
         member_repo.remove_member.assert_awaited_once()
-        dispatcher.dispatch.assert_awaited_once()
+        dispatcher.dispatch_all.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_project_not_found(self) -> None:
@@ -220,6 +230,7 @@ class TestRemoveProjectMember:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=None)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         member_repo = AsyncMock()
         dispatcher = AsyncMock()
@@ -251,12 +262,13 @@ class TestUpdateProjectMemberRole:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         member_repo.get_role = AsyncMock(return_value=ProjectRole.MANAGER)
         member_repo.update_role = AsyncMock()
 
-        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo)
+        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo, AsyncMock())
         result = await uc(
             UpdateProjectMemberRoleCommand(
                 workspace_id=auth.workspace_id,
@@ -280,6 +292,7 @@ class TestUpdateProjectMemberRole:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         # get_role called twice: first for caller (admin bypass skips it), but
@@ -287,7 +300,7 @@ class TestUpdateProjectMemberRole:
         # is bypassed, so only the target membership check matters.
         member_repo.get_role = AsyncMock(return_value=None)
 
-        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo)
+        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo, AsyncMock())
         result = await uc(
             UpdateProjectMemberRoleCommand(
                 workspace_id=auth.workspace_id,
@@ -307,7 +320,7 @@ class TestUpdateProjectMemberRole:
         proj_repo = AsyncMock()
         member_repo = AsyncMock()
 
-        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo)
+        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo, AsyncMock())
         result = await uc(
             UpdateProjectMemberRoleCommand(
                 workspace_id=auth.workspace_id,
@@ -326,10 +339,11 @@ class TestUpdateProjectMemberRole:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=None)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         member_repo = AsyncMock()
 
-        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo)
+        uc = UpdateProjectMemberRole(FakeUnitOfWork(), proj_repo, member_repo, AsyncMock())
         result = await uc(
             UpdateProjectMemberRoleCommand(
                 workspace_id=auth.workspace_id,
@@ -361,6 +375,7 @@ class TestListProjectMembers:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         member_repo.find_members = AsyncMock(return_value=members)
@@ -382,6 +397,7 @@ class TestListProjectMembers:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=project)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
 
         member_repo = AsyncMock()
         member_repo.find_members = AsyncMock(return_value=[])
@@ -401,6 +417,7 @@ class TestListProjectMembers:
 
         proj_repo = AsyncMock()
         proj_repo.find_by_id = AsyncMock(return_value=None)
+        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         member_repo = AsyncMock()
 

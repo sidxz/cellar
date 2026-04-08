@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 from collections import namedtuple
+from types import TracebackType
+from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -64,8 +66,23 @@ def _make_protocol(
     )
 
 
+class _FakeUoW:
+    async def commit(self) -> list:
+        return []
+
+    async def rollback(self) -> None:
+        pass
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+
 def _make_service(protocol_repo=None, readout_data_repo=None) -> ConditionGroupingService:
     return ConditionGroupingService(
+        uow=_FakeUoW(),
         readout_data_repo=readout_data_repo or AsyncMock(),
         protocol_repo=protocol_repo or AsyncMock(),
     )
@@ -123,6 +140,7 @@ class TestGroupsByConditionValue:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = protocol
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_grouped_by_condition.return_value = [hek_row, cho_row]
@@ -157,7 +175,7 @@ class TestGroupsByConditionValue:
         assert hek_readout.readout_definition_id == rd.id
 
         readout_data_repo.find_grouped_by_condition.assert_awaited_once_with(
-            protocol.id, "Cell Line"
+            WS, protocol.id, "Cell Line"
         )
 
 
@@ -181,6 +199,7 @@ class TestUnknownConditionFails:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = protocol
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
         readout_data_repo = AsyncMock()
         service = _make_service(protocol_repo, readout_data_repo)
@@ -220,6 +239,7 @@ class TestEmptyResults:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = protocol
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_grouped_by_condition.return_value = []
@@ -242,6 +262,7 @@ class TestProtocolNotFound:
         # -- Arrange --
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = None  # does not exist
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         readout_data_repo = AsyncMock()
         service = _make_service(protocol_repo, readout_data_repo)
@@ -290,6 +311,7 @@ class TestMinMaxAggregation:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = protocol
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_grouped_by_condition.return_value = [row]
@@ -331,6 +353,7 @@ class TestMinMaxAggregation:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = protocol
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_grouped_by_condition.return_value = [row]
@@ -393,6 +416,7 @@ class TestRunCountIsMaxAcrossReadouts:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_id.return_value = protocol
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_grouped_by_condition.return_value = [row_a, row_b]

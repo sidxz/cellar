@@ -5,13 +5,15 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, model_validator
 
 from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.events import DomainEvent
+from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.workspace_config.enums import FieldTarget
+from chem_vault.domain.workspace_config.events import (
+    RegistrationFormCreated,
+    RegistrationFormUpdated,
+)
+from chem_vault.domain.workspace_config.value_objects import FieldOverride
 
 __all__ = [
     "FieldOverride",
@@ -22,49 +24,6 @@ __all__ = [
 
 # Sentinel for "not provided" in update()
 UNSET = object()
-
-
-# ---------------------------------------------------------------------------
-# Domain Events
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class RegistrationFormCreated(DomainEvent):
-    workspace_id: uuid.UUID
-    name: str
-    applies_to: str
-
-
-@dataclass(frozen=True)
-class RegistrationFormUpdated(DomainEvent):
-    workspace_id: uuid.UUID
-
-
-# ---------------------------------------------------------------------------
-# Value Object
-# ---------------------------------------------------------------------------
-
-
-class FieldOverride(BaseModel):
-    """Frozen VO that overrides one field definition attribute within a form template."""
-
-    model_config = ConfigDict(frozen=True)
-
-    field_definition_id: uuid.UUID
-    is_required: bool | None = None
-    default_value: Any | None = None
-    is_locked: bool = False
-    pick_list_subset: list[str] | None = None
-
-    @model_validator(mode="after")
-    def _locked_requires_default(self) -> "FieldOverride":
-        if self.is_locked and self.default_value is None:
-            raise ValueError(
-                "A locked field override must have a default_value set; "
-                "is_locked=True requires default_value to be non-None."
-            )
-        return self
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +81,7 @@ class RegistrationForm(AggregateRoot):
     ) -> "RegistrationForm":
         """Create and validate a new RegistrationForm."""
         if not name or not name.strip():
-            raise ValueError("name must not be empty")
+            raise ValidationError("name must not be empty")
 
         form = cls(
             id=uuid.uuid4(),
@@ -156,7 +115,7 @@ class RegistrationForm(AggregateRoot):
         """Partial update — only provided fields are changed."""
         if name is not UNSET:
             if not name or not str(name).strip():
-                raise ValueError("name must not be empty")
+                raise ValidationError("name must not be empty")
             self.name = str(name).strip()
 
         if field_overrides is not UNSET:
@@ -175,3 +134,10 @@ class RegistrationForm(AggregateRoot):
         """Set or unset this form as the workspace default for its applies_to type."""
         self.is_default = is_default
         self.updated_at = datetime.now(timezone.utc)
+        self.register_event(
+            RegistrationFormUpdated(
+                aggregate_id=self.id,
+                aggregate_type="RegistrationForm",
+                workspace_id=self.workspace_id,
+            )
+        )

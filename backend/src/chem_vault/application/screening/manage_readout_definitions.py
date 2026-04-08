@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -16,6 +16,7 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
+from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from chem_vault.domain.screening_assay.repository import ProtocolRepository
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
@@ -61,20 +62,31 @@ class AddReadoutDefinition:
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        formula_evaluator: FormulaEvaluator | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._formula_evaluator = formula_evaluator
 
     async def __call__(
         self, input: AddReadoutDefinitionCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
         async with self._uow:
-            protocol = await self._repo.find_by_id(input.protocol_id)
-            if protocol is None or protocol.workspace_id != input.workspace_id:
+            protocol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.protocol_id)
+            if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            require_same_workspace(auth, protocol.workspace_id)
+
+            # Validate formula if this is a calculated readout
+            if input.is_calculated and input.calculation_formula and self._formula_evaluator:
+                available_names = [rd.name for rd in protocol.readout_definitions]
+                try:
+                    self._formula_evaluator.validate(
+                        input.calculation_formula, available_names
+                    )
+                except DomainError as exc:
+                    return Failure(exc)
 
             definition = ReadoutDefinition(
                 protocol_id=protocol.id,
@@ -114,10 +126,9 @@ class RemoveReadoutDefinition:
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
         async with self._uow:
-            protocol = await self._repo.find_by_id(input.protocol_id)
-            if protocol is None or protocol.workspace_id != input.workspace_id:
+            protocol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.protocol_id)
+            if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            require_same_workspace(auth, protocol.workspace_id)
 
             protocol.remove_readout_definition(input.definition_id)
             await self._repo.save(protocol)

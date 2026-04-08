@@ -18,6 +18,8 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EntityLink } from "@/shared/components/entity-link";
+import { MoleculeName } from "@/shared/components/entity-name";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { useBatch } from "../hooks/use-batches";
 import {
   useAliquotSample,
@@ -236,13 +238,23 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Compound</p>
-              <EntityLink
-                type="compound"
-                id={batch.molecule_id}
-                label={batch.molecule_id.slice(0, 8)}
-              />
+              <a
+                href={`/compounds/${batch.molecule_id}`}
+                className="text-sm text-primary hover:underline underline-offset-4"
+              >
+                <MoleculeName id={batch.molecule_id} />
+              </a>
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* Attachments */}
+      {sample && (
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-4">Files</h2>
+          <FileUploadZone entityType="sample" entityId={sampleId} />
+          <AttachmentList entityType="sample" entityId={sampleId} />
         </Card>
       )}
 

@@ -1,10 +1,14 @@
 """Unit tests for new criterion types in SearchQueryComposer."""
 
+import uuid
+
 import pytest
 
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     compose_criteria,
 )
+
+_WS = uuid.UUID("00000000-0000-0000-0000-ffffffffffff")
 
 
 class TestActivityClause:
@@ -20,7 +24,7 @@ class TestActivityClause:
                 }
             ],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
     def test_readout_definition_filter(self):
@@ -35,7 +39,7 @@ class TestActivityClause:
                 }
             ],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
     def test_invalid_operator_raises(self):
@@ -51,7 +55,7 @@ class TestActivityClause:
             ],
         }
         with pytest.raises(ValueError, match="Unknown activity operator"):
-            compose_criteria(query)
+            compose_criteria(query, workspace_id=_WS)
 
 
 class TestCollectionClause:
@@ -61,7 +65,7 @@ class TestCollectionClause:
                 {"type": "collection", "collection_id": "00000000-0000-0000-0000-000000000001"}
             ],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
 
@@ -72,7 +76,7 @@ class TestKeywordListClause:
                 {"type": "keyword_list", "values": ["CV-0001", "CV-0002"], "ref_type": "registration_number"}
             ],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
     def test_empty_values_raises(self):
@@ -82,7 +86,7 @@ class TestKeywordListClause:
             ],
         }
         with pytest.raises(ValueError, match="must not be empty"):
-            compose_criteria(query)
+            compose_criteria(query, workspace_id=_WS)
 
     def test_uuid_ref_type(self):
         query = {
@@ -94,7 +98,7 @@ class TestKeywordListClause:
                 }
             ],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
 
@@ -105,14 +109,14 @@ class TestRunDateClause:
                 {"type": "run_date", "date_from": "2026-01-01", "date_to": "2026-03-31"}
             ],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
     def test_date_from_only(self):
         query = {
             "criteria": [{"type": "run_date", "date_from": "2026-01-01"}],
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
 
@@ -131,5 +135,5 @@ class TestCombinedCriteria:
             ],
             "logic": "and",
         }
-        clause = compose_criteria(query)
+        clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None

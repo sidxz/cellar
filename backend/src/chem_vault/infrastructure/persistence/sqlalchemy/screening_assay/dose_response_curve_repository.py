@@ -27,6 +27,23 @@ class SQLAlchemyDoseResponseCurveRepository:
         model = await self._uow.session.get(DoseResponseCurveModel, id)
         return self._to_domain(model) if model else None
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> DoseResponseCurve | None:
+        """Load by PK scoped to workspace."""
+        stmt = (
+            select(DoseResponseCurveModel)
+            .where(
+                DoseResponseCurveModel.id == id,
+                DoseResponseCurveModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._uow.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     async def find_by_run(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[DoseResponseCurve]:

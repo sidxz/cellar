@@ -36,13 +36,21 @@ class FakeAuditRepository:
     async def find_by_id(self, id: uuid.UUID) -> AuditOperation | None:
         return next((op for op in self.saved if op.id == id), None)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> AuditOperation | None:
+        # AuditOperation is append-only; just delegate to find_by_id
+        return await self.find_by_id(id)
+
     async def find_by_entity(
-        self, entity_type: str, entity_id: uuid.UUID
+        self, workspace_id: uuid.UUID, entity_type: str, entity_id: uuid.UUID
     ) -> list[AuditOperation]:
         return [
             op
             for op in self.saved
-            if op.entity_type == entity_type and op.entity_id == entity_id
+            if op.workspace_id == workspace_id
+            and op.entity_type == entity_type
+            and op.entity_id == entity_id
         ]
 
 
