@@ -5,7 +5,9 @@ import { ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const allNavItems = navigation.flatMap((g) => g.items);
+const allNavItems = navigation.flatMap((g) =>
+  g.items.flatMap((i) => [i, ...(i.children ?? [])]),
+);
 
 function resolveLabel(href: string, segment: string): string {
   const match = allNavItems.find((item) => item.href === href);
