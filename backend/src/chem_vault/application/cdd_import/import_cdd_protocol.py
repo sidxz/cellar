@@ -63,62 +63,62 @@ class ImportCddProtocol:
             return Failure(AuthorizationError("Authentication required"))
         require_editor(auth)
 
-        config = await check_cdd_configured(
-            input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
-        )
-        if isinstance(config, Failure):
-            return config
-
-        vault_id, api_key = config.unwrap()
-
-        try:
-            raw = await self._gateway.get_protocol(vault_id, api_key, input.cdd_protocol_id)
-        except CddAuthError:
-            return Failure(ValidationError("CDD API key is invalid or expired"))
-        except CddNotFoundError:
-            return Failure(NotFoundError("CDD Protocol", str(input.cdd_protocol_id)))
-        except CddConnectionError:
-            return Failure(ValidationError("Could not connect to CDD Vault"))
-
-        mapping = map_cdd_protocol(raw)
-
-        if not mapping.readouts:
-            return Failure(
-                ValidationError(
-                    "No mappable readouts found in CDD protocol. "
-                    + (f"Warnings: {'; '.join(w.reason for w in mapping.warnings)}" if mapping.warnings else "")
-                )
-            )
-
-        tmp_id = uuid.uuid4()
-        readout_defs = [
-            ReadoutDefinition(
-                protocol_id=tmp_id,
-                name=r.name,
-                data_type=r.data_type,
-                unit=r.unit,
-                aggregation=r.aggregation,
-                normalization=r.normalization,
-                precision=r.precision,
-                pick_list_values=r.pick_list_values,
-                dose_response_config=r.dose_response_config,
-                display_order=r.display_order,
-            )
-            for r in mapping.readouts
-        ]
-
-        condition_defs = [
-            ConditionDefinition(
-                protocol_id=tmp_id,
-                name=c.name,
-                data_type=c.data_type,
-                unit=c.unit,
-                pick_list_values=c.pick_list_values,
-            )
-            for c in mapping.conditions
-        ] or None
-
         async with self._uow:
+            config = await check_cdd_configured(
+                input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
+            )
+            if isinstance(config, Failure):
+                return config
+
+            vault_id, api_key = config.unwrap()
+
+            try:
+                raw = await self._gateway.get_protocol(vault_id, api_key, input.cdd_protocol_id)
+            except CddAuthError:
+                return Failure(ValidationError("CDD API key is invalid or expired"))
+            except CddNotFoundError:
+                return Failure(NotFoundError("CDD Protocol", str(input.cdd_protocol_id)))
+            except CddConnectionError:
+                return Failure(ValidationError("Could not connect to CDD Vault"))
+
+            mapping = map_cdd_protocol(raw)
+
+            if not mapping.readouts:
+                return Failure(
+                    ValidationError(
+                        "No mappable readouts found in CDD protocol. "
+                        + (f"Warnings: {'; '.join(w.reason for w in mapping.warnings)}" if mapping.warnings else "")
+                    )
+                )
+
+            tmp_id = uuid.uuid4()
+            readout_defs = [
+                ReadoutDefinition(
+                    protocol_id=tmp_id,
+                    name=r.name,
+                    data_type=r.data_type,
+                    unit=r.unit,
+                    aggregation=r.aggregation,
+                    normalization=r.normalization,
+                    precision=r.precision,
+                    pick_list_values=r.pick_list_values,
+                    dose_response_config=r.dose_response_config,
+                    display_order=r.display_order,
+                )
+                for r in mapping.readouts
+            ]
+
+            condition_defs = [
+                ConditionDefinition(
+                    protocol_id=tmp_id,
+                    name=c.name,
+                    data_type=c.data_type,
+                    unit=c.unit,
+                    pick_list_values=c.pick_list_values,
+                )
+                for c in mapping.conditions
+            ] or None
+
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
                 name=input.name_override or mapping.name,

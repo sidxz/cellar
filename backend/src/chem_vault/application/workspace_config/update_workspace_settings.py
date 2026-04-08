@@ -22,12 +22,12 @@ from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSetti
 class UpdateWorkspaceSettingsCommand(Command):
     workspace_id: uuid.UUID
     registration_rules: dict[str, Any] | object = UNSET
-    custom_field_definitions: dict[str, Any] | object = UNSET
+    custom_field_definitions: list[dict[str, Any]] | object = UNSET
     default_molecule_type: str | None | object = UNSET
-    audit_reason_policy: dict[str, Any] | object = UNSET
+    audit_reason_policy: str | None | object = UNSET
     signature_required_for: list[str] | object = UNSET
     audit_retention_days: int | None | object = UNSET
-    formulation_number_scheme: dict[str, Any] | object = UNSET
+    formulation_number_scheme: str | None | object = UNSET
     cdd_vault_id: str | None | object = UNSET
 
 

@@ -26,12 +26,12 @@ class WorkspaceSettings(AggregateRoot):
         *,
         id: uuid.UUID,
         registration_rules: dict[str, Any] | None = None,
-        custom_field_definitions: dict[str, Any] | None = None,
+        custom_field_definitions: list[dict[str, Any]] | None = None,
         default_molecule_type: str | None = None,
-        audit_reason_policy: dict[str, Any] | None = None,
+        audit_reason_policy: str | None = None,
         signature_required_for: list[str] | None = None,
         audit_retention_days: int | None = None,
-        formulation_number_scheme: dict[str, Any] | None = None,
+        formulation_number_scheme: str | None = None,
         cdd_vault_id: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -39,12 +39,12 @@ class WorkspaceSettings(AggregateRoot):
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         self.registration_rules = registration_rules or {}
-        self.custom_field_definitions = custom_field_definitions or {}
+        self.custom_field_definitions = custom_field_definitions or []
         self.default_molecule_type = default_molecule_type
-        self.audit_reason_policy = audit_reason_policy or {}
+        self.audit_reason_policy = audit_reason_policy
         self.signature_required_for = signature_required_for or []
         self.audit_retention_days = audit_retention_days
-        self.formulation_number_scheme = formulation_number_scheme or {}
+        self.formulation_number_scheme = formulation_number_scheme
         self.cdd_vault_id = cdd_vault_id
 
     @property

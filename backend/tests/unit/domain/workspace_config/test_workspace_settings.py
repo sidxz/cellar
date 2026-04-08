@@ -13,12 +13,12 @@ class TestWorkspaceSettingsCreate:
         assert settings.id == ws_id
         assert settings.workspace_id == ws_id
         assert settings.registration_rules == {}
-        assert settings.custom_field_definitions == {}
+        assert settings.custom_field_definitions == []
         assert settings.default_molecule_type is None
-        assert settings.audit_reason_policy == {}
+        assert settings.audit_reason_policy is None
         assert settings.signature_required_for == []
         assert settings.audit_retention_days is None
-        assert settings.formulation_number_scheme == {}
+        assert settings.formulation_number_scheme is None
         assert settings.version == 1
 
     def test_explicit_values(self) -> None:
@@ -43,7 +43,7 @@ class TestWorkspaceSettingsUpdate:
         )
         assert settings.registration_rules == {"numbering": "MOL-{seq}"}
         assert settings.audit_retention_days == 90
-        assert settings.custom_field_definitions == {}  # unchanged
+        assert settings.custom_field_definitions == []  # unchanged
 
     def test_update_emits_event(self) -> None:
         settings = WorkspaceSettings.create_default(workspace_id=uuid.uuid4())

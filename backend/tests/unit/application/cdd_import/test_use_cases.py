@@ -97,6 +97,20 @@ class FakeApiKeyRepo:
         )
 
 
+class FakeUoW:
+    async def commit(self):
+        return []
+
+    async def rollback(self):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
 def _cdd_protocol_detail(protocol_id=1, name="Kinase IC50"):
     return {
         "id": protocol_id,
@@ -135,6 +149,7 @@ class TestListCddProtocols:
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Success)
@@ -149,6 +164,7 @@ class TestListCddProtocols:
             secret_provider=FakeSecretProvider(),
             settings_repo=FakeWorkspaceSettingsRepo(cdd_vault_id=None),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
@@ -160,6 +176,7 @@ class TestListCddProtocols:
             secret_provider=FakeSecretProvider(),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(has_active_key=False),
+            uow=FakeUoW(),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
@@ -171,6 +188,7 @@ class TestListCddProtocols:
             secret_provider=FakeSecretProvider(),  # empty — no secret stored
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
@@ -182,6 +200,7 @@ class TestListCddProtocols:
             secret_provider=FakeSecretProvider(),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         with pytest.raises(AuthorizationError):
             await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth(role="viewer"))
@@ -197,6 +216,7 @@ class TestListCddProtocols:
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
@@ -215,6 +235,7 @@ class TestPreviewCddProtocolImport:
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         result = await uc(
             PreviewCddProtocolImportQuery(workspace_id=WORKSPACE_ID, cdd_protocol_id=1),
@@ -233,6 +254,7 @@ class TestPreviewCddProtocolImport:
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
+            uow=FakeUoW(),
         )
         result = await uc(
             PreviewCddProtocolImportQuery(workspace_id=WORKSPACE_ID, cdd_protocol_id=999),

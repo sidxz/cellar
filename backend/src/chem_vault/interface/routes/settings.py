@@ -25,12 +25,12 @@ router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 
 class WorkspaceSettingsResponse(BaseModel):
     registration_rules: dict
-    custom_field_definitions: dict
+    custom_field_definitions: list
     default_molecule_type: str | None = None
-    audit_reason_policy: dict
+    audit_reason_policy: str | None = None
     signature_required_for: list[str]
     audit_retention_days: int | None = None
-    formulation_number_scheme: dict
+    formulation_number_scheme: str | None = None
     cdd_vault_id: str | None = None
     version: int
 
@@ -51,12 +51,12 @@ class WorkspaceSettingsResponse(BaseModel):
 
 class UpdateWorkspaceSettingsBody(BaseModel):
     registration_rules: dict | None = None
-    custom_field_definitions: dict | None = None
+    custom_field_definitions: list | None = None
     default_molecule_type: str | None = None
-    audit_reason_policy: dict | None = None
+    audit_reason_policy: str | None = None
     signature_required_for: list[str] | None = None
     audit_retention_days: int | None = None
-    formulation_number_scheme: dict | None = None
+    formulation_number_scheme: str | None = None
     cdd_vault_id: str | None = None
 
     model_config = {"extra": "forbid"}

@@ -15,6 +15,7 @@ from chem_vault.application.cdd_import.mapper import (
     map_cdd_protocol,
 )
 from chem_vault.application.shared.query import Query
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.secret_provider import SecretProvider
 from chem_vault.domain.workspace_config.repository import (
@@ -37,20 +38,23 @@ class PreviewCddProtocolImport:
         secret_provider: SecretProvider,
         settings_repo: WorkspaceSettingsRepository,
         api_key_repo: ExternalApiKeyRepository,
+        uow: UnitOfWork,
     ) -> None:
         self._gateway = gateway
         self._secret_provider = secret_provider
         self._settings_repo = settings_repo
         self._api_key_repo = api_key_repo
+        self._uow = uow
 
     async def __call__(
         self, input: PreviewCddProtocolImportQuery, auth: AuthContext | None = None
     ) -> Result[CddProtocolMappingResult, DomainError]:
         require_editor(auth)
 
-        config = await check_cdd_configured(
-            input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
-        )
+        async with self._uow:
+            config = await check_cdd_configured(
+                input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
+            )
         if isinstance(config, Failure):
             return config
 

@@ -45,16 +45,14 @@ class WorkspaceSettingsModel(Base, EntityModelMixin, VersionMixin):
     __tablename__ = "workspace_settings"
 
     registration_rules: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    custom_field_definitions: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    custom_field_definitions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     default_molecule_type: Mapped[str | None] = mapped_column(String(50))
-    audit_reason_policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    audit_reason_policy: Mapped[str | None] = mapped_column(JSON, nullable=True)
     signature_required_for: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list
     )
     audit_retention_days: Mapped[int | None] = mapped_column()
-    formulation_number_scheme: Mapped[dict] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
+    formulation_number_scheme: Mapped[str | None] = mapped_column(JSON, nullable=True)
     cdd_vault_id: Mapped[str | None] = mapped_column(String(50))
 
 

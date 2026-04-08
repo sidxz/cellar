@@ -1609,6 +1609,7 @@ def create_container(
                 secret_provider=c[SecretProvider],
                 settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
                 api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+                uow=uow,
             )
         return _f
 
