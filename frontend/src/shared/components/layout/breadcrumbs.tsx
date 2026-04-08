@@ -4,20 +4,24 @@ import { navigation } from "@/shared/lib/navigation";
 import { ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBreadcrumbOverrides } from "./breadcrumb-context";
 
 const allNavItems = navigation.flatMap((g) =>
   g.items.flatMap((i) => [i, ...(i.children ?? [])]),
 );
 
-function resolveLabel(href: string, segment: string): string {
-  const match = allNavItems.find((item) => item.href === href);
-  if (match) return match.title;
-  return segment.charAt(0).toUpperCase() + segment.slice(1);
-}
-
 export function Breadcrumbs() {
   const pathname = usePathname();
+  const overrides = useBreadcrumbOverrides();
   const segments = pathname.split("/").filter(Boolean);
+
+  function resolveLabel(href: string, segment: string): string {
+    const override = overrides.get(segment);
+    if (override) return override;
+    const match = allNavItems.find((item) => item.href === href);
+    if (match) return match.title;
+    return segment.charAt(0).toUpperCase() + segment.slice(1);
+  }
 
   if (segments.length === 0) {
     return <span className="text-sm font-medium">Dashboard</span>;
