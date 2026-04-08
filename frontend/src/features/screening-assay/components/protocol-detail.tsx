@@ -308,17 +308,14 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           <CardContent>
             <div className="space-y-4">
               {ontologySlots.map((slot) => {
-                const annotation = protocol.ontology_annotations?.find(
-                  (a) => a.slot_name === slot.name,
-                );
-                const currentTerms: OntologyTerm[] = (annotation?.terms ?? []).map(
-                  (t) => ({
-                    term_id: t.term_id,
-                    label: t.label,
-                    ontology_source: t.ontology_source,
-                    uri: t.uri,
-                  }),
-                );
+                // ontology_annotations is a dict keyed by slot name, e.g. { "bioassay_type": [...] }
+                const rawTerms = protocol.ontology_annotations?.[slot.name] ?? [];
+                const currentTerms: OntologyTerm[] = rawTerms.map((t) => ({
+                  term_id: t.term_id,
+                  label: t.label,
+                  ontology_source: t.ontology_source,
+                  uri: t.uri ?? null,
+                }));
                 return (
                   <div key={slot.id} className="grid gap-1.5">
                     <Label className="text-sm font-medium">

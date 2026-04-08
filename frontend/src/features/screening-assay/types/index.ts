@@ -252,7 +252,7 @@ export interface Protocol {
   readout_definitions: ReadoutDefinition[];
   condition_definitions: ConditionDefinition[];
   control_layouts: Record<string, string> | null;
-  ontology_annotations: OntologyAnnotation[] | null;
+  ontology_annotations: Record<string, OntologyAnnotationTerm[]> | null;
   project_ids: string[];
 }
 
