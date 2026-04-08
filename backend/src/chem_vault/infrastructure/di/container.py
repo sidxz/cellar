@@ -1590,4 +1590,42 @@ def create_container(
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
 
+    # --- CDD Import ---
+    import httpx
+
+    from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocol
+    from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocols
+    from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
+    from chem_vault.infrastructure.cdd.client import CddVaultClient
+
+    _httpx_client = httpx.AsyncClient()
+    container.define(CddVaultClient, Singleton(lambda: CddVaultClient(_httpx_client)))
+
+    def _cdd_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                gateway=c[CddVaultClient],
+                secret_provider=c[SecretProvider],
+                settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+                api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+            )
+        return _f
+
+    def _cdd_import_cmd(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportCddProtocol(
+            gateway=c[CddVaultClient],
+            secret_provider=c[SecretProvider],
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+            uow=uow,
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ListCddProtocols, _cdd_query(ListCddProtocols))
+    container.define(PreviewCddProtocolImport, _cdd_query(PreviewCddProtocolImport))
+    container.define(ImportCddProtocol, _cdd_import_cmd)
+
     return container

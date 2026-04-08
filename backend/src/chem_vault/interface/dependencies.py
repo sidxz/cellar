@@ -182,6 +182,9 @@ from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
+from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocol
+from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocols
+from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
 from chem_vault.application.workspace_config.create_external_api_key import CreateExternalApiKey
 from chem_vault.application.workspace_config.list_external_api_keys import ListExternalApiKeys
 from chem_vault.application.workspace_config.update_external_api_key import UpdateExternalApiKey
@@ -488,6 +491,11 @@ UploadAttachmentDep = Annotated[UploadAttachment, Depends(_get_use_case(UploadAt
 DeleteAttachmentDep = Annotated[DeleteAttachment, Depends(_get_use_case(DeleteAttachment))]
 ListAttachmentsDep = Annotated[ListAttachments, Depends(_get_use_case(ListAttachments))]
 DownloadAttachmentDep = Annotated[DownloadAttachment, Depends(_get_use_case(DownloadAttachment))]
+
+# --- CDD Import dependencies ---
+ListCddProtocolsDep = Annotated[ListCddProtocols, Depends(_get_use_case(ListCddProtocols))]
+PreviewCddProtocolImportDep = Annotated[PreviewCddProtocolImport, Depends(_get_use_case(PreviewCddProtocolImport))]
+ImportCddProtocolDep = Annotated[ImportCddProtocol, Depends(_get_use_case(ImportCddProtocol))]
 
 # --- Dashboard dependencies ---
 GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]
