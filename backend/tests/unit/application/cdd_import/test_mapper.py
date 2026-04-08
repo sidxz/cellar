@@ -153,3 +153,48 @@ class TestMapCddProtocol:
         rd = result.readouts[0]
         assert rd.aggregation == ReadoutAggregation.NONE
         assert rd.normalization == ReadoutNormalization.NONE
+
+    def test_calculated_outputs_excluded(self):
+        """Dose-response calculation outputs (Hill slope, R², IC50 value, etc.) are skipped."""
+        cdd = {
+            "id": 1,
+            "name": "DR Protocol",
+            "readout_definitions": [
+                {"id": 100, "name": "Concentration", "data_type": "Number", "unit_label": "uM"},
+                {"id": 101, "name": "% Inhibition", "data_type": "Number", "unit_label": "%"},
+                # All below are auto-generated calculation outputs:
+                {"id": 102, "name": "IC50", "data_type": "Number", "unit_label": "uM"},
+                {"id": 103, "name": "Hill slope", "data_type": "Number"},
+                {"id": 104, "name": "R squared", "data_type": "Number"},
+                {"id": 105, "name": "IC50 CI (Lower)", "data_type": "Number", "unit_label": "uM"},
+                {"id": 106, "name": "IC50 CI (Upper)", "data_type": "Number", "unit_label": "uM"},
+            ],
+            "calculations": [
+                {
+                    "id": 1,
+                    "class": "dose response calculation",
+                    "inputs": {"response_readout_definition": 101, "dose_readout_definition": 100},
+                    "outputs": {
+                        "intercept_readout_definitions": [[102, {"confidence_interval_readout_definitions": [105, 106]}]],
+                        "hill_slope_readout_definition": 103,
+                        "r_squared_readout_definition": 104,
+                    },
+                }
+            ],
+        }
+        result = map_cdd_protocol(cdd)
+        # Only the 2 user-defined readouts, not the 5 calculated ones
+        names = [r.name for r in result.readouts]
+        assert names == ["Concentration", "% Inhibition"]
+        assert len(result.readouts) == 2
+
+    def test_description_and_category_from_protocol_fields(self):
+        cdd = {
+            "id": 1,
+            "name": "Test",
+            "readout_definitions": [_cdd_readout()],
+            "protocol_fields": {"Category": "In vivo", "Description": "A test protocol"},
+        }
+        result = map_cdd_protocol(cdd)
+        assert result.category == "In vivo"
+        assert result.description == "A test protocol"
