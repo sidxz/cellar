@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -235,13 +236,11 @@ export function StorageBrowser() {
 
   if (!locations?.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <MapPin className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">No storage locations</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configure storage locations to track where samples are stored.
-        </p>
-      </div>
+      <EmptyState
+        icon={MapPin}
+        title="No storage locations"
+        description="Configure storage locations to track where samples are stored."
+      />
     );
   }
 

@@ -5,6 +5,7 @@ import { Package, Pipette, Move, Trash2 } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -153,13 +154,11 @@ export function SampleList({ batchId }: SampleListProps) {
 
   if (!batchId) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <Package className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">Select a batch</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Select a compound and batch to view samples.
-        </p>
-      </div>
+      <EmptyState
+        icon={Package}
+        title="Select a batch"
+        description="Select a compound and batch to view samples."
+      />
     );
   }
 
@@ -172,13 +171,11 @@ export function SampleList({ batchId }: SampleListProps) {
         height="300px"
         suppressFilters
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <Package className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No samples</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              No samples have been created for this batch yet.
-            </p>
-          </div>
+          <EmptyState
+            icon={Package}
+            title="No samples"
+            description="No samples have been created for this batch yet."
+          />
         }
       />
 

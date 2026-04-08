@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   Dialog,
@@ -191,16 +192,11 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
 
   if (!plate) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">Plate not found</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The plate may have been deleted or does not exist.
-        </p>
-        <Button variant="outline" className="mt-4" asChild>
-          <Link href="/inventory/plates">Back to Plates</Link>
-        </Button>
-      </div>
+      <EmptyState
+        icon={FlaskConical}
+        title="Plate not found"
+        description="The plate may have been deleted or does not exist."
+      />
     );
   }
 

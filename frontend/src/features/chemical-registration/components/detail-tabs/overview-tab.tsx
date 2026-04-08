@@ -12,6 +12,7 @@ import {
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import {
   Card,
   CardContent,
@@ -327,12 +328,11 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-              <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-              <p className="mt-4 text-sm text-muted-foreground">
-                Undisclosed structure
-              </p>
-            </div>
+            <EmptyState
+              icon={FlaskConical}
+              title="Undisclosed structure"
+              description="This compound's structure has not been disclosed."
+            />
           )}
         </CardContent>
       </Card>

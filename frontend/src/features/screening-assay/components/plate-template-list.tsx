@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName } from "@/shared/components/entity-name";
 import { usePlateTemplates, useDeletePlateTemplate } from "../hooks/use-plate-templates";
@@ -90,12 +91,7 @@ export function PlateTemplateListPage() {
     return (
       <div>
         <PageHeader onNew={() => setCreateOpen(true)} />
-        <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-          <p className="text-sm text-destructive">
-            Failed to load plate templates. Is the backend running?
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-        </div>
+        <ErrorState message="Failed to load plate templates. Is the backend running?" details={error.message} />
       </div>
     );
   }
@@ -112,21 +108,12 @@ export function PlateTemplateListPage() {
         suppressFilters
         onRowClick={handleRowClick}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <Grid3x3 className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No plate templates</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Design a plate layout template for your screening runs.
-            </p>
-            <Button
-              className="mt-4"
-              size="sm"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Plate Template
-            </Button>
-          </div>
+          <EmptyState
+            icon={Grid3x3}
+            title="No plate templates"
+            description="Design a plate layout template for your screening runs."
+            action={{ label: "New Plate Template", onClick: () => setCreateOpen(true), icon: Plus }}
+          />
         }
       />
 

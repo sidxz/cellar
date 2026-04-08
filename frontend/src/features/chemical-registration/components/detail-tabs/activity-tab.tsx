@@ -2,6 +2,7 @@
 
 import { FlaskConical } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { EmptyState } from "@/shared/components/empty-state";
 import {
   Card,
   CardContent,
@@ -41,13 +42,11 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
 
   if (!activity?.protocols?.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">No activity data</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          No activity data for this molecule.
-        </p>
-      </div>
+      <EmptyState
+        icon={FlaskConical}
+        title="No activity data"
+        description="No activity data for this molecule."
+      />
     );
   }
 

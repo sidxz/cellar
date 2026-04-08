@@ -6,6 +6,7 @@ import { FlaskRound, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { MoleculeName } from "@/shared/components/entity-name";
 import {
   Select,
@@ -174,15 +175,11 @@ export function SynthesisRequestListPage() {
           router.push(`/inventory/synthesis-requests/${req.id}`)
         }
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <FlaskRound className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">
-              No synthesis requests
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              No requests match the current filter.
-            </p>
-          </div>
+          <EmptyState
+            icon={FlaskRound}
+            title="No synthesis requests"
+            description="No requests match the current filter."
+          />
         }
       />
 

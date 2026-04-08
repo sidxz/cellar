@@ -5,6 +5,7 @@ import { Search, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -75,12 +76,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
   if (error) {
     return (
       <div>
-        <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-          <p className="text-sm text-destructive">
-            Failed to load saved searches. Is the backend running?
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-        </div>
+        <ErrorState message="Failed to load saved searches. Is the backend running?" details={error.message} />
       </div>
     );
   }
@@ -117,21 +113,12 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
           setCreateOpen(true);
         }}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <Search className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No saved searches</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Save a search to quickly re-run it later.
-            </p>
-            <Button
-              className="mt-4"
-              size="sm"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Saved Search
-            </Button>
-          </div>
+          <EmptyState
+            icon={Search}
+            title="No saved searches"
+            description="Save a search to quickly re-run it later."
+            action={{ label: "New Saved Search", onClick: () => setCreateOpen(true), icon: Plus }}
+          />
         }
       />
 

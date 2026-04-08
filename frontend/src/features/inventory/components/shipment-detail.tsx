@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
 import { OrgName, SampleName } from "@/shared/components/entity-name";
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
@@ -81,10 +82,11 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
 
   if (!shipment) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <Truck className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">Shipment not found</h3>
-      </div>
+      <EmptyState
+        icon={Truck}
+        title="Shipment not found"
+        description="The shipment may have been deleted or does not exist."
+      />
     );
   }
 

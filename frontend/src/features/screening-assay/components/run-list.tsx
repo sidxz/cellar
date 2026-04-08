@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { FlaskConical } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useRunsByProtocol } from "../hooks/use-runs";
 import {
@@ -89,13 +90,11 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
       suppressFilters
       onRowClick={onSelect ? (run) => onSelect(run.id) : undefined}
       emptyState={
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No runs</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create a run to start collecting screening data.
-          </p>
-        </div>
+        <EmptyState
+          icon={FlaskConical}
+          title="No runs"
+          description="Create a run to start collecting screening data."
+        />
       }
     />
   );

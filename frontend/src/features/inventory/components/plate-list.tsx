@@ -16,6 +16,7 @@ import {
 } from "@/shared/components/ui/alert-dialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import {
   Select,
   SelectContent,
@@ -155,12 +156,7 @@ export function PlateList() {
     return (
       <div>
         <PageHeader onNew={() => setRegisterOpen(true)} />
-        <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-          <p className="text-sm text-destructive">
-            Failed to load plates. Is the backend running?
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-        </div>
+        <ErrorState message="Failed to load plates. Is the backend running?" details={error.message} />
       </div>
     );
   }
@@ -222,21 +218,12 @@ export function PlateList() {
         suppressFilters
         onRowClick={(plate) => router.push(`/inventory/plates/${plate.id}`)}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No plates</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Register a plate to start tracking compound locations.
-            </p>
-            <Button
-              className="mt-4"
-              size="sm"
-              onClick={() => setRegisterOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Register Plate
-            </Button>
-          </div>
+          <EmptyState
+            icon={FlaskConical}
+            title="No plates"
+            description="Register a plate to start tracking compound locations."
+            action={{ label: "Register Plate", onClick: () => setRegisterOpen(true), icon: Plus }}
+          />
         }
       />
 

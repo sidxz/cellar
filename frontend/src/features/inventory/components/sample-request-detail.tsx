@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
 import {
   Dialog,
@@ -106,10 +107,11 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
 
   if (!request) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <ClipboardList className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">Request not found</h3>
-      </div>
+      <EmptyState
+        icon={ClipboardList}
+        title="Request not found"
+        description="The request may have been deleted or does not exist."
+      />
     );
   }
 

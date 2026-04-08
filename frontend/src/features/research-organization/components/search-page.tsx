@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookmarkPlus, ChevronDown, Download, ListPlus, Star } from "lucide-react";
+import { BookmarkPlus, ChevronDown, Download, ListPlus, Search, Star } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -480,12 +481,11 @@ export function SearchPage() {
               </>
             )}
             emptyState={
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-                <h3 className="text-lg font-semibold">No results</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Try adjusting your search criteria.
-                </p>
-              </div>
+              <EmptyState
+                icon={Search}
+                title="No results"
+                description="Try adjusting your search criteria."
+              />
             }
           />
 

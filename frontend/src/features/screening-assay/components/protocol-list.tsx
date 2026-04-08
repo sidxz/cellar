@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { TestTubes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import {
   Select,
@@ -85,12 +86,7 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-        <p className="text-sm text-destructive">
-          Failed to load protocols. Is the backend running?
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-      </div>
+      <ErrorState message="Failed to load protocols. Is the backend running?" details={error.message} />
     );
   }
 
@@ -126,13 +122,11 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
         suppressFilters
         onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <TestTubes className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No protocols</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create your first screening protocol to get started.
-            </p>
-          </div>
+          <EmptyState
+            icon={TestTubes}
+            title="No protocols"
+            description="Create your first screening protocol to get started."
+          />
         }
       />
     </div>

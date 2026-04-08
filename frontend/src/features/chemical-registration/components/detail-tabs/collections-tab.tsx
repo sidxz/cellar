@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, Plus, X } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
@@ -61,22 +62,12 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
       </div>
 
       {!collections?.length ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <FolderOpen className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No collections</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            This molecule is not in any collections yet.
-          </p>
-          <Button
-            className="mt-4"
-            size="sm"
-            variant="outline"
-            onClick={() => setPickerOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add to Collection
-          </Button>
-        </div>
+        <EmptyState
+          icon={FolderOpen}
+          title="No collections"
+          description="This molecule is not in any collections yet."
+          action={{ label: "Add to Collection", onClick: () => setPickerOpen(true), icon: Plus }}
+        />
       ) : (
         <div className="space-y-2">
           {collections.map((col) => (

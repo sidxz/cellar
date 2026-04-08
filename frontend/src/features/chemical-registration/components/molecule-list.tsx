@@ -7,6 +7,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useMolecules } from "../hooks/use-molecules";
 import { useSdfExport } from "../hooks/use-sdf-export";
@@ -169,12 +170,7 @@ export function MoleculeList() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-destructive/50 p-12 text-center">
-        <p className="text-sm text-destructive">
-          Failed to load compounds. Is the backend running?
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-      </div>
+      <ErrorState message="Failed to load compounds. Is the backend running?" details={error.message} />
     );
   }
 
@@ -233,19 +229,12 @@ export function MoleculeList() {
             </>
           )}
           emptyState={
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-              <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-              <h3 className="mt-4 text-lg font-semibold">
-                No compounds registered
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Register your first compound to get started.
-              </p>
-              <Button className="mt-4" onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Register Compound
-              </Button>
-            </div>
+            <EmptyState
+              icon={FlaskConical}
+              title="No compounds registered"
+              description="Register your first compound to get started."
+              action={{ label: "Register Compound", onClick: () => setDialogOpen(true), icon: Plus }}
+            />
           }
         />
       </div>

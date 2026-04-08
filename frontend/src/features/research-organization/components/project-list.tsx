@@ -6,6 +6,7 @@ import { FolderKanban, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -67,12 +68,7 @@ export function ProjectListPage() {
     return (
       <div>
         <PageHeader onNew={() => setCreateOpen(true)} />
-        <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-          <p className="text-sm text-destructive">
-            Failed to load projects. Is the backend running?
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-        </div>
+        <ErrorState message="Failed to load projects. Is the backend running?" details={error.message} />
       </div>
     );
   }
@@ -104,21 +100,12 @@ export function ProjectListPage() {
         suppressFilters
         onRowClick={(project) => router.push(`/projects/${project.id}`)}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <FolderKanban className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No projects</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create your first research project to get started.
-            </p>
-            <Button
-              className="mt-4"
-              size="sm"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
-            </Button>
-          </div>
+          <EmptyState
+            icon={FolderKanban}
+            title="No projects"
+            description="Create your first research project to get started."
+            action={{ label: "New Project", onClick: () => setCreateOpen(true), icon: Plus }}
+          />
         }
       />
 
