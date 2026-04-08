@@ -55,6 +55,7 @@ class WorkspaceSettingsModel(Base, EntityModelMixin, VersionMixin):
     formulation_number_scheme: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    cdd_vault_id: Mapped[str | None] = mapped_column(String(50))
 
 
 class ControlledVocabularyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):

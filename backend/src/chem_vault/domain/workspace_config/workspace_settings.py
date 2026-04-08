@@ -32,6 +32,7 @@ class WorkspaceSettings(AggregateRoot):
         signature_required_for: list[str] | None = None,
         audit_retention_days: int | None = None,
         formulation_number_scheme: dict[str, Any] | None = None,
+        cdd_vault_id: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -44,6 +45,7 @@ class WorkspaceSettings(AggregateRoot):
         self.signature_required_for = signature_required_for or []
         self.audit_retention_days = audit_retention_days
         self.formulation_number_scheme = formulation_number_scheme or {}
+        self.cdd_vault_id = cdd_vault_id
 
     @property
     def workspace_id(self) -> uuid.UUID:
@@ -65,7 +67,7 @@ class WorkspaceSettings(AggregateRoot):
         for key in (
             "registration_rules", "custom_field_definitions", "default_molecule_type",
             "audit_reason_policy", "signature_required_for", "audit_retention_days",
-            "formulation_number_scheme",
+            "formulation_number_scheme", "cdd_vault_id",
         ):
             if key in fields:
                 setattr(self, key, fields[key])
