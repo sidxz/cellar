@@ -198,7 +198,7 @@ export function useRemoveControlLayout(protocolId: string) {
 }
 
 export interface OntologyAnnotationInput {
-  slot_name: string;
+  slot: string;
   terms: Array<{
     term_id: string;
     label: string;

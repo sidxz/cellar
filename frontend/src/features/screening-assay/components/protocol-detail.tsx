@@ -337,7 +337,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                             removeOntologyAnnotation.mutate(slot.name);
                           } else {
                             setOntologyAnnotation.mutate({
-                              slot_name: slot.name,
+                              slot: slot.name,
                               terms: terms.map((t) => ({
                                 term_id: t.term_id,
                                 label: t.label,
