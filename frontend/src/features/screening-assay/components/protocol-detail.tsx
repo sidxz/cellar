@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Send,
   RotateCcw,
   Archive,
@@ -13,7 +12,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
-import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -39,8 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { DetailShell } from "@/shared/components/detail-shell";
 import {
   Dialog,
   DialogContent,
@@ -136,121 +134,89 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [clFormat, setClFormat] = useState("96");
   const [clTemplateId, setClTemplateId] = useState("");
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (!protocol) {
-    return (
-      <div className="text-center text-muted-foreground py-12">
-        Protocol not found.
-      </div>
-    );
-  }
-
-  const status = protocol.status as ProtocolStatus;
+  const query = { data: protocol, isLoading };
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.back()}
+    <>
+      <DetailShell
+        query={query}
+        backHref="/assays"
+        backLabel="Back to Protocols"
+        title={(p) => p.name}
+        badge={(p) => ({ status: p.status })}
+        notFoundMessage="Protocol not found."
+        actions={(p) => {
+          const s = p.status as ProtocolStatus;
+          return (
+            <>
+              {s === "draft" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditName(p.name);
+                      setEditDescription(p.description ?? "");
+                      setEditCategory(p.category ?? "");
+                      setEditOpen(true);
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => publishMutation.mutate(protocolId)}
+                    disabled={publishMutation.isPending}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {publishMutation.isPending ? "Publishing..." : "Publish"}
+                  </Button>
+                </>
+              )}
+              {s === "active" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => versionMutation.mutate(protocolId)}
+                    disabled={versionMutation.isPending}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    {versionMutation.isPending ? "Creating..." : "New Version"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() =>
+                      retireMutation.mutate({
+                        id: protocolId,
+                        reason: "Retired by user",
+                      })
+                    }
+                    disabled={retireMutation.isPending}
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    {retireMutation.isPending ? "Retiring..." : "Retire"}
+                  </Button>
+                </>
+              )}
+            </>
+          );
+        }}
       >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back
-      </Button>
-
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {protocol.name}
-            </h1>
-            <StatusBadge status={status} />
-            <Badge variant="outline" className="font-mono">
-              v{protocol.protocol_version}
-            </Badge>
-          </div>
-          {protocol.description && (
-            <p className="mt-1 text-muted-foreground">
-              {protocol.description}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {status === "draft" && (
+        {(protocol) => {
+          const status = protocol.status as ProtocolStatus;
+          return (
             <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setEditName(protocol.name);
-                  setEditDescription(protocol.description ?? "");
-                  setEditCategory(protocol.category ?? "");
-                  setEditOpen(true);
-                }}
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => publishMutation.mutate(protocolId)}
-                disabled={publishMutation.isPending}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                {publishMutation.isPending ? "Publishing..." : "Publish"}
-              </Button>
-            </>
-          )}
-          {status === "active" && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => versionMutation.mutate(protocolId)}
-                disabled={versionMutation.isPending}
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                {versionMutation.isPending ? "Creating..." : "New Version"}
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() =>
-                  retireMutation.mutate({
-                    id: protocolId,
-                    reason: "Retired by user",
-                  })
-                }
-                disabled={retireMutation.isPending}
-              >
-                <Archive className="mr-2 h-4 w-4" />
-                {retireMutation.isPending ? "Retiring..." : "Retire"}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* Metadata */}
       <Card>
         <CardHeader>
@@ -655,6 +621,10 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           <AttachmentList entityType="protocol" entityId={protocolId} />
         </div>
       </div>
+            </>
+          );
+        }}
+      </DetailShell>
 
       <CreateRunDialog
         protocolId={protocolId}
@@ -723,7 +693,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           <DialogHeader>
             <DialogTitle>Delete Draft Protocol</DialogTitle>
             <DialogDescription>
-              This will permanently delete &quot;{protocol.name}&quot; (v{protocol.protocol_version}).
+              This will permanently delete &quot;{protocol?.name}&quot; (v{protocol?.protocol_version}).
               This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -909,6 +879,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Archive, Pencil, FolderKanban } from "lucide-react";
+import { Archive, Pencil } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
-import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -21,7 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { MemberName } from "@/shared/components/entity-name";
 import { useProject, useArchiveProject } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
@@ -34,65 +32,23 @@ interface ProjectDetailProps {
 }
 
 export function ProjectDetail({ projectId }: ProjectDetailProps) {
-  const router = useRouter();
-  const { data: project, isLoading } = useProject(projectId);
+  const query = useProject(projectId);
   const archiveMutation = useArchiveProject();
 
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
-  // --- Loading ---
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
-  }
-
-  // --- Not found ---
-  if (!project) {
-    return (
-      <div className="text-center text-muted-foreground py-12">
-        <FolderKanban className="mx-auto h-12 w-12 text-muted-foreground/40" />
-        <p className="mt-4">Project not found.</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-4"
-          onClick={() => router.push("/projects")}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Projects
-        </Button>
-      </div>
-    );
-  }
-
-  const isArchived = project.status === "archived";
-
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push("/projects")}
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Projects
-      </Button>
-
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
-          <StatusBadge status={project.status} />
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!isArchived && (
+    <>
+      <DetailShell
+        query={query}
+        backHref="/projects"
+        backLabel="Back to Projects"
+        title={(p) => p.name}
+        badge={(p) => ({ status: p.status })}
+        notFoundMessage="Project not found."
+        actions={(p) =>
+          p.status !== "archived" ? (
             <>
               <Button
                 variant="outline"
@@ -111,72 +67,76 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                 Archive
               </Button>
             </>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      >
+        {(project) => (
+          <>
+            {/* Metadata Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Description</p>
+                    <p className="font-medium">
+                      {project.description || "\u2014"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <p className="font-medium capitalize">{project.status}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Created By</p>
+                    <p className="text-sm font-medium">
+                      <MemberName id={project.created_by} />
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-      {/* Metadata Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Description</p>
-              <p className="font-medium">
-                {project.description || "\u2014"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <p className="font-medium capitalize">{project.status}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Created By</p>
-              <p className="text-sm font-medium">
-                <MemberName id={project.created_by} />
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            {/* Collections */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Collections</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CollectionList projectId={projectId} />
+              </CardContent>
+            </Card>
 
-      {/* Collections */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Collections</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CollectionList projectId={projectId} />
-        </CardContent>
-      </Card>
+            {/* Saved Searches */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Saved Searches</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SavedSearchList projectId={projectId} />
+              </CardContent>
+            </Card>
 
-      {/* Saved Searches */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Saved Searches</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SavedSearchList projectId={projectId} />
-        </CardContent>
-      </Card>
-
-      {/* Members */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProjectMembers projectId={projectId} />
-        </CardContent>
-      </Card>
+            {/* Members */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Members</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ProjectMembers projectId={projectId} />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </DetailShell>
 
       {/* Edit dialog */}
       <CreateProjectDialog
         open={editOpen}
         onOpenChange={setEditOpen}
-        project={project}
+        project={query.data}
       />
 
       {/* Archive confirmation */}
@@ -185,7 +145,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Archive project?</AlertDialogTitle>
             <AlertDialogDescription>
-              Archiving &ldquo;{project.name}&rdquo; will hide it from the
+              Archiving &ldquo;{query.data?.name}&rdquo; will hide it from the
               active projects list. Collections and saved searches will be
               preserved.
             </AlertDialogDescription>
@@ -194,9 +154,11 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                archiveMutation.mutate(project.id, {
-                  onSuccess: () => setArchiveOpen(false),
-                });
+                if (query.data) {
+                  archiveMutation.mutate(query.data.id, {
+                    onSuccess: () => setArchiveOpen(false),
+                  });
+                }
               }}
               disabled={archiveMutation.isPending}
             >
@@ -205,6 +167,6 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

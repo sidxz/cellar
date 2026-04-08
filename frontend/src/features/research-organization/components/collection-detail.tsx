@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Download,
   FolderOpen,
   Pencil,
@@ -30,7 +29,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName, MoleculeName, OrgName } from "@/shared/components/entity-name";
 import {
@@ -53,10 +52,10 @@ interface MoleculeRow {
 
 export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const router = useRouter();
-  const { data: collection, isLoading } = useCollection(collectionId);
+  const query = useCollection(collectionId);
   const { data: moleculeIds, isLoading: moleculesLoading } =
     useCollectionMolecules(collectionId);
-  const { data: project } = useProject(collection?.project_id ?? undefined);
+  const { data: project } = useProject(query.data?.project_id ?? undefined);
   const deleteMutation = useDeleteCollection();
   const removeMutation = useRemoveMolecules(collectionId);
 
@@ -105,42 +104,15 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const { exportSdf } = useSdfExport();
   const handleExportSdf = useCallback(() => {
     if (!moleculeIds?.length) return;
-    exportSdf(moleculeIds, `${collection?.name ?? "collection"}.sdf`);
-  }, [moleculeIds, collection?.name, exportSdf]);
-
-  // --- Loading ---
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
-  }
-
-  // --- Not found ---
-  if (!collection) {
-    return (
-      <div className="text-center text-muted-foreground py-12">
-        <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground/40" />
-        <p className="mt-4">Collection not found.</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-4"
-          onClick={() => router.push("/collections")}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Collections
-        </Button>
-      </div>
-    );
-  }
+    exportSdf(moleculeIds, `${query.data?.name ?? "collection"}.sdf`);
+  }, [moleculeIds, query.data?.name, exportSdf]);
 
   const handleDelete = () => {
-    deleteMutation.mutate(collection.id, {
-      onSuccess: () => router.push("/collections"),
-    });
+    if (query.data) {
+      deleteMutation.mutate(query.data.id, {
+        onSuccess: () => router.push("/collections"),
+      });
+    }
   };
 
   const handleRemoveSelected = async () => {
@@ -150,165 +122,161 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push("/collections")}
+    <>
+      <DetailShell
+        query={query}
+        backHref="/collections"
+        backLabel="Back to Collections"
+        title={(c) => c.name}
+        notFoundMessage="Collection not found."
+        actions={() => (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportSdf}
+              disabled={!moleculeIds?.length}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export SDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+            <Button size="sm" onClick={() => setAddMolOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Molecules
+            </Button>
+          </>
+        )}
       >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Collections
-      </Button>
+        {(collection) => (
+          <>
+            {/* Metadata Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Description</p>
+                    <p className="font-medium">
+                      {collection.description || "\u2014"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Project</p>
+                    <p className="font-medium">
+                      {project ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 text-base font-medium"
+                          onClick={() => router.push(`/projects/${project.id}`)}
+                        >
+                          {project.name}
+                        </Button>
+                      ) : (
+                        "\u2014"
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Organization</p>
+                    <p className="font-medium">
+                      {collection.owned_by_org_id ? (
+                        <OrgName id={collection.owned_by_org_id} />
+                      ) : (
+                        "\u2014"
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Created By</p>
+                    <p className="text-sm font-medium">
+                      <MemberName id={collection.created_by} />
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {collection.name}
-          </h1>
-          <Badge variant="secondary">
-            {collection.molecule_count} molecule
-            {collection.molecule_count !== 1 ? "s" : ""}
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportSdf}
-            disabled={!moleculeIds?.length}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export SDF
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
-          <Button size="sm" onClick={() => setAddMolOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Molecules
-          </Button>
-        </div>
-      </div>
-
-      {/* Metadata Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Description</p>
-              <p className="font-medium">
-                {collection.description || "\u2014"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Project</p>
-              <p className="font-medium">
-                {project ? (
-                  <Button
-                    variant="link"
-                    className="h-auto p-0 text-base font-medium"
-                    onClick={() => router.push(`/projects/${project.id}`)}
-                  >
-                    {project.name}
-                  </Button>
-                ) : (
-                  "\u2014"
-                )}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Organization</p>
-              <p className="font-medium">
-                {collection.owned_by_org_id ? (
-                  <OrgName id={collection.owned_by_org_id} />
-                ) : (
-                  "\u2014"
-                )}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Created By</p>
-              <p className="text-sm font-medium">
-                <MemberName id={collection.created_by} />
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Molecules Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Molecules</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataGrid<MoleculeRow>
-            rowData={moleculeRows}
-            columnDefs={columnDefs}
-            loading={moleculesLoading}
-            height="400px"
-            suppressFilters
-            selectionToolbar={(selected) => (
-              <>
-                <span className="text-sm text-muted-foreground">
-                  {selected.length} selected
-                </span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => {
-                    setRemoveIds(selected.map((r) => r.id));
-                    setRemoveOpen(true);
-                  }}
-                >
-                  Remove Selected
-                </Button>
-              </>
-            )}
-            emptyState={
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  No molecules in this collection yet.
-                </p>
-                <Button
-                  className="mt-3"
-                  size="sm"
-                  onClick={() => setAddMolOpen(true)}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Molecules
-                </Button>
-              </div>
-            }
-          />
-        </CardContent>
-      </Card>
+            {/* Molecules Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Molecules
+                  <Badge variant="secondary" className="ml-2">
+                    {collection.molecule_count} molecule
+                    {collection.molecule_count !== 1 ? "s" : ""}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DataGrid<MoleculeRow>
+                  rowData={moleculeRows}
+                  columnDefs={columnDefs}
+                  loading={moleculesLoading}
+                  height="400px"
+                  suppressFilters
+                  selectionToolbar={(selected) => (
+                    <>
+                      <span className="text-sm text-muted-foreground">
+                        {selected.length} selected
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          setRemoveIds(selected.map((r) => r.id));
+                          setRemoveOpen(true);
+                        }}
+                      >
+                        Remove Selected
+                      </Button>
+                    </>
+                  )}
+                  emptyState={
+                    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
+                      <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        No molecules in this collection yet.
+                      </p>
+                      <Button
+                        className="mt-3"
+                        size="sm"
+                        onClick={() => setAddMolOpen(true)}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Molecules
+                      </Button>
+                    </div>
+                  }
+                />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </DetailShell>
 
       {/* Edit dialog */}
       <CreateCollectionDialog
         open={editOpen}
         onOpenChange={setEditOpen}
-        collection={collection}
+        collection={query.data}
       />
 
       {/* Delete confirmation */}
@@ -317,7 +285,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete collection?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &ldquo;{collection.name}&rdquo; and
+              This will permanently delete &ldquo;{query.data?.name}&rdquo; and
               remove all molecule associations. The molecules themselves will not
               be deleted.
             </AlertDialogDescription>
@@ -365,6 +333,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         open={addMolOpen}
         onOpenChange={setAddMolOpen}
       />
-    </div>
+    </>
   );
 }

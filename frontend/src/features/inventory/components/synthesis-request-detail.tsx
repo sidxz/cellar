@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, FlaskRound, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
 import {
   Dialog,
@@ -27,8 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { MoleculeName, OrgName, MemberName, BatchName, RouteName } from "@/shared/components/entity-name";
 import {
   useSynthesisRequest,
@@ -78,7 +76,7 @@ export function SynthesisRequestDetail({
   requestId,
 }: SynthesisRequestDetailProps) {
   const router = useRouter();
-  const { data: request, isLoading } = useSynthesisRequest(requestId);
+  const query = useSynthesisRequest(requestId);
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -95,184 +93,149 @@ export function SynthesisRequestDetail({
   const cancel = useCancelSynthesisRequest();
   const deleteMutation = useDeleteSynthesisRequest();
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (!request) {
-    return (
-      <EmptyState
-        icon={FlaskRound}
-        title="Request not found"
-        description="The request may have been deleted or does not exist."
-      />
-    );
-  }
-
-  const isTerminal = TERMINAL_STATUSES.has(request.status);
-  const isCancellable = CANCELLABLE_STATUSES.has(request.status);
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/inventory/synthesis-requests">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Synthesis Request{request.purpose ? ` \u2014 ${request.purpose.length > 40 ? request.purpose.slice(0, 40) + "\u2026" : request.purpose}` : ""}
-            </h1>
-            <StatusBadge
-              status={request.status}
-              label={SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-            />
-            <PriorityBadge priority={request.priority ?? ""} />
-          </div>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Requested by <MemberName id={request.requester_id} />
-          </p>
-        </div>
-
-        {/* Action buttons by status */}
-        {!isTerminal && (
-          <div className="flex flex-wrap gap-2">
-            {/* DRAFT */}
-            {request.status === "draft" && (
-              <>
+    <>
+      <DetailShell
+        query={query}
+        backHref="/inventory/synthesis-requests"
+        backLabel="Back to Synthesis Requests"
+        title={(r) =>
+          `Synthesis Request${r.purpose ? ` \u2014 ${r.purpose.length > 40 ? r.purpose.slice(0, 40) + "\u2026" : r.purpose}` : ""}`
+        }
+        badge={(r) => ({
+          status: r.status,
+          label: SYNTHESIS_REQUEST_STATUS_LABELS[r.status] ?? r.status,
+        })}
+        notFoundMessage="Request not found."
+        actions={(r) => {
+          const isTerminal = TERMINAL_STATUSES.has(r.status);
+          const isCancellable = CANCELLABLE_STATUSES.has(r.status);
+          if (isTerminal) return undefined;
+          return (
+            <>
+              {r.status === "draft" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditOpen(true)}
+                  >
+                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => submit.mutate(requestId)}
+                    disabled={submit.isPending}
+                  >
+                    {submit.isPending ? "Submitting..." : "Submit"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                </>
+              )}
+              {r.status === "submitted" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => approve.mutate(requestId)}
+                    disabled={approve.isPending}
+                  >
+                    {approve.isPending ? "Approving..." : "Approve"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    Reject
+                  </Button>
+                </>
+              )}
+              {r.status === "approved" && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setEditOpen(true)}
+                  onClick={() => setAssignOpen(true)}
                 >
-                  <Pencil className="mr-1 h-3.5 w-3.5" />
-                  Edit
+                  Assign
                 </Button>
+              )}
+              {r.status === "assigned" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setStartOpen(true)}
+                  >
+                    Start
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFlagInfeasibleOpen(true)}
+                  >
+                    Flag Infeasible
+                  </Button>
+                </>
+              )}
+              {r.status === "in_progress" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCompleteOpen(true)}
+                  >
+                    Complete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFailOpen(true)}
+                  >
+                    Fail
+                  </Button>
+                </>
+              )}
+              {r.status === "synthesis_complete" && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => submit.mutate(requestId)}
-                  disabled={submit.isPending}
+                  onClick={() => setFulfillOpen(true)}
                 >
-                  {submit.isPending ? "Submitting..." : "Submit"}
+                  Fulfill
                 </Button>
+              )}
+              {isCancellable && (
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => setDeleteOpen(true)}
-                  disabled={deleteMutation.isPending}
+                  onClick={() => cancel.mutate(requestId)}
+                  disabled={cancel.isPending}
                 >
-                  <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  Delete
+                  {cancel.isPending ? "Cancelling..." : "Cancel"}
                 </Button>
-              </>
-            )}
-
-            {/* SUBMITTED */}
-            {request.status === "submitted" && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => approve.mutate(requestId)}
-                  disabled={approve.isPending}
-                >
-                  {approve.isPending ? "Approving..." : "Approve"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRejectOpen(true)}
-                >
-                  Reject
-                </Button>
-              </>
-            )}
-
-            {/* APPROVED */}
-            {request.status === "approved" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAssignOpen(true)}
-              >
-                Assign
-              </Button>
-            )}
-
-            {/* ASSIGNED */}
-            {request.status === "assigned" && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setStartOpen(true)}
-                >
-                  Start
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFlagInfeasibleOpen(true)}
-                >
-                  Flag Infeasible
-                </Button>
-              </>
-            )}
-
-            {/* IN_PROGRESS */}
-            {request.status === "in_progress" && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCompleteOpen(true)}
-                >
-                  Complete
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFailOpen(true)}
-                >
-                  Fail
-                </Button>
-              </>
-            )}
-
-            {/* SYNTHESIS_COMPLETE */}
-            {request.status === "synthesis_complete" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFulfillOpen(true)}
-              >
-                Fulfill
-              </Button>
-            )}
-
-            {/* Cancel (available for draft/submitted/approved/assigned) */}
-            {isCancellable && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => cancel.mutate(requestId)}
-                disabled={cancel.isPending}
-              >
-                {cancel.isPending ? "Cancelling..." : "Cancel"}
-              </Button>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          );
+        }}
+      >
+        {(request) => (
+          <>
+      <div className="-mt-3 flex items-center gap-2">
+        <PriorityBadge priority={request.priority ?? ""} />
+        <span className="text-muted-foreground text-sm">
+          Requested by <MemberName id={request.requester_id} />
+        </span>
       </div>
 
       {/* Request Details */}
@@ -502,50 +465,57 @@ export function SynthesisRequestDetail({
           )}
         </Card>
       )}
+          </>
+        )}
+      </DetailShell>
 
       {/* Action dialogs */}
-      {request.status === "draft" && (
+      {query.data?.status === "draft" && (
         <EditSynthesisRequestDialog
-          request={request}
+          request={query.data}
           open={editOpen}
           onOpenChange={setEditOpen}
         />
       )}
-      <RejectDialog
-        request={request}
-        open={rejectOpen}
-        onOpenChange={setRejectOpen}
-      />
-      <AssignDialog
-        request={request}
-        open={assignOpen}
-        onOpenChange={setAssignOpen}
-      />
-      <StartDialog
-        request={request}
-        open={startOpen}
-        onOpenChange={setStartOpen}
-      />
-      <FlagInfeasibleDialog
-        request={request}
-        open={flagInfeasibleOpen}
-        onOpenChange={setFlagInfeasibleOpen}
-      />
-      <CompleteDialog
-        request={request}
-        open={completeOpen}
-        onOpenChange={setCompleteOpen}
-      />
-      <FulfillDialog
-        request={request}
-        open={fulfillOpen}
-        onOpenChange={setFulfillOpen}
-      />
-      <FailDialog
-        request={request}
-        open={failOpen}
-        onOpenChange={setFailOpen}
-      />
+      {query.data && (
+        <>
+          <RejectDialog
+            request={query.data}
+            open={rejectOpen}
+            onOpenChange={setRejectOpen}
+          />
+          <AssignDialog
+            request={query.data}
+            open={assignOpen}
+            onOpenChange={setAssignOpen}
+          />
+          <StartDialog
+            request={query.data}
+            open={startOpen}
+            onOpenChange={setStartOpen}
+          />
+          <FlagInfeasibleDialog
+            request={query.data}
+            open={flagInfeasibleOpen}
+            onOpenChange={setFlagInfeasibleOpen}
+          />
+          <CompleteDialog
+            request={query.data}
+            open={completeOpen}
+            onOpenChange={setCompleteOpen}
+          />
+          <FulfillDialog
+            request={query.data}
+            open={fulfillOpen}
+            onOpenChange={setFulfillOpen}
+          />
+          <FailDialog
+            request={query.data}
+            open={failOpen}
+            onOpenChange={setFailOpen}
+          />
+        </>
+      )}
 
       <ConfirmDeleteDialog
         open={deleteOpen}
@@ -559,7 +529,7 @@ export function SynthesisRequestDetail({
         }
         isPending={deleteMutation.isPending}
       />
-    </div>
+    </>
   );
 }
 

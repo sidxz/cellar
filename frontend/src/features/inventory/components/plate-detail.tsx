@@ -3,10 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
+import { Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   Dialog,
@@ -25,8 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { usePlate, usePlateChildren, useChangeStatus, useDerivePlate } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, WellMapping } from "../types/plates";
@@ -174,123 +173,101 @@ interface PlateDetailProps {
 
 export function PlateDetail({ plateId }: PlateDetailProps) {
   const router = useRouter();
-  const { data: plate, isLoading } = usePlate(plateId);
+  const query = usePlate(plateId);
   const { data: children } = usePlateChildren(plateId);
   const [wellMapOpen, setWellMapOpen] = useState(false);
   const [deriveOpen, setDeriveOpen] = useState(false);
   const changeStatus = useChangeStatus(plateId);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full" />
-        <Skeleton className="h-32 w-full" />
-      </div>
-    );
-  }
-
-  if (!plate) {
-    return (
-      <EmptyState
-        icon={FlaskConical}
-        title="Plate not found"
-        description="The plate may have been deleted or does not exist."
-      />
-    );
-  }
-
-  const wellCount = plate.well_map ? Object.keys(plate.well_map).length : 0;
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/inventory/plates">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-mono text-2xl font-bold tracking-tight">
-              {plate.barcode}
-            </h1>
-            <Badge variant={plateStatusVariant(plate.status as PlateStatus)}>
-              {plateStatusLabels[plate.status as PlateStatus] ?? plate.status}
-            </Badge>
-            <Badge variant="outline">
-              {plateTypeLabels[plate.plate_type as PlateType] ?? plate.plate_type}
-            </Badge>
-          </div>
-          <p className="mt-1 text-muted-foreground">{plate.plate_label}</p>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex shrink-0 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setWellMapOpen(true)}
-            disabled={plate.status === "disposed"}
-          >
-            <Grid3x3 className="mr-1.5 h-3.5 w-3.5" />
-            Map Wells
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/inventory/plates/import")}
-          >
-            <FileUp className="mr-1.5 h-3.5 w-3.5" />
-            Import Data
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDeriveOpen(true)}
-            disabled={plate.status === "disposed"}
-          >
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            Derive Plate
-          </Button>
-          <Select
-            value="__current__"
-            onValueChange={(v) => {
-              if (v !== "__current__") changeStatus.mutate(v);
-            }}
-          >
-            <SelectTrigger className="h-8 w-[150px] text-xs">
-              <SelectValue>Change Status</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__current__" disabled>Change Status</SelectItem>
-              {plate.status === "registered" && (
-                <>
-                  <SelectItem value="stored">Store</SelectItem>
-                  <SelectItem value="in_use">Check Out</SelectItem>
+    <>
+      <DetailShell
+        query={query}
+        backHref="/inventory/plates"
+        backLabel="Back to Plates"
+        title={(p) => p.barcode || "Plate"}
+        notFoundMessage="Plate not found."
+        actions={(p) => (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setWellMapOpen(true)}
+              disabled={p.status === "disposed"}
+            >
+              <Grid3x3 className="mr-1.5 h-3.5 w-3.5" />
+              Map Wells
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/inventory/plates/import")}
+            >
+              <FileUp className="mr-1.5 h-3.5 w-3.5" />
+              Import Data
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeriveOpen(true)}
+              disabled={p.status === "disposed"}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Derive Plate
+            </Button>
+            <Select
+              value="__current__"
+              onValueChange={(v) => {
+                if (v !== "__current__") changeStatus.mutate(v);
+              }}
+            >
+              <SelectTrigger className="h-8 w-[150px] text-xs">
+                <SelectValue>Change Status</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__current__" disabled>Change Status</SelectItem>
+                {p.status === "registered" && (
+                  <>
+                    <SelectItem value="stored">Store</SelectItem>
+                    <SelectItem value="in_use">Check Out</SelectItem>
+                    <SelectItem value="disposed">Dispose</SelectItem>
+                  </>
+                )}
+                {p.status === "in_use" && (
+                  <>
+                    <SelectItem value="stored">Return to Storage</SelectItem>
+                    <SelectItem value="depleted">Mark Depleted</SelectItem>
+                  </>
+                )}
+                {p.status === "stored" && (
+                  <>
+                    <SelectItem value="in_use">Check Out</SelectItem>
+                    <SelectItem value="depleted">Mark Depleted</SelectItem>
+                    <SelectItem value="disposed">Dispose</SelectItem>
+                  </>
+                )}
+                {p.status === "depleted" && (
                   <SelectItem value="disposed">Dispose</SelectItem>
-                </>
-              )}
-              {plate.status === "in_use" && (
-                <>
-                  <SelectItem value="stored">Return to Storage</SelectItem>
-                  <SelectItem value="depleted">Mark Depleted</SelectItem>
-                </>
-              )}
-              {plate.status === "stored" && (
-                <>
-                  <SelectItem value="in_use">Check Out</SelectItem>
-                  <SelectItem value="depleted">Mark Depleted</SelectItem>
-                  <SelectItem value="disposed">Dispose</SelectItem>
-                </>
-              )}
-              {plate.status === "depleted" && (
-                <SelectItem value="disposed">Dispose</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
+                )}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+      >
+        {(plate) => {
+          const wellCount = plate.well_map ? Object.keys(plate.well_map).length : 0;
+          return (
+            <>
+      <div className="flex flex-wrap items-center gap-2 -mt-3">
+        <Badge variant={plateStatusVariant(plate.status as PlateStatus)}>
+          {plateStatusLabels[plate.status as PlateStatus] ?? plate.status}
+        </Badge>
+        <Badge variant="outline">
+          {plateTypeLabels[plate.plate_type as PlateType] ?? plate.plate_type}
+        </Badge>
+        {plate.plate_label && (
+          <span className="text-muted-foreground">{plate.plate_label}</span>
+        )}
       </div>
 
       {/* Metadata card */}
@@ -404,15 +381,21 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           <AttachmentList entityType="plate" entityId={plateId} />
         </CardContent>
       </Card>
+            </>
+          );
+        }}
+      </DetailShell>
 
       {/* Well mapping dialog */}
-      <WellMappingDialog
-        open={wellMapOpen}
-        onOpenChange={setWellMapOpen}
-        plateId={plateId}
-        format={plate.format}
-        initialWellMap={plate.well_map}
-      />
+      {query.data && (
+        <WellMappingDialog
+          open={wellMapOpen}
+          onOpenChange={setWellMapOpen}
+          plateId={plateId}
+          format={query.data.format}
+          initialWellMap={query.data.well_map}
+        />
+      )}
 
       {/* Derive plate dialog */}
       <DerivePlateDialog
@@ -420,7 +403,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
         open={deriveOpen}
         onOpenChange={setDeriveOpen}
       />
-    </div>
+    </>
   );
 }
 

@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
-import Link from "next/link";
+import { PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { StatusBadge } from "@/shared/components/status-badge";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
 import { OrgName, SampleName } from "@/shared/components/entity-name";
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
@@ -21,7 +18,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { Textarea } from "@/shared/components/ui/textarea";
 import {
   useAddShipmentItem,
@@ -45,7 +42,7 @@ interface ShipmentDetailProps {
 
 export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
   const router = useRouter();
-  const { data: shipment, isLoading } = useShipment(shipmentId);
+  const query = useShipment(shipmentId);
   const [shipDialogOpen, setShipDialogOpen] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
@@ -56,235 +53,214 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
   const returnShipment = useReturnShipment();
   const deleteMutation = useDeleteShipment();
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (!shipment) {
-    return (
-      <EmptyState
-        icon={Truck}
-        title="Shipment not found"
-        description="The shipment may have been deleted or does not exist."
-      />
-    );
-  }
-
-  const isTerminal =
-    shipment.status === "delivered" || shipment.status === "returned";
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/inventory/shipments">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Shipment to <OrgName id={shipment.destination_org_id} />
-            </h1>
-            <StatusBadge
-              status={shipment.status}
-              label={SHIPMENT_STATUS_LABELS[shipment.status]}
-            />
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {SHIPMENT_STATUS_LABELS[shipment.status]} &middot;{" "}
-            {shipment.tracking_number ?? "No tracking number"}
-          </p>
-        </div>
-
-        {/* Action buttons */}
-        {!isTerminal && (
-          <div className="flex gap-2">
-            {shipment.status === "preparing" && (
-              <>
+    <>
+      <DetailShell
+        query={query}
+        backHref="/inventory/shipments"
+        backLabel="Back to Shipments"
+        title={(s) => s.tracking_number || "Shipment"}
+        badge={(s) => ({
+          status: s.status,
+          label: SHIPMENT_STATUS_LABELS[s.status],
+        })}
+        notFoundMessage="Shipment not found."
+        actions={(s) => {
+          const isTerminal =
+            s.status === "delivered" || s.status === "returned";
+          if (isTerminal) return undefined;
+          return (
+            <>
+              {s.status === "preparing" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditOpen(true)}
+                  >
+                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddItemOpen(true)}
+                  >
+                    Add Item
+                  </Button>
+                  <Button size="sm" onClick={() => setShipDialogOpen(true)}>
+                    <Truck className="mr-2 h-4 w-4" />
+                    Ship
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                </>
+              )}
+              {s.status === "shipped" && (
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditOpen(true)}
-                >
-                  <Pencil className="mr-1 h-3.5 w-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAddItemOpen(true)}
-                >
-                  Add Item
-                </Button>
-                <Button size="sm" onClick={() => setShipDialogOpen(true)}>
-                  <Truck className="mr-2 h-4 w-4" />
-                  Ship
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setDeleteOpen(true)}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  Delete
-                </Button>
-              </>
-            )}
-            {shipment.status === "shipped" && (
-              <Button
-                size="sm"
-                onClick={() =>
-                  markInTransit.mutate({ id: shipmentId })
-                }
-                disabled={markInTransit.isPending}
-              >
-                {markInTransit.isPending ? "Updating..." : "Mark In Transit"}
-              </Button>
-            )}
-            {shipment.status === "in_transit" && (
-              <>
-                <Button
-                  variant="outline"
                   size="sm"
                   onClick={() =>
-                    returnShipment.mutate({ id: shipmentId })
+                    markInTransit.mutate({ id: shipmentId })
                   }
-                  disabled={returnShipment.isPending}
+                  disabled={markInTransit.isPending}
                 >
-                  {returnShipment.isPending ? "Processing..." : "Return"}
+                  {markInTransit.isPending ? "Updating..." : "Mark In Transit"}
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={() => setDeliverOpen(true)}
-                >
-                  <PackageCheck className="mr-2 h-4 w-4" />
-                  Deliver
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+              )}
+              {s.status === "in_transit" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      returnShipment.mutate({ id: shipmentId })
+                    }
+                    disabled={returnShipment.isPending}
+                  >
+                    {returnShipment.isPending ? "Processing..." : "Return"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setDeliverOpen(true)}
+                  >
+                    <PackageCheck className="mr-2 h-4 w-4" />
+                    Deliver
+                  </Button>
+                </>
+              )}
+            </>
+          );
+        }}
+      >
+        {(shipment) => (
+          <>
+            <p className="-mt-3 text-sm text-muted-foreground">
+              Shipment to <OrgName id={shipment.destination_org_id} />
+            </p>
 
-      {/* Properties */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold">Shipment Details</h2>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Carrier</p>
-            <p className="font-medium">{shipment.carrier ?? "\u2014"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Tracking Number</p>
-            <p className="font-mono text-sm">
-              {shipment.tracking_number ?? "\u2014"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Shipping Date</p>
-            <p className="font-medium">{shipment.shipping_date ?? "\u2014"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Expected Arrival</p>
-            <p className="font-medium">
-              {shipment.expected_arrival_date ?? "\u2014"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Received Date</p>
-            <p className="font-medium">
-              {shipment.received_date ?? "\u2014"}
-            </p>
-          </div>
-          {shipment.shipping_conditions && (
-            <div className="col-span-2">
-              <p className="text-xs text-muted-foreground">
-                Shipping Conditions
+            {/* Properties */}
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold">Shipment Details</h2>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Carrier</p>
+                  <p className="font-medium">{shipment.carrier ?? "\u2014"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tracking Number</p>
+                  <p className="font-mono text-sm">
+                    {shipment.tracking_number ?? "\u2014"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Shipping Date</p>
+                  <p className="font-medium">{shipment.shipping_date ?? "\u2014"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Expected Arrival</p>
+                  <p className="font-medium">
+                    {shipment.expected_arrival_date ?? "\u2014"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Received Date</p>
+                  <p className="font-medium">
+                    {shipment.received_date ?? "\u2014"}
+                  </p>
+                </div>
+                {shipment.shipping_conditions && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">
+                      Shipping Conditions
+                    </p>
+                    <p className="font-medium">{shipment.shipping_conditions}</p>
+                  </div>
+                )}
+                {shipment.notes && (
+                  <div className="col-span-2 sm:col-span-3">
+                    <p className="text-xs text-muted-foreground">Notes</p>
+                    <p className="text-sm">{shipment.notes}</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Items */}
+            <div>
+              <h2 className="text-lg font-semibold">Items</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Samples included in this shipment.
               </p>
-              <p className="font-medium">{shipment.shipping_conditions}</p>
+              <div className="mt-4">
+                {shipment.items.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
+                    <p className="text-sm text-muted-foreground">No items added yet.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-4 py-2 text-left font-medium">
+                            Sample
+                          </th>
+                          <th className="px-4 py-2 text-right font-medium">
+                            Amount
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shipment.items.map((item) => (
+                          <tr key={item.id} className="border-b last:border-0">
+                            <td className="px-4 py-2 text-sm">
+                              <SampleName id={item.sample_id} />
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {item.amount_value}
+                            </td>
+                            <td className="px-4 py-2">{item.amount_unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          {shipment.notes && (
-            <div className="col-span-2 sm:col-span-3">
-              <p className="text-xs text-muted-foreground">Notes</p>
-              <p className="text-sm">{shipment.notes}</p>
-            </div>
-          )}
-        </div>
-      </Card>
 
-      {/* Items */}
-      <div>
-        <h2 className="text-lg font-semibold">Items</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Samples included in this shipment.
-        </p>
-        <div className="mt-4">
-          {shipment.items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-              <p className="text-sm text-muted-foreground">No items added yet.</p>
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-2 text-left font-medium">
-                      Sample
-                    </th>
-                    <th className="px-4 py-2 text-right font-medium">
-                      Amount
-                    </th>
-                    <th className="px-4 py-2 text-left font-medium">Unit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shipment.items.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="px-4 py-2 text-sm">
-                        <SampleName id={item.sample_id} />
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {item.amount_value}
-                      </td>
-                      <td className="px-4 py-2">{item.amount_unit}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Attachments */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Files</h2>
-        <FileUploadZone entityType="shipment" entityId={shipmentId} />
-        <AttachmentList entityType="shipment" entityId={shipmentId} />
-      </Card>
+            {/* Attachments */}
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold mb-4">Files</h2>
+              <FileUploadZone entityType="shipment" entityId={shipmentId} />
+              <AttachmentList entityType="shipment" entityId={shipmentId} />
+            </Card>
+          </>
+        )}
+      </DetailShell>
 
       {/* Dialogs */}
-      {shipment.status === "preparing" && (
+      {query.data?.status === "preparing" && (
         <EditShipmentDialog
-          shipment={shipment}
+          shipment={query.data}
           open={editOpen}
           onOpenChange={setEditOpen}
         />
       )}
-      <ShipDialog
-        shipment={shipment}
-        open={shipDialogOpen}
-        onOpenChange={setShipDialogOpen}
-      />
+      {query.data && (
+        <ShipDialog
+          shipment={query.data}
+          open={shipDialogOpen}
+          onOpenChange={setShipDialogOpen}
+        />
+      )}
       <AddItemDialog
         shipmentId={shipmentId}
         open={addItemOpen}
@@ -308,7 +284,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         }
         isPending={deleteMutation.isPending}
       />
-    </div>
+    </>
   );
 }
 

@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Play,
   CheckCircle2,
   ThumbsUp,
@@ -13,7 +11,6 @@ import {
   Unlock,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
-import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -30,8 +27,8 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Label } from "@/shared/components/ui/label";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { MemberName, ProtocolName } from "@/shared/components/entity-name";
 import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import {
@@ -55,8 +52,7 @@ interface RunDetailProps {
 }
 
 export function RunDetail({ runId }: RunDetailProps) {
-  const router = useRouter();
-  const { data: run, isLoading } = useRun(runId);
+  const query = useRun(runId);
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
   const approveMutation = useApproveRun();
@@ -70,26 +66,6 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [lockReason, setLockReason] = useState("");
   const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (!run) {
-    return (
-      <div className="text-center text-muted-foreground py-12">
-        Run not found.
-      </div>
-    );
-  }
-
-  const status = run.status as RunStatus;
 
   const handleReject = () => {
     rejectMutation.mutate(
@@ -128,177 +104,158 @@ export function RunDetail({ runId }: RunDetailProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.back()}
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back
-      </Button>
-
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            Run {run.run_date}
-          </h1>
-          <StatusBadge status={status} />
-          <Badge variant={run.is_locked ? "destructive" : "outline"}>
-            {run.is_locked ? (
-              <>
-                <Lock className="mr-1 h-3 w-3" />
-                Locked
-              </>
-            ) : (
-              <>
-                <Unlock className="mr-1 h-3 w-3" />
-                Unlocked
-              </>
-            )}
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Lifecycle buttons */}
-          {status === "draft" && (
-            <Button
-              size="sm"
-              onClick={() => startMutation.mutate(runId)}
-              disabled={startMutation.isPending}
-            >
-              <Play className="mr-2 h-4 w-4" />
-              {startMutation.isPending ? "Starting..." : "Start"}
-            </Button>
-          )}
-          {status === "in_progress" && (
-            <Button
-              size="sm"
-              onClick={() =>
-                completeMutation.mutate({
-                  id: runId,
-                  plate_count: run.plate_count,
-                  data_point_count: 0,
-                })
-              }
-              disabled={completeMutation.isPending}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              {completeMutation.isPending ? "Completing..." : "Complete"}
-            </Button>
-          )}
-          {status === "completed" && (
+    <>
+      <DetailShell
+        query={query}
+        backHref="/assays"
+        backLabel="Back to Protocols"
+        title={(r) => `Run ${r.run_date}`}
+        badge={(r) => ({ status: r.status })}
+        notFoundMessage="Run not found."
+        actions={(r) => {
+          const status = r.status as RunStatus;
+          return (
             <>
-              <Button
-                size="sm"
-                onClick={() => approveMutation.mutate(runId)}
-                disabled={approveMutation.isPending}
-              >
-                <ThumbsUp className="mr-2 h-4 w-4" />
-                {approveMutation.isPending ? "Approving..." : "Approve"}
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setRejectDialogOpen(true)}
-              >
-                <ThumbsDown className="mr-2 h-4 w-4" />
-                Reject
-              </Button>
+              {status === "draft" && (
+                <Button
+                  size="sm"
+                  onClick={() => startMutation.mutate(runId)}
+                  disabled={startMutation.isPending}
+                >
+                  <Play className="mr-2 h-4 w-4" />
+                  {startMutation.isPending ? "Starting..." : "Start"}
+                </Button>
+              )}
+              {status === "in_progress" && (
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    completeMutation.mutate({
+                      id: runId,
+                      plate_count: r.plate_count,
+                      data_point_count: 0,
+                    })
+                  }
+                  disabled={completeMutation.isPending}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {completeMutation.isPending ? "Completing..." : "Complete"}
+                </Button>
+              )}
+              {status === "completed" && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => approveMutation.mutate(runId)}
+                    disabled={approveMutation.isPending}
+                  >
+                    <ThumbsUp className="mr-2 h-4 w-4" />
+                    {approveMutation.isPending ? "Approving..." : "Approve"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setRejectDialogOpen(true)}
+                  >
+                    <ThumbsDown className="mr-2 h-4 w-4" />
+                    Reject
+                  </Button>
+                </>
+              )}
+              {status !== "draft" && !r.is_locked && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setLockDialogOpen(true)}
+                >
+                  <Lock className="mr-2 h-4 w-4" />
+                  Lock
+                </Button>
+              )}
+              {status !== "draft" && r.is_locked && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setUnlockDialogOpen(true)}
+                >
+                  <Unlock className="mr-2 h-4 w-4" />
+                  Unlock
+                </Button>
+              )}
             </>
-          )}
+          );
+        }}
+      >
+        {(run) => (
+          <>
+            {/* Metadata */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Protocol</p>
+                    <a
+                      href={`/assays/protocols/${run.protocol_id}`}
+                      className="text-sm text-primary hover:underline underline-offset-4"
+                    >
+                      <ProtocolName id={run.protocol_id} />
+                    </a>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Run Date</p>
+                    <p className="font-medium font-mono">{run.run_date}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Plate Format</p>
+                    <p className="font-medium">
+                      {run.plate_format
+                        ? PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ??
+                          run.plate_format
+                        : "\u2014"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Plates</p>
+                    <p className="font-medium">{run.plate_count}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Notes</p>
+                    <p className="font-medium">{run.notes ?? "\u2014"}</p>
+                  </div>
+                </div>
+                {run.lock_reason && (
+                  <div className="mt-4 rounded-md bg-destructive/10 p-3">
+                    <p className="text-sm font-medium text-destructive">
+                      Lock reason: {run.lock_reason}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Lock / Unlock */}
-          {status !== "draft" && !run.is_locked && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setLockDialogOpen(true)}
-            >
-              <Lock className="mr-2 h-4 w-4" />
-              Lock
-            </Button>
-          )}
-          {status !== "draft" && run.is_locked && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setUnlockDialogOpen(true)}
-            >
-              <Unlock className="mr-2 h-4 w-4" />
-              Unlock
-            </Button>
-          )}
-        </div>
-      </div>
+            {/* Data visualizations */}
+            <RunDataPanel run={run} />
 
-      {/* Metadata */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {/* Files */}
             <div>
-              <p className="text-sm text-muted-foreground">Protocol</p>
-              <a
-                href={`/assays/protocols/${run.protocol_id}`}
-                className="text-sm text-primary hover:underline underline-offset-4"
-              >
-                <ProtocolName id={run.protocol_id} />
-              </a>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Run Date</p>
-              <p className="font-medium font-mono">{run.run_date}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Plate Format</p>
-              <p className="font-medium">
-                {run.plate_format
-                  ? PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ??
-                    run.plate_format
-                  : "\u2014"}
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Paperclip className="h-4 w-4" />
+                Files
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Attachments associated with this run.
               </p>
+              <div className="mt-4 space-y-6">
+                <FileUploadZone entityType="run" entityId={runId} />
+                <AttachmentList entityType="run" entityId={runId} />
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Plates</p>
-              <p className="font-medium">{run.plate_count}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Notes</p>
-              <p className="font-medium">{run.notes ?? "\u2014"}</p>
-            </div>
-          </div>
-          {run.lock_reason && (
-            <div className="mt-4 rounded-md bg-destructive/10 p-3">
-              <p className="text-sm font-medium text-destructive">
-                Lock reason: {run.lock_reason}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Data visualizations */}
-      <RunDataPanel run={run} />
-
-      {/* Files */}
-      <div>
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Paperclip className="h-4 w-4" />
-          Files
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Attachments associated with this run.
-        </p>
-        <div className="mt-4 space-y-6">
-          <FileUploadZone entityType="run" entityId={runId} />
-          <AttachmentList entityType="run" entityId={runId} />
-        </div>
-      </div>
+          </>
+        )}
+      </DetailShell>
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
@@ -391,6 +348,6 @@ export function RunDetail({ runId }: RunDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
