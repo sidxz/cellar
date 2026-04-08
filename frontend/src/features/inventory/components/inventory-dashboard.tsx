@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Package, Boxes, MapPin, Plus } from "lucide-react";
+import { Package, Boxes, FlaskConical, MapPin, Plus } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -16,6 +16,7 @@ import { StorageBrowser } from "./storage-browser";
 import { CreateBatchDialog } from "./create-batch-dialog";
 import { CreateSampleDialog } from "./create-sample-dialog";
 import { CreateStorageLocationDialog } from "./create-storage-location-dialog";
+import { EmptyState } from "@/shared/components/empty-state";
 import { MoleculeSelector } from "./molecule-selector";
 import { BatchSelector } from "./batch-selector";
 
@@ -61,17 +62,27 @@ export function InventoryDashboard() {
                 setSelectedBatchId(null);
               }}
             />
-            {selectedMoleculeId && (
-              <Button onClick={() => setCreateBatchOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Batch
-              </Button>
-            )}
+            <Button
+              onClick={() => setCreateBatchOpen(true)}
+              disabled={!selectedMoleculeId}
+              title={!selectedMoleculeId ? "Select a compound first" : undefined}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Batch
+            </Button>
           </div>
-          <BatchList
-            moleculeId={selectedMoleculeId ?? undefined}
-            onSelectBatch={setSelectedBatchId}
-          />
+          {selectedMoleculeId ? (
+            <BatchList
+              moleculeId={selectedMoleculeId}
+              onSelectBatch={setSelectedBatchId}
+            />
+          ) : (
+            <EmptyState
+              icon={FlaskConical}
+              title="Select a compound"
+              description="Choose a compound above to view its batches."
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="samples" className="mt-4 space-y-4">
@@ -92,14 +103,30 @@ export function InventoryDashboard() {
                 />
               )}
             </div>
-            {selectedBatchId && (
-              <Button onClick={() => setCreateSampleOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Sample
-              </Button>
-            )}
+            <Button
+              onClick={() => setCreateSampleOpen(true)}
+              disabled={!selectedBatchId}
+              title={!selectedBatchId ? "Select a batch first" : undefined}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Sample
+            </Button>
           </div>
-          <SampleList batchId={selectedBatchId ?? undefined} />
+          {!selectedMoleculeId ? (
+            <EmptyState
+              icon={FlaskConical}
+              title="Select a compound"
+              description="Choose a compound and batch above to view samples."
+            />
+          ) : !selectedBatchId ? (
+            <EmptyState
+              icon={Boxes}
+              title="Select a batch"
+              description="Choose a batch above to view its samples."
+            />
+          ) : (
+            <SampleList batchId={selectedBatchId} />
+          )}
         </TabsContent>
 
         <TabsContent value="storage" className="mt-4 space-y-4">
