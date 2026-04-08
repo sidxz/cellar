@@ -5,7 +5,7 @@ import httpx
 import respx
 
 from chem_vault.infrastructure.cdd.client import CddVaultClient
-from chem_vault.infrastructure.cdd.errors import (
+from chem_vault.application.cdd_import.errors import (
     CddAuthError,
     CddConnectionError,
     CddNotFoundError,

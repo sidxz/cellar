@@ -10,8 +10,9 @@ from typing import Any
 
 import httpx
 
-from chem_vault.infrastructure.cdd.errors import (
+from chem_vault.application.cdd_import.errors import (
     CddAuthError,
+    CddClientError,
     CddConnectionError,
     CddNotFoundError,
 )
@@ -44,12 +45,16 @@ class CddVaultClient:
                 "CDD resource not found",
                 status_code=404,
             )
-        response.raise_for_status()
+        if not response.is_success:
+            raise CddClientError(
+                f"CDD API returned {response.status_code}",
+                status_code=response.status_code,
+            )
 
     async def _get(self, url: str, api_key: str) -> Any:
         try:
             response = await self._http.get(url, headers=self._headers(api_key), timeout=30.0)
-        except httpx.ConnectError as exc:
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
             raise CddConnectionError(f"Cannot reach CDD Vault: {exc}") from exc
         self._check_response(response)
         return response.json()

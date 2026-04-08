@@ -21,7 +21,7 @@ from chem_vault.domain.workspace_config.repository import (
     ExternalApiKeyRepository,
     WorkspaceSettingsRepository,
 )
-from chem_vault.infrastructure.cdd.errors import CddAuthError, CddConnectionError, CddNotFoundError
+from chem_vault.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -22,7 +22,7 @@ from chem_vault.application.cdd_import.preview_cdd_protocol_import import (
 )
 from chem_vault.domain.screening_assay.enums import ReadoutDataType
 from chem_vault.domain.shared.errors import AuthorizationError
-from chem_vault.infrastructure.cdd.errors import CddAuthError
+from chem_vault.application.cdd_import.errors import CddAuthError
 
 from tests.fakes.fake_auth import FakeAuth
 

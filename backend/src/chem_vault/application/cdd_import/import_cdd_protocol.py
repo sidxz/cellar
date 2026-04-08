@@ -26,8 +26,8 @@ from chem_vault.domain.workspace_config.repository import (
     ExternalApiKeyRepository,
     WorkspaceSettingsRepository,
 )
-from chem_vault.infrastructure.cdd.errors import CddAuthError, CddConnectionError, CddNotFoundError
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,7 +46,7 @@ class ImportCddProtocol:
         api_key_repo: ExternalApiKeyRepository,
         uow: UnitOfWork,
         protocol_repo: ProtocolRepository,
-        dispatcher: EventDispatcher,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._gateway = gateway
         self._secret_provider = secret_provider
