@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, AlertCircle } from "lucide-react";
-import { BreadcrumbOverride } from "@/shared/components/layout/breadcrumb-context";
+import { useBreadcrumbOverride } from "@/shared/components/layout/breadcrumb-context";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { StatusBadge } from "@/shared/components/status-badge";
@@ -31,6 +31,10 @@ export function DetailShell<T>({
   children,
 }: DetailShellProps<T>) {
   const pathname = usePathname();
+  const segments = pathname.split("/").filter(Boolean);
+  const lastSegment = segments[segments.length - 1] ?? "";
+  const entityTitle = query.data ? title(query.data) : "";
+  useBreadcrumbOverride(lastSegment, entityTitle);
 
   if (query.isLoading) {
     return (
@@ -61,35 +65,30 @@ export function DetailShell<T>({
   }
 
   const entity = query.data;
-  const entityTitle = title(entity);
-  const segments = pathname.split("/").filter(Boolean);
-  const lastSegment = segments[segments.length - 1];
   const badgeProps = badge?.(entity);
 
   return (
-    <BreadcrumbOverride segment={lastSegment} label={entityTitle}>
-      <div className="space-y-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={backHref}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {backLabel}
-          </Link>
-        </Button>
+    <div className="space-y-6">
+      <Button variant="ghost" size="sm" asChild>
+        <Link href={backHref}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {backLabel}
+        </Link>
+      </Button>
 
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">{entityTitle}</h1>
-            {badgeProps && (
-              <StatusBadge status={badgeProps.status} label={badgeProps.label} />
-            )}
-          </div>
-          {actions && (
-            <div className="flex items-center gap-2">{actions(entity)}</div>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold tracking-tight">{entityTitle}</h1>
+          {badgeProps && (
+            <StatusBadge status={badgeProps.status} label={badgeProps.label} />
           )}
         </div>
-
-        {children(entity)}
+        {actions && (
+          <div className="flex items-center gap-2">{actions(entity)}</div>
+        )}
       </div>
-    </BreadcrumbOverride>
+
+      {children(entity)}
+    </div>
   );
 }
