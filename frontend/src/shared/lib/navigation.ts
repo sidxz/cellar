@@ -73,6 +73,7 @@ export const navigation: NavGroup[] = [
       { title: "Projects", href: "/projects", icon: FolderKanban },
       { title: "Collections", href: "/collections", icon: Library },
       { title: "Search", href: "/search", icon: Search },
+      { title: "Saved Searches", href: "/saved-searches", icon: BookOpen },
     ],
   },
   {
