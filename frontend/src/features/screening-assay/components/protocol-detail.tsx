@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -96,19 +97,6 @@ interface ProtocolDetailProps {
   protocolId: string;
 }
 
-function statusBadgeVariant(
-  status: ProtocolStatus
-): "default" | "outline" | "destructive" {
-  switch (status) {
-    case "active":
-      return "default";
-    case "draft":
-      return "outline";
-    case "retired":
-      return "destructive";
-  }
-}
-
 export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const router = useRouter();
   const { data: protocol, isLoading } = useProtocol(protocolId);
@@ -187,7 +175,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             <h1 className="text-2xl font-bold tracking-tight">
               {protocol.name}
             </h1>
-            <Badge variant={statusBadgeVariant(status)}>{status}</Badge>
+            <StatusBadge status={status} />
             <Badge variant="outline" className="font-mono">
               v{protocol.protocol_version}
             </Badge>

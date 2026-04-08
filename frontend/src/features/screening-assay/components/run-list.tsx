@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { FlaskConical } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useRunsByProtocol } from "../hooks/use-runs";
@@ -11,28 +12,11 @@ import {
   PLATE_FORMAT_LABELS,
   type PlateFormat,
   type Run,
-  type RunStatus,
 } from "../types";
 
 interface RunListProps {
   protocolId: string;
   onSelect?: (runId: string) => void;
-}
-
-function statusBadgeVariant(
-  status: RunStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "approved":
-      return "default";
-    case "completed":
-    case "in_progress":
-      return "secondary";
-    case "rejected":
-      return "destructive";
-    case "draft":
-      return "outline";
-  }
 }
 
 export function RunList({ protocolId, onSelect }: RunListProps) {
@@ -62,9 +46,7 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
         field: "status",
         width: 110,
         cellRenderer: (params: ICellRendererParams<Run>) => (
-          <Badge variant={statusBadgeVariant(params.value as RunStatus)}>
-            {params.value}
-          </Badge>
+          <StatusBadge status={params.value} />
         ),
       },
       {

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { ArrowLeft, FlaskRound, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
@@ -59,39 +60,6 @@ interface SynthesisRequestDetailProps {
   requestId: string;
 }
 
-function statusVariant(
-  s: SynthesisRequestStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "fulfilled":
-      return "default";
-    case "approved":
-    case "assigned":
-    case "in_progress":
-    case "synthesis_complete":
-      return "secondary";
-    case "rejected":
-    case "cancelled":
-    case "failed":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
-
-function priorityVariant(
-  p: string
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (p) {
-    case "critical":
-      return "destructive";
-    case "urgent":
-      return "secondary";
-    default:
-      return "outline";
-  }
-}
-
 const TERMINAL_STATUSES = new Set<SynthesisRequestStatus>([
   "fulfilled",
   "rejected",
@@ -120,6 +88,7 @@ export function SynthesisRequestDetail({
   const [fulfillOpen, setFulfillOpen] = useState(false);
   const [failOpen, setFailOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const submit = useSubmitSynthesisRequest();
   const approve = useApproveSynthesisRequest();
@@ -163,15 +132,11 @@ export function SynthesisRequestDetail({
             <h1 className="text-2xl font-bold tracking-tight">
               Synthesis Request{request.purpose ? ` \u2014 ${request.purpose.length > 40 ? request.purpose.slice(0, 40) + "\u2026" : request.purpose}` : ""}
             </h1>
-            <Badge variant={statusVariant(request.status)}>
-              {SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-            </Badge>
-            <Badge variant={priorityVariant(request.priority)}>
-              {request.priority
-                ? request.priority.charAt(0).toUpperCase() +
-                  request.priority.slice(1)
-                : "\u2014"}
-            </Badge>
+            <StatusBadge
+              status={request.status}
+              label={SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+            />
+            <PriorityBadge priority={request.priority ?? ""} />
           </div>
           <p className="mt-1 text-muted-foreground text-sm">
             Requested by <MemberName id={request.requester_id} />
@@ -203,17 +168,11 @@ export function SynthesisRequestDetail({
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => {
-                    if (confirm("Delete this synthesis request? This cannot be undone.")) {
-                      deleteMutation.mutate(requestId, {
-                        onSuccess: () => router.push("/inventory/synthesis-requests"),
-                      });
-                    }
-                  }}
+                  onClick={() => setDeleteOpen(true)}
                   disabled={deleteMutation.isPending}
                 >
                   <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                  Delete
                 </Button>
               </>
             )}
@@ -368,9 +327,11 @@ export function SynthesisRequestDetail({
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">Status</p>
-            <Badge variant={statusVariant(request.status)} className="mt-1">
-              {SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-            </Badge>
+            <StatusBadge
+              status={request.status}
+              label={SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+              className="mt-1"
+            />
           </div>
           {request.approved_by && (
             <div>
@@ -584,6 +545,19 @@ export function SynthesisRequestDetail({
         request={request}
         open={failOpen}
         onOpenChange={setFailOpen}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Synthesis Request"
+        description="This will permanently delete this synthesis request. This action cannot be undone."
+        onConfirm={() =>
+          deleteMutation.mutate(requestId, {
+            onSuccess: () => router.push("/inventory/synthesis-requests"),
+          })
+        }
+        isPending={deleteMutation.isPending}
       />
     </div>
   );

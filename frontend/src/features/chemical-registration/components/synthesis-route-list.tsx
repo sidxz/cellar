@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { GitBranch, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import {
@@ -35,25 +35,6 @@ import {
   type SynthesisRouteSummary,
 } from "../types/synthesis-route";
 import { SynthesisRouteDetail } from "./synthesis-route-detail";
-
-// ---------------------------------------------------------------------------
-// Badge helpers
-// ---------------------------------------------------------------------------
-
-function routeStatusVariant(
-  s: RouteStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "preferred":
-      return "default";
-    case "validated":
-      return "secondary";
-    case "deprecated":
-      return "destructive";
-    default:
-      return "outline"; // draft
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Create Route Dialog
@@ -208,14 +189,12 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
         headerName: "Status",
         field: "status",
         width: 120,
-        cellRenderer: (params: ICellRendererParams<SynthesisRouteSummary>) => {
-          const status = params.value as RouteStatus;
-          return (
-            <Badge variant={routeStatusVariant(status)}>
-              {ROUTE_STATUS_LABELS[status] ?? status}
-            </Badge>
-          );
-        },
+        cellRenderer: (params: ICellRendererParams<SynthesisRouteSummary>) => (
+          <StatusBadge
+            status={params.value}
+            label={ROUTE_STATUS_LABELS[params.value as RouteStatus] ?? params.value}
+          />
+        ),
       },
       {
         headerName: "Steps",

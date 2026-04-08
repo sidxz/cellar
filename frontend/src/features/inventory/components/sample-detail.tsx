@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, Package, Pipette, Move, Trash2, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
@@ -41,23 +41,6 @@ import {
 
 interface SampleDetailProps {
   sampleId: string;
-}
-
-function statusBadgeVariant(
-  status: SampleStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "available":
-      return "default";
-    case "quarantined":
-      return "secondary";
-    case "depleted":
-    case "expired":
-    case "disposed":
-      return "destructive";
-    default:
-      return "outline";
-  }
 }
 
 const TERMINAL_STATUSES = new Set(["depleted", "disposed"]);
@@ -113,12 +96,10 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
             <h1 className="text-2xl font-bold tracking-tight font-mono">
               {sample.barcode}
             </h1>
-            <Badge
-              variant={statusBadgeVariant(sample.status as SampleStatus)}
-            >
-              {SAMPLE_STATUS_LABELS[sample.status as SampleStatus] ??
-                sample.status}
-            </Badge>
+            <StatusBadge
+              status={sample.status}
+              label={SAMPLE_STATUS_LABELS[sample.status as SampleStatus] ?? sample.status}
+            />
           </div>
           {batch && (
             <p className="mt-1 text-muted-foreground">

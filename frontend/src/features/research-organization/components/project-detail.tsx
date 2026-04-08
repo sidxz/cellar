@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -28,13 +28,6 @@ import { CreateProjectDialog } from "./create-project-dialog";
 import { CollectionList } from "./collection-list";
 import { SavedSearchList } from "./saved-search-list";
 import { ProjectMembers } from "./project-members";
-import type { ProjectStatus } from "../types";
-
-function statusBadgeVariant(
-  status: ProjectStatus
-): "default" | "destructive" {
-  return status === "active" ? "default" : "destructive";
-}
 
 interface ProjectDetailProps {
   projectId: string;
@@ -95,9 +88,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
-          <Badge variant={statusBadgeVariant(project.status as ProjectStatus)}>
-            {project.status}
-          </Badge>
+          <StatusBadge status={project.status} />
         </div>
 
         <div className="flex items-center gap-2">

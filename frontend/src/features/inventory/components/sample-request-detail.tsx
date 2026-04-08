@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, ClipboardList, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useAuthz } from "@sentinel-auth/nextjs";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
@@ -48,36 +48,6 @@ import {
 
 interface SampleRequestDetailProps {
   requestId: string;
-}
-
-function statusVariant(
-  s: SampleRequestStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "fulfilled":
-      return "default";
-    case "approved":
-    case "preparing":
-      return "secondary";
-    case "rejected":
-    case "cancelled":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
-
-function priorityVariant(
-  p: RequestPriority
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (p) {
-    case "critical":
-      return "destructive";
-    case "urgent":
-      return "secondary";
-    default:
-      return "outline";
-  }
 }
 
 const TERMINAL_STATUSES = new Set<SampleRequestStatus>([
@@ -131,12 +101,14 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
             <h1 className="text-2xl font-bold tracking-tight">
               Sample Request{request.purpose ? ` \u2014 ${request.purpose.length > 40 ? request.purpose.slice(0, 40) + "\u2026" : request.purpose}` : ""}
             </h1>
-            <Badge variant={statusVariant(request.status)}>
-              {SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-            </Badge>
-            <Badge variant={priorityVariant(request.priority)}>
-              {REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
-            </Badge>
+            <StatusBadge
+              status={request.status}
+              label={SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+            />
+            <PriorityBadge
+              priority={request.priority}
+              label={REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
+            />
           </div>
           <p className="mt-1 text-muted-foreground text-sm">
             Requested by <MemberName id={request.requester_id} />

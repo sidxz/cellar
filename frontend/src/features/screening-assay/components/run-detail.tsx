@@ -13,6 +13,7 @@ import {
   Unlock,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -51,22 +52,6 @@ import { RunDataPanel } from "./run-data-panel";
 
 interface RunDetailProps {
   runId: string;
-}
-
-function statusBadgeVariant(
-  status: RunStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "approved":
-      return "default";
-    case "completed":
-    case "in_progress":
-      return "secondary";
-    case "rejected":
-      return "destructive";
-    case "draft":
-      return "outline";
-  }
 }
 
 export function RunDetail({ runId }: RunDetailProps) {
@@ -160,7 +145,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           <h1 className="text-2xl font-bold tracking-tight">
             Run {run.run_date}
           </h1>
-          <Badge variant={statusBadgeVariant(status)}>{status}</Badge>
+          <StatusBadge status={status} />
           <Badge variant={run.is_locked ? "destructive" : "outline"}>
             {run.is_locked ? (
               <>

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Truck } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
@@ -24,23 +24,6 @@ import {
   type ShipmentSummary,
 } from "../types/shipment";
 import { CreateShipmentDialog } from "./create-shipment-dialog";
-
-function statusBadgeVariant(
-  status: ShipmentStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "delivered":
-      return "default";
-    case "shipped":
-    case "in_transit":
-      return "secondary";
-    case "returned":
-      return "destructive";
-    case "preparing":
-    default:
-      return "outline";
-  }
-}
 
 export function ShipmentListPage() {
   const router = useRouter();
@@ -79,10 +62,10 @@ export function ShipmentListPage() {
         field: "status",
         width: 130,
         cellRenderer: (params: ICellRendererParams<ShipmentSummary>) => (
-          <Badge variant={statusBadgeVariant(params.value as ShipmentStatus)}>
-            {SHIPMENT_STATUS_LABELS[params.value as ShipmentStatus] ??
-              params.value}
-          </Badge>
+          <StatusBadge
+            status={params.value}
+            label={SHIPMENT_STATUS_LABELS[params.value as ShipmentStatus] ?? params.value}
+          />
         ),
       },
       {

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { ArrowLeft, PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Card } from "@/shared/components/ui/card";
@@ -42,23 +43,6 @@ interface ShipmentDetailProps {
   shipmentId: string;
 }
 
-function statusBadgeVariant(
-  status: ShipmentStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "delivered":
-      return "default";
-    case "shipped":
-    case "in_transit":
-      return "secondary";
-    case "returned":
-      return "destructive";
-    case "preparing":
-    default:
-      return "outline";
-  }
-}
-
 export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
   const router = useRouter();
   const { data: shipment, isLoading } = useShipment(shipmentId);
@@ -66,6 +50,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const markInTransit = useMarkInTransit();
   const returnShipment = useReturnShipment();
@@ -107,9 +92,10 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
             <h1 className="text-2xl font-bold tracking-tight">
               Shipment to <OrgName id={shipment.destination_org_id} />
             </h1>
-            <Badge variant={statusBadgeVariant(shipment.status)}>
-              {SHIPMENT_STATUS_LABELS[shipment.status]}
-            </Badge>
+            <StatusBadge
+              status={shipment.status}
+              label={SHIPMENT_STATUS_LABELS[shipment.status]}
+            />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {SHIPMENT_STATUS_LABELS[shipment.status]} &middot;{" "}
@@ -144,17 +130,11 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => {
-                    if (confirm("Delete this shipment? This cannot be undone.")) {
-                      deleteMutation.mutate(shipmentId, {
-                        onSuccess: () => router.push("/inventory/shipments"),
-                      });
-                    }
-                  }}
+                  onClick={() => setDeleteOpen(true)}
                   disabled={deleteMutation.isPending}
                 >
                   <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                  Delete
                 </Button>
               </>
             )}
@@ -314,6 +294,19 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         shipmentId={shipmentId}
         open={deliverOpen}
         onOpenChange={setDeliverOpen}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Shipment"
+        description="This will permanently delete this shipment. This action cannot be undone."
+        onConfirm={() =>
+          deleteMutation.mutate(shipmentId, {
+            onSuccess: () => router.push("/inventory/shipments"),
+          })
+        }
+        isPending={deleteMutation.isPending}
       />
     </div>
   );

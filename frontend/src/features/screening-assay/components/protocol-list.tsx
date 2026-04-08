@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { TestTubes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import {
@@ -18,25 +18,11 @@ import { useProtocols } from "../hooks/use-protocols";
 import {
   PROTOCOL_TYPE_LABELS,
   type Protocol,
-  type ProtocolStatus,
   type ProtocolType,
 } from "../types";
 
 interface ProtocolListProps {
   onSelect?: (protocolId: string) => void;
-}
-
-function statusBadgeVariant(
-  status: ProtocolStatus
-): "default" | "outline" | "destructive" {
-  switch (status) {
-    case "active":
-      return "default";
-    case "draft":
-      return "outline";
-    case "retired":
-      return "destructive";
-  }
 }
 
 const ALL_PROJECTS = "__all__";
@@ -75,9 +61,7 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
         field: "status",
         width: 100,
         cellRenderer: (params: ICellRendererParams<Protocol>) => (
-          <Badge variant={statusBadgeVariant(params.value as ProtocolStatus)}>
-            {params.value}
-          </Badge>
+          <StatusBadge status={params.value} />
         ),
       },
     ],

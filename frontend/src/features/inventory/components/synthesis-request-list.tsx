@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FlaskRound, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
@@ -25,39 +25,6 @@ import {
 } from "../types/synthesis-request";
 import { CreateSynthesisRequestDialog } from "./create-synthesis-request-dialog";
 
-function statusVariant(
-  s: SynthesisRequestStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "fulfilled":
-      return "default";
-    case "approved":
-    case "assigned":
-    case "in_progress":
-    case "synthesis_complete":
-      return "secondary";
-    case "rejected":
-    case "cancelled":
-    case "failed":
-      return "destructive";
-    default:
-      return "outline"; // draft, submitted
-  }
-}
-
-function priorityVariant(
-  p: string
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (p) {
-    case "critical":
-      return "destructive";
-    case "urgent":
-      return "secondary";
-    default:
-      return "outline";
-  }
-}
-
 export function SynthesisRequestListPage() {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -74,12 +41,7 @@ export function SynthesisRequestListPage() {
         field: "priority",
         width: 110,
         cellRenderer: (params: ICellRendererParams<SynthesisRequestSummary>) => (
-          <Badge variant={priorityVariant(params.value as string)}>
-            {params.value
-              ? String(params.value).charAt(0).toUpperCase() +
-                String(params.value).slice(1)
-              : "\u2014"}
-          </Badge>
+          <PriorityBadge priority={params.value ?? ""} />
         ),
       },
       {
@@ -117,11 +79,10 @@ export function SynthesisRequestListPage() {
         cellRenderer: (
           params: ICellRendererParams<SynthesisRequestSummary>
         ) => (
-          <Badge variant={statusVariant(params.value as SynthesisRequestStatus)}>
-            {SYNTHESIS_REQUEST_STATUS_LABELS[
-              params.value as SynthesisRequestStatus
-            ] ?? params.value}
-          </Badge>
+          <StatusBadge
+            status={params.value}
+            label={SYNTHESIS_REQUEST_STATUS_LABELS[params.value as SynthesisRequestStatus] ?? params.value}
+          />
         ),
       },
     ],

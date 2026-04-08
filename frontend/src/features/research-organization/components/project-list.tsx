@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderKanban, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
@@ -14,13 +14,7 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName } from "@/shared/components/entity-name";
 import { useProjects } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
-import type { Project, ProjectStatus } from "../types";
-
-function statusBadgeVariant(
-  status: ProjectStatus
-): "default" | "destructive" {
-  return status === "active" ? "default" : "destructive";
-}
+import type { Project } from "../types";
 
 export function ProjectListPage() {
   const router = useRouter();
@@ -49,9 +43,7 @@ export function ProjectListPage() {
         field: "status",
         width: 100,
         cellRenderer: (params: ICellRendererParams<Project>) => (
-          <Badge variant={statusBadgeVariant(params.value as ProjectStatus)}>
-            {params.value}
-          </Badge>
+          <StatusBadge status={params.value} />
         ),
       },
       {

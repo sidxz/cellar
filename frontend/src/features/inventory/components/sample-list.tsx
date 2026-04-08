@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Package, Pipette, Move, Trash2 } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
 import {
@@ -35,23 +35,6 @@ import {
 
 interface SampleListProps {
   batchId?: string;
-}
-
-function statusBadgeVariant(
-  status: SampleStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "available":
-      return "default";
-    case "quarantined":
-      return "secondary";
-    case "depleted":
-    case "expired":
-    case "disposed":
-      return "destructive";
-    default:
-      return "outline";
-  }
 }
 
 const TERMINAL_STATUSES = new Set(["depleted", "disposed"]);
@@ -89,9 +72,10 @@ export function SampleList({ batchId }: SampleListProps) {
         field: "status",
         width: 110,
         cellRenderer: (params: ICellRendererParams<Sample>) => (
-          <Badge variant={statusBadgeVariant(params.value as SampleStatus)}>
-            {SAMPLE_STATUS_LABELS[params.value as SampleStatus] ?? params.value}
-          </Badge>
+          <StatusBadge
+            status={params.value}
+            label={SAMPLE_STATUS_LABELS[params.value as SampleStatus] ?? params.value}
+          />
         ),
       },
       {

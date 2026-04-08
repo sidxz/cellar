@@ -6,6 +6,7 @@ import { Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
@@ -25,25 +26,6 @@ import { BulkRegistrationDialog } from "./bulk-registration-dialog";
 import { CompoundSearchBar } from "./compound-search-bar";
 import { DisclosureDialog } from "./disclosure-dialog";
 import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
-
-function lifecycleBadgeVariant(
-  stage: LifecycleStage
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (stage) {
-    case "active":
-    case "hit":
-    case "lead":
-      return "default";
-    case "preclinical_candidate":
-    case "development_candidate":
-      return "secondary";
-    case "deprioritized":
-    case "archived":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 export function MoleculeList() {
   const router = useRouter();
@@ -112,14 +94,12 @@ export function MoleculeList() {
         headerName: "Stage",
         field: "lifecycle_stage",
         width: 130,
-        cellRenderer: (params: ICellRendererParams<Molecule>) => {
-          const stage = params.value as LifecycleStage;
-          return (
-            <Badge variant={lifecycleBadgeVariant(stage)}>
-              {LIFECYCLE_LABELS[stage] ?? stage}
-            </Badge>
-          );
-        },
+        cellRenderer: (params: ICellRendererParams<Molecule>) => (
+          <StatusBadge
+            status={params.value}
+            label={LIFECYCLE_LABELS[params.value as LifecycleStage] ?? params.value}
+          />
+        ),
       },
       {
         headerName: "Status",

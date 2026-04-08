@@ -18,6 +18,7 @@ import {
   TestTubes,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
@@ -49,25 +50,6 @@ import {
 // ---------------------------------------------------------------------------
 // Badge helpers
 // ---------------------------------------------------------------------------
-
-function lifecycleBadgeVariant(
-  stage: LifecycleStage
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (stage) {
-    case "active":
-    case "hit":
-    case "lead":
-      return "default";
-    case "preclinical_candidate":
-    case "development_candidate":
-      return "secondary";
-    case "deprioritized":
-    case "archived":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 function structureStatusBadgeClass(status: StructureStatus): string {
   return status === "disclosed"
@@ -150,9 +132,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             <h1 className="text-2xl font-bold tracking-tight font-mono">
               {mol.registration_number}
             </h1>
-            <Badge variant={lifecycleBadgeVariant(mol.lifecycle_stage as LifecycleStage)}>
-              {LIFECYCLE_LABELS[mol.lifecycle_stage as LifecycleStage] ?? mol.lifecycle_stage}
-            </Badge>
+            <StatusBadge
+              status={mol.lifecycle_stage}
+              label={LIFECYCLE_LABELS[mol.lifecycle_stage as LifecycleStage] ?? mol.lifecycle_stage}
+            />
             <Badge variant="outline" className={structureStatusBadgeClass(mol.structure_status as StructureStatus)}>
               {mol.structure_status === "disclosed" ? "Disclosed" : "Undisclosed"}
             </Badge>
