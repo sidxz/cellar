@@ -8,7 +8,10 @@ from typing import Protocol, runtime_checkable
 from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
 from chem_vault.domain.workspace_config.enums import FieldTarget
+from chem_vault.domain.workspace_config.external_api_key import ExternalApiKey
+from chem_vault.domain.workspace_config.ontology_slot_definition import OntologySlotDefinition
 from chem_vault.domain.workspace_config.organization import Organization
+from chem_vault.domain.workspace_config.protocol_form import ProtocolForm
 from chem_vault.domain.workspace_config.registration_form import RegistrationForm
 from chem_vault.domain.workspace_config.salt_entry import SaltEntry
 from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
@@ -133,5 +136,67 @@ class RegistrationFormRepository(Protocol):
         *,
         applies_to: FieldTarget | None = None,
     ) -> list[RegistrationForm]: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class ExternalApiKeyRepository(Protocol):
+    """Repository for ExternalApiKey aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> ExternalApiKey | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> ExternalApiKey | None: ...
+
+    async def save(self, aggregate: ExternalApiKey) -> None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[ExternalApiKey]: ...
+
+    async def find_by_key_name(
+        self, workspace_id: uuid.UUID, key_name: str
+    ) -> ExternalApiKey | None: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class OntologySlotDefinitionRepository(Protocol):
+    """Repository for OntologySlotDefinition aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> OntologySlotDefinition | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> OntologySlotDefinition | None: ...
+
+    async def save(self, aggregate: OntologySlotDefinition) -> None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[OntologySlotDefinition]: ...
+
+    async def find_by_name(
+        self, workspace_id: uuid.UUID, name: str
+    ) -> OntologySlotDefinition | None: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class ProtocolFormRepository(Protocol):
+    """Repository for ProtocolForm aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> ProtocolForm | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> ProtocolForm | None: ...
+
+    async def save(self, aggregate: ProtocolForm) -> None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[ProtocolForm]: ...
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...

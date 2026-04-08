@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import uuid
 
 from chem_vault.domain.screening_assay.enums import ProtocolStatus
@@ -58,6 +59,8 @@ class ProtocolVersioningService:
                 is_calculated=rd.is_calculated,
                 calculation_formula=rd.calculation_formula,
                 display_order=rd.display_order,
+                pick_list_values=list(rd.pick_list_values) if rd.pick_list_values else None,
+                dose_response_config=rd.dose_response_config,  # frozen dataclass — safe to share
             )
             for rd in parent.readout_definitions
         ]
@@ -89,6 +92,8 @@ class ProtocolVersioningService:
             created_by=parent.created_by,
             readout_definitions=cloned_readouts,
             condition_definitions=cloned_conditions,
+            control_layouts=dict(parent.control_layouts) if parent.control_layouts else None,
+            ontology_annotations=copy.deepcopy(parent.ontology_annotations) if parent.ontology_annotations else None,
         )
         # NOTE: Parent is NOT retired here. It stays ACTIVE until the new
         # version is published. PublishProtocol use case retires the parent.

@@ -11,7 +11,11 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.enums import (
+    CurveType,
+    HillSlopeConstraint,
+    NormalizationScope,
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
@@ -40,6 +44,8 @@ class AddReadoutDefinitionCommand(Command):
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
+    pick_list_values: list[str] | None = None
+    dose_response_config: dict | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -88,6 +94,25 @@ class AddReadoutDefinition:
                 except DomainError as exc:
                     return Failure(exc)
 
+            # Build dose_response_config VO from dict if provided
+            dr_config = None
+            if input.data_type == "dose_response" and input.dose_response_config:
+                cfg = input.dose_response_config
+                dr_config = DoseResponseConfig(
+                    curve_type=CurveType(cfg["curve_type"]),
+                    x_readout_name=cfg["x_readout_name"],
+                    y_readout_name=cfg["y_readout_name"],
+                    hill_slope_constraint=HillSlopeConstraint(
+                        cfg.get("hill_slope_constraint", "unconstrained")
+                    ),
+                    activity_threshold=cfg.get("activity_threshold"),
+                    normalization_scope=NormalizationScope(
+                        cfg.get("normalization_scope", "per_plate")
+                    ),
+                    top_constraint=cfg.get("top_constraint"),
+                    bottom_constraint=cfg.get("bottom_constraint"),
+                )
+
             definition = ReadoutDefinition(
                 protocol_id=protocol.id,
                 name=input.name,
@@ -99,6 +124,8 @@ class AddReadoutDefinition:
                 is_calculated=input.is_calculated,
                 calculation_formula=input.calculation_formula,
                 display_order=input.display_order,
+                pick_list_values=input.pick_list_values,
+                dose_response_config=dr_config,
             )
 
             protocol.add_readout_definition(definition)

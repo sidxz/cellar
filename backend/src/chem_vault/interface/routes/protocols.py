@@ -32,6 +32,24 @@ from chem_vault.application.screening.manage_protocol import (
     VersionProtocol,
     VersionProtocolCommand,
 )
+from chem_vault.application.screening.manage_condition_definitions import (
+    AddConditionDefinition,
+    AddConditionDefinitionCommand,
+    RemoveConditionDefinition,
+    RemoveConditionDefinitionCommand,
+)
+from chem_vault.application.screening.manage_control_layouts import (
+    RemoveControlLayout,
+    RemoveControlLayoutCommand,
+    SetControlLayout,
+    SetControlLayoutCommand,
+)
+from chem_vault.application.screening.manage_ontology_annotations import (
+    RemoveOntologyAnnotation,
+    RemoveOntologyAnnotationCommand,
+    SetOntologyAnnotation,
+    SetOntologyAnnotationCommand,
+)
 from chem_vault.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     AddReadoutDefinitionCommand,
@@ -40,6 +58,7 @@ from chem_vault.application.screening.manage_readout_definitions import (
 )
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from chem_vault.interface.dependencies import (
+    AddConditionDefinitionDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
     AuthDep,
@@ -54,9 +73,14 @@ from chem_vault.interface.dependencies import (
     ListProtocolsDep,
     ListTargetsDep,
     PublishProtocolDep,
+    RemoveConditionDefinitionDep,
+    RemoveControlLayoutDep,
+    RemoveOntologyAnnotationDep,
     RemoveProtocolFromProjectDep,
     RemoveReadoutDefinitionDep,
     RetireProtocolDep,
+    SetControlLayoutDep,
+    SetOntologyAnnotationDep,
     UpdateProtocolDep,
     UpdateTargetDep,
     VersionProtocolDep,
@@ -82,6 +106,8 @@ class ReadoutDefinitionResponse(BaseModel):
     is_calculated: bool
     calculation_formula: str | None = None
     display_order: int
+    pick_list_values: list[str] | None = None
+    dose_response_config: dict | None = None
 
 
 class ConditionDefinitionResponse(BaseModel):
@@ -106,6 +132,8 @@ class ProtocolResponse(BaseModel):
     created_by: uuid.UUID
     readout_definitions: list[ReadoutDefinitionResponse]
     condition_definitions: list[ConditionDefinitionResponse]
+    control_layouts: dict[str, str] | None = None
+    ontology_annotations: dict[str, list[dict]] | None = None
     project_ids: list[uuid.UUID] = []
 
     @classmethod
@@ -115,6 +143,17 @@ class ProtocolResponse(BaseModel):
         *,
         project_ids: list[uuid.UUID] | None = None,
     ) -> ProtocolResponse:
+        # Serialize ontology_annotations
+        onto_annots = None
+        if p.ontology_annotations:
+            onto_annots = {
+                slot: [
+                    {"term_id": t.term_id, "label": t.label, "ontology_source": t.ontology_source, "uri": t.uri}
+                    for t in terms
+                ]
+                for slot, terms in p.ontology_annotations.items()
+            }
+
         return cls(
             id=p.id,
             workspace_id=p.workspace_id,
@@ -139,6 +178,21 @@ class ProtocolResponse(BaseModel):
                     is_calculated=rd.is_calculated,
                     calculation_formula=rd.calculation_formula,
                     display_order=rd.display_order,
+                    pick_list_values=rd.pick_list_values,
+                    dose_response_config=(
+                        {
+                            "curve_type": rd.dose_response_config.curve_type.value,
+                            "x_readout_name": rd.dose_response_config.x_readout_name,
+                            "y_readout_name": rd.dose_response_config.y_readout_name,
+                            "hill_slope_constraint": rd.dose_response_config.hill_slope_constraint.value,
+                            "activity_threshold": rd.dose_response_config.activity_threshold,
+                            "normalization_scope": rd.dose_response_config.normalization_scope.value,
+                            "top_constraint": rd.dose_response_config.top_constraint,
+                            "bottom_constraint": rd.dose_response_config.bottom_constraint,
+                        }
+                        if rd.dose_response_config is not None
+                        else None
+                    ),
                 )
                 for rd in p.readout_definitions
             ],
@@ -152,6 +206,12 @@ class ProtocolResponse(BaseModel):
                 )
                 for cd in p.condition_definitions
             ],
+            control_layouts=(
+                {k: str(v) for k, v in p.control_layouts.items()}
+                if p.control_layouts
+                else None
+            ),
+            ontology_annotations=onto_annots,
             project_ids=project_ids or [],
         )
 
@@ -233,6 +293,8 @@ class AddReadoutDefinitionRequest(BaseModel):
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
+    pick_list_values: list[str] | None = None
+    dose_response_config: dict | None = None
 
 
 class CreateTargetRequest(BaseModel):
@@ -418,6 +480,8 @@ async def add_readout_definition(
         is_calculated=body.is_calculated,
         calculation_formula=body.calculation_formula,
         display_order=body.display_order,
+        pick_list_values=body.pick_list_values,
+        dose_response_config=body.dose_response_config,
     )
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
@@ -439,6 +503,170 @@ async def remove_readout_definition(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
         definition_id=definition_id,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+# ---------------------------------------------------------------------------
+# Condition definition routes
+# ---------------------------------------------------------------------------
+
+
+class AddConditionDefinitionRequest(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    pick_list_values: list[str] | None = None
+
+
+@router.post(
+    "/protocols/{protocol_id}/condition-definitions",
+    response_model=ProtocolResponse,
+    status_code=201,
+    tags=["protocols"],
+)
+async def add_condition_definition(
+    protocol_id: uuid.UUID,
+    body: AddConditionDefinitionRequest,
+    auth: AuthDep,
+    uc: AddConditionDefinitionDep,
+) -> ProtocolResponse:
+    """Add a condition definition to a DRAFT protocol."""
+    cmd = AddConditionDefinitionCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        name=body.name,
+        data_type=body.data_type,
+        unit=body.unit,
+        pick_list_values=body.pick_list_values,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/condition-definitions/{definition_id}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def remove_condition_definition(
+    protocol_id: uuid.UUID,
+    definition_id: uuid.UUID,
+    auth: AuthDep,
+    uc: RemoveConditionDefinitionDep,
+) -> ProtocolResponse:
+    """Remove a condition definition from a DRAFT protocol."""
+    cmd = RemoveConditionDefinitionCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        definition_id=definition_id,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+# ---------------------------------------------------------------------------
+# Control layout routes
+# ---------------------------------------------------------------------------
+
+
+class SetControlLayoutRequest(BaseModel):
+    plate_format: str
+    template_id: uuid.UUID
+
+
+@router.put(
+    "/protocols/{protocol_id}/control-layouts",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def set_control_layout(
+    protocol_id: uuid.UUID,
+    body: SetControlLayoutRequest,
+    auth: AuthDep,
+    uc: SetControlLayoutDep,
+) -> ProtocolResponse:
+    """Set a default control layout (plate template) for a plate format on a DRAFT protocol."""
+    cmd = SetControlLayoutCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        plate_format=body.plate_format,
+        template_id=body.template_id,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/control-layouts/{plate_format}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def remove_control_layout(
+    protocol_id: uuid.UUID,
+    plate_format: str,
+    auth: AuthDep,
+    uc: RemoveControlLayoutDep,
+) -> ProtocolResponse:
+    """Remove the default control layout for a plate format from a DRAFT protocol."""
+    cmd = RemoveControlLayoutCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        plate_format=plate_format,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+# ---------------------------------------------------------------------------
+# Ontology annotation routes
+# ---------------------------------------------------------------------------
+
+
+class SetOntologyAnnotationRequest(BaseModel):
+    slot: str
+    terms: list[dict]
+
+
+@router.put(
+    "/protocols/{protocol_id}/ontology-annotations",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def set_ontology_annotation(
+    protocol_id: uuid.UUID,
+    body: SetOntologyAnnotationRequest,
+    auth: AuthDep,
+    uc: SetOntologyAnnotationDep,
+) -> ProtocolResponse:
+    """Set ontology terms for a slot on a DRAFT protocol."""
+    cmd = SetOntologyAnnotationCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        slot=body.slot,
+        terms=body.terms,
+    )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/ontology-annotations/{slot}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def remove_ontology_annotation(
+    protocol_id: uuid.UUID,
+    slot: str,
+    auth: AuthDep,
+    uc: RemoveOntologyAnnotationDep,
+) -> ProtocolResponse:
+    """Remove all ontology terms for a slot from a DRAFT protocol."""
+    cmd = RemoveOntologyAnnotationCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        slot=slot,
     )
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))

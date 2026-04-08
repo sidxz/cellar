@@ -30,6 +30,8 @@ class ReadoutDataType(StrEnum):
     PICK_LIST = "pick_list"
     FILE = "file"
     DATE = "date"
+    DOSE_RESPONSE = "dose_response"
+    BATCH_LINK = "batch_link"
 
 
 class ReadoutAggregation(StrEnum):
@@ -111,6 +113,23 @@ class RunRelationshipType(StrEnum):
     CONFIRMATION_OF = "confirmation_of"
     REPEAT_OF = "repeat_of"
     FOLLOW_UP_TO = "follow_up_to"
+
+
+class HillSlopeConstraint(StrEnum):
+    """How the Hill slope parameter is constrained during curve fitting."""
+
+    UNCONSTRAINED = "unconstrained"
+    FIXED_AT_ONE = "fixed_at_one"
+    POSITIVE_ONLY = "positive_only"
+    NEGATIVE_ONLY = "negative_only"
+
+
+class NormalizationScope(StrEnum):
+    """Scope for control-based normalization of readout values."""
+
+    PER_PLATE = "per_plate"
+    PER_RUN = "per_run"
+    NONE = "none"
 
 
 class CurveType(StrEnum):

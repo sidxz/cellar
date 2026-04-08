@@ -1010,6 +1010,19 @@ def create_container(
     container.define(AddReadoutDefinition, _add_readout_def)
     container.define(RemoveReadoutDefinition, _protocol_cmd(RemoveReadoutDefinition))
 
+    from chem_vault.application.screening.manage_condition_definitions import (
+        AddConditionDefinition,
+        RemoveConditionDefinition,
+    )
+    from chem_vault.application.screening.manage_control_layouts import (
+        RemoveControlLayout,
+        SetControlLayout,
+    )
+    container.define(AddConditionDefinition, _protocol_cmd(AddConditionDefinition))
+    container.define(RemoveConditionDefinition, _protocol_cmd(RemoveConditionDefinition))
+    container.define(SetControlLayout, _protocol_cmd(SetControlLayout))
+    container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
+
     def _target_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -1447,5 +1460,134 @@ def create_container(
         GetDashboardStats,
         lambda c: GetDashboardStats(SQLAlchemyDashboardReader(c[async_sessionmaker])),
     )
+
+    # --- External API Keys ---
+    from chem_vault.application.workspace_config.create_external_api_key import CreateExternalApiKey
+    from chem_vault.application.workspace_config.list_external_api_keys import ListExternalApiKeys
+    from chem_vault.application.workspace_config.update_external_api_key import UpdateExternalApiKey
+    from chem_vault.application.workspace_config.delete_external_api_key import DeleteExternalApiKey
+    from chem_vault.application.workspace_config.get_external_api_key_secret import GetExternalApiKeySecret
+    from chem_vault.domain.shared.secret_provider import SecretProvider
+    from chem_vault.infrastructure.secrets.env_provider import EnvSecretProvider
+    from chem_vault.infrastructure.secrets.chain_provider import ChainSecretProvider
+    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (
+        SQLAlchemyExternalApiKeyRepository,
+    )
+
+    def _build_secret_provider() -> SecretProvider:
+        """Build secret provider chain: Infisical (if configured) → env vars."""
+        import os
+        providers: list = []
+
+        infisical_token = os.environ.get("INFISICAL_TOKEN")
+        infisical_project = os.environ.get("INFISICAL_PROJECT_ID")
+        infisical_url = os.environ.get("INFISICAL_BASE_URL", "http://localhost:8089")
+
+        if infisical_token and infisical_project:
+            from chem_vault.infrastructure.secrets.infisical_provider import InfisicalSecretProvider
+            providers.append(InfisicalSecretProvider(
+                base_url=infisical_url,
+                token=infisical_token,
+                project_id=infisical_project,
+            ))
+
+        providers.append(EnvSecretProvider())
+        return ChainSecretProvider(*providers)
+
+    container.define(SecretProvider, Singleton(_build_secret_provider))
+
+    def _apikey_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyExternalApiKeyRepository(uow), c[EventDispatcher], c[SecretProvider])
+        return _f
+
+    def _apikey_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyExternalApiKeyRepository(uow))
+        return _f
+
+    container.define(CreateExternalApiKey, _apikey_cmd(CreateExternalApiKey))
+    container.define(UpdateExternalApiKey, _apikey_cmd(UpdateExternalApiKey))
+    container.define(DeleteExternalApiKey, _apikey_cmd(DeleteExternalApiKey))
+    container.define(ListExternalApiKeys, _apikey_query(ListExternalApiKeys))
+    container.define(GetExternalApiKeySecret, lambda c: GetExternalApiKeySecret(c[SecretProvider]))
+
+    # --- Ontology Slot Definitions ---
+    from chem_vault.application.workspace_config.create_ontology_slot import CreateOntologySlot
+    from chem_vault.application.workspace_config.list_ontology_slots import ListOntologySlots
+    from chem_vault.application.workspace_config.update_ontology_slot import UpdateOntologySlot
+    from chem_vault.application.workspace_config.delete_ontology_slot import DeleteOntologySlot
+    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.ontology_slot_definition_repository import (
+        SQLAlchemyOntologySlotDefinitionRepository,
+    )
+
+    def _slot_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyOntologySlotDefinitionRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _slot_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyOntologySlotDefinitionRepository(uow))
+        return _f
+
+    container.define(CreateOntologySlot, _slot_cmd(CreateOntologySlot))
+    container.define(UpdateOntologySlot, _slot_cmd(UpdateOntologySlot))
+    container.define(DeleteOntologySlot, _slot_cmd(DeleteOntologySlot))
+    container.define(ListOntologySlots, _slot_query(ListOntologySlots))
+
+    # --- Ontology Search ---
+    from chem_vault.application.screening.search_ontology import SearchOntology
+    from chem_vault.infrastructure.external.bioportal.client import BioPortalClient
+
+    container.define(BioPortalClient, lambda c: BioPortalClient(c[SecretProvider]))
+    container.define(SearchOntology, lambda c: SearchOntology(c[BioPortalClient]))
+
+    # --- Ontology Annotations on Protocols ---
+    from chem_vault.application.screening.manage_ontology_annotations import (
+        SetOntologyAnnotation,
+        RemoveOntologyAnnotation,
+    )
+
+    def _set_ontology_annotation(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+
+    def _remove_ontology_annotation(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+
+    container.define(SetOntologyAnnotation, _set_ontology_annotation)
+    container.define(RemoveOntologyAnnotation, _remove_ontology_annotation)
+
+    # --- Protocol Forms ---
+    from chem_vault.application.workspace_config.create_protocol_form import CreateProtocolForm
+    from chem_vault.application.workspace_config.list_protocol_forms import ListProtocolForms
+    from chem_vault.application.workspace_config.update_protocol_form import UpdateProtocolForm
+    from chem_vault.application.workspace_config.delete_protocol_form import DeleteProtocolForm
+    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (
+        SQLAlchemyProtocolFormRepository,
+    )
+
+    def _pf_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProtocolFormRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _pf_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProtocolFormRepository(uow))
+        return _f
+
+    container.define(CreateProtocolForm, _pf_cmd(CreateProtocolForm))
+    container.define(UpdateProtocolForm, _pf_cmd(UpdateProtocolForm))
+    container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
+    container.define(ListProtocolForms, _pf_query(ListProtocolForms))
 
     return container

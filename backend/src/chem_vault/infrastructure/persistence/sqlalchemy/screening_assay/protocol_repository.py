@@ -7,8 +7,12 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
+    CurveType,
+    HillSlopeConstraint,
+    NormalizationScope,
     ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
@@ -20,6 +24,7 @@ from chem_vault.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from chem_vault.domain.shared.ontology import OntologyTerm
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -195,6 +200,27 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     # Mapping: SA model <-> domain aggregate
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _reconstruct_dose_response_config(
+        data: dict | None,
+    ) -> DoseResponseConfig | None:
+        if data is None:
+            return None
+        return DoseResponseConfig(
+            curve_type=CurveType(data["curve_type"]),
+            x_readout_name=data["x_readout_name"],
+            y_readout_name=data["y_readout_name"],
+            hill_slope_constraint=HillSlopeConstraint(
+                data.get("hill_slope_constraint", "unconstrained")
+            ),
+            activity_threshold=data.get("activity_threshold"),
+            normalization_scope=NormalizationScope(
+                data.get("normalization_scope", "per_plate")
+            ),
+            top_constraint=data.get("top_constraint"),
+            bottom_constraint=data.get("bottom_constraint"),
+        )
+
     def _to_domain(self, model: ProtocolModel) -> Protocol:
         readout_defs = [
             ReadoutDefinition(
@@ -209,6 +235,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 is_calculated=rd.is_calculated,
                 calculation_formula=rd.calculation_formula,
                 display_order=rd.display_order,
+                pick_list_values=rd.pick_list_values,
+                dose_response_config=self._reconstruct_dose_response_config(
+                    rd.dose_response_config
+                ),
                 created_at=rd.created_at,
                 updated_at=rd.updated_at,
             )
@@ -229,6 +259,30 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             for cd in model.condition_definitions
         ]
 
+        # Reconstruct control_layouts: DB stores {format_str: uuid_str}
+        control_layouts = None
+        if model.control_layouts:
+            control_layouts = {
+                k: uuid.UUID(v) if isinstance(v, str) else v
+                for k, v in model.control_layouts.items()
+            }
+
+        # Reconstruct ontology_annotations: DB stores {slot: [{term_id, label, ...}]}
+        ontology_annotations = None
+        if model.ontology_annotations:
+            ontology_annotations = {
+                slot: [
+                    OntologyTerm(
+                        term_id=t["term_id"],
+                        label=t["label"],
+                        ontology_source=t["ontology_source"],
+                        uri=t.get("uri"),
+                    )
+                    for t in terms
+                ]
+                for slot, terms in model.ontology_annotations.items()
+            }
+
         return Protocol(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -243,10 +297,39 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             created_by=model.created_by,
             readout_definitions=readout_defs,
             condition_definitions=condition_defs,
+            control_layouts=control_layouts,
+            ontology_annotations=ontology_annotations,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
         )
+
+    @staticmethod
+    def _serialize_control_layouts(
+        layouts: dict[str, uuid.UUID] | None,
+    ) -> dict[str, str] | None:
+        if not layouts:
+            return None
+        return {k: str(v) for k, v in layouts.items()}
+
+    @staticmethod
+    def _serialize_ontology_annotations(
+        annotations: dict[str, list[OntologyTerm]] | None,
+    ) -> dict | None:
+        if not annotations:
+            return None
+        return {
+            slot: [
+                {
+                    "term_id": t.term_id,
+                    "label": t.label,
+                    "ontology_source": t.ontology_source,
+                    "uri": t.uri,
+                }
+                for t in terms
+            ]
+            for slot, terms in annotations.items()
+        }
 
     def _to_model(self, aggregate: Protocol) -> ProtocolModel:
         model = ProtocolModel(
@@ -262,6 +345,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             status=aggregate.status.value,
             created_by=aggregate.created_by,
             version=aggregate.version,
+            control_layouts=self._serialize_control_layouts(aggregate.control_layouts),
+            ontology_annotations=self._serialize_ontology_annotations(aggregate.ontology_annotations),
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -280,6 +365,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.protocol_version = aggregate.protocol_version
         model.parent_protocol_id = aggregate.parent_protocol_id
         model.status = aggregate.status.value
+        model.control_layouts = self._serialize_control_layouts(aggregate.control_layouts)
+        model.ontology_annotations = self._serialize_ontology_annotations(aggregate.ontology_annotations)
 
         # Replace owned entity collections
         model.readout_definitions = [
@@ -294,7 +381,27 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _serialize_dose_response_config(
+        config: DoseResponseConfig | None,
+    ) -> dict | None:
+        if config is None:
+            return None
+        from dataclasses import asdict
+        return asdict(config)
+
+    @staticmethod
     def _readout_def_to_model(rd: ReadoutDefinition) -> ReadoutDefinitionModel:
+        dose_response_dict = None
+        if rd.dose_response_config is not None:
+            from dataclasses import asdict
+
+            raw = asdict(rd.dose_response_config)
+            # Convert enums to their string values for JSON serialization
+            raw["curve_type"] = rd.dose_response_config.curve_type.value
+            raw["hill_slope_constraint"] = rd.dose_response_config.hill_slope_constraint.value
+            raw["normalization_scope"] = rd.dose_response_config.normalization_scope.value
+            dose_response_dict = raw
+
         return ReadoutDefinitionModel(
             id=rd.id,
             protocol_id=rd.protocol_id,
@@ -307,6 +414,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             is_calculated=rd.is_calculated,
             calculation_formula=rd.calculation_formula,
             display_order=rd.display_order,
+            pick_list_values=rd.pick_list_values,
+            dose_response_config=dose_response_dict,
         )
 
     @staticmethod

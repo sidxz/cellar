@@ -25,7 +25,14 @@ export const PROTOCOL_STATUS_LABELS: Record<ProtocolStatus, string> = {
   retired: "Retired",
 };
 
-export type ReadoutDataType = "numeric" | "text" | "pick_list" | "file" | "date";
+export type ReadoutDataType =
+  | "numeric"
+  | "text"
+  | "pick_list"
+  | "file"
+  | "date"
+  | "dose_response"
+  | "batch_link";
 
 export const READOUT_DATA_TYPE_LABELS: Record<ReadoutDataType, string> = {
   numeric: "Numeric",
@@ -33,6 +40,8 @@ export const READOUT_DATA_TYPE_LABELS: Record<ReadoutDataType, string> = {
   pick_list: "Pick List",
   file: "File",
   date: "Date",
+  dose_response: "Dose-Response (Plot)",
+  batch_link: "Batch Link",
 };
 
 export type ReadoutAggregation =
@@ -159,6 +168,38 @@ export const CURVE_CLASS_LABELS: Record<CurveClass, string> = {
   inactive: "Inactive",
 };
 
+export type HillSlopeConstraint =
+  | "unconstrained"
+  | "fixed_at_one"
+  | "positive_only"
+  | "negative_only";
+
+export const HILL_SLOPE_CONSTRAINT_LABELS: Record<HillSlopeConstraint, string> = {
+  unconstrained: "Unconstrained",
+  fixed_at_one: "Fixed at 1",
+  positive_only: "Positive Only",
+  negative_only: "Negative Only",
+};
+
+export type NormalizationScope = "per_plate" | "per_run" | "none";
+
+export const NORMALIZATION_SCOPE_LABELS: Record<NormalizationScope, string> = {
+  per_plate: "Per Plate",
+  per_run: "Per Run",
+  none: "None",
+};
+
+export interface DoseResponseConfig {
+  curve_type: CurveType;
+  x_readout_name: string;
+  y_readout_name: string;
+  hill_slope_constraint: HillSlopeConstraint;
+  activity_threshold: number | null;
+  normalization_scope: NormalizationScope;
+  top_constraint: number | null;
+  bottom_constraint: number | null;
+}
+
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface ReadoutDefinition {
@@ -172,6 +213,8 @@ export interface ReadoutDefinition {
   is_calculated: boolean;
   calculation_formula: string | null;
   display_order: number;
+  pick_list_values: string[] | null;
+  dose_response_config: DoseResponseConfig | null;
 }
 
 export interface ConditionDefinition {
@@ -180,6 +223,18 @@ export interface ConditionDefinition {
   data_type: string;
   unit: string | null;
   pick_list_values: string[] | null;
+}
+
+export interface OntologyAnnotationTerm {
+  term_id: string;
+  label: string;
+  ontology_source: string;
+  uri: string | null;
+}
+
+export interface OntologyAnnotation {
+  slot_name: string;
+  terms: OntologyAnnotationTerm[];
 }
 
 export interface Protocol {
@@ -196,6 +251,8 @@ export interface Protocol {
   created_by: string;
   readout_definitions: ReadoutDefinition[];
   condition_definitions: ConditionDefinition[];
+  control_layouts: Record<string, string> | null;
+  ontology_annotations: OntologyAnnotation[] | null;
   project_ids: string[];
 }
 
@@ -320,6 +377,8 @@ export interface CreateReadoutDefinitionInput {
   is_calculated?: boolean;
   calculation_formula?: string | null;
   display_order?: number;
+  pick_list_values?: string[] | null;
+  dose_response_config?: DoseResponseConfig | null;
 }
 
 export interface CreateConditionDefinitionInput {

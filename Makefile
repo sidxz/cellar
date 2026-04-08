@@ -30,13 +30,14 @@ help: ## Show this help
 
 # ── Infrastructure ─────────────────────────────────────────────
 
-up: ## Start Postgres + Valkey, run migrations
-	docker compose up -d postgres valkey
+up: ## Start Postgres + Valkey + Infisical, run migrations, bootstrap secrets
+	docker compose up -d postgres valkey infisical-db infisical
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec postgres pg_isready -U chemvault -q 2>/dev/null; do sleep 1; done
 	@echo "Postgres ready"
 	$(BACKEND) && uv run alembic upgrade head
 	@echo "Migrations applied"
+	@./scripts/bootstrap-infisical.sh
 
 down: ## Stop all containers (keep data)
 	docker compose down
@@ -45,7 +46,7 @@ status: ## Show container status
 	docker compose ps
 
 logs: ## Tail container logs
-	docker compose logs -f postgres valkey
+	docker compose logs -f postgres valkey infisical
 
 # ── Dependencies ──────────────────────────────────────────────
 
@@ -122,6 +123,8 @@ lint: ## Run import-linter only
 nuke: stop ## Destroy containers, volumes, and all data
 	docker compose down -v --remove-orphans
 	rm -rf $(LOGDIR)
+	rm -f .infisical-bootstrapped
+	@sed -i '' '/^INFISICAL_/d' .env 2>/dev/null || true
 	@echo "All containers and volumes removed"
 
 restart: nuke up dev ## Nuke + start fresh + dev servers

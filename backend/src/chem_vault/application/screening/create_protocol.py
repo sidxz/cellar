@@ -12,8 +12,12 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
+    CurveType,
+    HillSlopeConstraint,
+    NormalizationScope,
     ProtocolType,
     ReadoutAggregation,
     ReadoutDataType,
@@ -62,21 +66,42 @@ class CreateProtocol:
         # Protocol.__init__ will rebind them to the actual aggregate ID.
         tmp_protocol_id = uuid.uuid4()
 
-        readout_defs = [
-            ReadoutDefinition(
-                protocol_id=tmp_protocol_id,
-                name=rd["name"],
-                data_type=ReadoutDataType(rd["data_type"]),
-                unit=rd.get("unit"),
-                aggregation=ReadoutAggregation(rd["aggregation"]) if rd.get("aggregation") else ReadoutAggregation.NONE,
-                precision=rd.get("precision"),
-                normalization=ReadoutNormalization(rd["normalization"]) if rd.get("normalization") else ReadoutNormalization.NONE,
-                is_calculated=rd.get("is_calculated", False),
-                calculation_formula=rd.get("calculation_formula"),
-                display_order=rd.get("display_order", 0),
+        readout_defs = []
+        for rd in input.readout_definitions:
+            dr_config = None
+            if rd.get("data_type") == "dose_response" and rd.get("dose_response_config"):
+                cfg = rd["dose_response_config"]
+                dr_config = DoseResponseConfig(
+                    curve_type=CurveType(cfg["curve_type"]),
+                    x_readout_name=cfg["x_readout_name"],
+                    y_readout_name=cfg["y_readout_name"],
+                    hill_slope_constraint=HillSlopeConstraint(
+                        cfg.get("hill_slope_constraint", "unconstrained")
+                    ),
+                    activity_threshold=cfg.get("activity_threshold"),
+                    normalization_scope=NormalizationScope(
+                        cfg.get("normalization_scope", "per_plate")
+                    ),
+                    top_constraint=cfg.get("top_constraint"),
+                    bottom_constraint=cfg.get("bottom_constraint"),
+                )
+
+            readout_defs.append(
+                ReadoutDefinition(
+                    protocol_id=tmp_protocol_id,
+                    name=rd["name"],
+                    data_type=ReadoutDataType(rd["data_type"]),
+                    unit=rd.get("unit"),
+                    aggregation=ReadoutAggregation(rd["aggregation"]) if rd.get("aggregation") else ReadoutAggregation.NONE,
+                    precision=rd.get("precision"),
+                    normalization=ReadoutNormalization(rd["normalization"]) if rd.get("normalization") else ReadoutNormalization.NONE,
+                    is_calculated=rd.get("is_calculated", False),
+                    calculation_formula=rd.get("calculation_formula"),
+                    display_order=rd.get("display_order", 0),
+                    pick_list_values=rd.get("pick_list_values"),
+                    dose_response_config=dr_config,
+                )
             )
-            for rd in input.readout_definitions
-        ]
 
         condition_defs = [
             ConditionDefinition(

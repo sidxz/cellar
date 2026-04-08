@@ -161,6 +161,15 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.registration_forms import router as registration_forms_router
     app.include_router(registration_forms_router)
 
+    from chem_vault.interface.routes.api_keys import router as api_keys_router
+    app.include_router(api_keys_router)
+
+    from chem_vault.interface.routes.ontology import router as ontology_router
+    app.include_router(ontology_router)
+
+    from chem_vault.interface.routes.protocol_forms import router as protocol_forms_router
+    app.include_router(protocol_forms_router)
+
     # Health check (unauthenticated)
     @app.get("/health")
     async def health() -> dict[str, str]:

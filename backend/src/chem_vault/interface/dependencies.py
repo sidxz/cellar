@@ -165,6 +165,14 @@ from chem_vault.application.screening.manage_protocol import (
     UpdateProtocol,
     VersionProtocol,
 )
+from chem_vault.application.screening.manage_condition_definitions import (
+    AddConditionDefinition,
+    RemoveConditionDefinition,
+)
+from chem_vault.application.screening.manage_control_layouts import (
+    RemoveControlLayout,
+    SetControlLayout,
+)
 from chem_vault.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     RemoveReadoutDefinition,
@@ -174,6 +182,23 @@ from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
+from chem_vault.application.workspace_config.create_external_api_key import CreateExternalApiKey
+from chem_vault.application.workspace_config.list_external_api_keys import ListExternalApiKeys
+from chem_vault.application.workspace_config.update_external_api_key import UpdateExternalApiKey
+from chem_vault.application.workspace_config.delete_external_api_key import DeleteExternalApiKey
+from chem_vault.application.workspace_config.create_ontology_slot import CreateOntologySlot
+from chem_vault.application.workspace_config.list_ontology_slots import ListOntologySlots
+from chem_vault.application.workspace_config.update_ontology_slot import UpdateOntologySlot
+from chem_vault.application.workspace_config.delete_ontology_slot import DeleteOntologySlot
+from chem_vault.application.workspace_config.create_protocol_form import CreateProtocolForm as CreateProtocolFormUC
+from chem_vault.application.workspace_config.list_protocol_forms import ListProtocolForms as ListProtocolFormsUC
+from chem_vault.application.workspace_config.update_protocol_form import UpdateProtocolForm as UpdateProtocolFormUC
+from chem_vault.application.workspace_config.delete_protocol_form import DeleteProtocolForm as DeleteProtocolFormUC
+from chem_vault.application.screening.manage_ontology_annotations import (
+    SetOntologyAnnotation,
+    RemoveOntologyAnnotation,
+)
+from chem_vault.application.screening.search_ontology import SearchOntology
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -302,6 +327,29 @@ ListRegistrationFormsDep = Annotated[ListRegistrationForms, Depends(_get_use_cas
 UpdateRegistrationFormDep = Annotated[UpdateRegistrationForm, Depends(_get_use_case(UpdateRegistrationForm))]
 DeleteRegistrationFormDep = Annotated[DeleteRegistrationForm, Depends(_get_use_case(DeleteRegistrationForm))]
 
+# --- External API Keys dependencies ---
+CreateExternalApiKeyDep = Annotated[CreateExternalApiKey, Depends(_get_use_case(CreateExternalApiKey))]
+ListExternalApiKeysDep = Annotated[ListExternalApiKeys, Depends(_get_use_case(ListExternalApiKeys))]
+UpdateExternalApiKeyDep = Annotated[UpdateExternalApiKey, Depends(_get_use_case(UpdateExternalApiKey))]
+DeleteExternalApiKeyDep = Annotated[DeleteExternalApiKey, Depends(_get_use_case(DeleteExternalApiKey))]
+
+# --- Ontology Slot dependencies ---
+CreateOntologySlotDep = Annotated[CreateOntologySlot, Depends(_get_use_case(CreateOntologySlot))]
+ListOntologySlotsDep = Annotated[ListOntologySlots, Depends(_get_use_case(ListOntologySlots))]
+UpdateOntologySlotDep = Annotated[UpdateOntologySlot, Depends(_get_use_case(UpdateOntologySlot))]
+DeleteOntologySlotDep = Annotated[DeleteOntologySlot, Depends(_get_use_case(DeleteOntologySlot))]
+
+# --- Ontology Search + Annotation dependencies ---
+SearchOntologyDep = Annotated[SearchOntology, Depends(_get_use_case(SearchOntology))]
+SetOntologyAnnotationDep = Annotated[SetOntologyAnnotation, Depends(_get_use_case(SetOntologyAnnotation))]
+RemoveOntologyAnnotationDep = Annotated[RemoveOntologyAnnotation, Depends(_get_use_case(RemoveOntologyAnnotation))]
+
+# --- Protocol Form dependencies ---
+CreateProtocolFormDep = Annotated[CreateProtocolFormUC, Depends(_get_use_case(CreateProtocolFormUC))]
+ListProtocolFormsDep = Annotated[ListProtocolFormsUC, Depends(_get_use_case(ListProtocolFormsUC))]
+UpdateProtocolFormDep = Annotated[UpdateProtocolFormUC, Depends(_get_use_case(UpdateProtocolFormUC))]
+DeleteProtocolFormDep = Annotated[DeleteProtocolFormUC, Depends(_get_use_case(DeleteProtocolFormUC))]
+
 # --- Chemical Registration dependencies ---
 RegisterMoleculeDep = Annotated[RegisterMolecule, Depends(_get_use_case(RegisterMolecule))]
 GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
@@ -370,6 +418,10 @@ UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtoc
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[AddReadoutDefinition, Depends(_get_use_case(AddReadoutDefinition))]
 RemoveReadoutDefinitionDep = Annotated[RemoveReadoutDefinition, Depends(_get_use_case(RemoveReadoutDefinition))]
+AddConditionDefinitionDep = Annotated[AddConditionDefinition, Depends(_get_use_case(AddConditionDefinition))]
+RemoveConditionDefinitionDep = Annotated[RemoveConditionDefinition, Depends(_get_use_case(RemoveConditionDefinition))]
+SetControlLayoutDep = Annotated[SetControlLayout, Depends(_get_use_case(SetControlLayout))]
+RemoveControlLayoutDep = Annotated[RemoveControlLayout, Depends(_get_use_case(RemoveControlLayout))]
 CreateTargetDep = Annotated[CreateTarget, Depends(_get_use_case(CreateTarget))]
 GetTargetDep = Annotated[GetTarget, Depends(_get_use_case(GetTarget))]
 ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]

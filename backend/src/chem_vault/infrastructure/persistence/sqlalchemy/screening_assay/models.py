@@ -122,6 +122,8 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         String(20), nullable=False, server_default="draft"
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    control_layouts: Mapped[dict | None] = mapped_column(JSONB)
+    ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
 
     # Owned entity collections
     readout_definitions: Mapped[list[ReadoutDefinitionModel]] = relationship(
@@ -169,6 +171,8 @@ class ReadoutDefinitionModel(Base, EntityModelMixin):
     display_order: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    pick_list_values: Mapped[list | None] = mapped_column(JSONB)
+    dose_response_config: Mapped[dict | None] = mapped_column(JSONB)
 
     protocol: Mapped[ProtocolModel] = relationship(
         "ProtocolModel", back_populates="readout_definitions"
