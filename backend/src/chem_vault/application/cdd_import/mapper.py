@@ -109,10 +109,30 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
     readouts: list[MappedReadout] = []
     conditions: list[MappedCondition] = []
 
-    for idx, rd in enumerate(cdd_protocol.get("readout_definitions", [])):
-        cdd_type = rd.get("type", "")
-        rd_name = rd.get("name", f"Readout {idx + 1}")
+    # CDD readout_definitions includes both readouts and conditions.
+    # Conditions have "protocol_condition": true.
+    # CDD field names: "data_type" (not "type"), "unit_label" (not "unit"),
+    # "precision_number" (not "precision").
+    readout_idx = 0
+    for rd in cdd_protocol.get("readout_definitions", []):
+        rd_name = rd.get("name", f"Readout {readout_idx + 1}")
 
+        # CDD marks conditions with protocol_condition flag
+        if rd.get("protocol_condition", False):
+            cdd_type_str = rd.get("data_type", "Text")
+            cd_type = _CDD_CONDITION_TYPE_MAP.get(cdd_type_str, ConditionDataType.TEXT)
+            conditions.append(
+                MappedCondition(
+                    name=rd_name,
+                    data_type=cd_type,
+                    unit=rd.get("unit_label"),
+                    pick_list_values=rd.get("pick_list_values") if cd_type == ConditionDataType.PICK_LIST else None,
+                )
+            )
+            continue
+
+        # Regular readout — map the data_type
+        cdd_type = rd.get("data_type") or rd.get("type") or ""
         mapped_type = _CDD_READOUT_TYPE_MAP.get(cdd_type)
         if mapped_type is None:
             warnings.append(
@@ -151,27 +171,16 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
             MappedReadout(
                 name=rd_name,
                 data_type=mapped_type,
-                unit=rd.get("unit"),
+                unit=rd.get("unit_label") or rd.get("unit"),
                 aggregation=ReadoutAggregation.NONE,
                 normalization=ReadoutNormalization.NONE,
-                precision=rd.get("precision"),
+                precision=rd.get("precision_number") or rd.get("precision"),
                 pick_list_values=pick_list_values,
                 dose_response_config=dr_config,
-                display_order=idx,
+                display_order=readout_idx,
             )
         )
-
-    for cd in cdd_protocol.get("conditions", []):
-        cd_type_str = cd.get("type", "Text")
-        cd_type = _CDD_CONDITION_TYPE_MAP.get(cd_type_str, ConditionDataType.TEXT)
-        conditions.append(
-            MappedCondition(
-                name=cd.get("name", "Condition"),
-                data_type=cd_type,
-                unit=cd.get("unit"),
-                pick_list_values=cd.get("pick_list_values") if cd_type == ConditionDataType.PICK_LIST else None,
-            )
-        )
+        readout_idx += 1
 
     return CddProtocolMappingResult(
         name=cdd_protocol.get("name", f"CDD Protocol {cdd_protocol['id']}"),

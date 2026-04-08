@@ -54,6 +54,7 @@ export function useCddProtocols(enabled: boolean) {
         method: "GET",
       }),
     enabled,
+    staleTime: 5 * 60 * 1000, // 5 min — CDD protocols don't change often
   });
 }
 
@@ -66,6 +67,7 @@ export function useCddProtocolPreview(cddId: number | null) {
         method: "GET",
       }),
     enabled: cddId !== null,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

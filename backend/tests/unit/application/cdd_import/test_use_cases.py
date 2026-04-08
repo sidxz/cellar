@@ -116,10 +116,10 @@ def _cdd_protocol_detail(protocol_id=1, name="Kinase IC50"):
         "id": protocol_id,
         "name": name,
         "readout_definitions": [
-            {"name": "% Inhibition", "type": "Number", "unit": "%"},
-            {"name": "Notes", "type": "Text", "unit": None},
+            {"name": "% Inhibition", "data_type": "Number", "unit_label": "%"},
+            {"name": "Notes", "data_type": "Text", "unit_label": None},
+            {"name": "Cell Type", "data_type": "Text", "protocol_condition": True},
         ],
-        "conditions": [{"name": "Cell Type", "type": "Text"}],
     }
 
 
@@ -141,7 +141,7 @@ class TestListCddProtocols:
     async def test_success(self):
         gateway = FakeGateway(
             protocols=[
-                {"id": 1, "name": "P1", "readout_definitions": [{"name": "R1", "type": "Number"}]},
+                {"id": 1, "name": "P1", "readout_definitions": [{"name": "R1", "data_type": "Number"}]},
             ]
         )
         uc = ListCddProtocols(
@@ -325,7 +325,7 @@ class TestImportCddProtocol:
         detail = {
             "id": 1,
             "name": "Empty",
-            "readout_definitions": [{"name": "X", "type": "UnknownType"}],
+            "readout_definitions": [{"name": "X", "data_type": "UnknownType"}],
             "conditions": [],
         }
         uc, _repo = self._make_uc(detail=detail)

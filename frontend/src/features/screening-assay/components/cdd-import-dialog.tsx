@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Check, AlertTriangle, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, AlertTriangle, Loader2, Search } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -44,18 +45,30 @@ export function CddImportDialog({
   const [selectedCddId, setSelectedCddId] = useState<number | null>(null);
   const [nameOverride, setNameOverride] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: protocols, isLoading: protocolsLoading, error: protocolsError } =
-    useCddProtocols(open);
+  const {
+    data: protocols,
+    isLoading: protocolsLoading,
+    error: protocolsError,
+  } = useCddProtocols(open);
   const { data: preview, isLoading: previewLoading } =
     useCddProtocolPreview(step === "preview" ? selectedCddId : null);
   const importMutation = useImportCddProtocol();
+
+  const filteredProtocols = useMemo(() => {
+    if (!protocols) return [];
+    if (!searchQuery.trim()) return protocols;
+    const q = searchQuery.toLowerCase();
+    return protocols.filter((p) => p.name.toLowerCase().includes(q));
+  }, [protocols, searchQuery]);
 
   const reset = () => {
     setStep("select");
     setSelectedCddId(null);
     setNameOverride("");
     setError(null);
+    setSearchQuery("");
   };
 
   const handleOpenChange = (v: boolean) => {
@@ -79,7 +92,12 @@ export function CddImportDialog({
         nameOverride: nameOverride || undefined,
       });
       handleOpenChange(false);
-      if (onImported && result && typeof result === "object" && "id" in result) {
+      if (
+        onImported &&
+        result &&
+        typeof result === "object" &&
+        "id" in result
+      ) {
         onImported((result as { id: string }).id);
       }
     } catch (err: unknown) {
@@ -90,9 +108,14 @@ export function CddImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>Import Protocol from CDD Vault</DialogTitle>
+          <DialogDescription>
+            {step === "select" && "Select a protocol to preview its readout mapping."}
+            {step === "preview" && "Review the mapping before importing."}
+            {step === "importing" && "Importing..."}
+          </DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -103,7 +126,7 @@ export function CddImportDialog({
 
         {/* Step 1: Select */}
         {step === "select" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             {protocolsLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -123,39 +146,65 @@ export function CddImportDialog({
               </p>
             )}
             {protocols && protocols.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Protocol Name</TableHead>
-                    <TableHead className="w-[100px]">Readouts</TableHead>
-                    <TableHead className="w-[80px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {protocols.map((p) => (
-                    <TableRow key={p.cdd_id}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell>{p.readout_count}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
+              <>
+                <div className="relative shrink-0">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search protocols..."
+                    className="pl-9"
+                  />
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Protocol Name</TableHead>
+                        <TableHead className="w-[80px] text-right">
+                          Readouts
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredProtocols.map((p) => (
+                        <TableRow
+                          key={p.cdd_id}
+                          className="cursor-pointer hover:bg-muted/50"
                           onClick={() => handleSelectProtocol(p.cdd_id)}
                         >
-                          Preview
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                          <TableCell className="font-medium">
+                            {p.name}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {p.readout_count}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {filteredProtocols.length === 0 && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={2}
+                            className="text-center text-muted-foreground"
+                          >
+                            No protocols match your search.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  {filteredProtocols.length} of {protocols.length} protocols
+                </p>
+              </>
             )}
           </div>
         )}
 
         {/* Step 2: Preview */}
         {step === "preview" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
             {previewLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -164,89 +213,120 @@ export function CddImportDialog({
             )}
             {preview && (
               <>
-                <div className="grid gap-2">
-                  <Label>Protocol Name</Label>
-                  <Input
-                    value={nameOverride || preview.name}
-                    onChange={(e) => setNameOverride(e.target.value)}
-                    placeholder={preview.name}
-                  />
+                {/* Fixed header: name + summary */}
+                <div className="shrink-0 space-y-3">
+                  <div className="grid gap-1.5">
+                    <Label>Protocol Name</Label>
+                    <Input
+                      value={nameOverride || preview.name}
+                      onChange={(e) => setNameOverride(e.target.value)}
+                      placeholder={preview.name}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>
+                      <span className="font-medium text-green-600">
+                        {preview.readouts.length}
+                      </span>{" "}
+                      readouts mapped
+                    </span>
+                    {preview.conditions.length > 0 && (
+                      <span>
+                        <span className="font-medium">
+                          {preview.conditions.length}
+                        </span>{" "}
+                        conditions
+                      </span>
+                    )}
+                    {preview.warnings.length > 0 && (
+                      <span>
+                        <span className="font-medium text-amber-600">
+                          {preview.warnings.length}
+                        </span>{" "}
+                        skipped
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {preview.readouts.length > 0 && (
-                  <div>
-                    <h4 className="mb-2 text-sm font-semibold">
-                      Mapped Readouts ({preview.readouts.length})
-                    </h4>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead />
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Unit</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {preview.readouts.map((r, i) => (
-                          <TableRow key={i}>
-                            <TableCell>
-                              <Check className="h-4 w-4 text-green-500" />
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {r.name}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{r.data_type}</Badge>
-                            </TableCell>
-                            <TableCell>{r.unit ?? "\u2014"}</TableCell>
+                {/* Scrollable content */}
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+                  {/* Mapped readouts */}
+                  {preview.readouts.length > 0 && (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-8" />
+                            <TableHead>Readout</TableHead>
+                            <TableHead className="w-[100px]">Type</TableHead>
+                            <TableHead className="w-[80px]">Unit</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                        </TableHeader>
+                        <TableBody>
+                          {preview.readouts.map((r, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="pr-0">
+                                <Check className="h-4 w-4 text-green-500" />
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {r.name}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{r.data_type}</Badge>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {r.unit ?? "\u2014"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
 
-                {preview.warnings.length > 0 && (
-                  <div>
-                    <h4 className="mb-2 text-sm font-semibold text-amber-600">
-                      Skipped ({preview.warnings.length})
-                    </h4>
-                    {preview.warnings.map((w, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2 text-sm"
-                      >
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                        <div>
-                          <span className="font-medium">{w.field_name}</span>
-                          <span className="text-muted-foreground">
-                            {" "}&mdash; {w.reason}
+                  {/* Conditions */}
+                  {preview.conditions.length > 0 && (
+                    <div>
+                      <h4 className="mb-2 text-sm font-medium">Conditions</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {preview.conditions.map((c, i) => (
+                          <Badge key={i} variant="secondary">
+                            {c.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Warnings */}
+                  {preview.warnings.length > 0 && (
+                    <div className="space-y-1.5">
+                      <h4 className="text-sm font-medium text-amber-600">
+                        Skipped
+                      </h4>
+                      {preview.warnings.map((w, i) => (
+                        <div
+                          key={i}
+                          className="flex items-start gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-sm"
+                        >
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                          <span>
+                            <span className="font-medium">{w.field_name}</span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              &mdash; {w.reason}
+                            </span>
                           </span>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {preview.conditions.length > 0 && (
-                  <div>
-                    <h4 className="mb-2 text-sm font-semibold">
-                      Conditions ({preview.conditions.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {preview.conditions.map((c, i) => (
-                        <Badge key={i} variant="secondary">
-                          {c.name} ({c.data_type})
-                        </Badge>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               <Button variant="outline" onClick={() => setStep("select")}>
                 Back
               </Button>

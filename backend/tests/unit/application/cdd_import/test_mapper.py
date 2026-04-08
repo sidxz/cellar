@@ -18,18 +18,25 @@ from chem_vault.domain.screening_assay.enums import (
 )
 
 
-def _cdd_protocol_json(*, protocol_id=1, name="Kinase IC50", readouts=None, conditions=None):
+def _cdd_protocol_json(*, protocol_id=1, name="Kinase IC50", readouts=None):
     return {
         "id": protocol_id,
         "name": name,
         "class": "protocol",
         "readout_definitions": readouts or [],
-        "conditions": conditions or [],
     }
 
 
-def _cdd_readout(name="% Inhibition", rtype="Number", unit="%", **kwargs):
-    rd = {"name": name, "type": rtype, "unit": unit}
+def _cdd_readout(name="% Inhibition", data_type="Number", unit_label="%", **kwargs):
+    """Build a CDD readout definition using actual CDD API field names."""
+    rd = {"name": name, "data_type": data_type, "unit_label": unit_label}
+    rd.update(kwargs)
+    return rd
+
+
+def _cdd_condition(name="Cell Type", data_type="Text", **kwargs):
+    """Build a CDD condition (readout with protocol_condition=True)."""
+    rd = {"name": name, "data_type": data_type, "protocol_condition": True}
     rd.update(kwargs)
     return rd
 
@@ -116,10 +123,10 @@ class TestMapCddProtocol:
 
     def test_conditions_mapped(self):
         cdd = _cdd_protocol_json(
-            readouts=[_cdd_readout()],
-            conditions=[{"name": "Cell Type", "type": "Text"}],
+            readouts=[_cdd_readout(), _cdd_condition("Cell Type", "Text")],
         )
         result = map_cdd_protocol(cdd)
+        assert len(result.readouts) == 1  # condition not counted as readout
         assert len(result.conditions) == 1
         assert result.conditions[0].name == "Cell Type"
         assert result.conditions[0].data_type == ConditionDataType.TEXT

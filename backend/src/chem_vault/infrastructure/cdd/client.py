@@ -60,9 +60,19 @@ class CddVaultClient:
         return response.json()
 
     async def list_protocols(self, vault_id: str, api_key: str) -> list[dict[str, Any]]:
-        """Fetch all protocols from a CDD Vault."""
-        data = await self._get(f"{BASE_URL}/vaults/{vault_id}/protocols", api_key)
-        return data.get("objects", [])
+        """Fetch all protocols from a CDD Vault, handling pagination."""
+        all_objects: list[dict[str, Any]] = []
+        offset = 0
+        page_size = 50
+        while True:
+            url = f"{BASE_URL}/vaults/{vault_id}/protocols?page_size={page_size}&offset={offset}"
+            data = await self._get(url, api_key)
+            objects = data.get("objects", [])
+            all_objects.extend(objects)
+            if len(objects) < page_size:
+                break
+            offset += page_size
+        return all_objects
 
     async def get_protocol(
         self, vault_id: str, api_key: str, protocol_id: int
