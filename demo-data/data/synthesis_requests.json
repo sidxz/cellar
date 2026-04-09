@@ -1,0 +1,53 @@
+{
+  "synreq_01": {
+    "molecule_ref": "mol_osimertinib",
+    "amount_value": 500.0,
+    "amount_unit": "mg",
+    "purpose": "Resupply for dose-response confirmation studies in EGFR mutant panel",
+    "priority": "urgent",
+    "target_purity": 98.0,
+    "project_ref": "proj_kinase",
+    "transitions": ["submit", "approve", "assign", "start", "complete", "fulfill"],
+    "assign_type": "internal"
+  },
+  "synreq_02": {
+    "molecule_ref": "mol_dabrafenib",
+    "amount_value": 250.0,
+    "amount_unit": "mg",
+    "purpose": "Scale-up for in vivo xenograft study (BRAF V600E melanoma model)",
+    "priority": "urgent",
+    "target_purity": 99.0,
+    "project_ref": "proj_kinase",
+    "transitions": ["submit", "approve", "assign", "start"],
+    "assign_type": "internal"
+  },
+  "synreq_03": {
+    "molecule_ref": "mol_celecoxib",
+    "amount_value": 1000.0,
+    "amount_unit": "mg",
+    "purpose": "Reference compound for COX-2 selectivity benchmarking",
+    "priority": "routine",
+    "target_purity": 95.0,
+    "project_ref": "proj_antiinflam",
+    "transitions": ["submit", "approve"]
+  },
+  "synreq_04": {
+    "molecule_ref": "mol_valsartan",
+    "amount_value": 100.0,
+    "amount_unit": "mg",
+    "purpose": "Analytical reference standard for metabolite identification",
+    "priority": "routine",
+    "project_ref": "proj_cardio",
+    "transitions": ["submit", "reject"],
+    "reject_reason": "Available from Sigma-Aldrich catalog — purchase instead of synthesis"
+  },
+  "synreq_05": {
+    "molecule_ref": "mol_aripiprazole",
+    "amount_value": 200.0,
+    "amount_unit": "mg",
+    "purpose": "Radioligand displacement assay reference",
+    "priority": "routine",
+    "project_ref": "proj_cns",
+    "transitions": []
+  }
+}

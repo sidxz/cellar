@@ -1,0 +1,34 @@
+{
+  "sampreq_01": {
+    "molecule_ref": "mol_gefitinib",
+    "amount_value": 5.0,
+    "amount_unit": "mg",
+    "purpose": "Confirmation IC50 in EGFR L858R mutant cell line",
+    "priority": "urgent",
+    "transitions": ["approve", "prepare", "fulfill"]
+  },
+  "sampreq_02": {
+    "molecule_ref": "mol_celecoxib",
+    "amount_value": 10.0,
+    "amount_unit": "mg",
+    "purpose": "COX-1/COX-2 selectivity assay reference standard",
+    "priority": "routine",
+    "transitions": ["approve", "prepare"]
+  },
+  "sampreq_03": {
+    "molecule_ref": "mol_losartan",
+    "amount_value": 2.0,
+    "amount_unit": "mg",
+    "purpose": "ACE2 binding assay positive control",
+    "priority": "routine",
+    "transitions": ["approve"]
+  },
+  "sampreq_04": {
+    "molecule_ref": "mol_fluoxetine",
+    "amount_value": 5.0,
+    "amount_unit": "mg",
+    "purpose": "5-HT2A radioligand displacement — reference compound",
+    "priority": "routine",
+    "transitions": []
+  }
+}

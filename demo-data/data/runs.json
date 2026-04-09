@@ -1,0 +1,87 @@
+{
+  "run_kinase_01": {
+    "protocol_ref": "proto_kinase",
+    "run_date": "2026-03-15",
+    "org_ref": "org_acme",
+    "plate_format": "384",
+    "conditions": {"ATP Concentration": "10 uM", "Incubation Time": "60 min"},
+    "notes": "Primary screen of kinase inhibitor library against EGFR WT",
+    "transitions": ["start", "complete", "approve"],
+    "plate_setup": {
+      "molecules": [
+        "Imatinib", "Gefitinib", "Erlotinib", "Sorafenib", "Vemurafenib",
+        "Dabrafenib", "Osimertinib", "Lapatinib", "Crizotinib", "Sunitinib",
+        "Dasatinib", "Nilotinib", "Afatinib", "Bosutinib", "Lenvatinib"
+      ],
+      "concentrations_nM": [10000, 3333, 1111, 370, 123, 41, 13.7, 4.6, 1.5, 0.5]
+    }
+  },
+  "run_kinase_02": {
+    "protocol_ref": "proto_kinase",
+    "run_date": "2026-03-22",
+    "org_ref": "org_acme",
+    "plate_format": "384",
+    "conditions": {"ATP Concentration": "10 uM", "Incubation Time": "60 min"},
+    "notes": "Confirmation screen — repeat of primary hits",
+    "transitions": ["start", "complete"],
+    "plate_setup": {
+      "molecules": [
+        "Gefitinib", "Erlotinib", "Osimertinib", "Afatinib", "Lapatinib"
+      ],
+      "concentrations_nM": [10000, 3333, 1111, 370, 123, 41, 13.7, 4.6, 1.5, 0.5]
+    }
+  },
+  "run_cox2_01": {
+    "protocol_ref": "proto_cox2",
+    "run_date": "2026-03-18",
+    "org_ref": "org_acme",
+    "plate_format": "96",
+    "conditions": {"Substrate Concentration": "100 uM"},
+    "notes": "COX-2 selectivity panel for anti-inflammatory leads",
+    "transitions": ["start", "complete", "approve"],
+    "plate_setup": {
+      "molecules": [
+        "Celecoxib", "Indomethacin", "Naproxen", "Ibuprofen", "Diclofenac",
+        "Meloxicam", "Piroxicam", "Aspirin", "Sulindac", "Ketoprofen"
+      ],
+      "concentrations_nM": [10000, 3333, 1111, 370, 123, 41, 13.7, 4.6, 1.5, 0.5]
+    }
+  },
+  "run_viability_01": {
+    "protocol_ref": "proto_viability",
+    "run_date": "2026-04-01",
+    "org_ref": "org_acme",
+    "plate_format": "96",
+    "conditions": {"Cell Line": "HeLa", "Exposure Time": "72 h"},
+    "notes": "Cytotoxicity counter-screen",
+    "transitions": ["start"]
+  },
+  "run_admet_01": {
+    "protocol_ref": "proto_admet",
+    "run_date": "2026-03-20",
+    "org_ref": "org_biosynth",
+    "plate_format": "96",
+    "conditions": {"Species": "Human"},
+    "notes": "ADMET profiling — first batch of leads",
+    "transitions": ["start", "complete", "approve"]
+  },
+  "run_admet_02": {
+    "protocol_ref": "proto_admet",
+    "run_date": "2026-04-05",
+    "org_ref": "org_biosynth",
+    "plate_format": "96",
+    "conditions": {"Species": "Human"},
+    "notes": "ADMET profiling — second batch (pending)",
+    "transitions": []
+  },
+  "run_kinase_03": {
+    "protocol_ref": "proto_kinase",
+    "run_date": "2026-03-28",
+    "org_ref": "org_acme",
+    "plate_format": "384",
+    "conditions": {"ATP Concentration": "10 uM", "Incubation Time": "60 min"},
+    "notes": "QC failed — high plate-to-plate variability in controls",
+    "transitions": ["start", "complete", "reject"],
+    "reject_reason": "Z-prime below 0.4 on 2 of 4 plates — excessive signal variability in DMSO controls"
+  }
+}

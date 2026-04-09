@@ -1,0 +1,52 @@
+{
+  "target_egfr": {
+    "name": "Epidermal Growth Factor Receptor",
+    "target_type": "single_protein",
+    "organism": "Homo sapiens",
+    "gene_name": "EGFR",
+    "uniprot_id": "P00533",
+    "ncbi_gene_id": "1956",
+    "description": "Receptor tyrosine kinase involved in cell proliferation and survival signaling. Key oncology target in non-small cell lung cancer and other solid tumors.",
+    "target_class": "Kinase"
+  },
+  "target_cox2": {
+    "name": "Cyclooxygenase-2",
+    "target_type": "single_protein",
+    "organism": "Homo sapiens",
+    "gene_name": "PTGS2",
+    "uniprot_id": "P35354",
+    "ncbi_gene_id": "5743",
+    "description": "Inducible prostaglandin-endoperoxide synthase involved in inflammation. Target for NSAIDs and selective COX-2 inhibitors.",
+    "target_class": "Oxidoreductase"
+  },
+  "target_braf": {
+    "name": "Serine/Threonine-Protein Kinase B-Raf",
+    "target_type": "single_protein",
+    "organism": "Homo sapiens",
+    "gene_name": "BRAF",
+    "uniprot_id": "P15056",
+    "ncbi_gene_id": "673",
+    "description": "MAP kinase pathway component. BRAF V600E mutation drives melanoma and other cancers. Target for vemurafenib and dabrafenib.",
+    "target_class": "Kinase"
+  },
+  "target_ace2": {
+    "name": "Angiotensin-Converting Enzyme 2",
+    "target_type": "single_protein",
+    "organism": "Homo sapiens",
+    "gene_name": "ACE2",
+    "uniprot_id": "Q9BYF1",
+    "ncbi_gene_id": "59272",
+    "description": "Carboxypeptidase that converts angiotensin II to angiotensin-(1-7). Key regulator of cardiovascular homeostasis.",
+    "target_class": "Protease"
+  },
+  "target_5ht2a": {
+    "name": "5-Hydroxytryptamine Receptor 2A",
+    "target_type": "single_protein",
+    "organism": "Homo sapiens",
+    "gene_name": "HTR2A",
+    "uniprot_id": "P28223",
+    "ncbi_gene_id": "3356",
+    "description": "G protein-coupled serotonin receptor. Primary target for atypical antipsychotics and implicated in mood disorders.",
+    "target_class": "GPCR"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "plate_kinase_01": {
+    "barcode": "PLT-KIN-001",
+    "plate_label": "EGFR Primary Screen Plate 1",
+    "format": "384",
+    "plate_type": "assay",
+    "location_ref": "loc_room_201",
+    "project_ref": "proj_kinase",
+    "template_ref": "tpl_384_dose",
+    "notes": "Primary EGFR kinase screen — 10pt dose response"
+  },
+  "plate_kinase_02": {
+    "barcode": "PLT-KIN-002",
+    "plate_label": "EGFR Primary Screen Plate 2",
+    "format": "384",
+    "plate_type": "assay",
+    "location_ref": "loc_room_201",
+    "project_ref": "proj_kinase",
+    "template_ref": "tpl_384_dose",
+    "notes": "Primary EGFR kinase screen — 10pt dose response (replicate)"
+  },
+  "plate_cox2_01": {
+    "barcode": "PLT-COX-001",
+    "plate_label": "COX-2 Selectivity Panel Plate 1",
+    "format": "96",
+    "plate_type": "assay",
+    "location_ref": "loc_room_201",
+    "project_ref": "proj_antiinflam",
+    "template_ref": "tpl_96_standard",
+    "notes": "COX-2 selectivity panel"
+  },
+  "plate_storage_01": {
+    "barcode": "PLT-STR-001",
+    "plate_label": "Compound Storage Plate A",
+    "format": "96",
+    "plate_type": "compound_storage",
+    "location_ref": "loc_freezer_01",
+    "notes": "DMSO stock plate — 10 mM solutions"
+  }
+}

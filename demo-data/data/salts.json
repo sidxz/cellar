@@ -1,0 +1,58 @@
+{
+  "salt_hcl": {
+    "code": "HCl",
+    "name": "Hydrochloride",
+    "smiles": "[Cl-]",
+    "molecular_weight": 36.46,
+    "is_default": true
+  },
+  "salt_na": {
+    "code": "Na",
+    "name": "Sodium",
+    "smiles": "[Na+]",
+    "molecular_weight": 22.99,
+    "is_default": false
+  },
+  "salt_ca": {
+    "code": "Ca",
+    "name": "Calcium",
+    "smiles": "[Ca++]",
+    "molecular_weight": 40.08,
+    "is_default": false
+  },
+  "salt_k": {
+    "code": "K",
+    "name": "Potassium",
+    "smiles": "[K+]",
+    "molecular_weight": 39.10,
+    "is_default": false
+  },
+  "salt_tartrate": {
+    "code": "TART",
+    "name": "Tartrate",
+    "smiles": "OC(C(O)C(=O)[O-])C(=O)[O-]",
+    "molecular_weight": 148.07,
+    "is_default": false
+  },
+  "salt_mesylate": {
+    "code": "MES",
+    "name": "Mesylate",
+    "smiles": "CS(=O)(=O)[O-]",
+    "molecular_weight": 95.10,
+    "is_default": false
+  },
+  "salt_maleate": {
+    "code": "MAL",
+    "name": "Maleate",
+    "smiles": "OC(=O)/C=C\\C(=O)[O-]",
+    "molecular_weight": 115.04,
+    "is_default": false
+  },
+  "salt_sulfate": {
+    "code": "SO4",
+    "name": "Sulfate",
+    "smiles": "OS(=O)(=O)[O-]",
+    "molecular_weight": 97.07,
+    "is_default": false
+  }
+}

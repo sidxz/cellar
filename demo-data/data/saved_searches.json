@@ -1,0 +1,46 @@
+{
+  "search_active_kinase": {
+    "name": "Active Kinase Inhibitors (<100nM)",
+    "project_ref": "proj_kinase",
+    "visibility": "project",
+    "query": {
+      "search_type": "property",
+      "filters": [
+        {"field": "lifecycle_stage", "operator": "in", "value": ["ACTIVE", "HIT", "LEAD"]},
+        {"field": "tags", "operator": "contains", "value": "kinase"}
+      ]
+    }
+  },
+  "search_quinazoline": {
+    "name": "Quinazoline Core Substructure",
+    "project_ref": "proj_kinase",
+    "visibility": "project",
+    "query": {
+      "search_type": "substructure",
+      "smiles": "c1ccc2ncncc2c1",
+      "filters": []
+    }
+  },
+  "search_high_mw": {
+    "name": "High Molecular Weight (>500)",
+    "project_ref": null,
+    "visibility": "private",
+    "query": {
+      "search_type": "property",
+      "filters": [
+        {"field": "molecular_weight", "operator": ">=", "value": 500}
+      ]
+    }
+  },
+  "search_recent": {
+    "name": "Recently Registered (Last 30 Days)",
+    "project_ref": null,
+    "visibility": "private",
+    "query": {
+      "search_type": "property",
+      "filters": [
+        {"field": "created_at", "operator": ">=", "value": "2026-03-09"}
+      ]
+    }
+  }
+}

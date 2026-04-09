@@ -1,0 +1,31 @@
+{
+  "ship_01": {
+    "destination_ref": "org_neurotech",
+    "carrier": "FedEx Priority",
+    "expected_arrival_date": "2026-04-10",
+    "shipping_conditions": "Ambient temperature, desiccant pack",
+    "notes": "CNS collaboration compound shipment — batch 1",
+    "sample_refs": ["sample_fluoxetine_01", "sample_risperidone_01"],
+    "transitions": ["ship", "deliver"],
+    "tracking_number": "FX-7742891034"
+  },
+  "ship_02": {
+    "destination_ref": "org_biosynth",
+    "carrier": "DHL Express",
+    "expected_arrival_date": "2026-04-15",
+    "shipping_conditions": "Cold chain (2-8 C), insulated box",
+    "notes": "ADMET profiling batch 2 — handle with care",
+    "sample_refs": ["sample_imatinib_01", "sample_erlotinib_01"],
+    "transitions": ["ship"],
+    "tracking_number": "DHL-9981234567"
+  },
+  "ship_03": {
+    "destination_ref": "org_mit",
+    "carrier": "UPS Ground",
+    "expected_arrival_date": "2026-04-20",
+    "shipping_conditions": "Room temperature",
+    "notes": "Academic collaboration — reference compounds for crystallography",
+    "sample_refs": ["sample_losartan_01"],
+    "transitions": []
+  }
+}
