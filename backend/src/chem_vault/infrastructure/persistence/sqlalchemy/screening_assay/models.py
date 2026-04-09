@@ -324,8 +324,8 @@ class ReadoutDataModel(Base, EntityModelMixin, WorkspaceIdMixin):
         Uuid, ForeignKey("runs.id"), nullable=False
     )
     well_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
-    molecule_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
-    batch_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    molecule_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     readout_definition_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("readout_definitions.id"), nullable=False
     )

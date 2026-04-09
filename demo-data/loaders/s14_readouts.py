@@ -159,9 +159,42 @@ async def _load_dose_response_run(
     rng = random.Random(seed)
     items = []
 
-    # Note: Control well readout data skipped — readout_data.molecule_id is NOT NULL.
-    # Z-prime QC requires a future migration to make molecule_id nullable for controls.
-    # Dose-response curve fitting works without control data (normalization set to "none").
+    # Create readout data for control wells (molecule_id/batch_id NULL — migration 005)
+    from chem_vault.domain.screening_assay.enums import WellType
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+        ReadoutDataModel, WellModel, PlateModel,
+    )
+    from sqlalchemy import select
+    import uuid as _uuid
+
+    sf = ctx.container[async_sessionmaker]
+    async with sf() as session:
+        plate_stmt = select(PlateModel.id).where(PlateModel.run_id == run.id)
+        plate_ids = [r[0] for r in (await session.execute(plate_stmt)).all()]
+        if plate_ids:
+            ctrl_stmt = select(WellModel).where(
+                WellModel.plate_id.in_(plate_ids),
+                WellModel.well_type.in_(["positive_control", "negative_control"]),
+            )
+            ctrl_wells = (await session.execute(ctrl_stmt)).scalars().all()
+            for cw in ctrl_wells:
+                val = 95.0 + rng.gauss(0, 2.0) if cw.well_type == "positive_control" else 5.0 + rng.gauss(0, 2.0)
+                session.add(ReadoutDataModel(
+                    id=_uuid.uuid4(),
+                    workspace_id=WORKSPACE_ID,
+                    run_id=run.id,
+                    well_id=cw.id,
+                    molecule_id=None,
+                    batch_id=None,
+                    readout_definition_id=pct_inh_rd.id,
+                    value_numeric=round(val, 2),
+                    value_qualifier="=",
+                    is_outlier=False,
+                    is_computed=False,
+                ))
+            await session.commit()
+            logger.info("readout.controls_created", run_key=run_key, count=len(ctrl_wells))
 
     for well in run.wells:
         if well.batch_id is None or well.concentration is None:
