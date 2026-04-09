@@ -141,7 +141,9 @@ from chem_vault.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from chem_vault.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
+from chem_vault.application.screening.refit_dose_response import RefitDoseResponseCurve
 from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from chem_vault.application.screening.create_readout_data import CreateReadoutData
@@ -446,6 +448,8 @@ BulkCreateReadoutDataDep = Annotated[BulkCreateReadoutData, Depends(_get_use_cas
 ListReadoutDataByRunDep = Annotated[ListReadoutDataByRun, Depends(_get_use_case(ListReadoutDataByRun))]
 CreateDoseResponseCurveDep = Annotated[CreateDoseResponseCurve, Depends(_get_use_case(CreateDoseResponseCurve))]
 ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_case(ListDoseResponseByRun))]
+RefitDoseResponseCurveDep = Annotated[RefitDoseResponseCurve, Depends(_get_use_case(RefitDoseResponseCurve))]
+ClassifyDoseResponseCurveDep = Annotated[ClassifyDoseResponseCurve, Depends(_get_use_case(ClassifyDoseResponseCurve))]
 MoleculeActivityServiceDep = Annotated[MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))]
 ReadoutCalculationEngineDep = Annotated[ReadoutCalculationEngine, Depends(_get_use_case(ReadoutCalculationEngine))]
 

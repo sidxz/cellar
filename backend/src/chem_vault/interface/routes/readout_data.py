@@ -6,7 +6,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from chem_vault.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
@@ -27,11 +27,13 @@ from chem_vault.application.screening.readout_calculation_engine import ReadoutC
 from chem_vault.interface.dependencies import (
     AuthDep,
     BulkCreateReadoutDataDep,
+    ClassifyDoseResponseCurveDep,
     CreateDoseResponseCurveDep,
     CreateReadoutDataDep,
     ListDoseResponseByRunDep,
     ListReadoutDataByRunDep,
     ReadoutCalculationEngineDep,
+    RefitDoseResponseCurveDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -192,6 +194,17 @@ class CreateDoseResponseCurveRequest(BaseModel):
     excluded_points: list[dict[str, Any]] | None = None
 
 
+class RefitDoseResponseCurveRequest(BaseModel):
+    excluded_point_indices: list[int] = Field(default_factory=list)
+    hill_slope_constraint: str | None = None
+    top_constraint: float | None = None
+    bottom_constraint: float | None = None
+
+
+class ClassifyDoseResponseCurveRequest(BaseModel):
+    curve_class: str
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -314,3 +327,46 @@ async def list_dose_response_curves(
     result = await uc(query, auth=auth)
     curves = result_to_response(result)
     return [DoseResponseCurveResponse.from_domain(c) for c in curves]
+
+
+@router.post("/dose-response-curves/{curve_id}/refit", response_model=DoseResponseCurveResponse)
+async def refit_dose_response_curve(
+    curve_id: uuid.UUID,
+    body: RefitDoseResponseCurveRequest,
+    auth: AuthDep,
+    uc: RefitDoseResponseCurveDep,
+) -> DoseResponseCurveResponse:
+    from chem_vault.application.screening.refit_dose_response import RefitDoseResponseCurveCommand
+
+    result = await uc(
+        RefitDoseResponseCurveCommand(
+            workspace_id=auth.workspace_id,
+            curve_id=curve_id,
+            excluded_point_indices=body.excluded_point_indices,
+            hill_slope_constraint=body.hill_slope_constraint,
+            top_constraint=body.top_constraint,
+            bottom_constraint=body.bottom_constraint,
+        ),
+        auth=auth,
+    )
+    return DoseResponseCurveResponse.from_domain(result_to_response(result))
+
+
+@router.patch("/dose-response-curves/{curve_id}/classify", response_model=DoseResponseCurveResponse)
+async def classify_dose_response_curve(
+    curve_id: uuid.UUID,
+    body: ClassifyDoseResponseCurveRequest,
+    auth: AuthDep,
+    uc: ClassifyDoseResponseCurveDep,
+) -> DoseResponseCurveResponse:
+    from chem_vault.application.screening.classify_dose_response import ClassifyDoseResponseCurveCommand
+
+    result = await uc(
+        ClassifyDoseResponseCurveCommand(
+            workspace_id=auth.workspace_id,
+            curve_id=curve_id,
+            curve_class=body.curve_class,
+        ),
+        auth=auth,
+    )
+    return DoseResponseCurveResponse.from_domain(result_to_response(result))
