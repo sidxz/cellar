@@ -55,6 +55,18 @@ class LinkedEntityType(StrEnum):
     FORMULATION_BATCH = "formulation_batch"
 
 
+class PlateFormat(StrEnum):
+    """Microplate well count — shared across screening and inventory contexts."""
+
+    F6 = "6"
+    F12 = "12"
+    F24 = "24"
+    F48 = "48"
+    F96 = "96"
+    F384 = "384"
+    F1536 = "1536"
+
+
 class AssignmentType(StrEnum):
     """Synthesis request assignment target."""
 

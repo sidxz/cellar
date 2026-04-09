@@ -75,16 +75,9 @@ class TargetType(StrEnum):
     TISSUE = "tissue"
 
 
-class PlateFormat(StrEnum):
-    """Microplate well count."""
-
-    F6 = "6"
-    F12 = "12"
-    F24 = "24"
-    F48 = "48"
-    F96 = "96"
-    F384 = "384"
-    F1536 = "1536"
+# PlateFormat is shared across screening and inventory — canonical definition
+# lives in domain.shared.enums. Re-exported here for backwards compatibility.
+from chem_vault.domain.shared.enums import PlateFormat as PlateFormat  # noqa: F401
 
 
 class WellType(StrEnum):

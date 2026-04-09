@@ -17,7 +17,7 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.enums import PlateStatus, PlateType
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
 from chem_vault.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
-from chem_vault.domain.screening_assay.enums import PlateFormat
+from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import Barcode
 

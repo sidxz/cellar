@@ -19,7 +19,7 @@ from chem_vault.domain.inventory.events import (
     PlateStatusChanged,
     PlateWellsMapped,
 )
-from chem_vault.domain.screening_assay.enums import PlateFormat
+from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.shared.value_objects import Barcode

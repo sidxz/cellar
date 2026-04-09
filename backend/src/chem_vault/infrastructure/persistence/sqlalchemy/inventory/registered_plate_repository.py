@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 
 from chem_vault.domain.inventory.enums import PlateStatus, PlateType
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
-from chem_vault.domain.screening_assay.enums import PlateFormat
+from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.value_objects import Barcode
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
