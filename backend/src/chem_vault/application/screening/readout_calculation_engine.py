@@ -23,10 +23,12 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import (
     ReadoutAggregation,
     ReadoutNormalization,
+    WellType,
 )
 from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from chem_vault.domain.screening_assay.plate_normalizer import PlateNormalizer
+from chem_vault.domain.screening_assay.plate_quality import PlateQualityCalculator
 from chem_vault.domain.screening_assay.protocol import ReadoutDefinition
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.screening_assay.replicate_aggregator import ReplicateAggregator
@@ -62,6 +64,7 @@ class ReadoutCalculationEngine:
         run_repo: RunRepository,
         protocol_repo: ProtocolRepository,
         fit_dose_response: FitDoseResponseCurves | None = None,
+        plate_quality: PlateQualityCalculator | None = None,
     ) -> None:
         self._uow = uow
         self._formula_evaluator = formula_evaluator
@@ -71,6 +74,7 @@ class ReadoutCalculationEngine:
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
         self._fit_dose_response = fit_dose_response
+        self._plate_quality = plate_quality
 
     async def compute_for_run(
         self, run_id: uuid.UUID, *, workspace_id: uuid.UUID
@@ -185,6 +189,45 @@ class ReadoutCalculationEngine:
                             is_computed=True,
                         )
                     )
+
+        # ------------------------------------------------------------------
+        # 4.5. Z-prime QC from controls
+        # ------------------------------------------------------------------
+        if self._plate_quality is not None and run.plates:
+            z_prime_results = {}
+            for plate in run.plates:
+                pos_vals = []
+                neg_vals = []
+                for w in run.wells:
+                    if w.plate_id != plate.id:
+                        continue
+                    # Find the first raw readout value for this well
+                    well_readout = next(
+                        (r for r in raw_data if r.well_id == w.id and r.value is not None),
+                        None,
+                    )
+                    if well_readout is None:
+                        continue
+                    if w.well_type == WellType.POSITIVE_CONTROL:
+                        pos_vals.append(well_readout.value.value)
+                    elif w.well_type == WellType.NEGATIVE_CONTROL:
+                        neg_vals.append(well_readout.value.value)
+
+                if pos_vals and neg_vals:
+                    qc = self._plate_quality.compute(pos_vals, neg_vals)
+                    z_prime_results[str(plate.id)] = {
+                        "z_prime": round(qc.z_prime, 3),
+                        "classification": qc.classification,
+                        "pos_mean": round(qc.positive_control_mean, 2),
+                        "pos_sd": round(qc.positive_control_sd, 2),
+                        "neg_mean": round(qc.negative_control_mean, 2),
+                        "neg_sd": round(qc.negative_control_sd, 2),
+                        "s2b": round(qc.signal_to_background, 2),
+                    }
+
+            if z_prime_results:
+                run.qc_metrics = run.qc_metrics or {}
+                run.qc_metrics["z_prime"] = z_prime_results
 
         # ------------------------------------------------------------------
         # 5. Aggregate replicates (in-memory)
