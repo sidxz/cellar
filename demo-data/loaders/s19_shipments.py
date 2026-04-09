@@ -19,7 +19,7 @@ async def load(ctx: DemoContext) -> int:
         DeliverShipment,
         DeliverShipmentCommand,
         MarkShipmentInTransit,
-        MarkShipmentInTransitCommand,
+        MarkInTransitCommand,
         ShipmentItemInput,
         ShipShipment,
         ShipShipmentCommand,
@@ -82,7 +82,7 @@ async def load(ctx: DemoContext) -> int:
                     )
                 elif transition == "in_transit":
                     await in_transit_uc(
-                        MarkShipmentInTransitCommand(
+                        MarkInTransitCommand(
                             workspace_id=WORKSPACE_ID,
                             shipment_id=shipment_id,
                         ),
