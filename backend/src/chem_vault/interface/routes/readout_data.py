@@ -34,6 +34,7 @@ from chem_vault.interface.dependencies import (
     ListReadoutDataByRunDep,
     ReadoutCalculationEngineDep,
     RefitDoseResponseCurveDep,
+    UoWDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -81,7 +82,9 @@ class DoseResponseCurveResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
+    molecule_name: str | None = None
     batch_id: uuid.UUID
+    batch_number: str | None = None
     protocol_id: uuid.UUID
     run_id: uuid.UUID
     curve_type: str
@@ -99,12 +102,20 @@ class DoseResponseCurveResponse(BaseModel):
     excluded_points: list[dict[str, Any]] | None = None
 
     @classmethod
-    def from_domain(cls, c) -> DoseResponseCurveResponse:  # type: ignore[no-untyped-def]
+    def from_domain(
+        cls,
+        c,  # type: ignore[no-untyped-def]
+        *,
+        molecule_name: str | None = None,
+        batch_number: str | None = None,
+    ) -> DoseResponseCurveResponse:
         return cls(
             id=c.id,
             workspace_id=c.workspace_id,
             molecule_id=c.molecule_id,
+            molecule_name=molecule_name,
             batch_id=c.batch_id,
+            batch_number=batch_number,
             protocol_id=c.protocol_id,
             run_id=c.run_id,
             curve_type=c.curve_type.value,
@@ -322,11 +333,40 @@ async def list_dose_response_curves(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
     uc: ListDoseResponseByRunDep,
+    uow: UoWDep,
 ) -> list[DoseResponseCurveResponse]:
     query = ListDoseResponseByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
     result = await uc(query, auth=auth)
     curves = result_to_response(result)
-    return [DoseResponseCurveResponse.from_domain(c) for c in curves]
+
+    # Batch-resolve molecule names and batch numbers for display
+    mol_ids = list({c.molecule_id for c in curves})
+    batch_ids = list({c.batch_id for c in curves})
+    mol_names: dict[uuid.UUID, str] = {}
+    batch_numbers: dict[uuid.UUID, str] = {}
+
+    if mol_ids:
+        from sqlalchemy import select
+        from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
+        from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+
+        async with uow:
+            stmt = select(MoleculeModel.id, MoleculeModel.name).where(MoleculeModel.id.in_(mol_ids))
+            rows = await uow.session.execute(stmt)
+            mol_names = {row[0]: row[1] for row in rows}
+
+            stmt = select(BatchModel.id, BatchModel.batch_number).where(BatchModel.id.in_(batch_ids))
+            rows = await uow.session.execute(stmt)
+            batch_numbers = {row[0]: row[1] for row in rows}
+
+    return [
+        DoseResponseCurveResponse.from_domain(
+            c,
+            molecule_name=mol_names.get(c.molecule_id),
+            batch_number=batch_numbers.get(c.batch_id),
+        )
+        for c in curves
+    ]
 
 
 @router.post("/dose-response-curves/{curve_id}/refit", response_model=DoseResponseCurveResponse)

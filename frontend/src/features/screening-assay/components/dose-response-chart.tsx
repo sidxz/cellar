@@ -291,7 +291,7 @@ function SummaryCard({
     <Card key={curve.id} className="py-4">
       <CardHeader className="pb-0">
         <CardTitle className="text-sm">
-          {CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
+          {curve.molecule_name ?? CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-2 space-y-1">
@@ -466,7 +466,10 @@ export function DoseResponseChart({
     const curve = curves[i];
     const color = TRACE_COLORS[i % TRACE_COLORS.length];
     const group = `curve-${curve.id}`;
-    const label = CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type;
+    const curveTypeLabel = CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type;
+    const label = curve.molecule_name
+      ? `${curve.molecule_name} (${curveTypeLabel})`
+      : curveTypeLabel;
 
     // Merge server excluded_points back into raw_data for interactive mode:
     // In interactive mode we manage exclusions locally.

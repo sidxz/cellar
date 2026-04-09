@@ -308,7 +308,9 @@ export interface DoseResponseCurve {
   id: string;
   workspace_id: string;
   molecule_id: string;
+  molecule_name: string | null;
   batch_id: string;
+  batch_number: string | null;
   protocol_id: string;
   run_id: string;
   curve_type: CurveType;
