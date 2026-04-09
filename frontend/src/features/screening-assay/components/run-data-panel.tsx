@@ -200,7 +200,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [plateSetupOpen, setPlateSetupOpen] = useState(false);
 
-  const hasPlateMap = !!plateMap && plateMap.wells.length > 0;
+  const hasPlateMap = !!plateMap?.wells && plateMap.wells.length > 0;
 
   return (
     <>
