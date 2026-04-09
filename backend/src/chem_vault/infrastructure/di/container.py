@@ -210,8 +210,6 @@ from chem_vault.domain.workspace_config.repository import (
     ControlledVocabularyRepository,
     CustomFieldDefinitionRepository,
     OrganizationRepository,
-    RegistrationFormRepository,
-    SaltEntryRepository,
     WorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -334,6 +332,11 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.synt
 )
 from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
 from chem_vault.infrastructure.rdkit.structure_processor import StructureProcessor
+from chem_vault.domain.screening_assay.curve_fitting import CurveFittingService
+from chem_vault.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
+from chem_vault.application.screening.refit_dose_response import RefitDoseResponseCurve
+from chem_vault.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from chem_vault.infrastructure.persistence.sqlalchemy.user_preferences_repository import (
     SQLAlchemyUserPreferencesRepository,
 )
@@ -489,18 +492,9 @@ def create_container(
     container.define(DeleteVocabulary, _delete_vocabulary)
 
     # --- Custom Field Definitions ---
-    container.define(
-        SQLAlchemyCustomFieldDefinitionRepository,
-        lambda c: SQLAlchemyCustomFieldDefinitionRepository(AsyncUnitOfWork(c[async_sessionmaker])),
-    )
-    container.define(
-        CustomFieldDefinitionRepository,
-        lambda c: c[SQLAlchemyCustomFieldDefinitionRepository],
-    )
-    container.define(
-        CustomFieldValidator,
-        lambda c: CustomFieldValidator(repo=c[CustomFieldDefinitionRepository]),
-    )
+    # NOTE: CustomFieldValidator is NOT registered as a standalone singleton.
+    # It must share the same UoW as the calling use case, so it is created
+    # inline in each use case factory (see _mol_cmd, _update_molecule, etc.).
 
     def _cfd_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -524,15 +518,6 @@ def create_container(
     container.define(DeleteCustomField, _delete_custom_field)
 
     # --- Salt Catalog ---
-    container.define(
-        SQLAlchemySaltEntryRepository,
-        lambda c: SQLAlchemySaltEntryRepository(AsyncUnitOfWork(c[async_sessionmaker])),
-    )
-    container.define(
-        SaltEntryRepository,
-        lambda c: c[SQLAlchemySaltEntryRepository],
-    )
-
     def _salt_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -555,14 +540,6 @@ def create_container(
     container.define(DeleteSaltEntry, _delete_salt_entry)
 
     # --- Registration Forms ---
-    container.define(
-        SQLAlchemyRegistrationFormRepository,
-        lambda c: SQLAlchemyRegistrationFormRepository(AsyncUnitOfWork(c[async_sessionmaker])),
-    )
-    container.define(
-        RegistrationFormRepository,
-        lambda c: c[SQLAlchemyRegistrationFormRepository],
-    )
 
     def _regform_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -590,10 +567,15 @@ def create_container(
     container.define(StructureProcessor, Singleton(StructureProcessor))
     container.define(StructureProcessorProtocol, lambda c: c[StructureProcessor])
 
+    # --- Curve Fitting ---
+    container.define(LmfitCurveFitter, Singleton(LmfitCurveFitter))
+    container.define(CurveFittingService, lambda c: c[LmfitCurveFitter])
+
     def _mol_cmd(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[StructureProcessorProtocol], c[CustomFieldValidator])
+            validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+            return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[StructureProcessorProtocol], validator)
         return _f
 
     def _mol_cmd_no_proc(uc_cls):  # type: ignore[no-untyped-def]
@@ -612,7 +594,8 @@ def create_container(
 
     def _update_molecule(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return UpdateMolecule(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[CustomFieldValidator])
+        validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+        return UpdateMolecule(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], validator)
 
     container.define(UpdateMolecule, _update_molecule)
     container.define(GetMolecule, _mol_query(GetMolecule))
@@ -697,12 +680,22 @@ def create_container(
 
     def _disclosure_service(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        # MergeService must share the same UoW as DisclosureService because
+        # merge_in_transaction() expects the caller to manage the transaction.
+        merge_svc = MergeService(
+            uow=uow,
+            molecule_repo=mol_repo,
+            merge_event_repo=SQLAlchemyMergeEventRepository(uow),
+            dispatcher=c[EventDispatcher],
+            side_effect_registry=c[MergeSideEffectRegistry],
+        )
         return DisclosureService(
             uow=uow,
-            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            molecule_repo=mol_repo,
             disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
             structure_processor=c[StructureProcessorProtocol],
-            merge_service=c[MergeService],
+            merge_service=merge_svc,
             dispatcher=c[EventDispatcher],
         )
 
@@ -738,11 +731,21 @@ def create_container(
 
     def _resolve_conflict(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        # MergeService must share the same UoW — merge_in_transaction
+        # expects the caller to manage the transaction.
+        merge_svc = MergeService(
+            uow=uow,
+            molecule_repo=mol_repo,
+            merge_event_repo=SQLAlchemyMergeEventRepository(uow),
+            dispatcher=c[EventDispatcher],
+            side_effect_registry=c[MergeSideEffectRegistry],
+        )
         return ResolveDisclosureConflict(
             uow=uow,
             disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
-            molecule_repo=SQLAlchemyMoleculeRepository(uow),
-            merge_service=c[MergeService],
+            molecule_repo=mol_repo,
+            merge_service=merge_svc,
             structure_processor=c[StructureProcessorProtocol],
             dispatcher=c[EventDispatcher],
         )
@@ -807,7 +810,8 @@ def create_container(
     # --- Inventory ---
     def _batch_cmd(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[CustomFieldValidator])
+        validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+        return CreateBatch(uow, SQLAlchemyBatchRepository(uow), SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], validator)
 
     def _batch_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -817,7 +821,8 @@ def create_container(
 
     def _update_batch(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return UpdateBatch(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher], c[CustomFieldValidator])
+        validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+        return UpdateBatch(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher], validator)
 
     container.define(CreateBatch, _batch_cmd)
     container.define(UpdateBatch, _update_batch)
@@ -903,12 +908,27 @@ def create_container(
             return uc_cls(uow, SQLAlchemySampleRequestRepository(uow))
         return _f
 
-    container.define(CreateSampleRequest, _sample_request_cmd(CreateSampleRequest))
+    def _create_sample_request(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateSampleRequest(
+            uow, SQLAlchemySampleRequestRepository(uow), c[EventDispatcher],
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+        )
+
+    def _fulfill_sample_request(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FulfillSampleRequest(
+            uow, SQLAlchemySampleRequestRepository(uow), c[EventDispatcher],
+            sample_repo=SQLAlchemySampleRepository(uow),
+        )
+
+    container.define(CreateSampleRequest, _create_sample_request)
     container.define(GetSampleRequest, _sample_request_query(GetSampleRequest))
     container.define(ListSampleRequests, _sample_request_query(ListSampleRequests))
     container.define(ApproveSampleRequest, _sample_request_cmd(ApproveSampleRequest))
     container.define(RejectSampleRequest, _sample_request_cmd(RejectSampleRequest))
-    container.define(FulfillSampleRequest, _sample_request_cmd(FulfillSampleRequest))
+    container.define(FulfillSampleRequest, _fulfill_sample_request)
     container.define(CancelSampleRequest, _sample_request_cmd(CancelSampleRequest))
     container.define(StartPreparingSampleRequest, _sample_request_cmd(StartPreparingSampleRequest))
     container.define(UpdateSampleRequest, _sample_request_cmd(UpdateSampleRequest))
@@ -926,14 +946,28 @@ def create_container(
             return uc_cls(uow, SQLAlchemyShipmentRepository(uow))
         return _f
 
-    container.define(CreateShipment, _shipment_cmd(CreateShipment))
+    def _create_shipment(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateShipment(
+            uow, SQLAlchemyShipmentRepository(uow), c[EventDispatcher],
+            sample_repo=SQLAlchemySampleRepository(uow),
+        )
+
+    container.define(CreateShipment, _create_shipment)
     container.define(GetShipment, _shipment_query(GetShipment))
     container.define(ListShipments, _shipment_query(ListShipments))
     container.define(ShipShipment, _shipment_cmd(ShipShipment))
     container.define(MarkShipmentInTransit, _shipment_cmd(MarkShipmentInTransit))
     container.define(DeliverShipment, _shipment_cmd(DeliverShipment))
     container.define(ReturnShipment, _shipment_cmd(ReturnShipment))
-    container.define(AddShipmentItem, _shipment_cmd(AddShipmentItem))
+    def _add_shipment_item(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddShipmentItem(
+            uow, SQLAlchemyShipmentRepository(uow), c[EventDispatcher],
+            sample_repo=SQLAlchemySampleRepository(uow),
+        )
+
+    container.define(AddShipmentItem, _add_shipment_item)
     container.define(UpdateShipment, _shipment_cmd(UpdateShipment))
     container.define(DeleteShipment, _shipment_cmd(DeleteShipment))
 
@@ -969,7 +1003,14 @@ def create_container(
     container.define(StartSynthesis, _synth_req_cmd(StartSynthesis))
     container.define(FlagInfeasible, _synth_req_cmd(FlagInfeasible))
     container.define(CompleteSynthesis, _synth_req_cmd(CompleteSynthesis))
-    container.define(FulfillSynthReq, _synth_req_cmd(FulfillSynthReq))
+    def _fulfill_synth_req(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FulfillSynthReq(
+            uow, SQLAlchemySynthesisRequestRepository(uow), c[EventDispatcher],
+            batch_repo=SQLAlchemyBatchRepository(uow),
+        )
+
+    container.define(FulfillSynthReq, _fulfill_synth_req)
     container.define(FailSynthesis, _synth_req_cmd(FailSynthesis))
     container.define(CancelSynthReq, _synth_req_cmd(CancelSynthReq))
     container.define(GetSynthReq, _synth_req_query(GetSynthReq))
@@ -1020,7 +1061,14 @@ def create_container(
     )
     container.define(AddConditionDefinition, _protocol_cmd(AddConditionDefinition))
     container.define(RemoveConditionDefinition, _protocol_cmd(RemoveConditionDefinition))
-    container.define(SetControlLayout, _protocol_cmd(SetControlLayout))
+    def _set_control_layout(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetControlLayout(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher],
+            plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
+        )
+
+    container.define(SetControlLayout, _set_control_layout)
     container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
 
     def _target_cmd(uc_cls):  # type: ignore[no-untyped-def]
@@ -1060,6 +1108,7 @@ def create_container(
             SQLAlchemyRunRepository(uow),
             SQLAlchemyProtocolRepository(uow),
             c[EventDispatcher],
+            plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
         )
 
     container.define(CreateRun, _create_run)
@@ -1077,7 +1126,7 @@ def create_container(
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
-        return CreateReadoutData(uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher])
+        return CreateReadoutData(uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher], run_repo=run_repo)
 
     def _readout_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -1108,7 +1157,7 @@ def create_container(
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
-        return CreateDoseResponseCurve(uow, SQLAlchemyDoseResponseCurveRepository(uow), guard, c[EventDispatcher])
+        return CreateDoseResponseCurve(uow, SQLAlchemyDoseResponseCurveRepository(uow), guard, c[EventDispatcher], run_repo=run_repo)
 
     def _dose_response_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
@@ -1118,6 +1167,36 @@ def create_container(
 
     container.define(CreateDoseResponseCurve, _dose_response_create)
     container.define(ListDoseResponseByRun, _dose_response_query(ListDoseResponseByRun))
+
+    def _fit_dose_response_curves(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FitDoseResponseCurves(
+            uow=uow,
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            curve_fitter=c[CurveFittingService],
+        )
+
+    container.define(FitDoseResponseCurves, _fit_dose_response_curves)
+
+    def _refit_dose_response_curve(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RefitDoseResponseCurve(
+            uow=uow,
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            curve_fitter=c[CurveFittingService],
+        )
+
+    container.define(RefitDoseResponseCurve, _refit_dose_response_curve)
+
+    def _classify_dose_response_curve(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ClassifyDoseResponseCurve(
+            uow=uow,
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+        )
+
+    container.define(ClassifyDoseResponseCurve, _classify_dose_response_curve)
 
     # --- Plate Templates ---
     def _pt_cmd(uc_cls):  # type: ignore[no-untyped-def]
@@ -1155,12 +1234,14 @@ def create_container(
     def _readout_calc_engine(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ReadoutCalculationEngine(
+            uow=uow,
             formula_evaluator=c[FormulaEvaluator],
             plate_normalizer=c[PlateNormalizer],
             replicate_aggregator=c[ReplicateAggregator],
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
+            fit_dose_response=c[FitDoseResponseCurves],
         )
 
     container.define(ReadoutCalculationEngine, _readout_calc_engine)
@@ -1372,6 +1453,7 @@ def create_container(
     def _molecule_activity_service(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MoleculeActivityService(
+            uow=uow,
             readout_repo=SQLAlchemyReadoutDataRepository(uow),
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
@@ -1387,6 +1469,7 @@ def create_container(
             SQLAlchemyMoleculeRepository(uow),
             SQLAlchemySavedSearchRepository(uow),
             activity_service=MoleculeActivityService(
+                uow=uow,
                 readout_repo=SQLAlchemyReadoutDataRepository(uow),
                 curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
                 protocol_repo=SQLAlchemyProtocolRepository(uow),
@@ -1599,6 +1682,7 @@ def create_container(
     from chem_vault.infrastructure.cdd.client import CddVaultClient
 
     _httpx_client = httpx.AsyncClient()
+    container.define(httpx.AsyncClient, Singleton(lambda: _httpx_client))
     container.define(CddVaultClient, Singleton(lambda: CddVaultClient(_httpx_client)))
 
     def _cdd_query(uc_cls):  # type: ignore[no-untyped-def]
