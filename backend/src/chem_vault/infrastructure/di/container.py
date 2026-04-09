@@ -1225,11 +1225,16 @@ def create_container(
     from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
     from chem_vault.application.screening.cross_protocol_resolver import CrossProtocolResolver
     from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
+    from chem_vault.domain.screening_assay.plate_quality import PlateQualityCalculator
+    from chem_vault.application.screening.plate_setup import ParsePlateMapFile, SetUpRunPlate
+    from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
 
     container.define(AstevalFormulaEvaluator, Singleton(AstevalFormulaEvaluator))
     container.define(FormulaEvaluator, lambda c: c[AstevalFormulaEvaluator])
     container.define(PlateNormalizer, Singleton(PlateNormalizer))
     container.define(ReplicateAggregator, Singleton(ReplicateAggregator))
+    container.define(PlateQualityCalculator, Singleton(PlateQualityCalculator))
+    container.define(ParsePlateMapFile, Singleton(ParsePlateMapFile))
 
     def _readout_calc_engine(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -1242,9 +1247,37 @@ def create_container(
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             fit_dose_response=c[FitDoseResponseCurves],
+            plate_quality=c[PlateQualityCalculator],
         )
 
     container.define(ReadoutCalculationEngine, _readout_calc_engine)
+
+    def _set_up_run_plate(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        from chem_vault.application.shared.molecule_resolver import MoleculeResolver
+        resolver = MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
+        return SetUpRunPlate(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            molecule_resolver=resolver,
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(SetUpRunPlate, _set_up_run_plate)
+
+    def _import_run_readouts(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportRunReadouts(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+        )
+
+    container.define(ImportRunReadouts, _import_run_readouts)
 
     def _cross_protocol_resolver(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])

@@ -45,6 +45,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with sentinel.lifespan(app):
         yield
 
+    # Cleanup: close httpx client used by CDD integration
+    import httpx
+
+    try:
+        cdd_http = container[httpx.AsyncClient]
+        await cdd_http.aclose()
+    except Exception:
+        pass
+
     # Cleanup: dispose the database engine
     from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -172,6 +181,9 @@ def create_app() -> FastAPI:
 
     from chem_vault.interface.routes.cdd_import import router as cdd_import_router
     app.include_router(cdd_import_router)
+
+    from chem_vault.interface.routes.plate_setup import router as plate_setup_router
+    app.include_router(plate_setup_router)
 
     # Health check (unauthenticated)
     @app.get("/health")
