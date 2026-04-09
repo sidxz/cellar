@@ -47,13 +47,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> BatchNumber:
+        # Global workspace counter — batch_number is unique per workspace.
         stmt = (
             select(func.count())
             .select_from(BatchModel)
-            .where(
-                BatchModel.workspace_id == workspace_id,
-                BatchModel.molecule_id == molecule_id,
-            )
+            .where(BatchModel.workspace_id == workspace_id)
         )
         result = await self._session.execute(stmt)
         count = result.scalar() or 0

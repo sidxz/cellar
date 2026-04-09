@@ -30,3 +30,4 @@ class EnrichedPageResult(Generic[T]):
     items: list[T]
     next_cursor: str | None = None
     activity_data: dict | None = None
+    total_count: int | None = None

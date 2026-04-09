@@ -85,6 +85,14 @@ def _make_repos():
     )
 
 
+def _fake_uow():
+    """Create a fake UoW that passes through async context manager."""
+    uow = AsyncMock()
+    uow.__aenter__ = AsyncMock(return_value=uow)
+    uow.__aexit__ = AsyncMock(return_value=False)
+    return uow
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -136,6 +144,7 @@ class TestComputedReadoutsPersisted:
         readout_data_repo.delete_computed_for_run.return_value = 0
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -199,6 +208,7 @@ class TestNoCalculatedReadoutsIsNoop:
         readout_data_repo.delete_computed_for_run.return_value = 0
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -259,6 +269,7 @@ class TestIdempotentDeletesPreviousComputed:
         readout_data_repo.delete_computed_for_run.return_value = 5  # simulate 5 old rows deleted
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -290,6 +301,7 @@ class TestRunNotFound:
         run_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -326,6 +338,7 @@ class TestProtocolNotFound:
         protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -364,6 +377,7 @@ class TestEmptyRawDataReturnsSuccess:
         readout_data_repo.delete_computed_for_run.return_value = 0
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -420,6 +434,7 @@ class TestCrossProtocolFormulasSkipped:
         readout_data_repo.delete_computed_for_run.return_value = 0
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -485,6 +500,7 @@ class TestChainedCalculatedReadouts:
         readout_data_repo.delete_computed_for_run.return_value = 0
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),
@@ -555,6 +571,7 @@ class TestCircularDependencyDetected:
         readout_data_repo.delete_computed_for_run.return_value = 0
 
         engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
             formula_evaluator=AstevalFormulaEvaluator(),
             plate_normalizer=PlateNormalizer(),
             replicate_aggregator=ReplicateAggregator(),

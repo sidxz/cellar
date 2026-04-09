@@ -13,7 +13,7 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import PlateFormat
 from chem_vault.domain.screening_assay.protocol import Protocol
-from chem_vault.domain.screening_assay.repository import ProtocolRepository
+from chem_vault.domain.screening_assay.repository import PlateTemplateRepository, ProtocolRepository
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 
 
@@ -50,16 +50,26 @@ class SetControlLayout:
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        plate_template_repo: PlateTemplateRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._plate_template_repo = plate_template_repo
 
     async def __call__(
         self, input: SetControlLayoutCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
         async with self._uow:
+            # Verify template belongs to this workspace
+            if self._plate_template_repo is not None:
+                template = await self._plate_template_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.template_id
+                )
+                if template is None:
+                    return Failure(NotFoundError("PlateTemplate", str(input.template_id)))
+
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
             )

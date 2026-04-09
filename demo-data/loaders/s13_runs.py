@@ -164,4 +164,36 @@ async def load(ctx: DemoContext) -> int:
                     unresolved=info.get("unresolved", []),
                 )
 
+                # Add control wells directly via SQL for normalization + Z-prime
+                from sqlalchemy.ext.asyncio import async_sessionmaker
+                from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+                    PlateModel, WellModel,
+                )
+                from sqlalchemy import select
+                import uuid as _uuid
+
+                sf = ctx.container[async_sessionmaker]
+                async with sf() as session:
+                    # Find the plate we just created
+                    stmt = select(PlateModel).where(PlateModel.run_id == run_id)
+                    plate_result = await session.execute(stmt)
+                    plate_model = plate_result.scalars().first()
+                    if plate_model:
+                        # Add 4 positive + 4 negative control wells in last 2 columns
+                        last_col = len(concentrations) + 1
+                        control_rows = ["A", "B", "C", "D"]
+                        for r in control_rows:
+                            session.add(WellModel(
+                                id=_uuid.uuid4(), plate_id=plate_model.id,
+                                row=r, column=last_col,
+                                well_type="positive_control",
+                            ))
+                            session.add(WellModel(
+                                id=_uuid.uuid4(), plate_id=plate_model.id,
+                                row=r, column=last_col + 1,
+                                well_type="negative_control",
+                            ))
+                        await session.commit()
+                        logger.info("run.controls_added", key=key, pos=4, neg=4)
+
     return created

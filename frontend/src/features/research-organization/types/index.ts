@@ -156,7 +156,8 @@ export interface UpdateSavedSearchInput {
 
 // ─── Search types ───────────────────────────────────────────────────────────
 
-export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch" | "project";
+export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch" | "project" | "selectivity" | "group" | "custom_field";
+export type CustomFieldMode = "text" | "numeric";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
 export type StructureSearchType = "substructure" | "similarity" | "exact";
@@ -231,7 +232,33 @@ export interface ProjectCriterion {
   project_ids: string[];
 }
 
-export type SearchCriterion =
+export interface SelectivityCriterion {
+  type: "selectivity";
+  target_protocol_id: string;
+  target_curve_type: string;
+  counter_protocol_id: string;
+  counter_curve_type: string;
+  ratio_operator: PropertyOperator;
+  ratio_value: number;
+}
+
+export interface GroupCriterion {
+  type: "group";
+  logic: "and" | "or";
+  criteria: SearchCriterion[];
+}
+
+export interface CustomFieldCriterion {
+  type: "custom_field";
+  field: string;
+  mode: CustomFieldMode;
+  operator?: TextOperator | PropertyOperator;
+  value?: string | number;
+  min?: number;
+  max?: number;
+}
+
+export type SearchCriterionBase =
   | TextCriterion
   | PropertyCriterion
   | StructureCriterion
@@ -240,12 +267,20 @@ export type SearchCriterion =
   | KeywordListCriterion
   | RunDateCriterion
   | BatchCriterion
-  | ProjectCriterion;
+  | ProjectCriterion
+  | SelectivityCriterion
+  | GroupCriterion
+  | CustomFieldCriterion;
+
+export type SearchCriterion = SearchCriterionBase & { negate?: boolean };
 
 export interface SearchQuery {
   criteria: SearchCriterion[];
   logic: "and" | "or";
 }
+
+export type SortField = "name" | "registration_number" | "molecular_weight" | "logp" | "tpsa" | "hbd" | "hba" | "created_at";
+export type SortDir = "asc" | "desc";
 
 export interface ExecuteSearchInput {
   query?: SearchQuery;

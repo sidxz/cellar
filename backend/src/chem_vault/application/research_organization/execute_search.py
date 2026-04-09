@@ -8,6 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_same_workspace
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
 from chem_vault.application.shared.pagination import EnrichedPageResult, PageResult
 from chem_vault.application.shared.query import Query
@@ -27,6 +28,8 @@ class ExecuteSearchQuery(Query):
     cursor_id: uuid.UUID | None = None
     limit: int = 50
     project_ids: list[uuid.UUID] | None = None
+    sort_by: str | None = None
+    sort_dir: str | None = None
 
 
 class ExecuteSearch:
@@ -50,8 +53,9 @@ class ExecuteSearch:
         self._activity_service = activity_service
 
     async def __call__(
-        self, input: ExecuteSearchQuery
+        self, input: ExecuteSearchQuery, auth: AuthContext | None = None
     ) -> Result[EnrichedPageResult[Molecule], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
         if input.saved_search_id is None and input.query is None:
             return Failure(
                 ValidationError("Provide either saved_search_id or query.")
@@ -76,9 +80,23 @@ class ExecuteSearch:
                     cursor_id=input.cursor_id,
                     limit=fetch_limit,
                     project_ids=input.project_ids,
+                    sort_by=input.sort_by,
+                    sort_dir=input.sort_dir,
                 )
             except ValueError as e:
                 return Failure(ValidationError(str(e)))
+
+            # Total count — only on first page to avoid repeated full scans
+            total_count: int | None = None
+            if input.cursor_id is None:
+                try:
+                    total_count = await self._mol_repo.count_by_query(
+                        input.workspace_id,
+                        query_dict,
+                        project_ids=input.project_ids,
+                    )
+                except ValueError:
+                    pass  # Non-critical — skip count on composer errors
 
             # Determine next_cursor
             next_cursor: str | None = None
@@ -104,5 +122,6 @@ class ExecuteSearch:
                     items=molecules,
                     next_cursor=next_cursor,
                     activity_data=activity_data,
+                    total_count=total_count,
                 )
             )

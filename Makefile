@@ -104,6 +104,9 @@ logs-dev: ## Tail dev server logs
 migrate: ## Run Alembic migrations
 	$(BACKEND) && uv run alembic upgrade head
 
+import-demo-data: ## Load demo data (requires `make up`). Optional: WORKSPACE_ID=<uuid>
+	cd backend && WORKSPACE_ID=$(WORKSPACE_ID) uv run python ../demo-data/load.py
+
 # ── Testing ────────────────────────────────────────────────────
 
 test: ## Run unit tests + import-linter

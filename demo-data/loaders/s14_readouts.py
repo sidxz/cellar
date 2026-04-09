@@ -37,10 +37,8 @@ async def load(ctx: DemoContext) -> int:
     from chem_vault.domain.screening_assay.enums import RunStatus
 
     data = ctx.data("readout_config.json")
-    bulk_uc = ctx.container[BulkCreateReadoutData]
     get_protocol_uc = ctx.container[GetProtocol]
     get_run_uc = ctx.container[GetRun]
-    engine = ctx.container[ReadoutCalculationEngine]
     total_created = 0
 
     for run_key, config in data.items():
@@ -80,6 +78,9 @@ async def load(ctx: DemoContext) -> int:
         rd_by_name = {rd.name: rd for rd in protocol.readout_definitions}
 
         if mode == "dose_response":
+            # Re-resolve per run — UoW is consumed after each use
+            bulk_uc = ctx.container[BulkCreateReadoutData]
+            engine = ctx.container[ReadoutCalculationEngine]
             n_created = await _load_dose_response_run(
                 ctx=ctx,
                 run=run,
@@ -92,6 +93,7 @@ async def load(ctx: DemoContext) -> int:
             )
             total_created += n_created
         else:
+            bulk_uc = ctx.container[BulkCreateReadoutData]
             n_created = await _load_single_point_run(
                 ctx=ctx,
                 run=run,
@@ -156,6 +158,10 @@ async def _load_dose_response_run(
 
     rng = random.Random(seed)
     items = []
+
+    # Note: Control well readout data skipped — readout_data.molecule_id is NOT NULL.
+    # Z-prime QC requires a future migration to make molecule_id nullable for controls.
+    # Dose-response curve fitting works without control data (normalization set to "none").
 
     for well in run.wells:
         if well.batch_id is None or well.concentration is None:

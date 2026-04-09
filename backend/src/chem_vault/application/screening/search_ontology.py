@@ -34,6 +34,6 @@ class SearchOntology:
             ontology_sources=input.ontology_sources,
             page_size=input.page_size,
             subtree_root_id=input.subtree_root_id,
-            workspace_id=input.workspace_id,  # type: ignore[call-arg]
+            workspace_id=input.workspace_id,
         )
         return Success(results)

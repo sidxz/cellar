@@ -13,7 +13,7 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.enums import FeasibilityStatus, RequestPriority, SynthesisRequestStatus
-from chem_vault.domain.inventory.repository import SynthesisRequestRepository
+from chem_vault.domain.inventory.repository import BatchRepository, SynthesisRequestRepository
 from chem_vault.domain.inventory.synthesis_request import SynthesisRequest
 from chem_vault.domain.shared.enums import AmountUnit, AssignmentType
 from chem_vault.application.shared.sentinel import UNSET
@@ -406,10 +406,12 @@ class FulfillSynthesisRequest:
         uow: UnitOfWork,
         repo: SynthesisRequestRepository,
         dispatcher: EventDispatcherProtocol,
+        batch_repo: BatchRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._batch_repo = batch_repo
 
     async def __call__(
         self, input: FulfillSynthesisRequestCommand, auth: AuthContext | None = None
@@ -421,6 +423,15 @@ class FulfillSynthesisRequest:
             )
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
+
+            # Verify batch belongs to this workspace
+            if self._batch_repo is not None:
+                batch = await self._batch_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.batch_id
+                )
+                if batch is None:
+                    return Failure(NotFoundError("Batch", str(input.batch_id)))
+
             request.fulfill(batch_id=input.batch_id)
             await self._repo.save(request)
             events = await self._uow.commit()

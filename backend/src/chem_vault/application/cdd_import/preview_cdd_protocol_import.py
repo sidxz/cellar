@@ -55,10 +55,10 @@ class PreviewCddProtocolImport:
             config = await check_cdd_configured(
                 input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
             )
-        if isinstance(config, Failure):
-            return config
+            if isinstance(config, Failure):
+                return config
 
-        vault_id, api_key = config.unwrap()
+            vault_id, api_key = config.unwrap()
 
         try:
             raw = await self._gateway.get_protocol(vault_id, api_key, input.cdd_protocol_id)

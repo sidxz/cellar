@@ -53,7 +53,12 @@ class ImportFileCache:
         import time
         self._time = time
         self._ttl = ttl_seconds
+        # Key is workspace-scoped: "{workspace_id}:{file_id}"
         self._store: dict[str, tuple[float, list[str], list[list[str]]]] = {}
+
+    @staticmethod
+    def _key(workspace_id: uuid.UUID, file_id: str) -> str:
+        return f"{workspace_id}:{file_id}"
 
     def _evict_expired(self) -> None:
         now = self._time.monotonic()
@@ -61,30 +66,30 @@ class ImportFileCache:
         for k in expired:
             del self._store[k]
 
-    def put(self, file_id: str, headers: list[str], data_rows: list[list[str]]) -> None:
+    def put(self, workspace_id: uuid.UUID, file_id: str, headers: list[str], data_rows: list[list[str]]) -> None:
         self._evict_expired()
-        self._store[file_id] = (self._time.monotonic(), headers, data_rows)
+        self._store[self._key(workspace_id, file_id)] = (self._time.monotonic(), headers, data_rows)
 
-    def get(self, file_id: str) -> tuple[list[str], list[list[str]]] | None:
+    def get(self, workspace_id: uuid.UUID, file_id: str) -> tuple[list[str], list[list[str]]] | None:
         self._evict_expired()
-        entry = self._store.get(file_id)
+        entry = self._store.get(self._key(workspace_id, file_id))
         if entry is None:
             return None
         return (entry[1], entry[2])
 
-    def pop(self, file_id: str) -> tuple[list[str], list[list[str]]] | None:
-        entry = self._store.pop(file_id, None)
+    def pop(self, workspace_id: uuid.UUID, file_id: str) -> tuple[list[str], list[list[str]]] | None:
+        entry = self._store.pop(self._key(workspace_id, file_id), None)
         if entry is None:
             return None
         return (entry[1], entry[2])
 
-    def __contains__(self, file_id: str) -> bool:
+    def contains(self, workspace_id: uuid.UUID, file_id: str) -> bool:
         self._evict_expired()
-        return file_id in self._store
+        return self._key(workspace_id, file_id) in self._store
 
 
 def preview_import_file(
-    filename: str, content: bytes, cache: ImportFileCache
+    filename: str, content: bytes, cache: ImportFileCache, *, workspace_id: uuid.UUID
 ) -> Result[ImportPreview, DomainError]:
     """Parse CSV/TSV, cache content, return preview."""
     file_id = str(uuid.uuid4())
@@ -106,7 +111,7 @@ def preview_import_file(
     headers = rows[0]
     data_rows = rows[1:]
 
-    cache.put(file_id, headers, data_rows)
+    cache.put(workspace_id, file_id, headers, data_rows)
 
     return Success(ImportPreview(
         file_id=file_id,
@@ -258,7 +263,7 @@ class ImportPlateDataService:
         workspace_id: uuid.UUID,
     ) -> Result[ValidationResult, DomainError]:
         """Validate column mappings against cached data rows."""
-        cached = self._cache.get(file_id)
+        cached = self._cache.get(workspace_id, file_id)
         if cached is None:
             return Failure(ValidationError(f"File {file_id!r} not found in cache (expired or invalid)"))
 
@@ -333,7 +338,7 @@ class ImportPlateDataService:
         - Extract readout values from mapped columns
         - If protocol_id provided: auto-create Run if needed, then BulkCreateReadoutData
         """
-        cached = self._cache.get(file_id)
+        cached = self._cache.get(workspace_id, file_id)
         if cached is None:
             return Failure(ValidationError(f"File {file_id!r} not found in cache (expired or invalid)"))
 
@@ -428,7 +433,7 @@ class ImportPlateDataService:
                     errors.append(f"Row {row_num}: {exc}")
                     skipped += 1
 
-        self._cache.pop(file_id)
+        self._cache.pop(workspace_id, file_id)
 
         # Phase 2: Create ReadoutData if protocol + readout columns present
         readout_count = 0

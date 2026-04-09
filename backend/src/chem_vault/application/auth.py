@@ -13,14 +13,6 @@ from typing import Protocol, runtime_checkable
 from chem_vault.domain.research_organization.project_membership import ProjectRole
 from chem_vault.domain.shared.errors import AuthorizationError, NotFoundError
 
-# Role hierarchy (ascending privilege)
-_ROLE_HIERARCHY: dict[str, int] = {
-    "viewer": 0,
-    "editor": 1,
-    "admin": 2,
-    "owner": 3,
-}
-
 
 @runtime_checkable
 class AuthContext(Protocol):

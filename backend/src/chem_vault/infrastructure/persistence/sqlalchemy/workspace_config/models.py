@@ -47,6 +47,10 @@ class WorkspaceSettingsModel(Base, EntityModelMixin, VersionMixin):
     registration_rules: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     custom_field_definitions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     default_molecule_type: Mapped[str | None] = mapped_column(String(50))
+    # TODO: migrate audit_reason_policy and formulation_number_scheme from JSON to Text —
+    # these are str|None semantically, but were originally created as JSON columns.
+    # The JSON type works correctly for string values. A future migration should
+    # ALTER COLUMN ... TYPE TEXT USING ...::text to match the Python annotation.
     audit_reason_policy: Mapped[str | None] = mapped_column(JSON, nullable=True)
     signature_required_for: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.shared.ontology import OntologyTerm
@@ -21,4 +22,6 @@ class OntologySearchService(Protocol):
         ontology_sources: list[str],
         page_size: int = 10,
         subtree_root_id: str | None = None,
+        *,
+        workspace_id: uuid.UUID | None = None,
     ) -> list[OntologyTerm]: ...

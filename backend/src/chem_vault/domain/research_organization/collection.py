@@ -4,23 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import StrEnum
 
+from chem_vault.domain.research_organization.enums import CollectionBooleanOp, CollectionVisibility
 from chem_vault.domain.research_organization.events import CollectionCreated
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
-
-
-class CollectionVisibility(StrEnum):
-    PRIVATE = "private"
-    SHARED = "shared"
-
-
-class CollectionBooleanOp(StrEnum):
-    UNION = "union"
-    INTERSECT = "intersect"
-    DIFFERENCE = "difference"
-    SYMMETRIC_DIFFERENCE = "symmetric_difference"
 
 
 class Collection(AggregateRoot):

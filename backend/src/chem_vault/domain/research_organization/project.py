@@ -4,16 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import StrEnum
 
+from chem_vault.domain.research_organization.enums import ProjectStatus
 from chem_vault.domain.research_organization.events import ProjectArchived, ProjectCreated
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
-
-
-class ProjectStatus(StrEnum):
-    ACTIVE = "active"
-    ARCHIVED = "archived"
 
 
 class Project(AggregateRoot):

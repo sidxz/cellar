@@ -15,8 +15,6 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.enums import (
     IdentifierType,
     MoleculeType,
-    RegistrationStatus,
-    SynthesisStatus,
 )
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier

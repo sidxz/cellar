@@ -15,6 +15,7 @@ from chem_vault.domain.screening_assay.activity_types import (
     ActivityValue,
     ProtocolActivitySummary,
 )
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
@@ -27,10 +28,12 @@ class MoleculeActivityService:
 
     def __init__(
         self,
+        uow: UnitOfWork,
         readout_repo: ReadoutDataRepository,
         curve_repo: DoseResponseCurveRepository,
         protocol_repo: ProtocolRepository,
     ) -> None:
+        self._uow = uow
         self._readout_repo = readout_repo
         self._curve_repo = curve_repo
         self._protocol_repo = protocol_repo
@@ -40,6 +43,14 @@ class MoleculeActivityService:
     ) -> ActivitySummary:
         """Full activity summary for molecule detail page.
         Groups dose-response curves by protocol."""
+        if self._uow.is_active:
+            return await self._get_activity_summary(workspace_id, molecule_id)
+        async with self._uow:
+            return await self._get_activity_summary(workspace_id, molecule_id)
+
+    async def _get_activity_summary(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+    ) -> ActivitySummary:
         curves = await self._curve_repo.find_by_molecule(workspace_id, molecule_id)
 
         # Group curves by protocol
@@ -95,6 +106,17 @@ class MoleculeActivityService:
         if not molecule_ids or not protocol_columns:
             return {}
 
+        if self._uow.is_active:
+            return await self._enrich_molecules(workspace_id, molecule_ids, protocol_columns)
+        async with self._uow:
+            return await self._enrich_molecules(workspace_id, molecule_ids, protocol_columns)
+
+    async def _enrich_molecules(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        protocol_columns: list[str],
+    ) -> dict[uuid.UUID, dict[str, ActivityValue]]:
         # Parse column specs
         rd_def_ids: list[uuid.UUID] = []
         drc_specs: list[tuple[uuid.UUID, str]] = []  # (protocol_id, curve_type)

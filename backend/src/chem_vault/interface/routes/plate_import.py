@@ -161,7 +161,7 @@ async def preview_import(
 ) -> ImportPreviewResponse:
     content = await file.read()
     preview: ImportPreview = result_to_response(
-        preview_import_file(file.filename or "upload.csv", content, cache)
+        preview_import_file(file.filename or "upload.csv", content, cache, workspace_id=auth.workspace_id)
     )
 
     # Auto-match against saved templates using header similarity

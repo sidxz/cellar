@@ -22,7 +22,7 @@ from chem_vault.domain.screening_assay.repository import (
     RunRepository,
 )
 from chem_vault.domain.shared.enums import Qualifier
-from chem_vault.domain.shared.errors import DomainError, ValidationError
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import QualifiedValue
 
 
@@ -185,8 +185,17 @@ class BulkCreateReadoutData:
             return Failure(ValidationError("No items provided"))
 
         async with self._uow:
-            # Check locks for all unique run IDs — reject entire batch if any locked
+            # Verify all referenced runs belong to this workspace
             run_ids = {item.run_id for item in input.items}
+            if self._run_repo is not None:
+                for run_id in run_ids:
+                    run = await self._run_repo.find_by_id_in_workspace(
+                        input.workspace_id, run_id
+                    )
+                    if run is None:
+                        return Failure(NotFoundError("Run", str(run_id)))
+
+            # Check locks for all unique run IDs — reject entire batch if any locked
             for run_id in run_ids:
                 try:
                     await self._guard.guard_write(input.workspace_id, run_id)

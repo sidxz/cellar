@@ -353,6 +353,10 @@ class Run(AggregateRoot):
         self._guard_not_locked()
         plate.run_id = self.id
         self.plates.append(plate)
+        # Sync plate's wells into the flat wells list so _update_model can find them
+        for well in getattr(plate, "wells", []):
+            well.plate_id = plate.id
+            self.wells.append(well)
         self.updated_at = datetime.now(UTC)
 
     # ------------------------------------------------------------------

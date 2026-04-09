@@ -18,6 +18,9 @@ class UnitOfWork(Protocol):
     implementation (AsyncUnitOfWork).
     """
 
+    @property
+    def is_active(self) -> bool: ...
+
     async def commit(self) -> list[DomainEvent]: ...
 
     async def rollback(self) -> None: ...

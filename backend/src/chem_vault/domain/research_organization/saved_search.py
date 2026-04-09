@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any
 
+from chem_vault.domain.research_organization.enums import SearchVisibility
 from chem_vault.domain.research_organization.events import SavedSearchCreated
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
-
-
-class SearchVisibility(StrEnum):
-    PRIVATE = "private"
-    PROJECT = "project"
 
 
 class SavedSearch(AggregateRoot):

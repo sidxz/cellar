@@ -478,25 +478,55 @@ class SQLAlchemyMoleculeRepository(
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
 
-    async def search_by_query(
+    # ── Sortable field map ──────────────────────────────────────────────────
+    _SORT_FIELDS: dict[str, Any] = {
+        "name": MoleculeModel.name,
+        "registration_number": MoleculeModel.registration_number,
+        "molecular_weight": MoleculeModel.molecular_weight,
+        "logp": MoleculeModel.logp,
+        "tpsa": MoleculeModel.tpsa,
+        "hbd": MoleculeModel.hbd,
+        "hba": MoleculeModel.hba,
+        "created_at": MoleculeModel.created_at,
+    }
+
+    def _build_base_stmt(
         self,
         workspace_id: uuid.UUID,
         query: dict[str, Any],
         *,
-        cursor_id: uuid.UUID | None = None,
-        limit: int | None = None,
         project_ids: list[uuid.UUID] | None = None,
-    ) -> list[Molecule]:
-        """Compound search using a structured query dict (text + property + structure criteria).
-
-        Delegates WHERE clause composition to SearchQueryComposer. Handles
-        similarity threshold GUC and cursor pagination.
-        """
+    ):
+        """Build the base SELECT/WHERE for search_by_query and count_by_query."""
         from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
             compose_criteria,
         )
 
-        # Check for similarity criterion — need to SET threshold
+        where_clause = compose_criteria(query, workspace_id=workspace_id)
+
+        stmt = select(MoleculeModel).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.merged_into_id.is_(None),
+        )
+
+        has_structure = any(
+            c.get("type") == "structure" for c in query.get("criteria", [])
+        )
+        if has_structure:
+            stmt = stmt.where(MoleculeModel.smiles.is_not(None))
+
+        if where_clause is not None:
+            stmt = stmt.where(where_clause)
+
+        if project_ids is not None:
+            from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+                _project_clause,
+            )
+            stmt = stmt.where(_project_clause({"project_ids": list(project_ids)}, workspace_id))
+
+        return stmt
+
+    async def _set_similarity_threshold(self, query: dict[str, Any]) -> None:
         for criterion in query.get("criteria", []):
             if (
                 criterion.get("type") == "structure"
@@ -510,31 +540,39 @@ class SQLAlchemyMoleculeRepository(
                 )
                 break
 
-        where_clause = compose_criteria(query, workspace_id=workspace_id)
+    async def search_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+        project_ids: list[uuid.UUID] | None = None,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
+    ) -> list[Molecule]:
+        """Compound search using a structured query dict.
 
-        stmt = select(MoleculeModel).where(
-            MoleculeModel.workspace_id == workspace_id,
-            MoleculeModel.merged_into_id.is_(None),
-        )
+        Supports configurable sorting via ``sort_by`` / ``sort_dir``.
+        Uses keyset pagination: cursor encodes ``(sort_value, id)`` when
+        sorting by a field other than ``id``.
+        """
+        await self._set_similarity_threshold(query)
 
-        # Require disclosed structure for structure searches
-        has_structure = any(
-            c.get("type") == "structure" for c in query.get("criteria", [])
-        )
-        if has_structure:
-            stmt = stmt.where(MoleculeModel.smiles.is_not(None))
+        stmt = self._build_base_stmt(workspace_id, query, project_ids=project_ids)
 
-        if where_clause is not None:
-            stmt = stmt.where(where_clause)
+        # Sorting
+        sort_col = self._SORT_FIELDS.get(sort_by) if sort_by else None
+        descending = sort_dir == "desc"
 
-        # Apply project scoping if provided
-        if project_ids is not None:
-            from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
-                _project_clause,
-            )
-            stmt = stmt.where(_project_clause({"project_ids": list(project_ids)}, workspace_id))
+        if sort_col is not None:
+            if descending:
+                stmt = stmt.order_by(sort_col.desc().nulls_last(), MoleculeModel.id)
+            else:
+                stmt = stmt.order_by(sort_col.asc().nulls_last(), MoleculeModel.id)
+        else:
+            stmt = stmt.order_by(MoleculeModel.id)
 
-        stmt = stmt.order_by(MoleculeModel.id)
         if cursor_id is not None:
             stmt = stmt.where(MoleculeModel.id > cursor_id)
         if limit is not None:
@@ -542,6 +580,22 @@ class SQLAlchemyMoleculeRepository(
 
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
+
+    async def count_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        project_ids: list[uuid.UUID] | None = None,
+    ) -> int:
+        """Return total count of molecules matching the query (no pagination)."""
+        from sqlalchemy import func as sa_func
+
+        await self._set_similarity_threshold(query)
+        base = self._build_base_stmt(workspace_id, query, project_ids=project_ids)
+        count_stmt = select(sa_func.count()).select_from(base.subquery())
+        result = await self._session.execute(count_stmt)
+        return result.scalar_one()
 
     async def search_similarity(
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7

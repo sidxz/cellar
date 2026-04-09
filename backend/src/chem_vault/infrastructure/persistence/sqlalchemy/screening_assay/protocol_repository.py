@@ -121,9 +121,14 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     ) -> None:
         """Link a protocol to a project (idempotent via ON CONFLICT DO NOTHING).
 
-        Defense-in-depth: only inserts if the protocol belongs to the workspace.
+        Defense-in-depth: only inserts if BOTH the protocol AND the project
+        belong to the workspace.
         """
-        # Verify protocol belongs to workspace before inserting
+        from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+            ProjectModel,
+        )
+
+        # Verify protocol belongs to workspace
         ownership_stmt = select(ProtocolModel.id).where(
             ProtocolModel.id == protocol_id,
             ProtocolModel.workspace_id == workspace_id,
@@ -131,6 +136,16 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         ownership_result = await self._session.execute(ownership_stmt)
         if ownership_result.scalar_one_or_none() is None:
             return
+
+        # Verify project belongs to workspace
+        project_stmt = select(ProjectModel.id).where(
+            ProjectModel.id == project_id,
+            ProjectModel.workspace_id == workspace_id,
+        )
+        project_result = await self._session.execute(project_stmt)
+        if project_result.scalar_one_or_none() is None:
+            return
+
         stmt = (
             pg_insert(protocol_projects)
             .values(protocol_id=protocol_id, project_id=project_id)

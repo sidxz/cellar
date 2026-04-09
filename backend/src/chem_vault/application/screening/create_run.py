@@ -14,7 +14,7 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import PlateFormat, ProtocolStatus, RunRelationshipType
-from chem_vault.domain.screening_assay.repository import ProtocolRepository, RunRepository
+from chem_vault.domain.screening_assay.repository import PlateTemplateRepository, ProtocolRepository, RunRepository
 from chem_vault.domain.screening_assay.run import Run
 from chem_vault.domain.shared.errors import AuthorizationError, ConflictError, DomainError, NotFoundError
 
@@ -40,11 +40,13 @@ class CreateRun:
         repo: RunRepository,
         protocol_repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        plate_template_repo: PlateTemplateRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._protocol_repo = protocol_repo
         self._dispatcher = dispatcher
+        self._plate_template_repo = plate_template_repo
 
     async def __call__(
         self, input: CreateRunCommand, auth: AuthContext | None = None
@@ -64,6 +66,14 @@ class CreateRun:
                         f"Cannot create runs on a {protocol.status.value} protocol — only active protocols"
                     )
                 )
+
+            # Verify plate template belongs to this workspace
+            if input.plate_template_id is not None and self._plate_template_repo is not None:
+                template = await self._plate_template_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.plate_template_id
+                )
+                if template is None:
+                    return Failure(NotFoundError("PlateTemplate", str(input.plate_template_id)))
 
             run = Run.create(
                 workspace_id=input.workspace_id,

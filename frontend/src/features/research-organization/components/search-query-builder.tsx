@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Search, Pencil } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Group } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -29,6 +29,10 @@ import type {
   RunDateCriterion,
   BatchCriterion,
   ProjectCriterion,
+  SelectivityCriterion,
+  GroupCriterion,
+  CustomFieldCriterion,
+  CustomFieldMode,
   TextOperator,
   PropertyOperator,
   StructureSearchType,
@@ -115,6 +119,26 @@ function defaultBatchCriterion(): BatchCriterion {
 
 function defaultProjectCriterion(): ProjectCriterion {
   return { type: "project", project_ids: [] };
+}
+
+function defaultGroupCriterion(): GroupCriterion {
+  return { type: "group", logic: "or", criteria: [] };
+}
+
+function defaultCustomFieldCriterion(): CustomFieldCriterion {
+  return { type: "custom_field", field: "", mode: "text", operator: "contains", value: "" };
+}
+
+function defaultSelectivityCriterion(): SelectivityCriterion {
+  return {
+    type: "selectivity",
+    target_protocol_id: "",
+    target_curve_type: "ic50",
+    counter_protocol_id: "",
+    counter_curve_type: "ic50",
+    ratio_operator: "gte",
+    ratio_value: 100,
+  };
 }
 
 const BATCH_TEXT_FIELDS = [
@@ -947,6 +971,360 @@ function ProjectCriterionRow({
   );
 }
 
+const CUSTOM_FIELD_MODE_OPTIONS: { value: CustomFieldMode; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "numeric", label: "Numeric" },
+];
+
+function CustomFieldCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: CustomFieldCriterion;
+  onChange: (c: CustomFieldCriterion) => void;
+  onRemove: () => void;
+}) {
+  const isNumeric = criterion.mode === "numeric";
+  const isBetween = criterion.operator === "between";
+
+  return (
+    <div className="flex items-end gap-2 flex-wrap">
+      <div className="w-36">
+        <Label className="text-xs text-muted-foreground">Field Name</Label>
+        <Input
+          className="h-9"
+          placeholder="e.g. solubility"
+          value={criterion.field}
+          onChange={(e) => onChange({ ...criterion, field: e.target.value })}
+        />
+      </div>
+      <div className="w-28">
+        <Label className="text-xs text-muted-foreground">Mode</Label>
+        <Select
+          value={criterion.mode}
+          onValueChange={(v) => {
+            const m = v as CustomFieldMode;
+            if (m === "text") {
+              onChange({ ...criterion, mode: m, operator: "contains", value: "", min: undefined, max: undefined });
+            } else {
+              onChange({ ...criterion, mode: m, operator: "gte", value: undefined, min: undefined, max: undefined });
+            }
+          }}
+        >
+          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {CUSTOM_FIELD_MODE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="w-28">
+        <Label className="text-xs text-muted-foreground">Operator</Label>
+        <Select
+          value={(criterion.operator as string) || (isNumeric ? "gte" : "contains")}
+          onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator | PropertyOperator })}
+        >
+          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {isNumeric
+              ? PROPERTY_OPERATORS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))
+              : TEXT_OPERATORS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {isNumeric && isBetween ? (
+        <>
+          <div className="w-24">
+            <Label className="text-xs text-muted-foreground">Min</Label>
+            <Input
+              className="h-9" type="number" placeholder="Min"
+              value={criterion.min ?? ""}
+              onChange={(e) => onChange({ ...criterion, min: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
+          <div className="w-24">
+            <Label className="text-xs text-muted-foreground">Max</Label>
+            <Input
+              className="h-9" type="number" placeholder="Max"
+              value={criterion.max ?? ""}
+              onChange={(e) => onChange({ ...criterion, max: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 min-w-[120px]">
+          <Label className="text-xs text-muted-foreground">Value</Label>
+          <Input
+            className="h-9"
+            type={isNumeric ? "number" : "text"}
+            placeholder={isNumeric ? "Value" : "Search text..."}
+            value={criterion.value ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...criterion,
+                value: isNumeric ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value,
+              })
+            }
+          />
+        </div>
+      )}
+      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
+function GroupCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+  depth,
+}: {
+  criterion: GroupCriterion;
+  onChange: (c: GroupCriterion) => void;
+  onRemove: () => void;
+  depth: number;
+}) {
+  const borderColors = ["border-blue-500/40", "border-amber-500/40", "border-emerald-500/40", "border-purple-500/40"];
+  const borderColor = borderColors[depth % borderColors.length];
+
+  function addSubCriterion(c: SearchCriterion) {
+    onChange({ ...criterion, criteria: [...criterion.criteria, c] });
+  }
+
+  function updateSubCriterion(index: number, updated: SearchCriterion) {
+    onChange({
+      ...criterion,
+      criteria: criterion.criteria.map((c, i) => (i === index ? updated : c)),
+    });
+  }
+
+  function removeSubCriterion(index: number) {
+    onChange({
+      ...criterion,
+      criteria: criterion.criteria.filter((_, i) => i !== index),
+    });
+  }
+
+  return (
+    <div className={`space-y-2 rounded-lg border-2 border-dashed ${borderColor} p-3`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Group className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Group</span>
+          <Select
+            value={criterion.logic}
+            onValueChange={(v) => onChange({ ...criterion, logic: v as "and" | "or" })}
+          >
+            <SelectTrigger className="h-7 w-16 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="and">AND</SelectItem>
+              <SelectItem value="or">OR</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-1">
+          <Select
+            value=""
+            onValueChange={(v) => {
+              const factories: Record<string, () => SearchCriterion> = {
+                text: defaultTextCriterion,
+                property: defaultPropertyCriterion,
+                structure: defaultStructureCriterion,
+                activity: defaultActivityCriterion,
+                collection: defaultCollectionCriterion,
+                custom_field: defaultCustomFieldCriterion,
+              };
+              const factory = factories[v];
+              if (factory) addSubCriterion(factory());
+            }}
+          >
+            <SelectTrigger className="h-7 w-24 text-xs">
+              <SelectValue placeholder="+ Add..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="text">Text</SelectItem>
+              <SelectItem value="property">Property</SelectItem>
+              <SelectItem value="structure">Structure</SelectItem>
+              <SelectItem value="activity">Activity</SelectItem>
+              <SelectItem value="collection">Collection</SelectItem>
+              <SelectItem value="custom_field">Custom Field</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRemove}>
+            <Trash2 className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </div>
+      </div>
+      {criterion.criteria.length === 0 && (
+        <p className="text-xs text-muted-foreground text-center py-2">
+          Add criteria to this group
+        </p>
+      )}
+      <div className="space-y-2">
+        {criterion.criteria.map((sub, i) => {
+          const key = `group-${depth}-${sub.type}-${i}`;
+          // Render sub-criteria (simplified — no NOT toggle inside groups for now, use negate on the sub directly)
+          if (sub.type === "text") return <TextCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} />;
+          if (sub.type === "property") return <PropertyCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} />;
+          if (sub.type === "structure") return <StructureCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} />;
+          if (sub.type === "activity") return <ActivityCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} />;
+          if (sub.type === "collection") return <CollectionCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} />;
+          if (sub.type === "custom_field") return <CustomFieldCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} />;
+          if (sub.type === "group" && depth < 3) return <GroupCriterionRow key={key} criterion={sub} onChange={(c) => updateSubCriterion(i, c)} onRemove={() => removeSubCriterion(i)} depth={depth + 1} />;
+          return null;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NegateToggle({
+  negate,
+  onToggle,
+}: {
+  negate: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={negate ? "destructive" : "outline"}
+      size="sm"
+      className="h-7 px-2 text-xs shrink-0 self-end mb-0.5"
+      onClick={() => onToggle(!negate)}
+      title={negate ? "Click to remove NOT" : "Click to negate this criterion"}
+    >
+      {negate ? "NOT" : "IS"}
+    </Button>
+  );
+}
+
+function SelectivityCriterionRow({
+  criterion,
+  onChange,
+  onRemove,
+}: {
+  criterion: SelectivityCriterion;
+  onChange: (c: SelectivityCriterion) => void;
+  onRemove: () => void;
+}) {
+  const { data: protocols } = useProtocols();
+  const activeProtocols = protocols?.filter((p) => p.status === "active");
+
+  return (
+    <div className="space-y-2 rounded border border-dashed border-border p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">
+          Selectivity — counter / target ratio
+        </span>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRemove}>
+          <Trash2 className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </div>
+      <div className="flex items-end gap-2 flex-wrap">
+        <div className="w-44">
+          <Label className="text-xs text-muted-foreground">Target Protocol</Label>
+          <Select
+            value={criterion.target_protocol_id || undefined}
+            onValueChange={(v) => onChange({ ...criterion, target_protocol_id: v })}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent>
+              {activeProtocols?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-28">
+          <Label className="text-xs text-muted-foreground">Curve</Label>
+          <Select
+            value={criterion.target_curve_type}
+            onValueChange={(v) => onChange({ ...criterion, target_curve_type: v })}
+          >
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CURVE_TYPE_OPTIONS.map((ct) => (
+                <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex items-end gap-2 flex-wrap">
+        <div className="w-44">
+          <Label className="text-xs text-muted-foreground">Counter Protocol</Label>
+          <Select
+            value={criterion.counter_protocol_id || undefined}
+            onValueChange={(v) => onChange({ ...criterion, counter_protocol_id: v })}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent>
+              {activeProtocols?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-28">
+          <Label className="text-xs text-muted-foreground">Curve</Label>
+          <Select
+            value={criterion.counter_curve_type}
+            onValueChange={(v) => onChange({ ...criterion, counter_curve_type: v })}
+          >
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CURVE_TYPE_OPTIONS.map((ct) => (
+                <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-20">
+          <Label className="text-xs text-muted-foreground">Ratio</Label>
+          <Select
+            value={criterion.ratio_operator}
+            onValueChange={(v) => onChange({ ...criterion, ratio_operator: v as PropertyOperator })}
+          >
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PROPERTY_OPERATORS.filter((o) => o.value !== "between").map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-24">
+          <Label className="text-xs text-muted-foreground">Value</Label>
+          <Input
+            className="h-9"
+            type="number"
+            placeholder="e.g. 100"
+            value={criterion.ratio_value ?? ""}
+            onChange={(e) =>
+              onChange({ ...criterion, ratio_value: e.target.value ? Number(e.target.value) : 0 })
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 interface SearchQueryBuilderProps {
@@ -996,80 +1374,46 @@ export function SearchQueryBuilder({
           </Select>
           <Label className="text-sm text-muted-foreground">of the following criteria</Label>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultTextCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Text
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultPropertyCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Property
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultStructureCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Structure
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultActivityCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Activity
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultCollectionCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Collection
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultKeywordListCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Keyword List
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultRunDateCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Run Date
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultBatchCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Batch
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCriteria([...criteria, defaultProjectCriterion()])}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Project
-          </Button>
-        </div>
+        <Select
+          value=""
+          onValueChange={(v) => {
+            const factories: Record<string, () => SearchCriterion> = {
+              text: defaultTextCriterion,
+              property: defaultPropertyCriterion,
+              structure: defaultStructureCriterion,
+              activity: defaultActivityCriterion,
+              collection: defaultCollectionCriterion,
+              keyword_list: defaultKeywordListCriterion,
+              run_date: defaultRunDateCriterion,
+              batch: defaultBatchCriterion,
+              project: defaultProjectCriterion,
+              selectivity: defaultSelectivityCriterion,
+              custom_field: defaultCustomFieldCriterion,
+              group: defaultGroupCriterion,
+            };
+            const factory = factories[v];
+            if (factory) setCriteria([...criteria, factory()]);
+          }}
+        >
+          <SelectTrigger className="h-8 w-44">
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            <SelectValue placeholder="Add criterion..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="text">Text</SelectItem>
+            <SelectItem value="property">Property</SelectItem>
+            <SelectItem value="structure">Structure</SelectItem>
+            <SelectItem value="activity">Activity</SelectItem>
+            <SelectItem value="batch">Batch</SelectItem>
+            <SelectItem value="collection">Collection</SelectItem>
+            <SelectItem value="project">Project</SelectItem>
+            <SelectItem value="keyword_list">Keyword List</SelectItem>
+            <SelectItem value="run_date">Run Date</SelectItem>
+            <SelectItem value="selectivity">Selectivity</SelectItem>
+            <SelectItem value="custom_field">Custom Field</SelectItem>
+            <SelectItem value="group">Group (nested)</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Criteria rows */}
@@ -1082,86 +1426,113 @@ export function SearchQueryBuilder({
       <div className="space-y-3">
         {criteria.map((criterion, index) => {
           const key = `${criterion.type}-${index}`;
+          const negate = criterion.negate ?? false;
+          const toggleNegate = (v: boolean) =>
+            updateCriterion(index, { ...criterion, negate: v || undefined });
+
+          const wrapWithNegate = (row: React.ReactNode) => (
+            <div key={key} className={`flex items-start gap-2 ${negate ? "ring-1 ring-destructive/30 rounded-md p-1" : ""}`}>
+              <NegateToggle negate={negate} onToggle={toggleNegate} />
+              <div className="flex-1">{row}</div>
+            </div>
+          );
+
           switch (criterion.type) {
             case "text":
-              return (
+              return wrapWithNegate(
                 <TextCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "property":
-              return (
+              return wrapWithNegate(
                 <PropertyCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "structure":
-              return (
+              return wrapWithNegate(
                 <StructureCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "activity":
-              return (
+              return wrapWithNegate(
                 <ActivityCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "collection":
-              return (
+              return wrapWithNegate(
                 <CollectionCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "keyword_list":
-              return (
+              return wrapWithNegate(
                 <KeywordListCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "run_date":
-              return (
+              return wrapWithNegate(
                 <RunDateCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "batch":
-              return (
+              return wrapWithNegate(
                 <BatchCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
                 />
               );
             case "project":
-              return (
+              return wrapWithNegate(
                 <ProjectCriterionRow
-                  key={key}
                   criterion={criterion}
-                  onChange={(c) => updateCriterion(index, c)}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "selectivity":
+              return wrapWithNegate(
+                <SelectivityCriterionRow
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "custom_field":
+              return wrapWithNegate(
+                <CustomFieldCriterionRow
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
+                  onRemove={() => removeCriterion(index)}
+                />
+              );
+            case "group":
+              return wrapWithNegate(
+                <GroupCriterionRow
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
+                  onRemove={() => removeCriterion(index)}
+                  depth={0}
                 />
               );
           }

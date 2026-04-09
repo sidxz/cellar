@@ -213,7 +213,7 @@ async def list_plates(
         storage_location_id=storage_location_id,
         project_id=project_id,
     )
-    plates = result_to_response(await uc(query))
+    plates = result_to_response(await uc(query, auth=auth))
     return [PlateResponse.from_domain(p) for p in plates]
 
 
@@ -225,7 +225,7 @@ async def get_plate(
 ) -> PlateResponse:
     """Retrieve a single registered plate by ID."""
     query = GetPlateQuery(workspace_id=auth.workspace_id, plate_id=plate_id)
-    plate = result_to_response(await uc(query))
+    plate = result_to_response(await uc(query, auth=auth))
     return PlateResponse.from_domain(plate)
 
 
@@ -319,7 +319,7 @@ async def list_children(
         workspace_id=auth.workspace_id,
         parent_plate_id=plate_id,
     )
-    children = result_to_response(await uc(query))
+    children = result_to_response(await uc(query, auth=auth))
     return [PlateResponse.from_domain(p) for p in children]
 
 

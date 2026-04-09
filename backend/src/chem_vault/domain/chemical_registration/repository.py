@@ -73,7 +73,17 @@ class MoleculeRepository(Protocol):
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
     ) -> list[Molecule]: ...
+
+    async def count_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        project_ids: list[uuid.UUID] | None = None,
+    ) -> int: ...
 
     async def save(self, aggregate: Molecule) -> None: ...
 

@@ -49,6 +49,18 @@ class FitDoseResponseCurves:
         readout_data: list[ReadoutData],
     ) -> Result[list[DoseResponseCurve], DomainError]:
         """Fit curves for all DOSE_RESPONSE readout definitions in the protocol."""
+        if not self._uow.is_active:
+            async with self._uow:
+                return await self._fit(run=run, protocol=protocol, readout_data=readout_data)
+        return await self._fit(run=run, protocol=protocol, readout_data=readout_data)
+
+    async def _fit(
+        self,
+        *,
+        run: Run,
+        protocol: Protocol,
+        readout_data: list[ReadoutData],
+    ) -> Result[list[DoseResponseCurve], DomainError]:
         dr_defs = [
             rd for rd in protocol.readout_definitions
             if rd.data_type == ReadoutDataType.DOSE_RESPONSE

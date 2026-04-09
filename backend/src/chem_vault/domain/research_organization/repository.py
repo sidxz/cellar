@@ -20,6 +20,10 @@ class ProjectRepository(Protocol):
 
     async def find_by_id(self, id: uuid.UUID) -> Project | None: ...
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Project | None: ...
+
     async def save(self, aggregate: Project) -> None: ...
 
     async def find_by_workspace(
@@ -39,6 +43,10 @@ class CollectionRepository(Protocol):
     """
 
     async def find_by_id(self, id: uuid.UUID) -> Collection | None: ...
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Collection | None: ...
 
     async def save(self, aggregate: Collection) -> None: ...
 
@@ -94,6 +102,10 @@ class SavedSearchRepository(Protocol):
     """Repository for SavedSearch aggregates."""
 
     async def find_by_id(self, id: uuid.UUID) -> SavedSearch | None: ...
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> SavedSearch | None: ...
 
     async def save(self, aggregate: SavedSearch) -> None: ...
 

@@ -29,6 +29,7 @@ class ExecuteSearchResponse(BaseModel):
     items: list[MoleculeResponse]
     next_cursor: str | None = None
     activity_data: dict[str, dict[str, Any]] | None = None
+    total_count: int | None = None
 
 
 @router.post("/execute", response_model=ExecuteSearchResponse)
@@ -38,6 +39,8 @@ async def execute_search(
     use_case: ExecuteSearchDep,
     cursor: str | None = None,
     limit: int | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> ExecuteSearchResponse:
     """Execute a compound search -- inline query or saved search reference."""
     q = ExecuteSearchQuery(
@@ -47,10 +50,13 @@ async def execute_search(
         protocol_columns=body.protocol_columns,
         cursor_id=parse_cursor(cursor),
         limit=clamp_limit(limit),
+        sort_by=sort_by,
+        sort_dir=sort_dir if sort_dir in ("asc", "desc") else None,
     )
-    page = result_to_response(await use_case(q))
+    page = result_to_response(await use_case(q, auth=auth))
     return ExecuteSearchResponse(
         items=[MoleculeResponse.from_domain(m) for m in page.items],
         next_cursor=page.next_cursor,
         activity_data=page.activity_data,
+        total_count=page.total_count,
     )

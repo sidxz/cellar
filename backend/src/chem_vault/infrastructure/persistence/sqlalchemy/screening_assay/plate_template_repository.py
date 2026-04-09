@@ -66,13 +66,17 @@ class SQLAlchemyPlateTemplateRepository:
 
     async def count_references(self, workspace_id: uuid.UUID, template_id: uuid.UUID) -> int:
         """Count how many plates/runs reference this template within the workspace."""
-        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import PlateModel
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import PlateModel, RunModel
         from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import RegisteredPlateModel
 
+        # PlateModel has no workspace_id — join through RunModel for workspace scoping
         run_result = await self._uow.session.execute(
-            select(func.count()).select_from(PlateModel).where(
+            select(func.count())
+            .select_from(PlateModel)
+            .join(RunModel, PlateModel.run_id == RunModel.id)
+            .where(
                 PlateModel.template_id == template_id,
-                PlateModel.workspace_id == workspace_id,
+                RunModel.workspace_id == workspace_id,
             )
         )
         plate_result = await self._uow.session.execute(

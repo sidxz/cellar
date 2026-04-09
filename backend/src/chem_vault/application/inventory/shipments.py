@@ -13,7 +13,7 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.inventory.repository import ShipmentRepository
+from chem_vault.domain.inventory.repository import SampleRepository, ShipmentRepository
 from chem_vault.domain.inventory.shipment import Shipment, ShipmentItem
 from chem_vault.domain.shared.enums import AmountUnit
 from chem_vault.application.shared.sentinel import UNSET
@@ -133,10 +133,12 @@ class CreateShipment:
         uow: UnitOfWork,
         repo: ShipmentRepository,
         dispatcher: EventDispatcherProtocol,
+        sample_repo: SampleRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._sample_repo = sample_repo
 
     async def __call__(
         self, input: CreateShipmentCommand, auth: AuthContext | None = None
@@ -144,6 +146,15 @@ class CreateShipment:
         require_editor(auth)
 
         async with self._uow:
+            # Verify all samples belong to this workspace
+            if self._sample_repo is not None:
+                for item_input in input.items:
+                    sample = await self._sample_repo.find_by_id_in_workspace(
+                        input.workspace_id, item_input.sample_id
+                    )
+                    if sample is None:
+                        return Failure(NotFoundError("Sample", str(item_input.sample_id)))
+
             # Build a placeholder shipment_id so items have a valid ref before creation
             placeholder_shipment_id = uuid.uuid4()
             items = [
@@ -338,10 +349,12 @@ class AddShipmentItem:
         uow: UnitOfWork,
         repo: ShipmentRepository,
         dispatcher: EventDispatcherProtocol,
+        sample_repo: SampleRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._sample_repo = sample_repo
 
     async def __call__(
         self, input: AddShipmentItemCommand, auth: AuthContext | None = None
@@ -354,6 +367,14 @@ class AddShipmentItem:
             )
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
+
+            # Verify sample belongs to this workspace
+            if self._sample_repo is not None:
+                sample = await self._sample_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.sample_id
+                )
+                if sample is None:
+                    return Failure(NotFoundError("Sample", str(input.sample_id)))
 
             item = ShipmentItem(
                 shipment_id=shipment.id,
