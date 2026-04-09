@@ -148,6 +148,7 @@ export function ReadoutDataTable({
         loading={isLoading}
         height="500px"
         suppressFilters
+        exportFilename={`readout-data-${runId}`}
         getRowId={(params) => params.data.key}
         emptyState={
           <p className="py-8 text-center text-sm text-muted-foreground">
