@@ -489,3 +489,16 @@ export interface ConditionGroupsResponse {
   condition_name: string;
   groups: ConditionGroupResponse[];
 }
+
+// ─── Refit / Classify Input Types ────────────────────────────────────────────
+
+export interface RefitDoseResponseInput {
+  excluded_point_indices: number[];
+  hill_slope_constraint?: string | null;
+  top_constraint?: number | null;
+  bottom_constraint?: number | null;
+}
+
+export interface ClassifyDoseResponseInput {
+  curve_class: string;
+}
