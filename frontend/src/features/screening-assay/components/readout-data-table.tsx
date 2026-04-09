@@ -59,6 +59,8 @@ export function ReadoutDataTable({
 
     const groups = new Map<string, PivotRow>();
     for (const row of data) {
+      // Skip control well readouts (no molecule)
+      if (!row.molecule_id) continue;
       const key = `${row.molecule_id}::${row.batch_id}`;
       let group = groups.get(key);
       if (!group) {
@@ -67,7 +69,7 @@ export function ReadoutDataTable({
           key,
           label: mol ? `${mol.reg} \u2014 ${mol.name}` : "Unknown compound",
           moleculeId: row.molecule_id,
-          batchId: row.batch_id,
+          batchId: row.batch_id ?? "",
           values: new Map(),
         };
         groups.set(key, group);

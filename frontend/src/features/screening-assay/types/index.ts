@@ -294,8 +294,8 @@ export interface ReadoutData {
   workspace_id: string;
   run_id: string;
   well_id: string | null;
-  molecule_id: string;
-  batch_id: string;
+  molecule_id: string | null;
+  batch_id: string | null;
   readout_definition_id: string;
   value_numeric: number | null;
   value_qualifier: string | null;

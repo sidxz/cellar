@@ -51,8 +51,8 @@ class ReadoutDataResponse(BaseModel):
     workspace_id: uuid.UUID
     run_id: uuid.UUID
     well_id: uuid.UUID | None = None
-    molecule_id: uuid.UUID
-    batch_id: uuid.UUID
+    molecule_id: uuid.UUID | None = None
+    batch_id: uuid.UUID | None = None
     readout_definition_id: uuid.UUID
     value_numeric: float | None = None
     value_qualifier: str | None = None
