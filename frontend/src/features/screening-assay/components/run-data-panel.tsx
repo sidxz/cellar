@@ -137,7 +137,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                 <Plus className="mr-2 h-4 w-4" /> Add Curve
               </Button>
             </div>
-            <DoseResponseChart curves={curves ?? []} />
+            <DoseResponseChart curves={curves ?? []} isInteractive={!run.is_locked} />
           </div>
         </TabsContent>
 
