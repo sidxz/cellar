@@ -42,10 +42,42 @@ _FULL_BOTTOM_MAX = 20.0
 _PARTIAL_R2_MIN = 0.6
 _MIN_FITTING_POINTS = 4
 
+# Outlier detection thresholds
+_MIN_POINTS_FOR_OUTLIER_DETECTION = 6   # need at least 6 points to run 3σ detection
+_OUTLIER_SIGMA = 3.0                    # flag residuals > 3 * SD
+
 
 def _hill_equation(concentration: np.ndarray, bottom: float, top: float, ec50: float, abs_hill: float) -> np.ndarray:
     """4PL Hill equation. Uses absolute hill slope — always positive internally."""
     return bottom + (top - bottom) / (1.0 + (concentration / ec50) ** abs_hill)
+
+
+def _detect_outliers(residuals: np.ndarray, sigma: float = 3.0) -> np.ndarray:
+    """Identify a single outlier using a leave-one-out (Grubbs-like) test.
+
+    For the point with the largest absolute residual, compute the SD of the
+    *remaining* n-1 residuals.  If the candidate's residual exceeds `sigma`
+    times that SD, it is flagged.  Using leave-one-out means a single extreme
+    outlier cannot inflate the SD and hide itself from detection.
+
+    Returns a boolean mask of the same length as ``residuals``.
+    """
+    n = len(residuals)
+    if n < 2:  # pragma: no cover
+        return np.zeros(n, dtype=bool)
+
+    abs_res = np.abs(residuals)
+    max_idx = int(np.argmax(abs_res))
+
+    # SD of all points except the candidate
+    others = np.delete(residuals, max_idx)
+    sd_others = float(np.std(others, ddof=1))
+
+    mask = np.zeros(n, dtype=bool)
+    if sd_others > 0 and abs_res[max_idx] > sigma * sd_others:
+        mask[max_idx] = True
+
+    return mask
 
 
 class LmfitCurveFitter:
@@ -172,6 +204,93 @@ class LmfitCurveFitter:
         ss_res = float(np.sum((responses - predicted) ** 2))
         ss_tot = float(np.sum((responses - np.mean(responses)) ** 2))
         r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+        # --- Two-pass 3σ outlier detection ---
+        # Only attempt when we have enough data points for meaningful statistics.
+        # Uses a leave-one-out (Grubbs-like) approach: compare each point's residual
+        # against the SD of the *remaining* n-1 residuals, so a single extreme outlier
+        # cannot inflate the SD and hide itself from detection.
+        if len(active_points) >= _MIN_POINTS_FOR_OUTLIER_DETECTION:
+            residuals = responses - predicted
+            outlier_mask = _detect_outliers(residuals, sigma=_OUTLIER_SIGMA)
+
+            if np.any(outlier_mask):
+                # Partition into clean and outlier sets
+                clean_concentrations = concentrations[~outlier_mask]
+                clean_responses = responses[~outlier_mask]
+
+                if len(clean_concentrations) >= _MIN_FITTING_POINTS:
+                    # Second-pass fit on clean subset
+                    try:
+                        params2 = model.make_params(
+                            bottom=fitted_bottom,
+                            top=fitted_top,
+                            ec50=fitted_ec50,
+                            abs_hill=fitted_abs_hill,
+                        )
+                        params2["ec50"].set(min=1e-12)
+                        # Re-apply same constraints
+                        constraint = config.hill_slope_constraint
+                        if constraint == HillSlopeConstraint.FIXED_AT_ONE:
+                            params2["abs_hill"].set(value=1.0, vary=False)
+                        elif constraint in (HillSlopeConstraint.POSITIVE_ONLY, HillSlopeConstraint.NEGATIVE_ONLY):
+                            params2["abs_hill"].set(min=0.1, max=10.0)
+                        else:
+                            params2["abs_hill"].set(min=0.01, max=20.0)
+                        if config.top_constraint is not None:
+                            params2["top"].set(value=config.top_constraint, vary=False)
+                        if config.bottom_constraint is not None:
+                            params2["bottom"].set(value=config.bottom_constraint, vary=False)
+
+                        fit_result2 = model.fit(
+                            clean_responses,
+                            params2,
+                            concentration=clean_concentrations,
+                            method="leastsq",
+                        )
+
+                        if fit_result2.success or fit_result2.errorbars:
+                            # Accept second-pass results
+                            best = fit_result2.params
+                            fitted_top = float(best["top"].value)
+                            fitted_bottom = float(best["bottom"].value)
+                            fitted_ec50 = float(best["ec50"].value)
+                            fitted_abs_hill = float(best["abs_hill"].value)
+
+                            is_inhibition = config.curve_type in _INHIBITION_CURVE_TYPES
+                            hill_slope_out = -abs(fitted_abs_hill) if is_inhibition else abs(fitted_abs_hill)
+
+                            predicted = _hill_equation(
+                                clean_concentrations, fitted_bottom, fitted_top, fitted_ec50, fitted_abs_hill
+                            )
+                            ss_res = float(np.sum((clean_responses - predicted) ** 2))
+                            ss_tot = float(np.sum((clean_responses - np.mean(clean_responses)) ** 2))
+                            r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+                            # Update concentrations/responses to the clean subset for downstream use
+                            concentrations = clean_concentrations
+                            responses = clean_responses
+
+                            # Move outlier points to excluded_data with reason + residual
+                            for i, is_outlier in enumerate(outlier_mask):
+                                if is_outlier:
+                                    excluded_data.append({
+                                        "concentration": float(active_points[i].concentration),
+                                        "response": float(active_points[i].response),
+                                        "reason": "auto_3sigma",
+                                        "residual": float(residuals[i]),
+                                    })
+
+                            # Rebuild raw_data from the clean subset only
+                            raw_data = [
+                                {"concentration": float(active_points[i].concentration), "response": float(active_points[i].response)}
+                                for i, is_outlier in enumerate(outlier_mask)
+                                if not is_outlier
+                            ]
+
+                    except Exception:
+                        # Second-pass failed — keep first-pass results as-is
+                        pass
 
         # --- Confidence intervals (EC50 ± 1.96 * stderr) ---
         ec50_stderr = best["ec50"].stderr
