@@ -19,10 +19,12 @@ from collections import defaultdict
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import (
     ReadoutAggregation,
     ReadoutNormalization,
 )
+from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from chem_vault.domain.screening_assay.plate_normalizer import PlateNormalizer
 from chem_vault.domain.screening_assay.protocol import ReadoutDefinition
@@ -52,19 +54,23 @@ class ReadoutCalculationEngine:
     def __init__(
         self,
         *,
+        uow: UnitOfWork,
         formula_evaluator: FormulaEvaluator,
         plate_normalizer: PlateNormalizer,
         replicate_aggregator: ReplicateAggregator,
         readout_data_repo: ReadoutDataRepository,
         run_repo: RunRepository,
         protocol_repo: ProtocolRepository,
+        fit_dose_response: FitDoseResponseCurves | None = None,
     ) -> None:
+        self._uow = uow
         self._formula_evaluator = formula_evaluator
         self._plate_normalizer = plate_normalizer
         self._replicate_aggregator = replicate_aggregator
         self._readout_data_repo = readout_data_repo
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
+        self._fit_dose_response = fit_dose_response
 
     async def compute_for_run(
         self, run_id: uuid.UUID, *, workspace_id: uuid.UUID
@@ -75,6 +81,14 @@ class ReadoutCalculationEngine:
             Success(list[ReadoutData]) — all newly computed readout data entities.
             Failure(DomainError) — if run/protocol not found or a computation fails.
         """
+        if self._uow.is_active:
+            return await self._execute(run_id, workspace_id=workspace_id)
+        async with self._uow:
+            return await self._execute(run_id, workspace_id=workspace_id)
+
+    async def _execute(
+        self, run_id: uuid.UUID, *, workspace_id: uuid.UUID
+    ) -> Result[list[ReadoutData], DomainError]:
         # ------------------------------------------------------------------
         # 1. Load context + workspace ownership check
         # ------------------------------------------------------------------
@@ -246,6 +260,16 @@ class ReadoutCalculationEngine:
 
                     # Make the computed value available for downstream formulas
                     bindings[rd.name] = value
+
+        # ------------------------------------------------------------------
+        # 7.5. Auto-fit dose-response curves
+        # ------------------------------------------------------------------
+        if self._fit_dose_response is not None:
+            await self._fit_dose_response.fit_for_run(
+                run=run,
+                protocol=protocol,
+                readout_data=raw_data + computed,
+            )
 
         # ------------------------------------------------------------------
         # 7. Persist
