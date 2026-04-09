@@ -166,7 +166,7 @@ function CurveControls({
           onClick={() => setOpen((v) => !v)}
         >
           <span>{open ? "▾" : "▸"}</span>
-          Fit Constraints
+          {curve.molecule_name ?? "Curve"} — Fit Constraints
           {isPending && (
             <span className="ml-1 h-2 w-2 rounded-full bg-blue-400 animate-pulse inline-block" />
           )}
@@ -296,7 +296,7 @@ function SummaryCard({
       </CardHeader>
       <CardContent className="pt-2 space-y-1">
         <p className="text-sm font-mono">
-          {curve.fitted_value} {curve.fitted_unit}
+          {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
         </p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className={cn("font-medium", rSquaredColor(curve.r_squared))}>
@@ -361,6 +361,9 @@ export function DoseResponseChart({
   // ── Interactive state ───────────────────────────────────────────────────────
   const { mutate: refit, isPending: isRefitting } = useRefitDoseResponse();
   const { mutate: classify, isPending: isClassifying } = useClassifyDoseResponse();
+
+  // Edit mode toggle — prevents accidental point exclusion
+  const [editMode, setEditMode] = useState(false);
 
   // excluded indices per curve id — tracked separately from curve.excluded_points
   // so local UI state stays until query invalidation refreshes the curve
@@ -527,9 +530,9 @@ export function DoseResponseChart({
             : undefined,
         },
         showlegend: true,
-        hovertemplate: isInteractive
+        hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to exclude</i><extra></extra>"
-          : undefined,
+          : "x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
       });
     }
 
@@ -546,9 +549,9 @@ export function DoseResponseChart({
         y: excludedY,
         marker: { color, size: 8, symbol: "x", opacity: 0.5 },
         showlegend: false,
-        hovertemplate: isInteractive
+        hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to include</i><extra></extra>"
-          : undefined,
+          : "x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
       });
     }
 
@@ -572,7 +575,7 @@ export function DoseResponseChart({
   const handlePlotClick = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (event: any) => {
-      if (!isInteractive) return;
+      if (!isInteractive || !editMode) return;
       const pt = event?.points?.[0];
       if (!pt) return;
 
@@ -622,7 +625,7 @@ export function DoseResponseChart({
       const constraints = getConstraints(curve);
       callRefit(curve, currentExcluded, constraints);
     },
-    [isInteractive, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve]
+    [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve]
   );
 
   const layout = {
@@ -648,8 +651,8 @@ export function DoseResponseChart({
       font: { color: "#a1a1aa" },
     },
     margin: { t: 20, b: 60, l: 60, r: 20 },
-    clickmode: isInteractive ? "event" : undefined,
-    cursor: isInteractive ? "pointer" : undefined,
+    clickmode: editMode ? "event" : undefined,
+    dragmode: editMode ? false : "zoom",
   };
 
   const config = {
@@ -660,13 +663,31 @@ export function DoseResponseChart({
 
   return (
     <div className={cn("space-y-4", className)}>
+      {/* Edit mode toggle */}
+      {isInteractive && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant={editMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEditMode((v) => !v)}
+          >
+            {editMode ? "Done Editing" : "Edit Points"}
+          </Button>
+          {editMode && (
+            <span className="text-xs text-muted-foreground">
+              Click data points to exclude/include them. Curve refits automatically.
+            </span>
+          )}
+        </div>
+      )}
+
       <Plot
         data={traces}
         layout={layout}
         config={config}
         style={{ width: "100%" }}
         useResizeHandler
-        onClick={isInteractive ? handlePlotClick : undefined}
+        onClick={editMode ? handlePlotClick : undefined}
       />
 
       {/* Per-curve constraint controls (interactive only) */}
