@@ -6,7 +6,7 @@
     "shipping_conditions": "Ambient temperature, desiccant pack",
     "notes": "CNS collaboration compound shipment — batch 1",
     "sample_refs": ["sample_fluoxetine_01", "sample_risperidone_01"],
-    "transitions": ["ship", "deliver"],
+    "transitions": ["ship", "in_transit", "deliver"],
     "tracking_number": "FX-7742891034"
   },
   "ship_02": {

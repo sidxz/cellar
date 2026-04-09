@@ -18,6 +18,8 @@ async def load(ctx: DemoContext) -> int:
         CreateShipmentCommand,
         DeliverShipment,
         DeliverShipmentCommand,
+        MarkShipmentInTransit,
+        MarkShipmentInTransitCommand,
         ShipmentItemInput,
         ShipShipment,
         ShipShipmentCommand,
@@ -26,6 +28,7 @@ async def load(ctx: DemoContext) -> int:
     data: dict = ctx.data("shipments.json")
     create_uc = ctx.container[CreateShipment]
     ship_uc = ctx.container[ShipShipment]
+    in_transit_uc = ctx.container[MarkShipmentInTransit]
     deliver_uc = ctx.container[DeliverShipment]
     created = 0
 
@@ -74,6 +77,14 @@ async def load(ctx: DemoContext) -> int:
                             workspace_id=WORKSPACE_ID,
                             shipment_id=shipment_id,
                             tracking_number=rec.get("tracking_number", "DEMO-TRACK-000"),
+                        ),
+                        auth=ctx.auth,
+                    )
+                elif transition == "in_transit":
+                    await in_transit_uc(
+                        MarkShipmentInTransitCommand(
+                            workspace_id=WORKSPACE_ID,
+                            shipment_id=shipment_id,
                         ),
                         auth=ctx.auth,
                     )
