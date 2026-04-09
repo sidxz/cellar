@@ -504,3 +504,68 @@ export interface RefitDoseResponseInput {
 export interface ClassifyDoseResponseInput {
   curve_class: string;
 }
+
+// ─── Plate Setup ─────────────────────────────────────────────────────────────
+
+export interface PlateMapWell {
+  well_id: string;
+  position: string;
+  row: string;
+  column: number;
+  well_type: string;
+  molecule_id: string | null;
+  molecule_name: string | null;
+  batch_id: string | null;
+  batch_number: string | null;
+  concentration: number | null;
+  concentration_unit: string | null;
+}
+
+export interface PlateMapSummary {
+  total_wells: number;
+  sample_wells: number;
+  control_wells: number;
+  compounds: number;
+  concentrations_per_compound: number;
+  replicates: number;
+}
+
+export interface PlateMapResponse {
+  plate_number: number;
+  format: string;
+  wells: PlateMapWell[];
+  summary: PlateMapSummary;
+}
+
+export interface CompoundAssignment {
+  molecule_ref: string;
+  batch_ref?: string | null;
+  well_positions: string[];
+}
+
+export interface ParsedPlateMap {
+  assignments: CompoundAssignment[];
+  unresolved: string[];
+  row_count: number;
+}
+
+export interface PlateSetupInput {
+  compound_assignments: CompoundAssignment[];
+  plate_number?: number;
+  concentration_series?: number[];
+  concentration_unit?: string;
+}
+
+export interface PlateSetupResult {
+  plate_id: string;
+  wells_created: number;
+  compounds_assigned: number;
+  unresolved: string[];
+}
+
+export interface ImportReadoutsResult {
+  total_rows: number;
+  matched: number;
+  unmatched: number;
+  readouts_created: number;
+}
