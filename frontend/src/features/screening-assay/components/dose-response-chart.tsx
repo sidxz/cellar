@@ -91,19 +91,76 @@ function generate4PLCurve(
 /** Extract (concentration, response) pairs from raw_data / excluded_points */
 function extractPoints(
   points: Array<Record<string, unknown>> | null
-): { x: number[]; y: number[] } {
-  if (!points || points.length === 0) return { x: [], y: [] };
+): { x: number[]; y: number[]; reasons: (string | null)[] } {
+  if (!points || points.length === 0) return { x: [], y: [], reasons: [] };
   const xs: number[] = [];
   const ys: number[] = [];
+  const reasons: (string | null)[] = [];
   for (const pt of points) {
     const conc = pt["concentration"] ?? pt["x"];
     const resp = pt["response"] ?? pt["y"];
     if (typeof conc === "number" && typeof resp === "number") {
       xs.push(conc);
       ys.push(resp);
+      reasons.push(typeof pt["reason"] === "string" ? pt["reason"] : null);
     }
   }
-  return { x: xs, y: ys };
+  return { x: xs, y: ys, reasons };
+}
+
+/** Group points by concentration, return mean ± SD arrays for error bars */
+function computeReplicateStats(
+  x: number[],
+  y: number[]
+): {
+  meanX: number[];
+  meanY: number[];
+  sdY: number[];
+  replicateX: number[];
+  replicateY: number[];
+} {
+  if (x.length === 0) {
+    return { meanX: [], meanY: [], sdY: [], replicateX: [], replicateY: [] };
+  }
+
+  // Group by concentration (use string key to avoid float equality issues)
+  const groups = new Map<string, { conc: number; responses: number[] }>();
+  for (let i = 0; i < x.length; i++) {
+    const key = x[i].toPrecision(10);
+    if (!groups.has(key)) groups.set(key, { conc: x[i], responses: [] });
+    groups.get(key)!.responses.push(y[i]);
+  }
+
+  const meanX: number[] = [];
+  const meanY: number[] = [];
+  const sdY: number[] = [];
+  const replicateX: number[] = [];
+  const replicateY: number[] = [];
+
+  for (const { conc, responses } of groups.values()) {
+    const mean = responses.reduce((a, b) => a + b, 0) / responses.length;
+    meanX.push(conc);
+    meanY.push(mean);
+
+    if (responses.length > 1) {
+      const variance =
+        responses.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) /
+        (responses.length - 1);
+      sdY.push(Math.sqrt(variance));
+    } else {
+      sdY.push(0);
+    }
+
+    // Individual replicates for scatter layer
+    if (responses.length > 1) {
+      for (const resp of responses) {
+        replicateX.push(conc);
+        replicateY.push(resp);
+      }
+    }
+  }
+
+  return { meanX, meanY, sdY, replicateX, replicateY };
 }
 
 /** R² color class */
@@ -484,25 +541,51 @@ export function DoseResponseChart({
 
     let includedX: number[];
     let includedY: number[];
-    let excludedX: number[];
-    let excludedY: number[];
+    let manualExcludedX: number[];
+    let manualExcludedY: number[];
+    let autoExcludedX: number[];
+    let autoExcludedY: number[];
 
     if (isInteractive) {
       includedX = serverIncluded.x.filter((_, idx) => !localExcluded.has(idx));
       includedY = serverIncluded.y.filter((_, idx) => !localExcluded.has(idx));
-      excludedX = [
-        ...serverIncluded.x.filter((_, idx) => localExcluded.has(idx)),
-        ...serverExcluded.x,
+      // locally excluded from raw_data -> treat as manual
+      manualExcludedX = serverIncluded.x.filter((_, idx) => localExcluded.has(idx));
+      manualExcludedY = serverIncluded.y.filter((_, idx) => localExcluded.has(idx));
+      // server excluded -> split by reason
+      autoExcludedX = serverExcluded.x.filter(
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+      );
+      autoExcludedY = serverExcluded.y.filter(
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+      );
+      manualExcludedX = [
+        ...manualExcludedX,
+        ...serverExcluded.x.filter(
+          (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+        ),
       ];
-      excludedY = [
-        ...serverIncluded.y.filter((_, idx) => localExcluded.has(idx)),
-        ...serverExcluded.y,
+      manualExcludedY = [
+        ...manualExcludedY,
+        ...serverExcluded.y.filter(
+          (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+        ),
       ];
     } else {
       includedX = serverIncluded.x;
       includedY = serverIncluded.y;
-      excludedX = serverExcluded.x;
-      excludedY = serverExcluded.y;
+      autoExcludedX = serverExcluded.x.filter(
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+      );
+      autoExcludedY = serverExcluded.y.filter(
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+      );
+      manualExcludedX = serverExcluded.x.filter(
+        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+      );
+      manualExcludedY = serverExcluded.y.filter(
+        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+      );
     }
 
     const allX = [...serverIncluded.x, ...serverExcluded.x, curve.fitted_value];
@@ -510,8 +593,38 @@ export function DoseResponseChart({
     const xMin = Math.max(xMinRaw, 1e-12);
     const xMax = allX.length > 0 ? Math.max(...allX) * 10 : curve.fitted_value * 100;
 
-    // Included data points
-    if (includedX.length > 0) {
+    // Compute replicate stats for error bars
+    const { meanX, meanY, sdY, replicateX, replicateY } = computeReplicateStats(
+      includedX,
+      includedY
+    );
+    const hasReplicates = replicateX.length > 0;
+
+    // Individual replicate scatter (semi-transparent, behind means) — only when replicates exist
+    if (hasReplicates) {
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        name: `${label} replicates`,
+        legendgroup: group,
+        x: replicateX,
+        y: replicateY,
+        marker: {
+          color,
+          size: 5,
+          symbol: "circle",
+          opacity: 0.35,
+        },
+        showlegend: false,
+        hoverinfo: "skip",
+      });
+    }
+
+    // Included data points (mean values with error bars when replicates exist)
+    const displayX = hasReplicates ? meanX : includedX;
+    const displayY = hasReplicates ? meanY : includedY;
+
+    if (displayX.length > 0) {
       const traceIdx = traces.length;
       traceIndexToCurve[traceIdx] = { curveId: curve.id, type: "included" };
       traces.push({
@@ -519,8 +632,8 @@ export function DoseResponseChart({
         mode: "markers",
         name: label,
         legendgroup: group,
-        x: includedX,
-        y: includedY,
+        x: displayX,
+        y: displayY,
         marker: {
           color,
           size: isInteractive ? 9 : 7,
@@ -529,6 +642,16 @@ export function DoseResponseChart({
             ? { color: "rgba(255,255,255,0.3)", width: 1 }
             : undefined,
         },
+        ...(hasReplicates && {
+          error_y: {
+            type: "data",
+            array: sdY,
+            visible: true,
+            color,
+            thickness: 1.5,
+            width: 4,
+          },
+        }),
         showlegend: true,
         hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to exclude</i><extra></extra>"
@@ -536,8 +659,8 @@ export function DoseResponseChart({
       });
     }
 
-    // Excluded data points
-    if (excludedX.length > 0) {
+    // Manually excluded points (x marker)
+    if (manualExcludedX.length > 0) {
       const traceIdx = traces.length;
       traceIndexToCurve[traceIdx] = { curveId: curve.id, type: "excluded" };
       traces.push({
@@ -545,13 +668,29 @@ export function DoseResponseChart({
         mode: "markers",
         name: `${label} (excluded)`,
         legendgroup: group,
-        x: excludedX,
-        y: excludedY,
+        x: manualExcludedX,
+        y: manualExcludedY,
         marker: { color, size: 8, symbol: "x", opacity: 0.5 },
         showlegend: false,
         hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to include</i><extra></extra>"
           : "x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
+      });
+    }
+
+    // Auto-excluded points (diamond marker, 3σ outliers)
+    if (autoExcludedX.length > 0) {
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        name: `${label} (auto-excluded)`,
+        legendgroup: group,
+        x: autoExcludedX,
+        y: autoExcludedY,
+        marker: { color, size: 8, symbol: "diamond", opacity: 0.45 },
+        showlegend: false,
+        hovertemplate:
+          "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Auto-excluded (3\u03c3 outlier)</i><extra></extra>",
       });
     }
 
