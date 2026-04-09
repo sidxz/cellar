@@ -203,7 +203,7 @@ class LmfitCurveFitter:
         predicted = _hill_equation(concentrations, fitted_bottom, fitted_top, fitted_ec50, fitted_abs_hill)
         ss_res = float(np.sum((responses - predicted) ** 2))
         ss_tot = float(np.sum((responses - np.mean(responses)) ** 2))
-        r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        r_squared = max(0.0, min(1.0, 1.0 - ss_res / ss_tot)) if ss_tot > 0 else 0.0
 
         # --- Two-pass 3σ outlier detection ---
         # Only attempt when we have enough data points for meaningful statistics.
@@ -265,7 +265,7 @@ class LmfitCurveFitter:
                             )
                             ss_res = float(np.sum((clean_responses - predicted) ** 2))
                             ss_tot = float(np.sum((clean_responses - np.mean(clean_responses)) ** 2))
-                            r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+                            r_squared = max(0.0, min(1.0, 1.0 - ss_res / ss_tot)) if ss_tot > 0 else 0.0
 
                             # Update concentrations/responses to the clean subset for downstream use
                             concentrations = clean_concentrations
