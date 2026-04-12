@@ -239,11 +239,18 @@ class StructureSearchResponse(BaseModel):
     count: int
 
 
+class DetectedSaltResponse(BaseModel):
+    salt_smiles: str
+    salt_fragment_mw: float
+    stoichiometry: int
+
+
 class RegistrationResponse(BaseModel):
     molecule: MoleculeResponse
     is_new: bool
     qc_warnings: list[str]
     batch: BatchResponse | None = None
+    detected_salt: DetectedSaltResponse | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -368,11 +375,20 @@ async def register_molecule(
         batch_outcome = result_to_response(await create_batch_uc(batch_cmd, auth=auth))
         batch_response = BatchResponse.from_domain(batch_outcome)
 
+    detected_salt_resp: DetectedSaltResponse | None = None
+    if outcome.detected_salt is not None:
+        detected_salt_resp = DetectedSaltResponse(
+            salt_smiles=outcome.detected_salt.salt_smiles,
+            salt_fragment_mw=outcome.detected_salt.salt_fragment_mw,
+            stoichiometry=outcome.detected_salt.stoichiometry,
+        )
+
     return RegistrationResponse(
         molecule=MoleculeResponse.from_domain(outcome.molecule),
         is_new=outcome.is_new,
         qc_warnings=outcome.qc_warnings,
         batch=batch_response,
+        detected_salt=detected_salt_resp,
     )
 
 

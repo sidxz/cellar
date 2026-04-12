@@ -30,6 +30,9 @@ class BulkRegistrationItemResponse(BaseModel):
     success: bool
     is_new: bool = False
     molecule_id: uuid.UUID | None = None
+    batch_id: uuid.UUID | None = None
+    batch_number: str | None = None
+    salt_matched: bool = False
     error: str | None = None
 
     @classmethod
@@ -39,6 +42,9 @@ class BulkRegistrationItemResponse(BaseModel):
             success=item.success,
             is_new=item.is_new,
             molecule_id=item.molecule_id,
+            batch_id=getattr(item, 'batch_id', None),
+            batch_number=getattr(item, 'batch_number', None),
+            salt_matched=getattr(item, 'salt_matched', False),
             error=item.error,
         )
 

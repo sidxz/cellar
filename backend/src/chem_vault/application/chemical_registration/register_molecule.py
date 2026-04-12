@@ -19,7 +19,10 @@ from chem_vault.domain.chemical_registration.enums import (
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
-from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
+from chem_vault.application.chemical_registration.protocols import (
+    DetectedSaltDTO,
+    StructureProcessorProtocol,
+)
 from chem_vault.application.workspace_config.custom_field_validator import CustomFieldValidator
 from chem_vault.domain.shared.errors import ConflictError, DomainError, ValidationError
 from chem_vault.domain.workspace_config.enums import FieldTarget
@@ -33,6 +36,7 @@ class RegistrationOutcome:
     molecule: Molecule
     is_new: bool
     qc_warnings: list[str] = field(default_factory=list)
+    detected_salt: DetectedSaltDTO | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -208,7 +212,8 @@ class RegisterMolecule:
             await self._dispatcher.dispatch_all(events)
             return Success(
                 RegistrationOutcome(
-                    molecule=existing_by_inchi, is_new=False, qc_warnings=qc_warnings
+                    molecule=existing_by_inchi, is_new=False, qc_warnings=qc_warnings,
+                    detected_salt=processed.detected_salt,
                 )
             )
 
@@ -237,7 +242,8 @@ class RegisterMolecule:
         events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
         return Success(
-            RegistrationOutcome(molecule=mol, is_new=True, qc_warnings=qc_warnings)
+            RegistrationOutcome(molecule=mol, is_new=True, qc_warnings=qc_warnings,
+                                detected_salt=processed.detected_salt)
         )
 
     async def _register_undisclosed(
