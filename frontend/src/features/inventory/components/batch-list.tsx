@@ -52,7 +52,7 @@ export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
       },
       {
         headerName: "Salt Form",
-        field: "salt_form",
+        field: "salt_name",
         width: 110,
         valueFormatter: (p) => p.value ?? "\u2014",
       },

@@ -48,7 +48,11 @@ export interface Batch {
   workspace_id: string;
   molecule_id: string;
   batch_number: string;
-  salt_form: string | null;
+  salt_entry_id: string | null;
+  salt_name: string | null;
+  salt_smiles: string | null;
+  salt_stoichiometry: number;
+  formula_weight: number | null;
   purity: number | null;
   amount_value: number;
   amount_unit: string;
@@ -67,14 +71,22 @@ export interface CreateBatchInput {
   source: string;
   amount_value: number;
   amount_unit: string;
-  salt_form?: string | null;
+  salt_entry_id?: string | null;
+  salt_name?: string | null;
+  salt_smiles?: string | null;
+  salt_stoichiometry?: number;
+  formula_weight?: number | null;
   purity?: number | null;
   supplier_org_id?: string | null;
   appearance?: string | null;
 }
 
 export interface UpdateBatchInput {
-  salt_form?: string | null;
+  salt_entry_id?: string | null;
+  salt_name?: string | null;
+  salt_smiles?: string | null;
+  salt_stoichiometry?: number | null;
+  formula_weight?: number | null;
   purity?: number | null;
   amount_value?: number | null;
   amount_unit?: string | null;

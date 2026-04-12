@@ -144,7 +144,7 @@ function defaultSelectivityCriterion(): SelectivityCriterion {
 const BATCH_TEXT_FIELDS = [
   { value: "batch_number", label: "Batch Number" },
   { value: "source", label: "Source" },
-  { value: "salt_form", label: "Salt Form" },
+  { value: "salt_name", label: "Salt Form" },
   { value: "vendor_catalog_number", label: "Vendor Catalog #" },
   { value: "notebook_reference", label: "Notebook Reference" },
 ] as const;

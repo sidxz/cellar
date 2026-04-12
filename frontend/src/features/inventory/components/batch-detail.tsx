@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Paperclip, Pencil } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -17,7 +17,15 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { EntityLink } from "@/shared/components/entity-link";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useSaltCatalog, type SaltEntry } from "@/features/workspace-config/hooks/use-salt-catalog";
 import { useMolecule } from "@/features/chemical-registration/hooks/use-molecules";
 import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import { useBatch, useUpdateBatch } from "../hooks/use-batches";
@@ -86,7 +94,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Salt Form</p>
-                    <p className="font-medium">{batch.salt_form ?? "\u2014"}</p>
+                    <p className="font-medium">{batch.salt_name ?? "\u2014"}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Appearance</p>
@@ -166,6 +174,8 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
   );
 }
 
+const NONE_VALUE = "__none__";
+
 function EditBatchDialog({
   batch,
   open,
@@ -176,12 +186,27 @@ function EditBatchDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useUpdateBatch(batch.id);
-  const [saltForm, setSaltForm] = useState(batch.salt_form ?? "");
+  const { data: saltEntries } = useSaltCatalog(true);
+
+  const [saltEntryId, setSaltEntryId] = useState<string>(
+    batch.salt_entry_id ?? NONE_VALUE
+  );
+  const [stoichiometry, setStoichiometry] = useState<number>(
+    batch.salt_stoichiometry ?? 1
+  );
   const [purity, setPurity] = useState(batch.purity?.toString() ?? "");
   const [amountValue, setAmountValue] = useState(batch.amount_value.toString());
   const [amountUnit, setAmountUnit] = useState(batch.amount_unit);
   const [appearance, setAppearance] = useState(batch.appearance ?? "");
   const [expiryDate, setExpiryDate] = useState(batch.expiry_date ?? "");
+
+  const selectedSalt = useMemo<SaltEntry | undefined>(
+    () =>
+      saltEntryId !== NONE_VALUE
+        ? saltEntries?.find((e) => e.id === saltEntryId)
+        : undefined,
+    [saltEntryId, saltEntries]
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -221,12 +246,34 @@ function EditBatchDialog({
           </div>
           <div className="grid gap-2">
             <Label>Salt Form</Label>
-            <Input
-              placeholder="e.g. hydrochloride"
-              value={saltForm}
-              onChange={(e) => setSaltForm(e.target.value)}
-            />
+            <Select value={saltEntryId} onValueChange={setSaltEntryId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_VALUE}>None / Free base</SelectItem>
+                {saltEntries?.map((entry) => (
+                  <SelectItem key={entry.id} value={entry.id}>
+                    {entry.code} &mdash; {entry.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          {selectedSalt && (
+            <div className="grid gap-2">
+              <Label>Stoichiometry</Label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={stoichiometry}
+                onChange={(e) =>
+                  setStoichiometry(Math.max(1, parseInt(e.target.value) || 1))
+                }
+              />
+            </div>
+          )}
           <div className="grid gap-2">
             <Label>Appearance</Label>
             <Input
@@ -252,7 +299,10 @@ function EditBatchDialog({
                   amount_value: parseFloat(amountValue) || null,
                   amount_unit: amountUnit || null,
                   purity: purity ? parseFloat(purity) : null,
-                  salt_form: saltForm || null,
+                  salt_entry_id: selectedSalt ? selectedSalt.id : null,
+                  salt_name: selectedSalt ? selectedSalt.name : null,
+                  salt_smiles: selectedSalt ? selectedSalt.smiles : null,
+                  salt_stoichiometry: selectedSalt ? stoichiometry : null,
                   appearance: appearance || null,
                   expiry_date: expiryDate || null,
                 },
