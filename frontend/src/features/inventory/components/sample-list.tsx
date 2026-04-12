@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Package, Pipette, Move, Trash2 } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StatusBadge } from "@/shared/components/status-badge";
@@ -22,6 +23,8 @@ import {
   useDisposeSample,
   useMoveSample,
   useSamplesByBatch,
+  useSamplesGlobal,
+  type SampleGlobalParams,
 } from "../hooks/use-samples";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import {
@@ -29,6 +32,7 @@ import {
   SAMPLE_STATUS_LABELS,
   type ContainerType,
   type Sample,
+  type SampleListItem,
   type SampleStatus,
   type StorageLocation,
 } from "../types";
@@ -159,6 +163,212 @@ export function SampleList({ batchId }: SampleListProps) {
             icon={Package}
             title="No samples"
             description="No samples have been created for this batch yet."
+          />
+        }
+      />
+
+      {aliquotSample && (
+        <AliquotDialog
+          sample={aliquotSample}
+          open={!!aliquotSample}
+          onOpenChange={(open) => !open && setAliquotSample(null)}
+        />
+      )}
+      {moveSample && (
+        <MoveDialog
+          sample={moveSample}
+          open={!!moveSample}
+          onOpenChange={(open) => !open && setMoveSample(null)}
+        />
+      )}
+      {disposeSample && (
+        <DisposeDialog
+          sample={disposeSample}
+          open={!!disposeSample}
+          onOpenChange={(open) => !open && setDisposeSample(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Global Sample List (all samples across batches, for inventory hub)
+// ---------------------------------------------------------------------------
+
+interface GlobalSampleListProps {
+  params?: SampleGlobalParams;
+}
+
+/** Adapts a SampleListItem (flat DTO) to the Sample shape the dialogs expect. */
+function asSample(item: SampleListItem): Sample {
+  return {
+    id: item.id,
+    workspace_id: "",
+    batch_id: item.batch_id,
+    barcode: item.barcode,
+    container_type: item.container_type,
+    amount_value: item.amount_value,
+    amount_unit: item.amount_unit,
+    solvent: item.solvent,
+    status: item.status,
+    location_id: item.location_id,
+    freeze_thaw_count: item.freeze_thaw_count,
+    low_stock_threshold: item.low_stock_threshold,
+  };
+}
+
+export function GlobalSampleList({ params }: GlobalSampleListProps) {
+  const router = useRouter();
+  const { data, isLoading } = useSamplesGlobal(params);
+  const [aliquotSample, setAliquotSample] = useState<Sample | null>(null);
+  const [moveSample, setMoveSample] = useState<Sample | null>(null);
+  const [disposeSample, setDisposeSample] = useState<Sample | null>(null);
+
+  const columnDefs = useMemo<ColDef<SampleListItem>[]>(
+    () => [
+      {
+        headerName: "Barcode",
+        field: "barcode",
+        cellClass: "font-mono text-sm",
+        flex: 1,
+        minWidth: 130,
+      },
+      {
+        headerName: "Compound",
+        minWidth: 150,
+        flex: 1,
+        valueGetter: (p) =>
+          p.data
+            ? `${p.data.molecule_name} (${p.data.molecule_registration_number})`
+            : "",
+      },
+      {
+        headerName: "Batch #",
+        field: "batch_number",
+        width: 140,
+        cellClass: "font-mono text-sm",
+      },
+      {
+        headerName: "Container",
+        field: "container_type",
+        width: 110,
+        valueFormatter: (p) =>
+          CONTAINER_TYPE_LABELS[p.value as ContainerType] ?? p.value,
+      },
+      {
+        headerName: "Amount",
+        width: 120,
+        valueGetter: (p) =>
+          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        cellClass: (p) => {
+          const d = p.data;
+          if (
+            d &&
+            d.status === "available" &&
+            d.low_stock_threshold != null &&
+            d.amount_value < d.low_stock_threshold
+          ) {
+            return "text-amber-500";
+          }
+          return "";
+        },
+      },
+      {
+        headerName: "Status",
+        field: "status",
+        width: 110,
+        cellRenderer: (params: ICellRendererParams<SampleListItem>) => (
+          <StatusBadge
+            status={params.value}
+            label={
+              SAMPLE_STATUS_LABELS[params.value as SampleStatus] ?? params.value
+            }
+          />
+        ),
+      },
+      {
+        headerName: "Location",
+        width: 150,
+        valueGetter: (p) =>
+          p.data?.location_name
+            ? `${p.data.location_name} (${p.data.location_type})`
+            : "\u2014",
+      },
+      {
+        headerName: "F/T",
+        field: "freeze_thaw_count",
+        width: 60,
+      },
+      {
+        headerName: "",
+        field: "id",
+        width: 120,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (params: ICellRendererParams<SampleListItem>) => {
+          const item = params.data;
+          if (!item || TERMINAL_STATUSES.has(item.status)) return null;
+          return (
+            <div className="flex justify-end gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Aliquot"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAliquotSample(asSample(item));
+                }}
+              >
+                <Pipette className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Move"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMoveSample(asSample(item));
+                }}
+              >
+                <Move className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive"
+                title="Dispose"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDisposeSample(asSample(item));
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        },
+      },
+    ],
+    []
+  );
+
+  return (
+    <>
+      <DataGrid<SampleListItem>
+        rowData={data?.items}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="500px"
+        onRowClick={(row) => router.push(`/inventory/samples/${row.id}`)}
+        emptyState={
+          <EmptyState
+            icon={Package}
+            title="No samples"
+            description="No samples match the current filters."
           />
         }
       />
