@@ -527,78 +527,68 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   // ---------------------------------------------------------------------------
   const excelEnhancer: ExcelEnhancer = useCallback(
     async (workbook, worksheet, rows: CompoundActivity[]) => {
-      // Find the "Curve" column index
-      const curveColIdx = worksheet.columns.findIndex(
-        (_, i) => worksheet.getRow(1).getCell(i + 1).value === "Curve"
-      );
-
-      // Add sparkline images to the Curve column
-      if (curveColIdx >= 0) {
-        for (let r = 0; r < rows.length; r++) {
-          const row = rows[r];
-          // Find first DR readout with curve_params
-          const drReadout = Object.values(row.readouts).find(
-            (rv) => rv.curve_params
-          );
-          if (!drReadout?.curve_params) continue;
-
-          const base64 = renderCurveToBase64(
-            drReadout.curve_params,
-            drReadout.data_points
-          );
-          if (!base64) continue;
-
-          const imageId = workbook.addImage({
-            base64,
-            extension: "png",
-          });
-          // Row r+2 (1-indexed header + data), column curveColIdx
-          worksheet.addImage(imageId, {
-            tl: { col: curveColIdx, row: r + 1 },
-            ext: { width: 200, height: 60 },
-          });
+      // Helper: find column index (0-based) by header text
+      const findCol = (name: string) => {
+        const row1 = worksheet.getRow(1);
+        for (let c = 1; c <= worksheet.columnCount; c++) {
+          if (row1.getCell(c).value === name) return c - 1;
         }
-        // Set Curve column width and row heights for images
-        const col = worksheet.getColumn(curveColIdx + 1);
-        col.width = 30;
-        for (let r = 2; r <= rows.length + 1; r++) {
-          worksheet.getRow(r).height = 50;
-        }
-      }
-
-      // Add Structure, SMILES, and Synonyms columns
-      const lastCol = worksheet.columnCount;
-      const structCol = lastCol + 1;
-      const smilesCol = lastCol + 2;
-      const synonymsCol = lastCol + 3;
-      worksheet.getRow(1).getCell(structCol).value = "Structure";
-      worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
-      worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
+        return -1;
+      };
 
       // Batch-fetch structure images from backend
       const allSmiles = rows.map((r) => r.smiles).filter(Boolean) as string[];
       const structImages = await fetchStructureImages(allSmiles, 150, 100);
 
-      for (let r = 0; r < rows.length; r++) {
-        const row = rows[r];
-        worksheet.getRow(r + 2).getCell(smilesCol).value = row.smiles ?? "";
-        worksheet.getRow(r + 2).getCell(synonymsCol).value =
-          (row.synonyms ?? []).join("; ");
+      // Fill existing "Structure" column with images (grid exported it empty)
+      const structColIdx = findCol("Structure");
+      if (structColIdx >= 0) {
+        worksheet.getColumn(structColIdx + 1).width = 22;
+        for (let r = 0; r < rows.length; r++) {
+          const smiles = rows[r].smiles;
+          if (smiles && structImages[smiles]) {
+            const imgId = workbook.addImage({ base64: structImages[smiles], extension: "png" });
+            worksheet.addImage(imgId, {
+              tl: { col: structColIdx, row: r + 1 },
+              ext: { width: 150, height: 80 },
+            });
+          }
+        }
+      }
 
-        // Embed structure image
-        if (row.smiles && structImages[row.smiles]) {
-          const imgId = workbook.addImage({
-            base64: structImages[row.smiles],
-            extension: "png",
-          });
-          worksheet.addImage(imgId, {
-            tl: { col: structCol - 1, row: r + 1 },
-            ext: { width: 150, height: 80 },
+      // Fill existing "Curve" column with sparkline images
+      const curveColIdx = findCol("Curve");
+      if (curveColIdx >= 0) {
+        worksheet.getColumn(curveColIdx + 1).width = 30;
+        for (let r = 0; r < rows.length; r++) {
+          const drReadout = Object.values(rows[r].readouts).find((rv) => rv.curve_params);
+          if (!drReadout?.curve_params) continue;
+          const base64 = renderCurveToBase64(drReadout.curve_params, drReadout.data_points);
+          if (!base64) continue;
+          const imageId = workbook.addImage({ base64, extension: "png" });
+          worksheet.addImage(imageId, {
+            tl: { col: curveColIdx, row: r + 1 },
+            ext: { width: 200, height: 60 },
           });
         }
-        worksheet.getRow(r + 2).height = 65;
       }
-      worksheet.getColumn(structCol).width = 22;
+
+      // Set consistent row heights for images
+      for (let r = 2; r <= rows.length + 1; r++) {
+        worksheet.getRow(r).height = 65;
+      }
+
+      // Append SMILES and Synonyms as new columns at the end
+      const lastCol = worksheet.columnCount;
+      const smilesCol = lastCol + 1;
+      const synonymsCol = lastCol + 2;
+      worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
+      worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
+      for (let r = 0; r < rows.length; r++) {
+        worksheet.getRow(r + 2).getCell(smilesCol).value = rows[r].smiles ?? "";
+        worksheet.getRow(r + 2).getCell(synonymsCol).value =
+          (rows[r].synonyms ?? []).join("; ");
+      }
       worksheet.getColumn(smilesCol).width = 40;
       worksheet.getColumn(synonymsCol).width = 30;
 
