@@ -154,3 +154,70 @@ export interface UpdateStorageLocationInput {
   columns?: number | null;
   capacity?: number | null;
 }
+
+// ---------------------------------------------------------------------------
+// Global list item types (flat DTOs from hub endpoints)
+// ---------------------------------------------------------------------------
+
+export interface BatchListItem {
+  id: string;
+  batch_number: string;
+  molecule_id: string;
+  molecule_name: string;
+  molecule_registration_number: string;
+  source: BatchSource;
+  amount_value: number;
+  amount_unit: string;
+  purity: number | null;
+  salt_name: string | null;
+  appearance: string | null;
+  expiry_date: string | null;
+  sample_count: number;
+  has_low_stock_sample: boolean;
+  created_at: string;
+}
+
+export interface SampleListItem {
+  id: string;
+  barcode: string;
+  batch_id: string;
+  batch_number: string;
+  molecule_id: string;
+  molecule_name: string;
+  molecule_registration_number: string;
+  container_type: ContainerType;
+  amount_value: number;
+  amount_unit: string;
+  status: SampleStatus;
+  solvent: string | null;
+  freeze_thaw_count: number;
+  low_stock_threshold: number | null;
+  location_id: string | null;
+  location_name: string | null;
+  location_type: string | null;
+  created_at: string;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  next_cursor: string | null;
+  total_count: number | null;
+}
+
+export interface ActivityItem {
+  description: string;
+  entity_type: string;
+  entity_id: string;
+  occurred_at: string;
+}
+
+export interface InventorySummary {
+  low_stock_count: number;
+  expiring_soon_count: number;
+  pending_requests_count: number;
+  recent_activity: ActivityItem[];
+}
+
+export interface StorageLocationWithCount extends StorageLocation {
+  sample_count: number;
+}
