@@ -124,6 +124,7 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     control_layouts: Mapped[dict | None] = mapped_column(JSONB)
     ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
+    recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)
 
     # Owned entity collections
     readout_definitions: Mapped[list[ReadoutDefinitionModel]] = relationship(

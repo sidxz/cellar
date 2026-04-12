@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
     CurveType,
@@ -314,6 +315,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             condition_definitions=condition_defs,
             control_layouts=control_layouts,
             ontology_annotations=ontology_annotations,
+            recommended_hit_criteria=[
+                HitCriterion.from_dict(c) for c in (model.recommended_hit_criteria or [])
+            ] or None,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -362,6 +366,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             version=aggregate.version,
             control_layouts=self._serialize_control_layouts(aggregate.control_layouts),
             ontology_annotations=self._serialize_ontology_annotations(aggregate.ontology_annotations),
+            recommended_hit_criteria=[c.to_dict() for c in aggregate.recommended_hit_criteria]
+            if aggregate.recommended_hit_criteria
+            else None,
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -382,6 +389,11 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.status = aggregate.status.value
         model.control_layouts = self._serialize_control_layouts(aggregate.control_layouts)
         model.ontology_annotations = self._serialize_ontology_annotations(aggregate.ontology_annotations)
+        model.recommended_hit_criteria = (
+            [c.to_dict() for c in aggregate.recommended_hit_criteria]
+            if aggregate.recommended_hit_criteria
+            else None
+        )
 
         # Replace owned entity collections
         model.readout_definitions = [
