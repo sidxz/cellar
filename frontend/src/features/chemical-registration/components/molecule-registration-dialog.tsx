@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Pencil } from "lucide-react";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
@@ -28,6 +28,7 @@ import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-work
 import { useRegistrationForms } from "@/features/workspace-config/hooks/use-registration-forms";
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
+import { useSaltCatalog } from "@/features/workspace-config/hooks/use-salt-catalog";
 import { useRegisterMolecule } from "../hooks/use-molecules";
 import { MOLECULE_TYPE_LABELS } from "../types";
 
@@ -45,6 +46,7 @@ export function MoleculeRegistrationDialog({
   const { data: registrationForms } = useRegistrationForms("molecule");
   const { data: customFieldDefs } = useCustomFields("molecule", true);
   const registerMutation = useRegisterMolecule();
+  const { data: saltEntries } = useSaltCatalog(true);
 
   const defaultFormId =
     registrationForms?.find((f) => f.is_default)?.id ?? "";
@@ -71,9 +73,18 @@ export function MoleculeRegistrationDialog({
   const [batchUnit, setBatchUnit] = useState("mg");
   const [batchPurity, setBatchPurity] = useState("");
   const [batchAppearance, setBatchAppearance] = useState("");
+  const [batchSaltEntryId, setBatchSaltEntryId] = useState<string>("__none__");
+  const [batchStoichiometry, setBatchStoichiometry] = useState<number>(1);
   const [customFieldValues, setCustomFieldValues] = useState<
     Record<string, string>
   >({});
+  const selectedBatchSalt = useMemo(
+    () =>
+      batchSaltEntryId !== "__none__"
+        ? saltEntries?.find((e) => e.id === batchSaltEntryId)
+        : undefined,
+    [batchSaltEntryId, saltEntries]
+  );
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -92,6 +103,8 @@ export function MoleculeRegistrationDialog({
     setBatchUnit("mg");
     setBatchPurity("");
     setBatchAppearance("");
+    setBatchSaltEntryId("__none__");
+    setBatchStoichiometry(1);
     setCustomFieldValues({});
     setEditorOpen(false);
     setError(null);
@@ -137,6 +150,10 @@ export function MoleculeRegistrationDialog({
               purity: batchPurity ? parseFloat(batchPurity) : null,
               appearance: batchAppearance || null,
               supplier_org_id: orgId || null,
+              salt_entry_id: selectedBatchSalt?.id ?? null,
+              salt_name: selectedBatchSalt?.name ?? null,
+              salt_smiles: selectedBatchSalt?.smiles ?? null,
+              salt_stoichiometry: selectedBatchSalt ? batchStoichiometry : 1,
             }
           : null;
       await registerMutation.mutateAsync({
@@ -380,6 +397,46 @@ export function MoleculeRegistrationDialog({
                   />
                 </div>
               </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">Salt Form</Label>
+                <Select value={batchSaltEntryId} onValueChange={setBatchSaltEntryId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None / Free base</SelectItem>
+                    {saltEntries?.map((entry) => (
+                      <SelectItem key={entry.id} value={entry.id}>
+                        {entry.code} &mdash; {entry.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedBatchSalt && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Stoichiometry</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={batchStoichiometry}
+                      onChange={(e) =>
+                        setBatchStoichiometry(Math.max(1, parseInt(e.target.value) || 1))
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Salt MW</Label>
+                    <Input
+                      readOnly
+                      value={selectedBatchSalt.molecular_weight.toFixed(2)}
+                      className="bg-muted"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
