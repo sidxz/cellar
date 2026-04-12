@@ -414,6 +414,7 @@ class UpdateProtocolRequest(BaseModel):
     description: str | None = None
     target_id: uuid.UUID | None = None
     category: str | None = None
+    recommended_hit_criteria: list[dict] | None = None
 
 
 @router.patch("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])
@@ -432,6 +433,7 @@ async def update_protocol(
         description=body.description if "description" in body.model_fields_set else UNSET,
         target_id=body.target_id if "target_id" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
+        recommended_hit_criteria=body.recommended_hit_criteria if "recommended_hit_criteria" in body.model_fields_set else UNSET,
     )
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
