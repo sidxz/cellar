@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Download, ImageIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import {
   type DoseResponseCurve,
@@ -446,6 +447,9 @@ export function DoseResponseChart({
 
   // debounce refs per curve id
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // ref for Plotly export (downloadImage)
+  const plotContainerRef = useRef<HTMLDivElement>(null);
 
   const getConstraints = useCallback(
     (curve: DoseResponseCurve): CurveConstraints =>
@@ -904,7 +908,7 @@ export function DoseResponseChart({
   };
 
   const config = {
-    displayModeBar: isInteractive,
+    displayModeBar: true,
     responsive: true,
     modeBarButtonsToRemove: ["lasso2d", "select2d"] as string[],
   };
@@ -928,31 +932,79 @@ export function DoseResponseChart({
           </span>
         )}
         {!editMode && (
-          <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox checked={showCrossHair} onCheckedChange={(v) => setShowCrossHair(v === true)} />
-              {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
-              95% CI band
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox checked={showPlateaus} onCheckedChange={(v) => setShowPlateaus(v === true)} />
-              Top/Bottom
-            </label>
-          </div>
+          <>
+            <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox checked={showCrossHair} onCheckedChange={(v) => setShowCrossHair(v === true)} />
+                {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
+                95% CI band
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox checked={showPlateaus} onCheckedChange={(v) => setShowPlateaus(v === true)} />
+                Top/Bottom
+              </label>
+            </div>
+            <div className="flex items-center gap-1.5 ml-4 border-l pl-4 border-border">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
+                  if (plotEl) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const Plotly = (window as any).Plotly;
+                    Plotly?.downloadImage?.(plotEl, {
+                      format: "png",
+                      width: 1200,
+                      height: 600,
+                      filename: "dose-response",
+                    });
+                  }
+                }}
+              >
+                <ImageIcon className="mr-1 h-3.5 w-3.5" />
+                PNG
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
+                  if (plotEl) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const Plotly = (window as any).Plotly;
+                    Plotly?.downloadImage?.(plotEl, {
+                      format: "svg",
+                      width: 1200,
+                      height: 600,
+                      filename: "dose-response",
+                    });
+                  }
+                }}
+              >
+                <Download className="mr-1 h-3.5 w-3.5" />
+                SVG
+              </Button>
+            </div>
+          </>
         )}
       </div>
 
-      <Plot
-        data={traces}
-        layout={layout}
-        config={config}
-        style={{ width: "100%" }}
-        useResizeHandler
-        onClick={editMode ? handlePlotClick : undefined}
-      />
+      <div ref={plotContainerRef}>
+        <Plot
+          data={traces}
+          layout={layout}
+          config={config}
+          style={{ width: "100%" }}
+          useResizeHandler
+          onClick={editMode ? handlePlotClick : undefined}
+        />
+      </div>
 
       {/* Per-curve constraint controls (interactive only) */}
       {isInteractive && curves.length > 0 && (
