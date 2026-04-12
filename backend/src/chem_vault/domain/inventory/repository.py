@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
+from chem_vault.application.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.import_template import ImportTemplate
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
@@ -33,6 +34,16 @@ class BatchRepository(Protocol):
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> BatchNumber: ...
+    async def list_global(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        search: str | None = None,
+        sources: list[str] | None = None,
+        expiring_within_days: int | None = None,
+        cursor: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> PageResult[dict]: ...
     async def save(self, aggregate: Batch) -> None: ...
 
 

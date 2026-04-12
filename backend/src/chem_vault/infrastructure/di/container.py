@@ -74,6 +74,7 @@ from chem_vault.application.inventory.synthesis_requests import (
     UpdateSynthesisRequest as UpdateSynthReq,
 )
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
+from chem_vault.application.inventory.list_batches_global import ListBatchesGlobal
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import AliquotSample, ClearQuarantineSample, DisposeSample, MoveSample, QuarantineSample
 from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
@@ -831,6 +832,7 @@ def create_container(
     container.define(UpdateBatch, _update_batch)
     container.define(GetBatch, _batch_query(GetBatch))
     container.define(ListBatchesByMolecule, _batch_query(ListBatchesByMolecule))
+    container.define(ListBatchesGlobal, _batch_query(ListBatchesGlobal))
 
     def _sample_create(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])

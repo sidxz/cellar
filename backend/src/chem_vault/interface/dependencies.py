@@ -76,6 +76,7 @@ from chem_vault.application.inventory.create_batch import CreateBatch
 from chem_vault.application.inventory.create_sample import CreateSample
 from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
+from chem_vault.application.inventory.list_batches_global import ListBatchesGlobal
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import (
     AliquotSample,
@@ -386,6 +387,7 @@ BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use
 CreateBatchDep = Annotated[CreateBatch, Depends(_get_use_case(CreateBatch))]
 GetBatchDep = Annotated[GetBatch, Depends(_get_use_case(GetBatch))]
 ListBatchesByMoleculeDep = Annotated[ListBatchesByMolecule, Depends(_get_use_case(ListBatchesByMolecule))]
+ListBatchesGlobalDep = Annotated[ListBatchesGlobal, Depends(_get_use_case(ListBatchesGlobal))]
 UpdateBatchDep = Annotated[UpdateBatch, Depends(_get_use_case(UpdateBatch))]
 CreateSampleDep = Annotated[CreateSample, Depends(_get_use_case(CreateSample))]
 GetSampleDep = Annotated[GetSample, Depends(_get_use_case(GetSample))]

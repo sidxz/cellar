@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
+from sqlalchemy.sql import expression
 
+from chem_vault.application.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit, LightCondition
@@ -14,7 +17,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel, SampleModel
 
 
 class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
@@ -71,6 +74,117 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         count = count_result.scalar() or 0
 
         return BatchNumber(value=f"{reg_number}-{count + 1:03d}")
+
+    # ------------------------------------------------------------------
+    # Global list (read-model query — returns flat dicts, not aggregates)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape special LIKE/ILIKE characters."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    async def list_global(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        search: str | None = None,
+        sources: list[str] | None = None,
+        expiring_within_days: int | None = None,
+        cursor: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> PageResult[dict]:
+        # Sample stats subquery: count + any-low-stock per batch
+        sample_sub = (
+            select(
+                SampleModel.batch_id,
+                func.count().label("sample_count"),
+                func.bool_or(
+                    case(
+                        (
+                            (SampleModel.low_stock_threshold.isnot(None))
+                            & (SampleModel.amount_value < SampleModel.low_stock_threshold),
+                            expression.true(),
+                        ),
+                        else_=expression.false(),
+                    )
+                ).label("has_low_stock_sample"),
+            )
+            .where(SampleModel.workspace_id == workspace_id)
+            .group_by(SampleModel.batch_id)
+            .subquery("sample_stats")
+        )
+
+        stmt = (
+            select(
+                BatchModel.id,
+                BatchModel.batch_number,
+                BatchModel.molecule_id,
+                MoleculeModel.name.label("molecule_name"),
+                MoleculeModel.registration_number.label("molecule_registration_number"),
+                BatchModel.source,
+                BatchModel.amount_value,
+                BatchModel.amount_unit,
+                BatchModel.purity,
+                BatchModel.salt_name,
+                BatchModel.appearance,
+                BatchModel.expiry_date,
+                func.coalesce(sample_sub.c.sample_count, 0).label("sample_count"),
+                func.coalesce(sample_sub.c.has_low_stock_sample, expression.false()).label(
+                    "has_low_stock_sample"
+                ),
+                BatchModel.created_at,
+            )
+            .join(MoleculeModel, BatchModel.molecule_id == MoleculeModel.id)
+            .outerjoin(sample_sub, BatchModel.id == sample_sub.c.batch_id)
+            .where(BatchModel.workspace_id == workspace_id)
+        )
+
+        # --- filters ---
+        if search:
+            pattern = f"%{self._escape_like(search)}%"
+            stmt = stmt.where(
+                or_(
+                    BatchModel.batch_number.ilike(pattern),
+                    MoleculeModel.name.ilike(pattern),
+                    MoleculeModel.registration_number.ilike(pattern),
+                )
+            )
+
+        if sources:
+            stmt = stmt.where(BatchModel.source.in_(sources))
+
+        if expiring_within_days is not None:
+            deadline = date.today() + timedelta(days=expiring_within_days)
+            stmt = stmt.where(
+                BatchModel.expiry_date.isnot(None),
+                BatchModel.expiry_date <= deadline,
+            )
+
+        # --- cursor pagination (keyset on created_at DESC, id DESC) ---
+        if cursor is not None:
+            # Look up the cursor row's created_at so we can do a proper keyset
+            cursor_sub = select(BatchModel.created_at).where(BatchModel.id == cursor).scalar_subquery()
+            stmt = stmt.where(
+                (BatchModel.created_at < cursor_sub)
+                | ((BatchModel.created_at == cursor_sub) & (BatchModel.id < cursor))
+            )
+
+        stmt = stmt.order_by(BatchModel.created_at.desc(), BatchModel.id.desc())
+
+        # Fetch limit + 1 to detect next page
+        stmt = stmt.limit(limit + 1)
+
+        result = await self._session.execute(stmt)
+        rows = result.mappings().all()
+
+        has_next = len(rows) > limit
+        page_rows = rows[:limit]
+
+        items = [dict(row) for row in page_rows]
+        next_cursor = str(items[-1]["id"]) if has_next and items else None
+
+        return PageResult(items=items, next_cursor=next_cursor)
 
     # ------------------------------------------------------------------
     # Mapping
