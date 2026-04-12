@@ -190,6 +190,7 @@ from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
 from chem_vault.application.screening.plate_setup import ParsePlateMapFile, SetUpRunPlate
 from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
+from chem_vault.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from chem_vault.application.screening.get_protocol_stats import GetProtocolStats
 from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocol
 from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocols
@@ -464,6 +465,7 @@ ClassifyDoseResponseCurveDep = Annotated[ClassifyDoseResponseCurve, Depends(_get
 MoleculeActivityServiceDep = Annotated[MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))]
 ReadoutCalculationEngineDep = Annotated[ReadoutCalculationEngine, Depends(_get_use_case(ReadoutCalculationEngine))]
 GetProtocolStatsDep = Annotated[GetProtocolStats, Depends(_get_use_case(GetProtocolStats))]
+GetProtocolActivitySummaryDep = Annotated[GetProtocolActivitySummary, Depends(_get_use_case(GetProtocolActivitySummary))]
 
 # --- Plate Template dependencies ---
 CreatePlateTemplateDep = Annotated[CreatePlateTemplate, Depends(_get_use_case(CreatePlateTemplate))]
