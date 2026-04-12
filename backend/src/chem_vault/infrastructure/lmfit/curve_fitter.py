@@ -192,6 +192,12 @@ class LmfitCurveFitter:
         fitted_ec50 = float(best["ec50"].value)
         fitted_abs_hill = float(best["abs_hill"].value)
 
+        # --- R² (computed with original fitted params before any swapping) ---
+        predicted = _hill_equation(concentrations, fitted_bottom, fitted_top, fitted_ec50, fitted_abs_hill)
+        ss_res = float(np.sum((responses - predicted) ** 2))
+        ss_tot = float(np.sum((responses - np.mean(responses)) ** 2))
+        r_squared = max(0.0, min(1.0, 1.0 - ss_res / ss_tot)) if ss_tot > 0 else 0.0
+
         # --- Normalize top > bottom ---
         # The internal model uses (conc/ec50)^|h| which is decreasing.
         # When data increases with concentration (% inhibition), the fitter
@@ -205,12 +211,6 @@ class LmfitCurveFitter:
             hill_slope_out = -abs(fitted_abs_hill)
         else:
             hill_slope_out = abs(fitted_abs_hill)
-
-        # --- R² ---
-        predicted = _hill_equation(concentrations, fitted_bottom, fitted_top, fitted_ec50, fitted_abs_hill)
-        ss_res = float(np.sum((responses - predicted) ** 2))
-        ss_tot = float(np.sum((responses - np.mean(responses)) ** 2))
-        r_squared = max(0.0, min(1.0, 1.0 - ss_res / ss_tot)) if ss_tot > 0 else 0.0
 
         # --- Two-pass 3σ outlier detection ---
         # Only attempt when we have enough data points for meaningful statistics.
@@ -264,19 +264,20 @@ class LmfitCurveFitter:
                             fitted_ec50 = float(best["ec50"].value)
                             fitted_abs_hill = float(best["abs_hill"].value)
 
-                            # Normalize top > bottom
-                            if fitted_bottom > fitted_top:
-                                fitted_top, fitted_bottom = fitted_bottom, fitted_top
-
-                            is_inhibition = config.curve_type in _INHIBITION_CURVE_TYPES
-                            hill_slope_out = -abs(fitted_abs_hill) if is_inhibition else abs(fitted_abs_hill)
-
+                            # R² before swap
                             predicted = _hill_equation(
                                 clean_concentrations, fitted_bottom, fitted_top, fitted_ec50, fitted_abs_hill
                             )
                             ss_res = float(np.sum((clean_responses - predicted) ** 2))
                             ss_tot = float(np.sum((clean_responses - np.mean(clean_responses)) ** 2))
                             r_squared = max(0.0, min(1.0, 1.0 - ss_res / ss_tot)) if ss_tot > 0 else 0.0
+
+                            # Normalize top > bottom
+                            if fitted_bottom > fitted_top:
+                                fitted_top, fitted_bottom = fitted_bottom, fitted_top
+
+                            is_inhibition = config.curve_type in _INHIBITION_CURVE_TYPES
+                            hill_slope_out = -abs(fitted_abs_hill) if is_inhibition else abs(fitted_abs_hill)
 
                             # Update concentrations/responses to the clean subset for downstream use
                             concentrations = clean_concentrations
