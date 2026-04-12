@@ -22,6 +22,8 @@ export interface ProtocolActivityResponse {
     fitted_unit: string;
     r_squared: number;
     hill_slope: number;
+    top: number;
+    bottom: number;
     num_points: number;
     curve_class: string | null;
     data_points: Array<{ x: number; y: number }> | null;

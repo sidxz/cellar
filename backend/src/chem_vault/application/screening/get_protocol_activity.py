@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from returns.result import Failure, Result, Success
 from sqlalchemy import distinct, func, select
 
+from chem_vault.application.screening import _condense_raw_data
 from chem_vault.application.auth import AuthContext
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -358,12 +359,7 @@ class GetProtocolActivitySummary:
                             # Extract condensed data points from raw_data JSONB
                             raw = bp_row.raw_data
                             if raw and isinstance(raw, list):
-                                data_points = []
-                                for pt in raw:
-                                    conc = pt.get("concentration") or pt.get("x")
-                                    resp = pt.get("response") or pt.get("y")
-                                    if isinstance(conc, (int, float)) and isinstance(resp, (int, float)):
-                                        data_points.append({"x": float(conc), "y": float(resp)})
+                                data_points = _condense_raw_data(raw)
 
                         readouts[rd_info.name] = ReadoutValue(
                             best=float(dr_row.best) if dr_row.best is not None else None,

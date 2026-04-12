@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from chem_vault.application.screening import _condense_raw_data
 from chem_vault.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
@@ -61,12 +62,7 @@ class MoleculeActivityService:
             # Condense raw_data to [{x, y}] for sparkline rendering
             data_points = None
             if curve.raw_data and isinstance(curve.raw_data, list):
-                data_points = []
-                for pt in curve.raw_data:
-                    conc = pt.get("concentration") or pt.get("x")
-                    resp = pt.get("response") or pt.get("y")
-                    if isinstance(conc, (int, float)) and isinstance(resp, (int, float)):
-                        data_points.append({"x": float(conc), "y": float(resp)})
+                data_points = _condense_raw_data(curve.raw_data)
 
             curves_by_proto.setdefault(curve.protocol_id, []).append(
                 {
@@ -75,6 +71,8 @@ class MoleculeActivityService:
                     "fitted_unit": curve.fitted_unit,
                     "r_squared": curve.r_squared,
                     "hill_slope": curve.hill_slope,
+                    "top": curve.top,
+                    "bottom": curve.bottom,
                     "num_points": curve.num_points,
                     "curve_class": curve.curve_class.value if curve.curve_class else None,
                     "data_points": data_points,

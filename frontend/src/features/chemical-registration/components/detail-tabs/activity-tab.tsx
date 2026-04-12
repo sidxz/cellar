@@ -107,15 +107,13 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                             <DoseResponseSparkline
                               params={{
                                 hill_slope: curve.hill_slope,
-                                top: 100,
-                                bottom: 0,
+                                top: curve.top ?? 100,
+                                bottom: curve.bottom ?? 0,
                                 fitted_value: curve.fitted_value,
                                 r_squared: curve.r_squared,
                               }}
                               dataPoints={curve.data_points}
                               curveClass={curve.curve_class as CurveClass | null}
-                              width={120}
-                              height={50}
                             />
                           ) : (
                             "--"

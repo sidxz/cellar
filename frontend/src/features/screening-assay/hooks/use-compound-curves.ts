@@ -30,7 +30,7 @@ export function useMultiCompoundCurves(
 ) {
   const enabled = moleculeIds.length >= 2 && moleculeIds.length <= 5;
   return useQuery({
-    queryKey: ["multi-compound-curves", protocolId, ...moleculeIds],
+    queryKey: ["multi-compound-curves", protocolId, ...[...moleculeIds].sort()],
     queryFn: async () => {
       const results = await Promise.all(
         moleculeIds.map((mid) =>
