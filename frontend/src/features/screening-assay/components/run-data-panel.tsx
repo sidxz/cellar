@@ -23,8 +23,8 @@ import { type Run, type PlateFormat } from "../types";
 import { AddDoseResponseDialog } from "./add-dose-response-dialog";
 import { AddReadoutDataDialog } from "./add-readout-data-dialog";
 import { BulkReadoutImportDialog } from "./bulk-readout-import-dialog";
-import { DoseResponseChart } from "./dose-response-chart";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
+import { RunDoseResponseResults } from "./run-dr-results";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { PlateSetupDialog } from "./plate-setup-dialog";
@@ -295,7 +295,11 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                 <Plus className="mr-2 h-4 w-4" /> Add Curve
               </Button>
             </div>
-            <DoseResponseChart curves={curves ?? []} isInteractive={!run.is_locked} />
+            <RunDoseResponseResults
+              run={run}
+              curves={curves ?? []}
+              isLoading={!curves}
+            />
           </div>
         </TabsContent>
 
