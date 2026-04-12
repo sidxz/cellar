@@ -16,6 +16,7 @@ from chem_vault.application.screening.get_protocol_stats import (
 )
 from chem_vault.interface.dependencies import (
     AuthDep,
+    GetCompoundCurvesDep,
     GetProtocolActivitySummaryDep,
     GetProtocolStatsDep,
 )
@@ -56,23 +57,40 @@ class ProtocolStatsResponse(BaseModel):
     latest_run: LatestRunResponse | None = None
 
 
-class ActivitySummaryItemResponse(BaseModel):
+class CurveParamsResponse(BaseModel):
+    hill_slope: float
+    top: float
+    bottom: float
+    fitted_value: float
+    r_squared: float
+
+
+class ReadoutValueResponse(BaseModel):
+    best: float | None = None
+    mean: float | None = None
+    curve_class: str | None = None
+    curve_params: CurveParamsResponse | None = None
+
+
+class ReadoutDefInfoResponse(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    best_direction: str
+
+
+class CompoundActivityResponse(BaseModel):
     molecule_id: uuid.UUID
     molecule_name: str
-    molecule_registration_number: str
-    best_value: float | None = None
-    mean_value: float | None = None
+    registration_number: str
     run_count: int
-    min_value: float | None = None
-    max_value: float | None = None
-    curve_class: str | None = None
     last_tested: str | None = None
+    readouts: dict[str, ReadoutValueResponse]
 
 
-class ActivitySummaryResponse(BaseModel):
-    items: list[ActivitySummaryItemResponse]
-    readout_name: str
-    readout_unit: str | None = None
+class ActivitySummaryV2Response(BaseModel):
+    items: list[CompoundActivityResponse]
+    readout_definitions: list[ReadoutDefInfoResponse]
     total_compounds: int
 
 
@@ -120,23 +138,74 @@ async def get_protocol_stats(
     )
 
 
-@router.get("/{protocol_id}/activity-summary", response_model=ActivitySummaryResponse)
+@router.get("/{protocol_id}/activity-summary", response_model=ActivitySummaryV2Response)
 async def get_protocol_activity_summary(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     uc: GetProtocolActivitySummaryDep,
-    readout_name: str | None = None,
-) -> ActivitySummaryResponse:
+) -> ActivitySummaryV2Response:
     """Compound-centric results aggregated across all runs for a protocol."""
     query = ActivitySummaryQuery(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
-        readout_name=readout_name,
     )
     summary = result_to_response(await uc(query, auth=auth))
-    return ActivitySummaryResponse(
-        items=[ActivitySummaryItemResponse(**vars(item)) for item in summary.items],
-        readout_name=summary.readout_name,
-        readout_unit=summary.readout_unit,
+    return ActivitySummaryV2Response(
+        items=[
+            CompoundActivityResponse(
+                molecule_id=item.molecule_id,
+                molecule_name=item.molecule_name,
+                registration_number=item.registration_number,
+                run_count=item.run_count,
+                last_tested=item.last_tested,
+                readouts={
+                    name: ReadoutValueResponse(
+                        best=rv.best,
+                        mean=rv.mean,
+                        curve_class=rv.curve_class,
+                        curve_params=(
+                            CurveParamsResponse(
+                                hill_slope=rv.curve_params.hill_slope,
+                                top=rv.curve_params.top,
+                                bottom=rv.curve_params.bottom,
+                                fitted_value=rv.curve_params.fitted_value,
+                                r_squared=rv.curve_params.r_squared,
+                            )
+                            if rv.curve_params is not None
+                            else None
+                        ),
+                    )
+                    for name, rv in item.readouts.items()
+                },
+            )
+            for item in summary.items
+        ],
+        readout_definitions=[
+            ReadoutDefInfoResponse(
+                name=rd.name,
+                data_type=rd.data_type,
+                unit=rd.unit,
+                best_direction=rd.best_direction,
+            )
+            for rd in summary.readout_definitions
+        ],
         total_compounds=summary.total_compounds,
     )
+
+
+@router.get("/{protocol_id}/compounds/{molecule_id}/dose-response")
+async def get_compound_dose_response(
+    protocol_id: uuid.UUID,
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetCompoundCurvesDep,
+) -> list[dict]:
+    """All dose-response curves for a compound in a protocol."""
+    from chem_vault.application.screening.get_compound_curves import CompoundCurvesQuery
+
+    query = CompoundCurvesQuery(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        molecule_id=molecule_id,
+    )
+    return result_to_response(await uc(query, auth=auth))
