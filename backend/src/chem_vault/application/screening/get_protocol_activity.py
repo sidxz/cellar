@@ -1,9 +1,16 @@
-"""GetProtocolActivitySummary query use case — compound-centric results across all runs."""
+"""GetProtocolActivitySummary query — multi-readout compound-centric results.
+
+Returns ALL aggregatable readouts per compound in a single response,
+with scientifically correct aggregation:
+  - Numeric readouts: arithmetic mean + max (higher-is-better)
+  - Dose-response readouts: geometric mean + min fitted_value (lower-is-better),
+    plus best curve params (hill_slope, top, bottom, r_squared)
+"""
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 from sqlalchemy import distinct, func, select
@@ -13,34 +20,65 @@ from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 
+# ---------------------------------------------------------------------------
+# DTOs
+# ---------------------------------------------------------------------------
+
+VALID_STATUSES = ("completed", "approved")
+_AGGREGATABLE_DATA_TYPES = {"numeric", "dose_response"}
+
 
 @dataclass(frozen=True, kw_only=True)
 class ActivitySummaryQuery(Query):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
-    readout_name: str | None = None  # defaults to first readout def
 
 
 @dataclass(frozen=True)
-class ActivitySummaryItem:
+class CurveParams:
+    hill_slope: float
+    top: float
+    bottom: float
+    fitted_value: float
+    r_squared: float
+
+
+@dataclass(frozen=True)
+class ReadoutValue:
+    best: float | None = None
+    mean: float | None = None
+    curve_class: str | None = None
+    curve_params: CurveParams | None = None
+
+
+@dataclass(frozen=True)
+class ReadoutDefInfo:
+    name: str
+    data_type: str
+    unit: str | None
+    best_direction: str  # "high" or "low"
+
+
+@dataclass(frozen=True)
+class CompoundActivity:
     molecule_id: uuid.UUID
     molecule_name: str
-    molecule_registration_number: str
-    best_value: float | None
-    mean_value: float | None
+    registration_number: str
     run_count: int
-    min_value: float | None
-    max_value: float | None
-    curve_class: str | None
-    last_tested: str | None  # ISO date string
+    last_tested: str | None
+    readouts: dict[str, ReadoutValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
-class ActivitySummary:
-    items: list[ActivitySummaryItem]
-    readout_name: str
-    readout_unit: str | None
+class ActivitySummaryV2:
+    items: list[CompoundActivity]
+    readout_definitions: list[ReadoutDefInfo]
     total_compounds: int
+
+
+# ---------------------------------------------------------------------------
+# Use case
+# ---------------------------------------------------------------------------
 
 
 class GetProtocolActivitySummary:
@@ -48,6 +86,10 @@ class GetProtocolActivitySummary:
 
     Uses raw SA queries (read-model approach) rather than loading full
     aggregates, since we only need per-molecule aggregated readout data.
+
+    Returns all numeric and dose-response readouts per compound in a
+    single response — the frontend builds dynamic columns from
+    ``readout_definitions``.
     """
 
     def __init__(self, uow: UnitOfWork) -> None:
@@ -57,7 +99,7 @@ class GetProtocolActivitySummary:
         self,
         input: ActivitySummaryQuery,
         auth: AuthContext | None = None,
-    ) -> Result[ActivitySummary, DomainError]:
+    ) -> Result[ActivitySummaryV2, DomainError]:
         # Deferred imports — these are infra models, only used inside the
         # read-model query.  Keeps the module importable without a DB.
         from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
@@ -76,139 +118,275 @@ class GetProtocolActivitySummary:
             ws = input.workspace_id
             pid = input.protocol_id
 
-            # 1. Verify protocol exists in workspace
-            protocol_stmt = select(ProtocolModel.id).where(
-                ProtocolModel.id == pid,
-                ProtocolModel.workspace_id == ws,
+            # ----------------------------------------------------------
+            # Setup: load protocol, build readout def metadata
+            # ----------------------------------------------------------
+            protocol_stmt = (
+                select(ProtocolModel)
+                .where(
+                    ProtocolModel.id == pid,
+                    ProtocolModel.workspace_id == ws,
+                )
             )
-            protocol_row = (await session.execute(protocol_stmt)).one_or_none()
-            if protocol_row is None:
+            protocol = (await session.execute(protocol_stmt)).scalar_one_or_none()
+            if protocol is None:
                 return Failure(
                     NotFoundError(f"Protocol {pid} not found in workspace")
                 )
 
-            # 2. Resolve readout_name: if not provided, use the first readout definition
-            if input.readout_name is not None:
-                rd_stmt = select(
-                    ReadoutDefinitionModel.id,
-                    ReadoutDefinitionModel.name,
-                    ReadoutDefinitionModel.unit,
-                ).where(
-                    ReadoutDefinitionModel.protocol_id == pid,
-                    ReadoutDefinitionModel.name == input.readout_name,
-                )
-            else:
-                rd_stmt = (
-                    select(
-                        ReadoutDefinitionModel.id,
-                        ReadoutDefinitionModel.name,
-                        ReadoutDefinitionModel.unit,
+            # Build readout_defs (only numeric + dose_response)
+            readout_defs: list[ReadoutDefInfo] = []
+            # Map curve_type -> readout_name for DR readouts
+            dr_curve_type_map: dict[str, str] = {}
+
+            for rd in protocol.readout_definitions:
+                if rd.data_type not in _AGGREGATABLE_DATA_TYPES:
+                    continue
+
+                if rd.data_type == "dose_response":
+                    best_direction = "low"
+                    config = rd.dose_response_config
+                    if config and isinstance(config, dict):
+                        curve_type = config.get("curve_type")
+                        if curve_type:
+                            dr_curve_type_map[curve_type] = rd.name
+                else:
+                    best_direction = "high"
+
+                readout_defs.append(
+                    ReadoutDefInfo(
+                        name=rd.name,
+                        data_type=rd.data_type,
+                        unit=rd.unit,
+                        best_direction=best_direction,
                     )
-                    .where(ReadoutDefinitionModel.protocol_id == pid)
-                    .order_by(ReadoutDefinitionModel.created_at.asc())
-                    .limit(1)
                 )
 
-            rd_row = (await session.execute(rd_stmt)).one_or_none()
-            if rd_row is None:
-                # No matching readout definition — return empty summary
-                readout_name = input.readout_name or ""
+            if not readout_defs:
                 return Success(
-                    ActivitySummary(
+                    ActivitySummaryV2(
                         items=[],
-                        readout_name=readout_name,
-                        readout_unit=None,
+                        readout_definitions=[],
                         total_compounds=0,
                     )
                 )
 
-            rd_id = rd_row.id
-            readout_name = rd_row.name
-            readout_unit = rd_row.unit
-
-            # 3. Build curve_class subquery — most recent curve_class per molecule
-            curve_sub = (
-                select(
-                    DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.curve_class,
-                    func.row_number()
-                    .over(
-                        partition_by=DoseResponseCurveModel.molecule_id,
-                        order_by=DoseResponseCurveModel.created_at.desc(),
-                    )
-                    .label("rn"),
-                ).where(DoseResponseCurveModel.protocol_id == pid)
-            ).subquery("curve_sub")
-
-            latest_curve = (
-                select(curve_sub.c.molecule_id, curve_sub.c.curve_class).where(
-                    curve_sub.c.rn == 1
-                )
-            ).subquery("latest_curve")
-
-            # 4. Main aggregation query
-            main_stmt = (
+            # ----------------------------------------------------------
+            # Query 1: Molecule base — all molecules tested + run_count
+            # ----------------------------------------------------------
+            mol_stmt = (
                 select(
                     ReadoutDataModel.molecule_id,
                     MoleculeModel.name.label("molecule_name"),
-                    MoleculeModel.registration_number.label(
-                        "molecule_registration_number"
-                    ),
-                    func.min(ReadoutDataModel.value_numeric).label("best_value"),
-                    func.avg(ReadoutDataModel.value_numeric).label("mean_value"),
+                    MoleculeModel.registration_number,
                     func.count(distinct(ReadoutDataModel.run_id)).label("run_count"),
-                    func.min(ReadoutDataModel.value_numeric).label("min_value"),
-                    func.max(ReadoutDataModel.value_numeric).label("max_value"),
                     func.max(RunModel.run_date).label("last_tested"),
-                    latest_curve.c.curve_class,
                 )
                 .select_from(ReadoutDataModel)
                 .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
                 .join(MoleculeModel, ReadoutDataModel.molecule_id == MoleculeModel.id)
-                .outerjoin(
-                    latest_curve,
-                    ReadoutDataModel.molecule_id == latest_curve.c.molecule_id,
-                )
                 .where(
                     RunModel.protocol_id == pid,
                     RunModel.workspace_id == ws,
-                    ReadoutDataModel.readout_definition_id == rd_id,
+                    RunModel.status.in_(VALID_STATUSES),
                     ReadoutDataModel.molecule_id.isnot(None),
-                    ReadoutDataModel.value_numeric.isnot(None),
-                    ReadoutDataModel.is_outlier == False,  # noqa: E712
                 )
                 .group_by(
                     ReadoutDataModel.molecule_id,
                     MoleculeModel.name,
                     MoleculeModel.registration_number,
-                    latest_curve.c.curve_class,
                 )
-                .order_by(func.min(ReadoutDataModel.value_numeric).asc())
             )
+            mol_rows = (await session.execute(mol_stmt)).all()
 
-            rows = (await session.execute(main_stmt)).all()
-
-            items = [
-                ActivitySummaryItem(
-                    molecule_id=row.molecule_id,
-                    molecule_name=row.molecule_name,
-                    molecule_registration_number=row.molecule_registration_number,
-                    best_value=float(row.best_value) if row.best_value is not None else None,
-                    mean_value=round(float(row.mean_value), 4) if row.mean_value is not None else None,
-                    run_count=row.run_count,
-                    min_value=float(row.min_value) if row.min_value is not None else None,
-                    max_value=float(row.max_value) if row.max_value is not None else None,
-                    curve_class=row.curve_class,
-                    last_tested=row.last_tested.isoformat() if row.last_tested is not None else None,
+            if not mol_rows:
+                return Success(
+                    ActivitySummaryV2(
+                        items=[],
+                        readout_definitions=readout_defs,
+                        total_compounds=0,
+                    )
                 )
-                for row in rows
-            ]
+
+            # ----------------------------------------------------------
+            # Query 2: Numeric readout aggregation (non-DR)
+            # ----------------------------------------------------------
+            numeric_stmt = (
+                select(
+                    ReadoutDataModel.molecule_id,
+                    ReadoutDefinitionModel.name.label("readout_name"),
+                    func.max(ReadoutDataModel.value_numeric).label("best"),
+                    func.avg(ReadoutDataModel.value_numeric).label("mean"),
+                )
+                .select_from(ReadoutDataModel)
+                .join(
+                    ReadoutDefinitionModel,
+                    ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+                )
+                .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
+                .where(
+                    RunModel.protocol_id == pid,
+                    RunModel.workspace_id == ws,
+                    RunModel.status.in_(VALID_STATUSES),
+                    ReadoutDefinitionModel.data_type != "dose_response",
+                    ReadoutDataModel.molecule_id.isnot(None),
+                    ReadoutDataModel.value_numeric.isnot(None),
+                    ReadoutDataModel.is_outlier == False,  # noqa: E712
+                    ReadoutDataModel.is_computed == False,  # noqa: E712
+                )
+                .group_by(ReadoutDataModel.molecule_id, ReadoutDefinitionModel.name)
+            )
+            numeric_rows = (await session.execute(numeric_stmt)).all()
+
+            # ----------------------------------------------------------
+            # Query 3a: DR aggregation — geo mean + min per curve_type
+            # ----------------------------------------------------------
+            dr_agg_stmt = (
+                select(
+                    DoseResponseCurveModel.molecule_id,
+                    DoseResponseCurveModel.curve_type,
+                    func.min(DoseResponseCurveModel.fitted_value).label("best"),
+                    func.exp(func.avg(func.ln(DoseResponseCurveModel.fitted_value))).label("geo_mean"),
+                )
+                .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+                .where(
+                    DoseResponseCurveModel.protocol_id == pid,
+                    RunModel.status.in_(VALID_STATUSES),
+                    DoseResponseCurveModel.curve_class != "inactive",
+                    DoseResponseCurveModel.fitted_value > 0,
+                )
+                .group_by(
+                    DoseResponseCurveModel.molecule_id,
+                    DoseResponseCurveModel.curve_type,
+                )
+            )
+            dr_agg_rows = (await session.execute(dr_agg_stmt)).all()
+
+            # ----------------------------------------------------------
+            # Query 3b: Best curve params — MIN fitted_value per molecule
+            # ----------------------------------------------------------
+            ranked_sub = (
+                select(
+                    DoseResponseCurveModel.molecule_id,
+                    DoseResponseCurveModel.curve_type,
+                    DoseResponseCurveModel.curve_class,
+                    DoseResponseCurveModel.hill_slope,
+                    DoseResponseCurveModel.top,
+                    DoseResponseCurveModel.bottom,
+                    DoseResponseCurveModel.fitted_value,
+                    DoseResponseCurveModel.r_squared,
+                    func.row_number()
+                    .over(
+                        partition_by=[
+                            DoseResponseCurveModel.molecule_id,
+                            DoseResponseCurveModel.curve_type,
+                        ],
+                        order_by=DoseResponseCurveModel.fitted_value.asc(),
+                    )
+                    .label("rn"),
+                )
+                .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+                .where(
+                    DoseResponseCurveModel.protocol_id == pid,
+                    RunModel.status.in_(VALID_STATUSES),
+                    DoseResponseCurveModel.curve_class != "inactive",
+                    DoseResponseCurveModel.fitted_value > 0,
+                )
+                .subquery()
+            )
+            best_params_stmt = select(ranked_sub).where(ranked_sub.c.rn == 1)
+            best_params_rows = (await session.execute(best_params_stmt)).all()
+
+            # ----------------------------------------------------------
+            # Python merge
+            # ----------------------------------------------------------
+
+            # Index numeric rows: (molecule_id, readout_name) -> row
+            numeric_map: dict[tuple[uuid.UUID, str], object] = {
+                (row.molecule_id, row.readout_name): row for row in numeric_rows
+            }
+
+            # Index DR agg rows: (molecule_id, curve_type) -> row
+            dr_agg_map: dict[tuple[uuid.UUID, str], object] = {
+                (row.molecule_id, row.curve_type): row for row in dr_agg_rows
+            }
+
+            # Index best params rows: (molecule_id, curve_type) -> row
+            best_params_map: dict[tuple[uuid.UUID, str], object] = {
+                (row.molecule_id, row.curve_type): row for row in best_params_rows
+            }
+
+            items: list[CompoundActivity] = []
+            for mol in mol_rows:
+                readouts: dict[str, ReadoutValue] = {}
+
+                for rd_info in readout_defs:
+                    if rd_info.data_type == "dose_response":
+                        # Find curve_type for this readout name
+                        curve_type: str | None = None
+                        for ct, rn in dr_curve_type_map.items():
+                            if rn == rd_info.name:
+                                curve_type = ct
+                                break
+                        if curve_type is None:
+                            continue
+
+                        dr_key = (mol.molecule_id, curve_type)
+                        dr_row = dr_agg_map.get(dr_key)
+                        bp_row = best_params_map.get(dr_key)
+
+                        if dr_row is None:
+                            continue
+
+                        curve_params: CurveParams | None = None
+                        curve_class: str | None = None
+                        if bp_row is not None:
+                            curve_class = bp_row.curve_class
+                            curve_params = CurveParams(
+                                hill_slope=float(bp_row.hill_slope),
+                                top=float(bp_row.top),
+                                bottom=float(bp_row.bottom),
+                                fitted_value=float(bp_row.fitted_value),
+                                r_squared=float(bp_row.r_squared),
+                            )
+
+                        readouts[rd_info.name] = ReadoutValue(
+                            best=float(dr_row.best) if dr_row.best is not None else None,
+                            mean=round(float(dr_row.geo_mean), 6) if dr_row.geo_mean is not None else None,
+                            curve_class=curve_class,
+                            curve_params=curve_params,
+                        )
+                    else:
+                        # Numeric readout
+                        num_key = (mol.molecule_id, rd_info.name)
+                        num_row = numeric_map.get(num_key)
+                        if num_row is None:
+                            continue
+
+                        readouts[rd_info.name] = ReadoutValue(
+                            best=float(num_row.best) if num_row.best is not None else None,
+                            mean=round(float(num_row.mean), 4) if num_row.mean is not None else None,
+                        )
+
+                items.append(
+                    CompoundActivity(
+                        molecule_id=mol.molecule_id,
+                        molecule_name=mol.molecule_name or "",
+                        registration_number=mol.registration_number or "",
+                        run_count=mol.run_count,
+                        last_tested=(
+                            mol.last_tested.isoformat()
+                            if mol.last_tested is not None
+                            else None
+                        ),
+                        readouts=readouts,
+                    )
+                )
 
             return Success(
-                ActivitySummary(
+                ActivitySummaryV2(
                     items=items,
-                    readout_name=readout_name,
-                    readout_unit=readout_unit,
+                    readout_definitions=readout_defs,
                     total_compounds=len(items),
                 )
             )
