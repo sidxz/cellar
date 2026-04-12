@@ -49,7 +49,7 @@ export function WorkspaceSettingsForm() {
   const [sigRequired, setSigRequired] = useState<string[]>([]);
   const [formulationScheme, setFormulationScheme] = useState("");
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
-  const [externalVaultId, setExternalVaultId] = useState("");
+  const [cddVaultId, setExternalVaultId] = useState("");
 
   useEffect(() => {
     if (settings) {
@@ -65,7 +65,7 @@ export function WorkspaceSettingsForm() {
           ? settings.custom_field_definitions
           : []
       );
-      setExternalVaultId(settings.external_vault_id ?? "");
+      setExternalVaultId(settings.cdd_vault_id ?? "");
     }
   }, [settings]);
 
@@ -85,7 +85,7 @@ export function WorkspaceSettingsForm() {
       audit_reason_policy: auditReasonPolicy,
       signature_required_for: sigRequired,
       formulation_number_scheme: formulationScheme || null,
-      external_vault_id: externalVaultId || null,
+      cdd_vault_id: cddVaultId || null,
       custom_field_definitions: customFields.filter((f) => f.name.trim()),
     });
   };
@@ -148,9 +148,9 @@ export function WorkspaceSettingsForm() {
           <h2 className="text-lg font-semibold">Integrations</h2>
           <div className="mt-4 grid gap-6 max-w-lg">
             <div className="grid gap-2">
-              <Label>External Vault ID</Label>
+              <Label>CDD Vault ID</Label>
               <Input
-                value={externalVaultId}
+                value={cddVaultId}
                 onChange={(e) => setExternalVaultId(e.target.value)}
                 placeholder="e.g., 12345"
               />

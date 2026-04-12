@@ -23,12 +23,12 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import {
-  useVaultProtocols,
-  useVaultProtocolPreview,
-  useImportVaultProtocol,
-} from "../hooks/use-vault-import";
+  useCddProtocols,
+  useCddProtocolPreview,
+  useImportCddProtocol,
+} from "../hooks/use-cdd-import";
 
-interface VaultImportDialogProps {
+interface CddImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: (protocolId: string) => void;
@@ -36,11 +36,11 @@ interface VaultImportDialogProps {
 
 type Step = "select" | "preview" | "importing";
 
-export function VaultImportDialog({
+export function CddImportDialog({
   open,
   onOpenChange,
   onImported,
-}: VaultImportDialogProps) {
+}: CddImportDialogProps) {
   const [step, setStep] = useState<Step>("select");
   const [selectedExternalId, setSelectedExternalId] = useState<number | null>(null);
   const [nameOverride, setNameOverride] = useState("");
@@ -51,10 +51,10 @@ export function VaultImportDialog({
     data: protocols,
     isLoading: protocolsLoading,
     error: protocolsError,
-  } = useVaultProtocols(open);
+  } = useCddProtocols(open);
   const { data: preview, isLoading: previewLoading } =
-    useVaultProtocolPreview(step === "preview" ? selectedExternalId : null);
-  const importMutation = useImportVaultProtocol();
+    useCddProtocolPreview(step === "preview" ? selectedExternalId : null);
+  const importMutation = useImportCddProtocol();
 
   const filteredProtocols = useMemo(() => {
     if (!protocols) return [];
@@ -110,7 +110,7 @@ export function VaultImportDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
-          <DialogTitle>Import Protocol from External Vault</DialogTitle>
+          <DialogTitle>Import Protocol from CDD Vault</DialogTitle>
           <DialogDescription>
             {step === "select" && "Select a protocol to preview its readout mapping."}
             {step === "preview" && "Review the mapping before importing."}
@@ -130,19 +130,19 @@ export function VaultImportDialog({
             {protocolsLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading protocols from external vault...
+                Loading protocols from CDD Vault...
               </div>
             )}
             {protocolsError && (
               <p className="text-sm text-destructive">
                 {protocolsError instanceof Error
                   ? protocolsError.message
-                  : "Failed to load external protocols"}
+                  : "Failed to load CDD protocols"}
               </p>
             )}
             {protocols && protocols.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No protocols found in external vault.
+                No protocols found in CDD Vault.
               </p>
             )}
             {protocols && protocols.length > 0 && (

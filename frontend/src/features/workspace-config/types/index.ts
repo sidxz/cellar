@@ -53,7 +53,7 @@ export interface WorkspaceSettings {
   signature_required_for: string[];
   audit_retention_days: number | null;
   formulation_number_scheme: string | null;
-  external_vault_id?: string | null;
+  cdd_vault_id?: string | null;
   version: number;
 }
 

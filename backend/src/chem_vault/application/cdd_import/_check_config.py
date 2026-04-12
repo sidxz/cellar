@@ -1,4 +1,4 @@
-"""Shared vault configuration check for import use cases."""
+"""Shared CDD vault configuration check for import use cases."""
 
 from __future__ import annotations
 
@@ -14,30 +14,30 @@ from chem_vault.domain.workspace_config.repository import (
 )
 
 
-async def check_vault_configured(
+async def check_cdd_configured(
     workspace_id: uuid.UUID,
     settings_repo: WorkspaceSettingsRepository,
     api_key_repo: ExternalApiKeyRepository,
     secret_provider: SecretProvider,
 ) -> Result[tuple[str, str], DomainError]:
-    """Verify external vault integration is configured. Returns (vault_id, api_key) on success."""
+    """Verify CDD Vault integration is configured. Returns (vault_id, api_key) on success."""
     settings = await settings_repo.find_by_id(workspace_id)
-    if settings is None or not settings.external_vault_id:
+    if settings is None or not settings.cdd_vault_id:
         return Failure(
-            ValidationError("External Vault ID is not configured. Go to Admin > Workspace Settings.")
+            ValidationError("CDD Vault ID is not configured. Go to Admin > Workspace Settings.")
         )
 
-    api_key_entry = await api_key_repo.find_by_key_name(workspace_id, "external_vault")
+    api_key_entry = await api_key_repo.find_by_key_name(workspace_id, "cdd_vault")
     if api_key_entry is None or not api_key_entry.is_active:
         return Failure(
-            ValidationError("External Vault API key is not configured or inactive. Go to Admin > API Keys.")
+            ValidationError("CDD Vault API key is not configured or inactive. Go to Admin > API Keys.")
         )
 
-    secret_key = f"{workspace_id}:external_vault"
+    secret_key = f"{workspace_id}:cdd_vault"
     api_key = await secret_provider.get_secret(secret_key)
     if api_key is None:
         return Failure(
-            ValidationError("External Vault API key secret not found. Re-add the key in Admin > API Keys.")
+            ValidationError("CDD Vault API key secret not found. Re-add the key in Admin > API Keys.")
         )
 
-    return Success((settings.external_vault_id, api_key))
+    return Success((settings.cdd_vault_id, api_key))

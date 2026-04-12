@@ -1722,23 +1722,23 @@ def create_container(
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
 
-    # --- Vault Import ---
+    # --- CDD Import ---
     import httpx
 
-    from chem_vault.application.vault_import.import_external_protocol import ImportExternalProtocol
-    from chem_vault.application.vault_import.list_external_protocols import ListExternalProtocols
-    from chem_vault.application.vault_import.preview_external_protocol_import import PreviewExternalProtocolImport
-    from chem_vault.infrastructure.vault_client.client import ExternalVaultClient
+    from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocol
+    from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocols
+    from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
+    from chem_vault.infrastructure.cdd.client import CddVaultClient
 
     _httpx_client = httpx.AsyncClient()
     container.define(httpx.AsyncClient, Singleton(lambda: _httpx_client))
-    container.define(ExternalVaultClient, Singleton(lambda: ExternalVaultClient(_httpx_client)))
+    container.define(CddVaultClient, Singleton(lambda: CddVaultClient(_httpx_client)))
 
-    def _vault_query(uc_cls):  # type: ignore[no-untyped-def]
+    def _cdd_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(
-                gateway=c[ExternalVaultClient],
+                gateway=c[CddVaultClient],
                 secret_provider=c[SecretProvider],
                 settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
                 api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
@@ -1746,10 +1746,10 @@ def create_container(
             )
         return _f
 
-    def _vault_import_cmd(c):  # type: ignore[no-untyped-def]
+    def _cdd_import_cmd(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return ImportExternalProtocol(
-            gateway=c[ExternalVaultClient],
+        return ImportCddProtocol(
+            gateway=c[CddVaultClient],
             secret_provider=c[SecretProvider],
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
             api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
@@ -1758,8 +1758,8 @@ def create_container(
             dispatcher=c[EventDispatcher],
         )
 
-    container.define(ListExternalProtocols, _vault_query(ListExternalProtocols))
-    container.define(PreviewExternalProtocolImport, _vault_query(PreviewExternalProtocolImport))
-    container.define(ImportExternalProtocol, _vault_import_cmd)
+    container.define(ListCddProtocols, _cdd_query(ListCddProtocols))
+    container.define(PreviewCddProtocolImport, _cdd_query(PreviewCddProtocolImport))
+    container.define(ImportCddProtocol, _cdd_import_cmd)
 
     return container

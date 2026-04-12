@@ -1,4 +1,4 @@
-"""Tests for vault import use cases with fakes."""
+"""Tests for CDD import use cases with fakes."""
 
 from __future__ import annotations
 
@@ -8,21 +8,21 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.vault_import.import_external_protocol import (
-    ImportExternalProtocol,
-    ImportExternalProtocolCommand,
+from chem_vault.application.cdd_import.import_cdd_protocol import (
+    ImportCddProtocol,
+    ImportCddProtocolCommand,
 )
-from chem_vault.application.vault_import.list_external_protocols import (
-    ListExternalProtocols,
-    ListExternalProtocolsQuery,
+from chem_vault.application.cdd_import.list_cdd_protocols import (
+    ListCddProtocols,
+    ListCddProtocolsQuery,
 )
-from chem_vault.application.vault_import.preview_external_protocol_import import (
-    PreviewExternalProtocolImport,
-    PreviewExternalProtocolImportQuery,
+from chem_vault.application.cdd_import.preview_cdd_protocol_import import (
+    PreviewCddProtocolImport,
+    PreviewCddProtocolImportQuery,
 )
 from chem_vault.domain.screening_assay.enums import ReadoutDataType
 from chem_vault.domain.shared.errors import AuthorizationError
-from chem_vault.application.vault_import.errors import VaultAuthError
+from chem_vault.application.cdd_import.errors import CddAuthError
 
 from tests.fakes.fake_auth import FakeAuth
 
@@ -45,7 +45,7 @@ class FakeGateway:
 
     async def get_protocol(self, vault_id, api_key, protocol_id):
         if self._detail is None:
-            raise VaultAuthError("Not found")
+            raise CddAuthError("Not found")
         return self._detail
 
 
@@ -64,16 +64,16 @@ class FakeSecretProvider:
 
 
 class FakeWorkspaceSettingsRepo:
-    def __init__(self, external_vault_id="12345"):
-        self._external_vault_id = external_vault_id
+    def __init__(self, cdd_vault_id="12345"):
+        self._cdd_vault_id = cdd_vault_id
 
     async def find_by_id(self, id):
-        if self._external_vault_id is None:
+        if self._cdd_vault_id is None:
             return None
         from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
 
         ws = WorkspaceSettings.create_default(workspace_id=id)
-        ws.external_vault_id = self._external_vault_id
+        ws.cdd_vault_id = self._cdd_vault_id
         return ws
 
 
@@ -90,7 +90,7 @@ class FakeApiKeyRepo:
             id=uuid.uuid4(),
             workspace_id=workspace_id,
             key_name=key_name,
-            label="External Vault",
+            label="CDD Vault",
             key_prefix="abc***",
             is_active=True,
             created_by=uuid.uuid4(),
@@ -128,15 +128,15 @@ def _make_auth(*, role="editor"):
 
 
 def _secret_key():
-    return f"{WORKSPACE_ID}:external_vault"
+    return f"{WORKSPACE_ID}:cdd_vault"
 
 
 # ---------------------------------------------------------------------------
-# ListExternalProtocols
+# ListCddProtocols
 # ---------------------------------------------------------------------------
 
 
-class TestListExternalProtocols:
+class TestListCddProtocols:
     @pytest.mark.asyncio
     async def test_success(self):
         gateway = FakeGateway(
@@ -144,14 +144,14 @@ class TestListExternalProtocols:
                 {"id": 1, "name": "P1", "readout_definitions": [{"name": "R1", "data_type": "Number"}]},
             ]
         )
-        uc = ListExternalProtocols(
+        uc = ListCddProtocols(
             gateway=gateway,
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
             uow=FakeUoW(),
         )
-        result = await uc(ListExternalProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
+        result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Success)
         summaries = result.unwrap()
         assert len(summaries) == 1
@@ -159,43 +159,43 @@ class TestListExternalProtocols:
 
     @pytest.mark.asyncio
     async def test_no_vault_id_configured(self):
-        uc = ListExternalProtocols(
+        uc = ListCddProtocols(
             gateway=FakeGateway(),
             secret_provider=FakeSecretProvider(),
-            settings_repo=FakeWorkspaceSettingsRepo(external_vault_id=None),
+            settings_repo=FakeWorkspaceSettingsRepo(cdd_vault_id=None),
             api_key_repo=FakeApiKeyRepo(),
             uow=FakeUoW(),
         )
-        result = await uc(ListExternalProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
+        result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
     @pytest.mark.asyncio
     async def test_no_api_key_configured(self):
-        uc = ListExternalProtocols(
+        uc = ListCddProtocols(
             gateway=FakeGateway(),
             secret_provider=FakeSecretProvider(),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(has_active_key=False),
             uow=FakeUoW(),
         )
-        result = await uc(ListExternalProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
+        result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
     @pytest.mark.asyncio
     async def test_no_secret_found(self):
-        uc = ListExternalProtocols(
+        uc = ListCddProtocols(
             gateway=FakeGateway(),
             secret_provider=FakeSecretProvider(),  # empty — no secret stored
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
             uow=FakeUoW(),
         )
-        result = await uc(ListExternalProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
+        result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
     @pytest.mark.asyncio
     async def test_viewer_rejected(self):
-        uc = ListExternalProtocols(
+        uc = ListCddProtocols(
             gateway=FakeGateway(),
             secret_provider=FakeSecretProvider(),
             settings_repo=FakeWorkspaceSettingsRepo(),
@@ -203,34 +203,34 @@ class TestListExternalProtocols:
             uow=FakeUoW(),
         )
         with pytest.raises(AuthorizationError):
-            await uc(ListExternalProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth(role="viewer"))
+            await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth(role="viewer"))
 
     @pytest.mark.asyncio
-    async def test_vault_auth_error_returns_failure(self):
+    async def test_cdd_auth_error_returns_failure(self):
         class AuthErrorGateway:
             async def list_protocols(self, vault_id, api_key):
-                raise VaultAuthError("Invalid key")
+                raise CddAuthError("Invalid key")
 
-        uc = ListExternalProtocols(
+        uc = ListCddProtocols(
             gateway=AuthErrorGateway(),
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
             uow=FakeUoW(),
         )
-        result = await uc(ListExternalProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
+        result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
 
 # ---------------------------------------------------------------------------
-# PreviewExternalProtocolImport
+# PreviewCddProtocolImport
 # ---------------------------------------------------------------------------
 
 
-class TestPreviewExternalProtocolImport:
+class TestPreviewCddProtocolImport:
     @pytest.mark.asyncio
     async def test_success_with_mapping(self):
-        uc = PreviewExternalProtocolImport(
+        uc = PreviewCddProtocolImport(
             gateway=FakeGateway(detail=_protocol_detail()),
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
@@ -238,7 +238,7 @@ class TestPreviewExternalProtocolImport:
             uow=FakeUoW(),
         )
         result = await uc(
-            PreviewExternalProtocolImportQuery(workspace_id=WORKSPACE_ID, external_protocol_id=1),
+            PreviewCddProtocolImportQuery(workspace_id=WORKSPACE_ID, external_protocol_id=1),
             auth=_make_auth(),
         )
         assert isinstance(result, Success)
@@ -249,26 +249,26 @@ class TestPreviewExternalProtocolImport:
 
     @pytest.mark.asyncio
     async def test_not_found_returns_failure(self):
-        uc = PreviewExternalProtocolImport(
-            gateway=FakeGateway(detail=None),  # will raise VaultAuthError
+        uc = PreviewCddProtocolImport(
+            gateway=FakeGateway(detail=None),  # will raise CddAuthError
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
             api_key_repo=FakeApiKeyRepo(),
             uow=FakeUoW(),
         )
         result = await uc(
-            PreviewExternalProtocolImportQuery(workspace_id=WORKSPACE_ID, external_protocol_id=999),
+            PreviewCddProtocolImportQuery(workspace_id=WORKSPACE_ID, external_protocol_id=999),
             auth=_make_auth(),
         )
         assert isinstance(result, Failure)
 
 
 # ---------------------------------------------------------------------------
-# ImportExternalProtocol
+# ImportCddProtocol
 # ---------------------------------------------------------------------------
 
 
-class TestImportExternalProtocol:
+class TestImportCddProtocol:
     def _make_uc(self, *, detail=None, uow=None, repo=None, dispatcher=None):
         if uow is None:
             uow = AsyncMock()
@@ -282,7 +282,7 @@ class TestImportExternalProtocol:
             dispatcher = AsyncMock()
             dispatcher.dispatch_all = AsyncMock()
 
-        return ImportExternalProtocol(
+        return ImportCddProtocol(
             gateway=FakeGateway(detail=detail or _protocol_detail()),
             secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
             settings_repo=FakeWorkspaceSettingsRepo(),
@@ -296,7 +296,7 @@ class TestImportExternalProtocol:
     async def test_success_creates_draft_protocol(self):
         uc, repo = self._make_uc()
         result = await uc(
-            ImportExternalProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
+            ImportCddProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
             auth=_make_auth(),
         )
         assert isinstance(result, Success)
@@ -310,7 +310,7 @@ class TestImportExternalProtocol:
     async def test_name_override(self):
         uc, _repo = self._make_uc()
         result = await uc(
-            ImportExternalProtocolCommand(
+            ImportCddProtocolCommand(
                 workspace_id=WORKSPACE_ID,
                 external_protocol_id=1,
                 name_override="My Custom Name",
@@ -330,7 +330,7 @@ class TestImportExternalProtocol:
         }
         uc, _repo = self._make_uc(detail=detail)
         result = await uc(
-            ImportExternalProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
+            ImportCddProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
             auth=_make_auth(),
         )
         assert isinstance(result, Failure)
@@ -339,7 +339,7 @@ class TestImportExternalProtocol:
     async def test_auth_required(self):
         uc, _repo = self._make_uc()
         result = await uc(
-            ImportExternalProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
+            ImportCddProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
             auth=None,
         )
         assert isinstance(result, Failure)
@@ -348,7 +348,7 @@ class TestImportExternalProtocol:
     async def test_conditions_mapped(self):
         uc, _repo = self._make_uc()
         result = await uc(
-            ImportExternalProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
+            ImportCddProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
             auth=_make_auth(),
         )
         assert isinstance(result, Success)

@@ -1,4 +1,4 @@
-"""Pure mapper: external vault protocol JSON -> domain-ready DTOs.
+"""Pure mapper: CDD Vault protocol JSON -> domain-ready DTOs.
 
 No I/O. No domain imports except enums and VOs needed for type mapping.
 """
@@ -20,18 +20,18 @@ from chem_vault.domain.screening_assay.enums import (
 )
 
 __all__ = [
-    "ExternalProtocolSummary",
+    "CddProtocolSummary",
     "MappedReadout",
     "MappedCondition",
     "MappingWarning",
-    "ExternalProtocolMappingResult",
-    "map_external_protocol_list",
-    "map_external_protocol",
+    "CddProtocolMappingResult",
+    "map_cdd_protocol_list",
+    "map_cdd_protocol",
 ]
 
 
 @dataclass(frozen=True)
-class ExternalProtocolSummary:
+class CddProtocolSummary:
     external_id: int
     name: str
     readout_count: int
@@ -66,7 +66,7 @@ class MappedCondition:
 
 
 @dataclass(frozen=True)
-class ExternalProtocolMappingResult:
+class CddProtocolMappingResult:
     name: str
     description: str | None
     category: str | None
@@ -93,10 +93,10 @@ _CONDITION_TYPE_MAP: dict[str, ConditionDataType] = {
 }
 
 
-def map_external_protocol_list(protocols: list[dict[str, Any]]) -> list[ExternalProtocolSummary]:
-    """Map a list of raw external protocol dicts to summary DTOs."""
+def map_cdd_protocol_list(protocols: list[dict[str, Any]]) -> list[CddProtocolSummary]:
+    """Map a list of raw CDD protocol dicts to summary DTOs."""
     return [
-        ExternalProtocolSummary(
+        CddProtocolSummary(
             external_id=p["id"],
             name=p.get("name", f"Protocol {p['id']}"),
             readout_count=len(p.get("readout_definitions", [])),
@@ -138,7 +138,7 @@ def _build_dose_response_readouts(
 ) -> list[MappedReadout]:
     """Synthesize DOSE_RESPONSE readouts from dose-response calculations.
 
-    The external vault represents dose-response curves as calculations
+    CDD Vault represents dose-response curves as calculations
     (not readout data types). Each dose-response calculation has:
       - inputs: dose_readout_definition (X axis), response_readout_definition (Y axis)
       - outputs: intercept_readout_definitions (primary IC50/EC50 value + CI bounds + stats)
@@ -200,8 +200,8 @@ def _build_dose_response_readouts(
     return dr_readouts
 
 
-def map_external_protocol(protocol_data: dict[str, Any]) -> ExternalProtocolMappingResult:
-    """Map a single external protocol dict to a full mapping result with warnings."""
+def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
+    """Map a single CDD protocol dict to a full mapping result with warnings."""
     warnings: list[MappingWarning] = []
     readouts: list[MappedReadout] = []
     conditions: list[MappedCondition] = []
@@ -303,7 +303,7 @@ def map_external_protocol(protocol_data: dict[str, Any]) -> ExternalProtocolMapp
     description = pf.get("Description") or protocol_data.get("description")
     category = pf.get("Category") or protocol_data.get("category")
 
-    return ExternalProtocolMappingResult(
+    return CddProtocolMappingResult(
         name=protocol_data.get("name", f"Protocol {protocol_data['id']}"),
         description=description or None,
         category=category or None,

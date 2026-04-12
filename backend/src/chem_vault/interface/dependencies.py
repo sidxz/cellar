@@ -193,9 +193,9 @@ from chem_vault.application.screening.import_run_readouts import ImportRunReadou
 from chem_vault.application.screening.get_compound_curves import GetCompoundCurves
 from chem_vault.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from chem_vault.application.screening.get_protocol_stats import GetProtocolStats
-from chem_vault.application.vault_import.import_external_protocol import ImportExternalProtocol
-from chem_vault.application.vault_import.list_external_protocols import ListExternalProtocols
-from chem_vault.application.vault_import.preview_external_protocol_import import PreviewExternalProtocolImport
+from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocol
+from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocols
+from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
 from chem_vault.application.workspace_config.create_external_api_key import CreateExternalApiKey
 from chem_vault.application.workspace_config.list_external_api_keys import ListExternalApiKeys
 from chem_vault.application.workspace_config.update_external_api_key import UpdateExternalApiKey
@@ -520,9 +520,9 @@ SetUpRunPlateDep = Annotated[SetUpRunPlate, Depends(_get_use_case(SetUpRunPlate)
 ImportRunReadoutsDep = Annotated[ImportRunReadouts, Depends(_get_use_case(ImportRunReadouts))]
 
 # --- Vault Import dependencies ---
-ListExternalProtocolsDep = Annotated[ListExternalProtocols, Depends(_get_use_case(ListExternalProtocols))]
-PreviewExternalProtocolImportDep = Annotated[PreviewExternalProtocolImport, Depends(_get_use_case(PreviewExternalProtocolImport))]
-ImportExternalProtocolDep = Annotated[ImportExternalProtocol, Depends(_get_use_case(ImportExternalProtocol))]
+ListCddProtocolsDep = Annotated[ListCddProtocols, Depends(_get_use_case(ListCddProtocols))]
+PreviewCddProtocolImportDep = Annotated[PreviewCddProtocolImport, Depends(_get_use_case(PreviewCddProtocolImport))]
+ImportCddProtocolDep = Annotated[ImportCddProtocol, Depends(_get_use_case(ImportCddProtocol))]
 
 # --- Dashboard dependencies ---
 GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]

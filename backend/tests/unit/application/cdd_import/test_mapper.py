@@ -1,14 +1,14 @@
-"""Tests for external protocol mapper — pure functions, no I/O."""
+"""Tests for CDD protocol mapper — pure functions, no I/O."""
 
 import pytest
 
-from chem_vault.application.vault_import.mapper import (
-    ExternalProtocolMappingResult,
-    ExternalProtocolSummary,
+from chem_vault.application.cdd_import.mapper import (
+    CddProtocolMappingResult,
+    CddProtocolSummary,
     MappedReadout,
     MappingWarning,
-    map_external_protocol,
-    map_external_protocol_list,
+    map_cdd_protocol,
+    map_cdd_protocol_list,
 )
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
@@ -28,7 +28,7 @@ def _protocol_json(*, protocol_id=1, name="Kinase IC50", readouts=None):
 
 
 def _readout(name="% Inhibition", data_type="Number", unit_label="%", **kwargs):
-    """Build a readout definition using actual external vault API field names."""
+    """Build a readout definition using actual CDD Vault API field names."""
     rd = {"name": name, "data_type": data_type, "unit_label": unit_label}
     rd.update(kwargs)
     return rd
@@ -41,25 +41,25 @@ def _condition(name="Cell Type", data_type="Text", **kwargs):
     return rd
 
 
-class TestMapExternalProtocolList:
+class TestMapCddProtocolList:
     def test_empty_list(self):
-        assert map_external_protocol_list([]) == []
+        assert map_cdd_protocol_list([]) == []
 
     def test_maps_id_name_count(self):
         protocols = [
             _protocol_json(protocol_id=1, name="P1", readouts=[_readout()]),
             _protocol_json(protocol_id=2, name="P2", readouts=[]),
         ]
-        result = map_external_protocol_list(protocols)
+        result = map_cdd_protocol_list(protocols)
         assert len(result) == 2
-        assert result[0] == ExternalProtocolSummary(external_id=1, name="P1", readout_count=1)
-        assert result[1] == ExternalProtocolSummary(external_id=2, name="P2", readout_count=0)
+        assert result[0] == CddProtocolSummary(external_id=1, name="P1", readout_count=1)
+        assert result[1] == CddProtocolSummary(external_id=2, name="P2", readout_count=0)
 
 
-class TestMapExternalProtocol:
+class TestMapCddProtocol:
     def test_numeric_readout(self):
         proto = _protocol_json(readouts=[_readout("IC50", "Number", "nM")])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert len(result.readouts) == 1
         assert result.readouts[0].name == "IC50"
         assert result.readouts[0].data_type == ReadoutDataType.NUMERIC
@@ -68,36 +68,36 @@ class TestMapExternalProtocol:
 
     def test_text_readout(self):
         proto = _protocol_json(readouts=[_readout("Notes", "Text")])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.TEXT
 
     def test_pick_list_readout(self):
         proto = _protocol_json(
             readouts=[_readout("Status", "Pick List", pick_list_values=["Active", "Inactive"])]
         )
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.PICK_LIST
         assert result.readouts[0].pick_list_values == ["Active", "Inactive"]
 
     def test_plot_becomes_dose_response(self):
         proto = _protocol_json(readouts=[_readout("DR Curve", "Plot")])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.DOSE_RESPONSE
         assert result.readouts[0].dose_response_config is not None
 
     def test_batch_link_readout(self):
         proto = _protocol_json(readouts=[_readout("Batch", "Batch Link")])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.BATCH_LINK
 
     def test_file_readout(self):
         proto = _protocol_json(readouts=[_readout("Attachment", "File")])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.FILE
 
     def test_date_readout(self):
         proto = _protocol_json(readouts=[_readout("Exp Date", "Date")])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.DATE
 
     def test_unknown_type_skipped_with_warning(self):
@@ -107,7 +107,7 @@ class TestMapExternalProtocol:
                 _readout("Custom", "SomeWeirdType"),
             ]
         )
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert len(result.readouts) == 1
         assert len(result.warnings) == 1
         assert result.warnings[0].field_name == "Custom"
@@ -117,7 +117,7 @@ class TestMapExternalProtocol:
         proto = _protocol_json(
             readouts=[_readout("A", "Number"), _readout("B", "Text")]
         )
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts[0].display_order == 0
         assert result.readouts[1].display_order == 1
 
@@ -125,7 +125,7 @@ class TestMapExternalProtocol:
         proto = _protocol_json(
             readouts=[_readout(), _condition("Cell Type", "Text")],
         )
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert len(result.readouts) == 1  # condition not counted as readout
         assert len(result.conditions) == 1
         assert result.conditions[0].name == "Cell Type"
@@ -133,23 +133,23 @@ class TestMapExternalProtocol:
 
     def test_external_source_id_preserved(self):
         proto = _protocol_json(protocol_id=42)
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.external_source_id == 42
 
     def test_protocol_name_preserved(self):
         proto = _protocol_json(name="My Protocol")
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.name == "My Protocol"
 
     def test_empty_readouts(self):
         proto = _protocol_json(readouts=[])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.readouts == []
         assert result.warnings == []
 
     def test_defaults_for_mapped_readout(self):
         proto = _protocol_json(readouts=[_readout()])
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         rd = result.readouts[0]
         assert rd.aggregation == ReadoutAggregation.NONE
         assert rd.normalization == ReadoutNormalization.NONE
@@ -182,7 +182,7 @@ class TestMapExternalProtocol:
                 }
             ],
         }
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         # 2 user-defined Number readouts + 1 synthesized DOSE_RESPONSE
         names = [r.name for r in result.readouts]
         assert names == ["Concentration", "% Inhibition", "IC50calc"]
@@ -202,6 +202,6 @@ class TestMapExternalProtocol:
             "readout_definitions": [_readout()],
             "protocol_fields": {"Category": "In vivo", "Description": "A test protocol"},
         }
-        result = map_external_protocol(proto)
+        result = map_cdd_protocol(proto)
         assert result.category == "In vivo"
         assert result.description == "A test protocol"

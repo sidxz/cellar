@@ -1,39 +1,39 @@
-"""External vault import endpoints."""
+"""CDD Vault import endpoints."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from chem_vault.application.vault_import.import_external_protocol import ImportExternalProtocolCommand
-from chem_vault.application.vault_import.list_external_protocols import ListExternalProtocolsQuery
-from chem_vault.application.vault_import.mapper import (
-    ExternalProtocolMappingResult,
-    ExternalProtocolSummary,
+from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocolCommand
+from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocolsQuery
+from chem_vault.application.cdd_import.mapper import (
+    CddProtocolMappingResult,
+    CddProtocolSummary,
     MappedCondition,
     MappedReadout,
     MappingWarning,
 )
-from chem_vault.application.vault_import.preview_external_protocol_import import PreviewExternalProtocolImportQuery
+from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImportQuery
 from chem_vault.interface.dependencies import (
     AuthDep,
-    ImportExternalProtocolDep,
-    ListExternalProtocolsDep,
-    PreviewExternalProtocolImportDep,
+    ImportCddProtocolDep,
+    ListCddProtocolsDep,
+    PreviewCddProtocolImportDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.routes.protocols import ProtocolResponse
 
-router = APIRouter(prefix="/api/v1/vault-import", tags=["vault-import"])
+router = APIRouter(prefix="/api/v1/cdd-import", tags=["cdd-import"])
 
 
-class ExternalProtocolSummaryResponse(BaseModel):
+class CddProtocolSummaryResponse(BaseModel):
     external_id: int
     name: str
     readout_count: int
 
     @classmethod
-    def from_dto(cls, s: ExternalProtocolSummary) -> ExternalProtocolSummaryResponse:
+    def from_dto(cls, s: CddProtocolSummary) -> CddProtocolSummaryResponse:
         return cls(external_id=s.external_id, name=s.name, readout_count=s.readout_count)
 
 
@@ -89,7 +89,7 @@ class MappingWarningResponse(BaseModel):
         return cls(field_name=w.field_name, source_type=w.source_type, reason=w.reason)
 
 
-class ExternalProtocolMappingResultResponse(BaseModel):
+class CddProtocolMappingResultResponse(BaseModel):
     name: str
     description: str | None = None
     category: str | None = None
@@ -99,7 +99,7 @@ class ExternalProtocolMappingResultResponse(BaseModel):
     external_source_id: int
 
     @classmethod
-    def from_dto(cls, m: ExternalProtocolMappingResult) -> ExternalProtocolMappingResultResponse:
+    def from_dto(cls, m: CddProtocolMappingResult) -> CddProtocolMappingResultResponse:
         return cls(
             name=m.name,
             description=m.description,
@@ -111,42 +111,42 @@ class ExternalProtocolMappingResultResponse(BaseModel):
         )
 
 
-class ImportExternalProtocolBody(BaseModel):
+class ImportCddProtocolBody(BaseModel):
     name_override: str | None = None
 
 
-@router.get("/protocols", response_model=list[ExternalProtocolSummaryResponse])
-async def list_external_protocols(
+@router.get("/protocols", response_model=list[CddProtocolSummaryResponse])
+async def list_cdd_protocols(
     auth: AuthDep,
-    use_case: ListExternalProtocolsDep,
-) -> list[ExternalProtocolSummaryResponse]:
-    query = ListExternalProtocolsQuery(workspace_id=auth.workspace_id)
+    use_case: ListCddProtocolsDep,
+) -> list[CddProtocolSummaryResponse]:
+    query = ListCddProtocolsQuery(workspace_id=auth.workspace_id)
     summaries = result_to_response(await use_case(query, auth=auth))
-    return [ExternalProtocolSummaryResponse.from_dto(s) for s in summaries]
+    return [CddProtocolSummaryResponse.from_dto(s) for s in summaries]
 
 
-@router.get("/protocols/{external_id}/preview", response_model=ExternalProtocolMappingResultResponse)
-async def preview_external_protocol(
+@router.get("/protocols/{external_id}/preview", response_model=CddProtocolMappingResultResponse)
+async def preview_cdd_protocol(
     external_id: int,
     auth: AuthDep,
-    use_case: PreviewExternalProtocolImportDep,
-) -> ExternalProtocolMappingResultResponse:
-    query = PreviewExternalProtocolImportQuery(
+    use_case: PreviewCddProtocolImportDep,
+) -> CddProtocolMappingResultResponse:
+    query = PreviewCddProtocolImportQuery(
         workspace_id=auth.workspace_id,
         external_protocol_id=external_id,
     )
     mapping = result_to_response(await use_case(query, auth=auth))
-    return ExternalProtocolMappingResultResponse.from_dto(mapping)
+    return CddProtocolMappingResultResponse.from_dto(mapping)
 
 
 @router.post("/protocols/{external_id}", response_model=ProtocolResponse, status_code=201)
-async def import_external_protocol(
+async def import_cdd_protocol(
     external_id: int,
     auth: AuthDep,
-    use_case: ImportExternalProtocolDep,
-    body: ImportExternalProtocolBody | None = None,
+    use_case: ImportCddProtocolDep,
+    body: ImportCddProtocolBody | None = None,
 ) -> ProtocolResponse:
-    command = ImportExternalProtocolCommand(
+    command = ImportCddProtocolCommand(
         workspace_id=auth.workspace_id,
         external_protocol_id=external_id,
         name_override=body.name_override if body else None,

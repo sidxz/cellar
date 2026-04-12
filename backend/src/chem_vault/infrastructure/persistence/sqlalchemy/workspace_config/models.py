@@ -57,7 +57,7 @@ class WorkspaceSettingsModel(Base, EntityModelMixin, VersionMixin):
     )
     audit_retention_days: Mapped[int | None] = mapped_column()
     formulation_number_scheme: Mapped[str | None] = mapped_column(JSON, nullable=True)
-    external_vault_id: Mapped[str | None] = mapped_column("cdd_vault_id", String(50))
+    cdd_vault_id: Mapped[str | None] = mapped_column(String(50))
 
 
 class ControlledVocabularyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
