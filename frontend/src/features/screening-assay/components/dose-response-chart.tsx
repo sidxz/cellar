@@ -353,12 +353,22 @@ function SummaryCard({
       </CardHeader>
       <CardContent className="pt-2 space-y-1">
         <p className="text-sm font-mono">
+          {CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
+          {" = "}
           {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
         </p>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
           <span className={cn("font-medium", rSquaredColor(curve.r_squared))}>
             R² = {curve.r_squared.toFixed(3)}
           </span>
+          <span className="font-mono">Hill = {curve.hill_slope.toFixed(2)}</span>
+          <span className="font-mono">Top = {curve.top.toFixed(1)}%</span>
+          <span className="font-mono">Bottom = {curve.bottom.toFixed(1)}%</span>
+          {curve.confidence_interval_low != null && curve.confidence_interval_high != null && (
+            <span className="font-mono">
+              CI: {curve.confidence_interval_low.toPrecision(3)}–{curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
+            </span>
+          )}
           {isInteractive && (
             <span className="text-muted-foreground">
               {includedCount}/{totalPoints} pts
@@ -421,6 +431,11 @@ export function DoseResponseChart({
 
   // Edit mode toggle — prevents accidental point exclusion
   const [editMode, setEditMode] = useState(false);
+
+  // Display toggles
+  const [showCI, setShowCI] = useState(true);
+  const [showCrossHair, setShowCrossHair] = useState(true);
+  const [showPlateaus, setShowPlateaus] = useState(false);
 
   // excluded indices per curve id — tracked separately from curve.excluded_points
   // so local UI state stays until query invalidation refreshes the curve
@@ -707,6 +722,39 @@ export function DoseResponseChart({
       showlegend: includedX.length === 0,
       hoverinfo: "skip",
     });
+
+    // Confidence interval band (shaded area between CI low/high EC50 curves)
+    if (showCI && curve.confidence_interval_low && curve.confidence_interval_high) {
+      const ciLowCurve = { ...curve, fitted_value: curve.confidence_interval_low };
+      const ciHighCurve = { ...curve, fitted_value: curve.confidence_interval_high };
+      const { x: ciX, y: ciLowY } = generate4PLCurve(ciLowCurve, xMin, xMax);
+      const { y: ciHighY } = generate4PLCurve(ciHighCurve, xMin, xMax);
+
+      // Upper bound
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        x: ciX,
+        y: ciHighY,
+        line: { width: 0 },
+        legendgroup: group,
+        showlegend: false,
+        hoverinfo: "skip",
+      });
+      // Lower bound (fill to upper)
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        x: ciX,
+        y: ciLowY,
+        line: { width: 0 },
+        fill: "tonexty",
+        fillcolor: `${color}15`,
+        legendgroup: group,
+        showlegend: false,
+        hoverinfo: "skip",
+      });
+    }
   }
 
   // ── Plotly click handler ────────────────────────────────────────────────────
@@ -767,7 +815,7 @@ export function DoseResponseChart({
     [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve]
   );
 
-  // Build cross-hair reference lines at (fitted_value, midpoint) for each curve
+  // Build overlay shapes and annotations based on toggle state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const shapes: any[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -777,65 +825,53 @@ export function DoseResponseChart({
     const color = TRACE_COLORS[i % TRACE_COLORS.length];
     const midY = (curve.top + curve.bottom) / 2;
     const ec50 = curve.fitted_value;
-
-    // Horizontal dashed line at midpoint
-    shapes.push({
-      type: "line",
-      xref: "paper",
-      x0: 0,
-      x1: 1,
-      yref: "y",
-      y0: midY,
-      y1: midY,
-      line: { color, width: 1, dash: "dot" },
-      opacity: 0.4,
-    });
-
-    // Vertical dashed line at fitted_value (IC50/EC50)
-    shapes.push({
-      type: "line",
-      xref: "x",
-      x0: ec50,
-      x1: ec50,
-      yref: "paper",
-      y0: 0,
-      y1: 1,
-      line: { color, width: 1, dash: "dot" },
-      opacity: 0.4,
-    });
-
-    // Filled marker at the intersection point
-    traces.push({
-      type: "scatter",
-      mode: "markers",
-      x: [ec50],
-      y: [midY],
-      marker: {
-        color: "#fbbf24",
-        size: 10,
-        line: { color: "#ef4444", width: 2 },
-        symbol: "circle",
-      },
-      showlegend: false,
-      hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)} ${curve.fitted_unit ?? ""}<extra></extra>`,
-    });
-
-    // Label above with arrow pointing down to the marker
     const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
-    annotations.push({
-      x: Math.log10(ec50),
-      y: midY,
-      xref: "x",
-      yref: "y",
-      text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-      showarrow: true,
-      arrowhead: 2,
-      arrowsize: 0.8,
-      arrowcolor: "#ef4444",
-      ax: 0,
-      ay: -35,
-      font: { color: "#ef4444", size: 11 },
-    });
+
+    // Cross-hair: dotted lines + marker + label at (EC50, midpoint)
+    if (showCrossHair) {
+      shapes.push({
+        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
+        line: { color, width: 1, dash: "dot" }, opacity: 0.4,
+      });
+      shapes.push({
+        type: "line", xref: "x", x0: ec50, x1: ec50, yref: "paper", y0: 0, y1: 1,
+        line: { color, width: 1, dash: "dot" }, opacity: 0.4,
+      });
+      traces.push({
+        type: "scatter", mode: "markers", x: [ec50], y: [midY],
+        marker: { color: "#fbbf24", size: 10, line: { color: "#ef4444", width: 2 }, symbol: "circle" },
+        showlegend: false,
+        hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
+      });
+      annotations.push({
+        x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
+        text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
+        showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: "#ef4444",
+        ax: 0, ay: -35, font: { color: "#ef4444", size: 11 },
+      });
+    }
+
+    // Plateau lines: horizontal dashed at top and bottom asymptotes
+    if (showPlateaus) {
+      shapes.push({
+        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.top, y1: curve.top,
+        line: { color, width: 1, dash: "dash" }, opacity: 0.3,
+      });
+      shapes.push({
+        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.bottom, y1: curve.bottom,
+        line: { color, width: 1, dash: "dash" }, opacity: 0.3,
+      });
+      annotations.push({
+        x: 1, y: curve.top, xref: "paper", yref: "y",
+        text: `Top: ${curve.top.toFixed(1)}%`, showarrow: false,
+        font: { color, size: 9 }, xanchor: "right",
+      });
+      annotations.push({
+        x: 1, y: curve.bottom, xref: "paper", yref: "y",
+        text: `Bottom: ${curve.bottom.toFixed(1)}%`, showarrow: false,
+        font: { color, size: 9 }, xanchor: "right",
+      });
+    }
   }
 
   const layout = {
@@ -875,9 +911,9 @@ export function DoseResponseChart({
 
   return (
     <div className={cn("space-y-4", className)}>
-      {/* Edit mode toggle */}
-      {isInteractive && (
-        <div className="flex items-center gap-2">
+      {/* Controls bar */}
+      <div className="flex items-center gap-4 flex-wrap">
+        {isInteractive && (
           <Button
             variant={editMode ? "default" : "outline"}
             size="sm"
@@ -885,13 +921,29 @@ export function DoseResponseChart({
           >
             {editMode ? "Done Editing" : "Edit Points"}
           </Button>
-          {editMode && (
-            <span className="text-xs text-muted-foreground">
-              Click data points to exclude/include them. Curve refits automatically.
-            </span>
-          )}
-        </div>
-      )}
+        )}
+        {editMode && (
+          <span className="text-xs text-muted-foreground">
+            Click data points to exclude/include them.
+          </span>
+        )}
+        {!editMode && (
+          <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox checked={showCrossHair} onCheckedChange={(v) => setShowCrossHair(v === true)} />
+              IC50 marker
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
+              95% CI band
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox checked={showPlateaus} onCheckedChange={(v) => setShowPlateaus(v === true)} />
+              Top/Bottom
+            </label>
+          </div>
+        )}
+      </div>
 
       <Plot
         data={traces}
