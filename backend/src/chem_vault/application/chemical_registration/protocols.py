@@ -24,6 +24,15 @@ class QCResultDTO:
 
 
 @dataclass(frozen=True)
+class DetectedSaltDTO:
+    """Salt fragment detected during standardization — application-layer DTO."""
+
+    salt_smiles: str
+    salt_fragment_mw: float
+    stoichiometry: int
+
+
+@dataclass(frozen=True)
 class ProcessedStructureDTO:
     """Processed structure — application-layer DTO."""
 
@@ -31,6 +40,7 @@ class ProcessedStructureDTO:
     descriptors: ComputedDescriptors
     fingerprints: dict[str, bytes]
     qc_result: QCResultDTO
+    detected_salt: DetectedSaltDTO | None = None
 
 
 class StructureProcessorProtocol(Protocol):

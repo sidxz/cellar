@@ -70,6 +70,22 @@ class TestStructureProcessor:
         assert s.molfile is not None
         assert s.is_disclosed
 
+    def test_detected_salt_for_sodium_salt(self, processor: StructureProcessor) -> None:
+        """Sodium aspirin: [Na+].CC(=O)Oc1ccccc1C(=O)[O-] should detect Na salt."""
+        result = processor.process("[Na+].CC(=O)Oc1ccccc1C(=O)[O-]")
+        assert isinstance(result, Success)
+        out = result.unwrap()
+        assert out.detected_salt is not None
+        assert out.detected_salt.stoichiometry == 1
+        assert out.detected_salt.salt_fragment_mw > 0
+
+    def test_no_salt_for_simple_molecule(self, processor: StructureProcessor) -> None:
+        """Aspirin (no salt) should return detected_salt=None."""
+        result = processor.process("CC(=O)Oc1ccccc1C(O)=O")
+        assert isinstance(result, Success)
+        out = result.unwrap()
+        assert out.detected_salt is None
+
     def test_deterministic_across_calls(self, processor: StructureProcessor) -> None:
         r1 = processor.process("CC(=O)Oc1ccccc1C(=O)O")
         r2 = processor.process("CC(=O)Oc1ccccc1C(=O)O")
