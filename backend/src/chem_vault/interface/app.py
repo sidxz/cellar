@@ -191,6 +191,9 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.protocol_hub import router as protocol_hub_router
     app.include_router(protocol_hub_router)
 
+    from chem_vault.interface.routes.compound_flags import router as compound_flags_router
+    app.include_router(compound_flags_router)
+
     # Health check (unauthenticated)
     @app.get("/health")
     async def health() -> dict[str, str]:
