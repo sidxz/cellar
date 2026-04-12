@@ -20,6 +20,7 @@ import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar";
 import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
+import { fetchStructureImages } from "@/shared/lib/export/structure-image";
 import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
 import { StructureRenderer } from "@/shared/components/chemistry";
@@ -398,18 +399,41 @@ export function RunDoseResponseResults({
         }
       }
 
-      // Add SMILES and Synonyms columns to main worksheet
+      // Add Structure, SMILES, and Synonyms columns
       const lastCol = worksheet.columnCount;
-      const smilesCol = lastCol + 1;
-      const synonymsCol = lastCol + 2;
+      const structCol = lastCol + 1;
+      const smilesCol = lastCol + 2;
+      const synonymsCol = lastCol + 3;
+      worksheet.getRow(1).getCell(structCol).value = "Structure";
       worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
       worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
+
+      // Batch-fetch structure images from backend
+      const allSmiles = rows
+        .map((r) => molMap.get(r.molecule_id)?.smiles)
+        .filter(Boolean) as string[];
+      const structImages = await fetchStructureImages(allSmiles, 150, 100);
+
       for (let r = 0; r < rows.length; r++) {
         const mol = molMap.get(rows[r].molecule_id);
-        worksheet.getRow(r + 2).getCell(smilesCol).value = mol?.smiles ?? "";
+        const smiles = mol?.smiles ?? "";
+        worksheet.getRow(r + 2).getCell(smilesCol).value = smiles;
         worksheet.getRow(r + 2).getCell(synonymsCol).value =
           (mol?.synonyms ?? []).join("; ");
+
+        if (smiles && structImages[smiles]) {
+          const imgId = workbook.addImage({
+            base64: structImages[smiles],
+            extension: "png",
+          });
+          worksheet.addImage(imgId, {
+            tl: { col: structCol - 1, row: r + 1 },
+            ext: { width: 150, height: 80 },
+          });
+        }
+        worksheet.getRow(r + 2).height = 65;
       }
+      worksheet.getColumn(structCol).width = 22;
       worksheet.getColumn(smilesCol).width = 40;
       worksheet.getColumn(synonymsCol).width = 30;
 

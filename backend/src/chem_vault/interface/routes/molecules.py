@@ -685,3 +685,47 @@ async def list_molecule_projects(
         )
     )
     return result_to_response(result)
+
+
+# ---------------------------------------------------------------------------
+# Batch structure depiction
+# ---------------------------------------------------------------------------
+
+
+class DepictRequest(BaseModel):
+    smiles_list: list[str]
+    width: int = 150
+    height: int = 100
+
+
+class DepictResponse(BaseModel):
+    """Maps SMILES → base64 PNG. Missing entries failed to parse."""
+    images: dict[str, str]
+
+
+@router.post("/depict", response_model=DepictResponse)
+async def depict_structures(body: DepictRequest) -> DepictResponse:
+    """Render 2D structure depictions for a batch of SMILES strings.
+
+    Returns a dict mapping each valid SMILES to a base64-encoded PNG.
+    Invalid SMILES are silently skipped.
+    """
+    import base64
+    import io
+
+    from rdkit import Chem
+    from rdkit.Chem import Draw
+
+    images: dict[str, str] = {}
+    for smiles in body.smiles_list:
+        if not smiles or smiles in images:
+            continue
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            continue
+        img = Draw.MolToImage(mol, size=(body.width, body.height))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        images[smiles] = base64.b64encode(buf.getvalue()).decode()
+
+    return DepictResponse(images=images)
