@@ -13,7 +13,7 @@ import {
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useGridPreferences } from "@/shared/hooks/use-grid-preferences";
 import { chemVaultTheme } from "./ag-grid-theme";
-import { ExportToolbar } from "./export-toolbar";
+import { ExportToolbar, type ExcelEnhancer } from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -32,6 +32,8 @@ export interface DataGridProps<TData = unknown>
   suppressFilters?: boolean;
   /** When provided, renders CSV + Excel export buttons above the grid */
   exportFilename?: string;
+  /** Optional enhancer for Excel exports — adds images, extra sheets, etc. */
+  excelEnhancer?: ExcelEnhancer;
   /** When provided, persists column state (width, order, visibility) to localStorage. */
   preferencesKey?: string;
   /** Render prop for selection toolbar. Shown above grid when rows are selected.
@@ -48,6 +50,7 @@ export function DataGrid<TData = unknown>({
   height = "400px",
   suppressFilters = false,
   exportFilename,
+  excelEnhancer,
   preferencesKey,
   selectionToolbar,
   ...rest
@@ -114,7 +117,7 @@ export function DataGrid<TData = unknown>({
     <div>
       {exportFilename && rowData?.length ? (
         <div className="mb-2 flex justify-end">
-          <ExportToolbar gridRef={gridRef} filename={exportFilename} />
+          <ExportToolbar gridRef={gridRef} filename={exportFilename} excelEnhancer={excelEnhancer} />
         </div>
       ) : null}
       {selectionToolbar && selectedRows.length > 0 ? (

@@ -18,6 +18,8 @@ import {
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar";
+import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
@@ -329,6 +331,60 @@ export function RunDoseResponseResults({
 
   const columnDefs = useMemo(() => buildColumnDefs(), []);
 
+  // Excel enhancer — sparkline images + raw data sheet
+  const excelEnhancer: ExcelEnhancer = useCallback(
+    async (workbook, worksheet, rows: CompoundCurveRow[]) => {
+      // Find "Curve" column (by header text)
+      const curveColIdx = worksheet.columns.findIndex(
+        (_, i) => worksheet.getRow(1).getCell(i + 1).value === "Curve"
+      );
+
+      if (curveColIdx >= 0) {
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows[r];
+          const base64 = renderCurveToBase64(
+            {
+              hill_slope: row.hill_slope,
+              top: row.top,
+              bottom: row.bottom,
+              fitted_value: row.fitted_value,
+            },
+            row.data_points
+          );
+          if (!base64) continue;
+
+          const imageId = workbook.addImage({ base64, extension: "png" });
+          worksheet.addImage(imageId, {
+            tl: { col: curveColIdx, row: r + 1 },
+            ext: { width: 200, height: 60 },
+          });
+        }
+        const col = worksheet.getColumn(curveColIdx + 1);
+        col.width = 30;
+        for (let r = 2; r <= rows.length + 1; r++) {
+          worksheet.getRow(r).height = 50;
+        }
+      }
+
+      // Raw data points sheet
+      const rawSheet = workbook.addWorksheet("Raw Data Points");
+      const rawHeader = rawSheet.addRow(["Compound", "Concentration", "Response"]);
+      rawHeader.font = { bold: true };
+      for (const row of rows) {
+        const name = row.molecule_name || row.molecule_id;
+        if (row.data_points) {
+          for (const pt of row.data_points) {
+            rawSheet.addRow([name, pt.x, pt.y]);
+          }
+        }
+      }
+      rawSheet.getColumn(1).width = 20;
+      rawSheet.getColumn(2).width = 15;
+      rawSheet.getColumn(3).width = 15;
+    },
+    []
+  );
+
   // Detail panel: curves for selected compound
   const selectedCurves =
     selectedRows.length === 1 ? selectedRows[0].all_curves : null;
@@ -461,6 +517,7 @@ export function RunDoseResponseResults({
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`run-${run.id.slice(0, 8)}-dose-response`}
+        excelEnhancer={excelEnhancer}
         emptyState={
           <EmptyState
             icon={Filter}

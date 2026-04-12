@@ -19,6 +19,8 @@ import {
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar";
+import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { DoseResponseChart } from "../dose-response-chart";
@@ -507,6 +509,77 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   }, [readoutDefs]);
 
   // ---------------------------------------------------------------------------
+  // Excel enhancer — sparkline images + raw data sheet
+  // ---------------------------------------------------------------------------
+  const excelEnhancer: ExcelEnhancer = useCallback(
+    async (workbook, worksheet, rows: CompoundActivity[]) => {
+      // Find the "Curve" column index
+      const curveColIdx = worksheet.columns.findIndex(
+        (_, i) => worksheet.getRow(1).getCell(i + 1).value === "Curve"
+      );
+
+      // Add sparkline images to the Curve column
+      if (curveColIdx >= 0) {
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows[r];
+          // Find first DR readout with curve_params
+          const drReadout = Object.values(row.readouts).find(
+            (rv) => rv.curve_params
+          );
+          if (!drReadout?.curve_params) continue;
+
+          const base64 = renderCurveToBase64(
+            drReadout.curve_params,
+            drReadout.data_points
+          );
+          if (!base64) continue;
+
+          const imageId = workbook.addImage({
+            base64,
+            extension: "png",
+          });
+          // Row r+2 (1-indexed header + data), column curveColIdx
+          worksheet.addImage(imageId, {
+            tl: { col: curveColIdx, row: r + 1 },
+            ext: { width: 200, height: 60 },
+          });
+        }
+        // Set Curve column width and row heights for images
+        const col = worksheet.getColumn(curveColIdx + 1);
+        col.width = 30;
+        for (let r = 2; r <= rows.length + 1; r++) {
+          worksheet.getRow(r).height = 50;
+        }
+      }
+
+      // Add raw data points sheet
+      const rawSheet = workbook.addWorksheet("Raw Data Points");
+      const rawHeader = rawSheet.addRow([
+        "Compound",
+        "Concentration",
+        "Response",
+      ]);
+      rawHeader.font = { bold: true };
+
+      for (const row of rows) {
+        const name =
+          row.registration_number || row.molecule_name || row.molecule_id;
+        for (const rv of Object.values(row.readouts)) {
+          if (rv.data_points) {
+            for (const pt of rv.data_points) {
+              rawSheet.addRow([name, pt.x, pt.y]);
+            }
+          }
+        }
+      }
+      rawSheet.getColumn(1).width = 20;
+      rawSheet.getColumn(2).width = 15;
+      rawSheet.getColumn(3).width = 15;
+    },
+    []
+  );
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -633,6 +706,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`${protocol.name}-activity`}
+        excelEnhancer={excelEnhancer}
         emptyState={
           <EmptyState
             icon={Filter}
