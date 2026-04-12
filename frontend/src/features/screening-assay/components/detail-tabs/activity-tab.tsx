@@ -25,6 +25,7 @@ import { useProtocolActivity } from "../../hooks/use-protocol-activity";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { DoseResponseChart } from "../dose-response-chart";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
+import { StructureRenderer } from "@/shared/components/chemistry";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import {
   CURVE_CLASS_LABELS,
@@ -164,6 +165,18 @@ function buildColumnDefs(
           )}
         </div>
       );
+    },
+  });
+
+  // Structure column
+  cols.push({
+    headerName: "Structure",
+    colId: "structure",
+    width: 100,
+    sortable: false,
+    cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
+      if (!params.data?.smiles) return <span className="text-muted-foreground">--</span>;
+      return <StructureRenderer smiles={params.data.smiles} width={80} height={55} />;
     },
   });
 

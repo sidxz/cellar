@@ -22,6 +22,7 @@ import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar
 import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
+import { StructureRenderer } from "@/shared/components/chemistry";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
 import { useProtocol } from "../hooks/use-protocols";
@@ -44,6 +45,7 @@ interface CompoundCurveRow {
   molecule_id: string;
   molecule_name: string;
   registration_number: string;
+  smiles: string | null;
   batch_number: string | null;
   curve_type: string;
   fitted_value: number;
@@ -81,7 +83,10 @@ function curveClassBadge(cc: CurveClass | null) {
 }
 
 /** Group curves by molecule, pick best (lowest fitted_value for IC50-type) */
-function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow[] {
+function buildCompoundRows(
+  curves: DoseResponseCurve[],
+  molMap: Map<string, { smiles: string | null; synonyms: string[] }>,
+): CompoundCurveRow[] {
   const byMolecule = new Map<string, DoseResponseCurve[]>();
   for (const c of curves) {
     const mid = c.molecule_id;
@@ -115,6 +120,7 @@ function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow[] {
       molecule_id: best.molecule_id,
       molecule_name: best.molecule_name ?? best.molecule_id.slice(0, 8),
       registration_number: best.molecule_name ?? best.molecule_id.slice(0, 8),
+      smiles: molMap.get(best.molecule_id)?.smiles ?? null,
       batch_number: best.batch_number,
       curve_type: best.curve_type,
       fitted_value: best.fitted_value,
@@ -193,6 +199,16 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
             )}
           </div>
         );
+      },
+    },
+    {
+      headerName: "Structure",
+      colId: "structure",
+      width: 100,
+      sortable: false,
+      cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
+        if (!params.data?.smiles) return <span className="text-muted-foreground">--</span>;
+        return <StructureRenderer smiles={params.data.smiles} width={80} height={55} />;
       },
     },
     {
@@ -336,7 +352,7 @@ export function RunDoseResponseResults({
   }
 
   // Build rows from curves
-  const allRows = useMemo(() => buildCompoundRows(curves), [curves]);
+  const allRows = useMemo(() => buildCompoundRows(curves, molMap), [curves, molMap]);
   const filteredRows = useMemo(
     () => applyHitFilter(allRows, activeCriteria),
     [allRows, activeCriteria]
