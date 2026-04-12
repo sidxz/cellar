@@ -65,6 +65,18 @@ class SampleRepository(Protocol):
         self, workspace_id: uuid.UUID, barcode: str
     ) -> Sample | None: ...
     async def find_low_stock(self, workspace_id: uuid.UUID) -> list[Sample]: ...
+    async def list_global(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        search: str | None = None,
+        statuses: list[str] | None = None,
+        location_id: uuid.UUID | None = None,
+        container_types: list[str] | None = None,
+        low_stock: bool = False,
+        cursor: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> PageResult[dict]: ...
     async def save(self, aggregate: Sample) -> None: ...
 
 
@@ -82,6 +94,9 @@ class StorageLocationRepository(Protocol):
     async def find_children(
         self, workspace_id: uuid.UUID, parent_id: uuid.UUID
     ) -> list[StorageLocation]: ...
+    async def find_by_workspace_with_counts(
+        self, workspace_id: uuid.UUID
+    ) -> list[dict]: ...
     async def save(self, entity: StorageLocation) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 

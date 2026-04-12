@@ -114,3 +114,18 @@ class GetStorageLocationChildren:
                 input.workspace_id, input.parent_id
             )
             return Success(children)
+
+
+class ListStorageLocationsWithCounts:
+    """Return all storage locations with available-sample counts."""
+
+    def __init__(self, uow: UnitOfWork, repo: StorageLocationRepository) -> None:
+        self._uow = uow
+        self._repo = repo
+
+    async def __call__(
+        self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
+    ) -> Result[list[dict], DomainError]:
+        async with self._uow:
+            rows = await self._repo.find_by_workspace_with_counts(input.workspace_id)
+            return Success(rows)

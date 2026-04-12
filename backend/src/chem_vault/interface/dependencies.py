@@ -77,6 +77,7 @@ from chem_vault.application.inventory.create_sample import CreateSample
 from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.list_batches_global import ListBatchesGlobal
+from chem_vault.application.inventory.list_samples_global import ListSamplesGlobal
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import (
     AliquotSample,
@@ -85,10 +86,12 @@ from chem_vault.application.inventory.manage_sample import (
     MoveSample,
     QuarantineSample,
 )
+from chem_vault.application.inventory.get_inventory_summary import GetInventorySummary
 from chem_vault.application.inventory.manage_storage import (
     CreateStorageLocation,
     GetStorageLocationChildren,
     ListStorageLocations,
+    ListStorageLocationsWithCounts,
 )
 from chem_vault.application.inventory.plate_read_model import PlateReadModelService
 from chem_vault.application.inventory.registered_plates import (
@@ -392,6 +395,7 @@ UpdateBatchDep = Annotated[UpdateBatch, Depends(_get_use_case(UpdateBatch))]
 CreateSampleDep = Annotated[CreateSample, Depends(_get_use_case(CreateSample))]
 GetSampleDep = Annotated[GetSample, Depends(_get_use_case(GetSample))]
 ListSamplesByBatchDep = Annotated[ListSamplesByBatch, Depends(_get_use_case(ListSamplesByBatch))]
+ListSamplesGlobalDep = Annotated[ListSamplesGlobal, Depends(_get_use_case(ListSamplesGlobal))]
 AliquotSampleDep = Annotated[AliquotSample, Depends(_get_use_case(AliquotSample))]
 MoveSampleDep = Annotated[MoveSample, Depends(_get_use_case(MoveSample))]
 QuarantineSampleDep = Annotated[QuarantineSample, Depends(_get_use_case(QuarantineSample))]
@@ -400,6 +404,8 @@ DisposeSampleDep = Annotated[DisposeSample, Depends(_get_use_case(DisposeSample)
 CreateStorageLocationDep = Annotated[CreateStorageLocation, Depends(_get_use_case(CreateStorageLocation))]
 ListStorageLocationsDep = Annotated[ListStorageLocations, Depends(_get_use_case(ListStorageLocations))]
 GetStorageLocationChildrenDep = Annotated[GetStorageLocationChildren, Depends(_get_use_case(GetStorageLocationChildren))]
+ListStorageLocationsWithCountsDep = Annotated[ListStorageLocationsWithCounts, Depends(_get_use_case(ListStorageLocationsWithCounts))]
+GetInventorySummaryDep = Annotated[GetInventorySummary, Depends(_get_use_case(GetInventorySummary))]
 UpdateStorageLocationDep = Annotated[UpdateStorageLocation, Depends(_get_use_case(UpdateStorageLocation))]
 DeleteStorageLocationDep = Annotated[DeleteStorageLocation, Depends(_get_use_case(DeleteStorageLocation))]
 RegisterPlateDep = Annotated[RegisterPlate, Depends(_get_use_case(RegisterPlate))]

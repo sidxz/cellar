@@ -1,4 +1,4 @@
-"""Inventory hub API routes — global batch list with molecule context."""
+"""Inventory hub API routes — global batch and sample lists with molecule context."""
 
 from __future__ import annotations
 
@@ -8,11 +8,25 @@ from datetime import date, datetime
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from chem_vault.application.inventory.get_inventory_summary import (
+    InventorySummaryQuery,
+)
 from chem_vault.application.inventory.list_batches_global import (
-    ListBatchesGlobal,
     ListBatchesGlobalQuery,
 )
-from chem_vault.interface.dependencies import AuthDep, ListBatchesGlobalDep
+from chem_vault.application.inventory.list_samples_global import (
+    ListSamplesGlobalQuery,
+)
+from chem_vault.application.inventory.manage_storage import (
+    ListStorageLocationsQuery,
+)
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    GetInventorySummaryDep,
+    ListBatchesGlobalDep,
+    ListSamplesGlobalDep,
+    ListStorageLocationsWithCountsDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import PaginatedResponse
 
@@ -40,6 +54,55 @@ class BatchListItemResponse(BaseModel):
     sample_count: int
     has_low_stock_sample: bool
     created_at: datetime
+
+
+class SampleListItemResponse(BaseModel):
+    id: uuid.UUID
+    barcode: str
+    batch_id: uuid.UUID
+    batch_number: str
+    molecule_id: uuid.UUID
+    molecule_name: str
+    molecule_registration_number: str
+    container_type: str
+    amount_value: float
+    amount_unit: str
+    status: str
+    solvent: str | None = None
+    freeze_thaw_count: int
+    low_stock_threshold: float | None = None
+    location_id: uuid.UUID | None = None
+    location_name: str | None = None
+    location_type: str | None = None
+    created_at: datetime
+
+
+class ActivityItemResponse(BaseModel):
+    description: str
+    entity_type: str
+    entity_id: uuid.UUID
+    occurred_at: datetime
+
+
+class InventorySummaryResponse(BaseModel):
+    low_stock_count: int
+    expiring_soon_count: int
+    pending_requests_count: int
+    recent_activity: list[ActivityItemResponse]
+
+
+class StorageLocationWithCountResponse(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    name: str
+    type: str
+    parent_id: uuid.UUID | None = None
+    barcode: str | None = None
+    temperature: str | None = None
+    rows: int | None = None
+    columns: int | None = None
+    capacity: int | None = None
+    sample_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -71,3 +134,71 @@ async def list_batches_global(
         items=[BatchListItemResponse(**row) for row in page.items],
         next_cursor=page.next_cursor,
     )
+
+
+@router.get("/samples", response_model=PaginatedResponse[SampleListItemResponse])
+async def list_samples_global(
+    auth: AuthDep,
+    uc: ListSamplesGlobalDep,
+    search: str | None = None,
+    status: list[str] | None = Query(None),
+    location_id: uuid.UUID | None = None,
+    container_type: list[str] | None = Query(None),
+    low_stock: bool = False,
+    cursor: str | None = None,
+    page_size: int | None = None,
+) -> PaginatedResponse[SampleListItemResponse]:
+    """List all samples across all batches with batch/molecule/location context."""
+    query = ListSamplesGlobalQuery(
+        workspace_id=auth.workspace_id,
+        search=search,
+        statuses=status,
+        location_id=location_id,
+        container_types=container_type,
+        low_stock=low_stock,
+        cursor=cursor,
+        limit=page_size,
+    )
+    page = result_to_response(await uc(query, auth=auth))
+    return PaginatedResponse(
+        items=[SampleListItemResponse(**row) for row in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get("/inventory/summary", response_model=InventorySummaryResponse)
+async def get_inventory_summary(
+    auth: AuthDep,
+    uc: GetInventorySummaryDep,
+) -> InventorySummaryResponse:
+    """Dashboard metrics: low stock, expiring batches, pending requests, recent activity."""
+    query = InventorySummaryQuery(workspace_id=auth.workspace_id)
+    summary = result_to_response(await uc(query, auth=auth))
+    return InventorySummaryResponse(
+        low_stock_count=summary.low_stock_count,
+        expiring_soon_count=summary.expiring_soon_count,
+        pending_requests_count=summary.pending_requests_count,
+        recent_activity=[
+            ActivityItemResponse(
+                description=a.description,
+                entity_type=a.entity_type,
+                entity_id=a.entity_id,
+                occurred_at=a.occurred_at,
+            )
+            for a in summary.recent_activity
+        ],
+    )
+
+
+@router.get(
+    "/storage-locations-summary",
+    response_model=list[StorageLocationWithCountResponse],
+)
+async def list_storage_locations_with_counts(
+    auth: AuthDep,
+    uc: ListStorageLocationsWithCountsDep,
+) -> list[StorageLocationWithCountResponse]:
+    """Storage locations with available-sample counts for the storage browser."""
+    query = ListStorageLocationsQuery(workspace_id=auth.workspace_id)
+    rows = result_to_response(await uc(query, auth=auth))
+    return [StorageLocationWithCountResponse(**r) for r in rows]

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -25,11 +25,12 @@ import {
 } from "@/features/workspace-config/hooks/use-salt-catalog";
 import { useCreateBatch } from "../hooks/use-batches";
 import { BATCH_SOURCE_LABELS, type BatchSource } from "../types";
+import { MoleculeSelector } from "./molecule-selector";
 
 const NONE_VALUE = "__none__";
 
 interface CreateBatchDialogProps {
-  moleculeId: string;
+  moleculeId?: string;
   moleculeMw?: number;
   detectedSalt?: {
     salt_smiles: string;
@@ -50,6 +51,9 @@ export function CreateBatchDialog({
   const createMutation = useCreateBatch();
   const { data: saltEntries } = useSaltCatalog(true);
 
+  const [selectedMoleculeId, setSelectedMoleculeId] = useState<string | null>(
+    moleculeId ?? null
+  );
   const [source, setSource] = useState<string>("synthesized");
   const [amountValue, setAmountValue] = useState("");
   const [amountUnit, setAmountUnit] = useState("mg");
@@ -83,7 +87,7 @@ export function CreateBatchDialog({
     }
   }, [detectedSalt, saltEntries]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setSource("synthesized");
     setAmountValue("");
     setAmountUnit("mg");
@@ -91,12 +95,16 @@ export function CreateBatchDialog({
     setStoichiometry(1);
     setPurity("");
     setAppearance("");
-  };
+    if (!moleculeId) setSelectedMoleculeId(null);
+  }, [moleculeId]);
+
+  const resolvedMoleculeId = selectedMoleculeId ?? moleculeId;
 
   const handleSubmit = () => {
+    if (!resolvedMoleculeId) return;
     createMutation.mutate(
       {
-        molecule_id: moleculeId,
+        molecule_id: resolvedMoleculeId,
         source,
         amount_value: parseFloat(amountValue),
         amount_unit: amountUnit,
@@ -128,6 +136,16 @@ export function CreateBatchDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {!moleculeId && (
+            <div className="grid gap-2">
+              <Label>Compound *</Label>
+              <MoleculeSelector
+                selectedId={selectedMoleculeId}
+                onSelect={setSelectedMoleculeId}
+              />
+            </div>
+          )}
+
           <div className="grid gap-2">
             <Label>Source</Label>
             <Select value={source} onValueChange={setSource}>
@@ -239,7 +257,7 @@ export function CreateBatchDialog({
         <DialogFooter>
           <Button
             onClick={handleSubmit}
-            disabled={!amountValue || createMutation.isPending}
+            disabled={!resolvedMoleculeId || !amountValue || createMutation.isPending}
           >
             {createMutation.isPending ? "Creating..." : "Create Batch"}
           </Button>

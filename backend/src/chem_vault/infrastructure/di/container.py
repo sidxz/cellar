@@ -75,13 +75,16 @@ from chem_vault.application.inventory.synthesis_requests import (
 )
 from chem_vault.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from chem_vault.application.inventory.list_batches_global import ListBatchesGlobal
+from chem_vault.application.inventory.list_samples_global import ListSamplesGlobal
 from chem_vault.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from chem_vault.application.inventory.manage_sample import AliquotSample, ClearQuarantineSample, DisposeSample, MoveSample, QuarantineSample
 from chem_vault.application.inventory.delete_storage_location import DeleteStorageLocation
+from chem_vault.application.inventory.get_inventory_summary import GetInventorySummary
 from chem_vault.application.inventory.manage_storage import (
     CreateStorageLocation,
     GetStorageLocationChildren,
     ListStorageLocations,
+    ListStorageLocationsWithCounts,
 )
 from chem_vault.application.inventory.update_batch import UpdateBatch
 from chem_vault.application.inventory.update_storage_location import UpdateStorageLocation
@@ -859,6 +862,7 @@ def create_container(
     container.define(CreateSample, _sample_create)
     container.define(GetSample, _sample_query(GetSample))
     container.define(ListSamplesByBatch, _sample_query(ListSamplesByBatch))
+    container.define(ListSamplesGlobal, _sample_query(ListSamplesGlobal))
     container.define(AliquotSample, _sample_cmd(AliquotSample))
     def _move_sample(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -899,6 +903,13 @@ def create_container(
     container.define(DeleteStorageLocation, _storage_delete)
     container.define(ListStorageLocations, _storage_query(ListStorageLocations))
     container.define(GetStorageLocationChildren, _storage_query(GetStorageLocationChildren))
+    container.define(ListStorageLocationsWithCounts, _storage_query(ListStorageLocationsWithCounts))
+
+    def _inventory_summary(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetInventorySummary(uow)
+
+    container.define(GetInventorySummary, _inventory_summary)
 
     # --- Sample Requests ---
     def _sample_request_cmd(uc_cls):  # type: ignore[no-untyped-def]

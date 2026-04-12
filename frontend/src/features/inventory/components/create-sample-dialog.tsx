@@ -22,9 +22,11 @@ import {
 import { useCreateSample } from "../hooks/use-samples";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { CONTAINER_TYPE_LABELS, type StorageLocation } from "../types";
+import { MoleculeSelector } from "./molecule-selector";
+import { BatchSelector } from "./batch-selector";
 
 interface CreateSampleDialogProps {
-  batchId: string;
+  batchId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -36,6 +38,8 @@ export function CreateSampleDialog({
 }: CreateSampleDialogProps) {
   const createMutation = useCreateSample();
   const { data: locations } = useStorageLocations();
+  const [selectedMoleculeId, setSelectedMoleculeId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(batchId ?? null);
   const [barcode, setBarcode] = useState("");
   const [locationId, setLocationId] = useState("");
   const [containerType, setContainerType] = useState("vial");
@@ -44,10 +48,13 @@ export function CreateSampleDialog({
   const [solvent, setSolvent] = useState("");
   const [lowStockThreshold, setLowStockThreshold] = useState("");
 
+  const resolvedBatchId = selectedBatchId ?? batchId;
+
   const handleSubmit = () => {
+    if (!resolvedBatchId) return;
     createMutation.mutate(
       {
-        batch_id: batchId,
+        batch_id: resolvedBatchId,
         barcode,
         container_type: containerType,
         amount_value: parseFloat(amountValue),
@@ -67,6 +74,10 @@ export function CreateSampleDialog({
           setLocationId("");
           setSolvent("");
           setLowStockThreshold("");
+          if (!batchId) {
+            setSelectedMoleculeId(null);
+            setSelectedBatchId(null);
+          }
         },
       }
     );
@@ -83,6 +94,31 @@ export function CreateSampleDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {!batchId && (
+            <>
+              <div className="grid gap-2">
+                <Label>Compound *</Label>
+                <MoleculeSelector
+                  selectedId={selectedMoleculeId}
+                  onSelect={(id) => {
+                    setSelectedMoleculeId(id);
+                    setSelectedBatchId(null);
+                  }}
+                />
+              </div>
+              {selectedMoleculeId && (
+                <div className="grid gap-2">
+                  <Label>Batch *</Label>
+                  <BatchSelector
+                    moleculeId={selectedMoleculeId}
+                    selectedId={selectedBatchId}
+                    onSelect={setSelectedBatchId}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
           <div className="grid gap-2">
             <Label>Barcode</Label>
             <Input
@@ -173,7 +209,7 @@ export function CreateSampleDialog({
         <DialogFooter>
           <Button
             onClick={handleSubmit}
-            disabled={!barcode || !amountValue || createMutation.isPending}
+            disabled={!resolvedBatchId || !barcode || !amountValue || createMutation.isPending}
           >
             {createMutation.isPending ? "Creating..." : "Create Sample"}
           </Button>
