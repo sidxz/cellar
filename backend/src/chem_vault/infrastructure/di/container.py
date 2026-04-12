@@ -31,6 +31,7 @@ from chem_vault.application.chemical_registration.synthesis_routes import (
 )
 from chem_vault.application.inventory.create_batch import CreateBatch
 from chem_vault.application.inventory.create_sample import CreateSample
+from chem_vault.application.inventory.salt_matcher import SaltMatcher
 from chem_vault.application.inventory.sample_requests import (
     ApproveSampleRequest,
     CancelSampleRequest,
@@ -771,6 +772,8 @@ def create_container(
             mol_repo=SQLAlchemyMoleculeRepository(uow),
             dispatcher=c[EventDispatcher],
             structure_processor=c[StructureProcessorProtocol],
+            salt_matcher=SaltMatcher(SQLAlchemySaltEntryRepository(uow)),
+            batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
     container.define(BulkRegistrationService, _bulk_registration_service)

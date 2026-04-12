@@ -42,9 +42,9 @@ class BulkRegistrationItemResponse(BaseModel):
             success=item.success,
             is_new=item.is_new,
             molecule_id=item.molecule_id,
-            batch_id=getattr(item, 'batch_id', None),
-            batch_number=getattr(item, 'batch_number', None),
-            salt_matched=getattr(item, 'salt_matched', False),
+            batch_id=item.batch_id,
+            batch_number=item.batch_number,
+            salt_matched=item.salt_matched,
             error=item.error,
         )
 
@@ -91,6 +91,13 @@ async def start_bulk_registration(
             molecule_type=p.molecule_type,
             external_ids=p.external_ids,
             error=p.error,
+            amount_value=p.amount_value,
+            amount_unit=p.amount_unit,
+            salt_code=p.salt_code,
+            salt_stoichiometry=p.salt_stoichiometry,
+            purity=p.purity,
+            batch_source=p.batch_source,
+            appearance=p.appearance,
         )
         for p in parsed
     ]
