@@ -70,6 +70,9 @@ class ReadoutValueResponse(BaseModel):
     mean: float | None = None
     curve_class: str | None = None
     curve_params: CurveParamsResponse | None = None
+    data_points: list[dict[str, float]] | None = None
+    n: int | None = None
+    sd: float | None = None
 
 
 class ReadoutDefInfoResponse(BaseModel):
@@ -174,6 +177,9 @@ async def get_protocol_activity_summary(
                             if rv.curve_params is not None
                             else None
                         ),
+                        data_points=rv.data_points,
+                        n=rv.n,
+                        sd=rv.sd,
                     )
                     for name, rv in item.readouts.items()
                 },
