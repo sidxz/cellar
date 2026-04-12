@@ -9,6 +9,7 @@ import {
   Lock,
   Paperclip,
   Unlock,
+  FlaskConical,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -39,6 +40,7 @@ import {
   useRejectRun,
   useLockRun,
   useUnlockRun,
+  useFitCurves,
 } from "../hooks/use-runs";
 import {
   PLATE_FORMAT_LABELS,
@@ -59,6 +61,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const rejectMutation = useRejectRun();
   const lockMutation = useLockRun();
   const unlockMutation = useUnlockRun();
+  const fitCurvesMutation = useFitCurves();
 
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -180,6 +183,17 @@ export function RunDetail({ runId }: RunDetailProps) {
                 >
                   <Unlock className="mr-2 h-4 w-4" />
                   Unlock
+                </Button>
+              )}
+              {status !== "draft" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fitCurvesMutation.mutate(runId)}
+                  disabled={fitCurvesMutation.isPending}
+                >
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  {fitCurvesMutation.isPending ? "Fitting..." : "Fit Curves"}
                 </Button>
               )}
             </>

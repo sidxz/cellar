@@ -137,3 +137,20 @@ export function useUpdateRun() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run updated"); },
   });
 }
+
+export function useFitCurves() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) =>
+      customInstance<{ curves_fitted: number }>({
+        url: `/api/v1/runs/${runId}/fit-curves`,
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      qc.invalidateQueries({ queryKey: ["compound-curves"] });
+      qc.invalidateQueries({ queryKey: ["protocol-activity"] });
+      showSuccess(`Fitted ${data.curves_fitted} dose-response curves`);
+    },
+  });
+}

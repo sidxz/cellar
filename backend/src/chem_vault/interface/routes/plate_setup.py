@@ -327,3 +327,48 @@ async def import_run_readouts(
         unmatched=import_result.unmatched,
         readouts_created=import_result.readouts_created,
     )
+
+
+# ---------------------------------------------------------------------------
+# Compute / re-fit dose-response curves
+# ---------------------------------------------------------------------------
+
+
+class FitCurvesResponse(BaseModel):
+    curves_fitted: int
+
+
+@router.post(
+    "/runs/{run_id}/fit-curves",
+    response_model=FitCurvesResponse,
+    tags=["screening-runs"],
+)
+async def fit_curves_for_run(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    calc_engine: ReadoutCalculationEngineDep,
+    uow: UoWDep,
+) -> FitCurvesResponse:
+    """Trigger dose-response curve fitting for a run.
+
+    Idempotent — deletes previous auto-fitted curves and re-fits from
+    the current readout data.  Uses the full ReadoutCalculationEngine
+    pipeline (normalisation + curve fitting).
+    """
+    await calc_engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+
+    # Count resulting curves
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+        DoseResponseCurveModel,
+    )
+    from sqlalchemy import func, select
+
+    async with uow as u:
+        count = (
+            await u.session.execute(
+                select(func.count())
+                .select_from(DoseResponseCurveModel)
+                .where(DoseResponseCurveModel.run_id == run_id)
+            )
+        ).scalar_one()
+    return FitCurvesResponse(curves_fitted=count)
