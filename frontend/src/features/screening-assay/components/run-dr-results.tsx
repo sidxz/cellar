@@ -23,6 +23,7 @@ import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { fetchStructureImages } from "@/shared/lib/export/structure-image";
 import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
+import { CurveNavigator } from "./curve-navigator";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
@@ -368,6 +369,26 @@ export function RunDoseResponseResults({
     [allRows, activeCriteria]
   );
 
+  // Curve navigation (prev/next in single-select mode)
+  const selectedIndex = selectedRows.length === 1
+    ? filteredRows.findIndex((r) => r.molecule_id === selectedRows[0].molecule_id)
+    : -1;
+
+  const navigateTo = useCallback((index: number) => {
+    const target = filteredRows[index];
+    if (target) setSelectedRows([target]);
+  }, [filteredRows]);
+
+  const handlePrev = useCallback(() => {
+    const newIdx = selectedIndex <= 0 ? filteredRows.length - 1 : selectedIndex - 1;
+    navigateTo(newIdx);
+  }, [selectedIndex, filteredRows.length, navigateTo]);
+
+  const handleNext = useCallback(() => {
+    const newIdx = selectedIndex >= filteredRows.length - 1 ? 0 : selectedIndex + 1;
+    navigateTo(newIdx);
+  }, [selectedIndex, filteredRows.length, navigateTo]);
+
   const columnDefs = useMemo(() => buildColumnDefs(), []);
 
   // Excel enhancer — fill image columns + add SMILES/Synonyms + raw data sheet
@@ -622,7 +643,7 @@ export function RunDoseResponseResults({
       {/* Detail panel — single compound selected */}
       {selectedCurves && selectedRows.length === 1 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">
               {selectedRows[0].molecule_name}
               {selectedRows[0].batch_number && (
@@ -631,6 +652,12 @@ export function RunDoseResponseResults({
                 </span>
               )}
             </CardTitle>
+            <CurveNavigator
+              currentIndex={selectedIndex}
+              total={filteredRows.length}
+              onPrev={handlePrev}
+              onNext={handleNext}
+            />
           </CardHeader>
           <CardContent>
             <DoseResponseChart

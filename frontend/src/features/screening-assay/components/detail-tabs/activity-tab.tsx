@@ -26,6 +26,7 @@ import { useProtocolActivity } from "../../hooks/use-protocol-activity";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { DoseResponseChart } from "../dose-response-chart";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
+import { CurveNavigator } from "../curve-navigator";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
@@ -341,6 +342,26 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     () => applyFilters(activity?.items ?? [], activeCriteria),
     [activity?.items, activeCriteria]
   );
+
+  // Curve navigation (prev/next in single-select mode)
+  const selectedIndex = selectedRows.length === 1
+    ? filteredItems.findIndex((r) => r.molecule_id === selectedRows[0].molecule_id)
+    : -1;
+
+  const navigateTo = useCallback((index: number) => {
+    const target = filteredItems[index];
+    if (target) setSelectedRows([target]);
+  }, [filteredItems]);
+
+  const handlePrev = useCallback(() => {
+    const newIdx = selectedIndex <= 0 ? filteredItems.length - 1 : selectedIndex - 1;
+    navigateTo(newIdx);
+  }, [selectedIndex, filteredItems.length, navigateTo]);
+
+  const handleNext = useCallback(() => {
+    const newIdx = selectedIndex >= filteredItems.length - 1 ? 0 : selectedIndex + 1;
+    navigateTo(newIdx);
+  }, [selectedIndex, filteredItems.length, navigateTo]);
 
   // AG Grid columns (dynamic from readout definitions)
   const columnDefs = useMemo<ColDef<CompoundActivity>[]>(
@@ -761,7 +782,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       {/* Compound detail panel — single select */}
       {selectedRows.length === 1 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">
               {selectedRows[0].registration_number}
               {selectedRows[0].molecule_name && (
@@ -770,6 +791,12 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                 </span>
               )}
             </CardTitle>
+            <CurveNavigator
+              currentIndex={selectedIndex}
+              total={filteredItems.length}
+              onPrev={handlePrev}
+              onNext={handleNext}
+            />
           </CardHeader>
           <CardContent className="space-y-4">
             {curvesLoading ? (
