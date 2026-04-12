@@ -13,6 +13,7 @@ from chem_vault.domain.shared.value_objects import Amount, BatchNumber, Concentr
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
 
 
@@ -47,15 +48,29 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> BatchNumber:
-        # Global workspace counter — batch_number is unique per workspace.
-        stmt = (
+        # Batch number = {molecule_reg_number}-{seq} (e.g., CV-00001-001).
+        # Count existing batches for this molecule to determine the next seq.
+
+        # 1. Get molecule registration number
+        mol_stmt = select(MoleculeModel.registration_number).where(
+            MoleculeModel.id == molecule_id
+        )
+        mol_result = await self._session.execute(mol_stmt)
+        reg_number = mol_result.scalar_one()
+
+        # 2. Count existing batches for this molecule
+        count_stmt = (
             select(func.count())
             .select_from(BatchModel)
-            .where(BatchModel.workspace_id == workspace_id)
+            .where(
+                BatchModel.workspace_id == workspace_id,
+                BatchModel.molecule_id == molecule_id,
+            )
         )
-        result = await self._session.execute(stmt)
-        count = result.scalar() or 0
-        return BatchNumber(value=f"B-{count + 1:03d}")
+        count_result = await self._session.execute(count_stmt)
+        count = count_result.scalar() or 0
+
+        return BatchNumber(value=f"{reg_number}-{count + 1:03d}")
 
     # ------------------------------------------------------------------
     # Mapping
