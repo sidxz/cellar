@@ -124,6 +124,10 @@ export function MoleculeRegistrationDialog({
       setError("SMILES is required for disclosed compounds");
       return;
     }
+    if (includeBatch && !batchAmount) {
+      setError("Amount is required when including a batch");
+      return;
+    }
 
     // Validate required custom fields (based on active form overrides or field definitions)
     for (const field of customFieldDefs ?? []) {
