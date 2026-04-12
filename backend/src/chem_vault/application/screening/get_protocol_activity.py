@@ -176,27 +176,58 @@ class GetProtocolActivitySummary:
                 )
 
             # ----------------------------------------------------------
-            # Query 1: Molecule base — all molecules tested + run_count
+            # Query 1: Molecule base — all molecules with readout data
+            #          OR dose-response curves (some curves are directly
+            #          imported without accompanying readout data rows)
             # ----------------------------------------------------------
-            mol_stmt = (
+            from sqlalchemy import literal_column, union_all
+
+            # Source A: molecules from readout data
+            rd_mols = (
                 select(
                     ReadoutDataModel.molecule_id,
-                    MoleculeModel.name.label("molecule_name"),
-                    MoleculeModel.registration_number,
                     func.count(distinct(ReadoutDataModel.run_id)).label("run_count"),
                     func.max(RunModel.run_date).label("last_tested"),
                 )
                 .select_from(ReadoutDataModel)
                 .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
-                .join(MoleculeModel, ReadoutDataModel.molecule_id == MoleculeModel.id)
                 .where(
                     RunModel.protocol_id == pid,
                     RunModel.workspace_id == ws,
                     RunModel.status.in_(VALID_STATUSES),
                     ReadoutDataModel.molecule_id.isnot(None),
                 )
+                .group_by(ReadoutDataModel.molecule_id)
+            )
+
+            # Source B: molecules from dose-response curves only
+            drc_mols = (
+                select(
+                    DoseResponseCurveModel.molecule_id,
+                    func.count(distinct(DoseResponseCurveModel.run_id)).label("run_count"),
+                    func.max(RunModel.run_date).label("last_tested"),
+                )
+                .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+                .where(
+                    DoseResponseCurveModel.protocol_id == pid,
+                    RunModel.status.in_(VALID_STATUSES),
+                )
+                .group_by(DoseResponseCurveModel.molecule_id)
+            )
+
+            # Merge: take max run_count and latest date per molecule
+            combined = union_all(rd_mols, drc_mols).subquery("combined")
+            mol_stmt = (
+                select(
+                    combined.c.molecule_id,
+                    MoleculeModel.name.label("molecule_name"),
+                    MoleculeModel.registration_number,
+                    func.max(combined.c.run_count).label("run_count"),
+                    func.max(combined.c.last_tested).label("last_tested"),
+                )
+                .join(MoleculeModel, combined.c.molecule_id == MoleculeModel.id)
                 .group_by(
-                    ReadoutDataModel.molecule_id,
+                    combined.c.molecule_id,
                     MoleculeModel.name,
                     MoleculeModel.registration_number,
                 )
