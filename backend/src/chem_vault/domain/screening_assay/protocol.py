@@ -352,7 +352,11 @@ class Protocol(AggregateRoot):
     def set_recommended_hit_criteria(
         self, criteria: list[HitCriterion] | None
     ) -> None:
-        """Set or clear recommended hit criteria for this protocol."""
+        """Set or clear recommended hit criteria for this protocol.
+
+        Intentionally NOT draft-guarded — protocol owners set criteria on
+        active protocols after publishing.
+        """
         if criteria is not None:
             validate_hit_criteria(criteria)
         self.recommended_hit_criteria = criteria

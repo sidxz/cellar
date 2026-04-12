@@ -135,6 +135,7 @@ class ProtocolResponse(BaseModel):
     control_layouts: dict[str, str] | None = None
     ontology_annotations: dict[str, list[dict]] | None = None
     project_ids: list[uuid.UUID] = []
+    recommended_hit_criteria: list[dict] | None = None
 
     @classmethod
     def from_domain(  # type: ignore[no-untyped-def]
@@ -213,6 +214,11 @@ class ProtocolResponse(BaseModel):
             ),
             ontology_annotations=onto_annots,
             project_ids=project_ids or [],
+            recommended_hit_criteria=(
+                [c.to_dict() for c in p.recommended_hit_criteria]
+                if p.recommended_hit_criteria
+                else None
+            ),
         )
 
 
