@@ -25,6 +25,7 @@ from chem_vault.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
 )
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
+from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from chem_vault.interface.routes.batches import BatchResponse
 from chem_vault.application.chemical_registration.search_molecules import SearchMoleculesQuery
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
@@ -322,12 +323,27 @@ def _get_create_batch(c: Annotated[Container, Depends(get_container)]) -> Create
     return c[CreateBatch]
 
 
+def _get_salt_matcher_uow(
+    c: Annotated[Container, Depends(get_container)],
+) -> tuple[SaltMatcher, Any]:
+    """Return (SaltMatcher, uow) — caller must use ``async with uow:``."""
+    from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
+        SQLAlchemySaltEntryRepository,
+    )
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    uow = AsyncUnitOfWork(c[async_sessionmaker])
+    return SaltMatcher(SQLAlchemySaltEntryRepository(uow)), uow
+
+
 @router.post("", response_model=RegistrationResponse, status_code=201)
 async def register_molecule(
     body: RegisterMoleculeBody,
     auth: AuthDep,
     use_case: RegisterMoleculeDep,
     create_batch_uc: Annotated[CreateBatch, Depends(_get_create_batch)],
+    salt_matcher_uow: Annotated[tuple[SaltMatcher, Any], Depends(_get_salt_matcher_uow)],
 ) -> RegistrationResponse:
     command = RegisterMoleculeCommand(
         workspace_id=auth.workspace_id,
@@ -348,6 +364,35 @@ async def register_molecule(
     batch_response: BatchResponse | None = None
     if body.batch is not None:
         b = body.batch
+
+        # Auto-fill salt from detected_salt if user didn't pick one
+        salt_entry_id = b.salt_entry_id
+        salt_name = b.salt_name
+        salt_smiles = b.salt_smiles
+        salt_stoichiometry = b.salt_stoichiometry
+        formula_weight = b.formula_weight
+
+        if salt_entry_id is None and outcome.detected_salt is not None:
+            _salt_matcher, _salt_uow = salt_matcher_uow
+            async with _salt_uow:
+                matched = await _salt_matcher.match_by_smiles(
+                    auth.workspace_id, outcome.detected_salt.salt_smiles
+                )
+            if matched is not None:
+                salt_entry_id = matched.id
+                salt_name = matched.name
+                salt_smiles = matched.smiles
+                salt_stoichiometry = outcome.detected_salt.stoichiometry
+                mol_mw = (
+                    outcome.molecule.descriptors.molecular_weight
+                    if outcome.molecule.descriptors
+                    else None
+                )
+                if mol_mw is not None:
+                    formula_weight = compute_formula_weight(
+                        mol_mw, matched.molecular_weight, salt_stoichiometry
+                    )
+
         batch_cmd = CreateBatchCommand(
             workspace_id=auth.workspace_id,
             molecule_id=outcome.molecule.id,
@@ -355,11 +400,11 @@ async def register_molecule(
             chemist=auth.user_id,
             amount_value=b.amount_value,
             amount_unit=b.amount_unit,
-            salt_entry_id=b.salt_entry_id,
-            salt_name=b.salt_name,
-            salt_smiles=b.salt_smiles,
-            salt_stoichiometry=b.salt_stoichiometry,
-            formula_weight=b.formula_weight,
+            salt_entry_id=salt_entry_id,
+            salt_name=salt_name,
+            salt_smiles=salt_smiles,
+            salt_stoichiometry=salt_stoichiometry,
+            formula_weight=formula_weight,
             purity=b.purity,
             concentration_value=b.concentration_value,
             concentration_unit=b.concentration_unit,
