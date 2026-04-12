@@ -570,9 +570,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       const smilesCol = lastCol + 1;
       const synonymsCol = lastCol + 2;
       worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
-      worksheet.getRow(1).getCell(smilesCol).font = { bold: true };
       worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
-      worksheet.getRow(1).getCell(synonymsCol).font = { bold: true };
       for (let r = 0; r < rows.length; r++) {
         const row = rows[r];
         worksheet.getRow(r + 2).getCell(smilesCol).value = row.smiles ?? "";
@@ -584,13 +582,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
 
       // Add raw data points sheet
       const rawSheet = workbook.addWorksheet("Raw Data Points");
-      const rawHeader = rawSheet.addRow([
-        "Compound",
-        "SMILES",
-        "Concentration",
-        "Response",
-      ]);
-      rawHeader.font = { bold: true };
+      rawSheet.addRow(["Compound", "SMILES", "Concentration", "Response"]);
 
       for (const row of rows) {
         const name =

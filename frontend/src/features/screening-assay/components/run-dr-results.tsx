@@ -85,7 +85,7 @@ function curveClassBadge(cc: CurveClass | null) {
 /** Group curves by molecule, pick best (lowest fitted_value for IC50-type) */
 function buildCompoundRows(
   curves: DoseResponseCurve[],
-  molMap: Map<string, { smiles: string | null; synonyms: string[] }>,
+  molMap: Map<string, { registration_number: string; smiles: string | null; synonyms: string[] }>,
 ): CompoundCurveRow[] {
   const byMolecule = new Map<string, DoseResponseCurve[]>();
   for (const c of curves) {
@@ -119,7 +119,7 @@ function buildCompoundRows(
     rows.push({
       molecule_id: best.molecule_id,
       molecule_name: best.molecule_name ?? best.molecule_id.slice(0, 8),
-      registration_number: best.molecule_name ?? best.molecule_id.slice(0, 8),
+      registration_number: molMap.get(best.molecule_id)?.registration_number ?? best.molecule_id.slice(0, 8),
       smiles: molMap.get(best.molecule_id)?.smiles ?? null,
       batch_number: best.batch_number,
       curve_type: best.curve_type,
@@ -181,7 +181,7 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
   return [
     {
       headerName: "Compound",
-      field: "molecule_name",
+      field: "registration_number",
       pinned: "left",
       flex: 1,
       minWidth: 160,
@@ -191,10 +191,10 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
         if (!params.data) return null;
         return (
           <div className="leading-tight">
-            <span className="font-medium">{params.data.molecule_name}</span>
-            {params.data.batch_number && (
+            <span className="font-medium">{params.data.registration_number}</span>
+            {params.data.molecule_name && (
               <span className="ml-2 text-xs text-muted-foreground">
-                {params.data.batch_number}
+                {params.data.molecule_name}
               </span>
             )}
           </div>
@@ -313,11 +313,14 @@ export function RunDoseResponseResults({
   const { data: molecules } = useMolecules();
 
   const molMap = useMemo(() => {
-    const m = new Map<string, { smiles: string | null; synonyms: string[] }>();
+    const m = new Map<string, { registration_number: string; smiles: string | null; synonyms: string[] }>();
     for (const mol of molecules ?? []) {
       m.set(mol.id, {
+        registration_number: mol.registration_number,
         smiles: mol.structure?.smiles ?? null,
-        synonyms: mol.identifiers?.map((id) => id.identifier) ?? [],
+        synonyms: mol.identifiers
+          ?.filter((id) => id.identifier_type === "custom")
+          .map((id) => id.identifier) ?? [],
       });
     }
     return m;
@@ -400,9 +403,7 @@ export function RunDoseResponseResults({
       const smilesCol = lastCol + 1;
       const synonymsCol = lastCol + 2;
       worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
-      worksheet.getRow(1).getCell(smilesCol).font = { bold: true };
       worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
-      worksheet.getRow(1).getCell(synonymsCol).font = { bold: true };
       for (let r = 0; r < rows.length; r++) {
         const mol = molMap.get(rows[r].molecule_id);
         worksheet.getRow(r + 2).getCell(smilesCol).value = mol?.smiles ?? "";
@@ -414,8 +415,7 @@ export function RunDoseResponseResults({
 
       // Raw data points sheet
       const rawSheet = workbook.addWorksheet("Raw Data Points");
-      const rawHeader = rawSheet.addRow(["Compound", "SMILES", "Concentration", "Response"]);
-      rawHeader.font = { bold: true };
+      rawSheet.addRow(["Compound", "SMILES", "Concentration", "Response"]);
       for (const row of rows) {
         const name = row.molecule_name || row.molecule_id;
         const mol = molMap.get(row.molecule_id);

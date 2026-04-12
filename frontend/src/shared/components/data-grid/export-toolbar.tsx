@@ -74,17 +74,9 @@ export function ExportToolbar({
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Data");
 
-      // Header row
+      // Header row — simple bold, no background color
       const headerRow = worksheet.addRow(headers);
       headerRow.font = { bold: true };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF27272A" },
-      };
-      headerRow.eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: "FFA1A1AA" } };
-      });
 
       // Data rows
       for (const row of displayRows) {

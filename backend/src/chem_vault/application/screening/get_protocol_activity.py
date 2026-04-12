@@ -250,7 +250,10 @@ class GetProtocolActivitySummary:
                         MoleculeIdentifierModel.molecule_id,
                         MoleculeIdentifierModel.identifier,
                     )
-                    .where(MoleculeIdentifierModel.molecule_id.in_(mol_ids))
+                    .where(
+                        MoleculeIdentifierModel.molecule_id.in_(mol_ids),
+                        MoleculeIdentifierModel.identifier_type == "custom",
+                    )
                 )
                 syn_rows = (await session.execute(syn_stmt)).all()
                 for sr in syn_rows:
