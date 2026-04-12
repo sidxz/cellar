@@ -21,6 +21,7 @@ interface PivotRow {
   label: string;
   moleculeId: string;
   batchId: string;
+  wellId: string | null;
   values: Map<string, ReadoutData>;
 }
 
@@ -57,11 +58,13 @@ export function ReadoutDataTable({
   const pivotRows = useMemo<PivotRow[]>(() => {
     if (!data) return [];
 
+    // Group by (molecule, batch, well) — one row per data point so
+    // dose-response data (multiple concentrations per compound) is not
+    // collapsed into a single row.
     const groups = new Map<string, PivotRow>();
     for (const row of data) {
-      // Skip control well readouts (no molecule)
       if (!row.molecule_id) continue;
-      const key = `${row.molecule_id}::${row.batch_id}`;
+      const key = `${row.molecule_id}::${row.batch_id}::${row.well_id ?? "no-well"}`;
       let group = groups.get(key);
       if (!group) {
         const mol = molMap.get(row.molecule_id);
@@ -70,6 +73,7 @@ export function ReadoutDataTable({
           label: mol ? `${mol.reg} \u2014 ${mol.name}` : "Unknown compound",
           moleculeId: row.molecule_id,
           batchId: row.batch_id ?? "",
+          wellId: row.well_id,
           values: new Map(),
         };
         groups.set(key, group);
