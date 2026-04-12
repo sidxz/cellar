@@ -1,6 +1,7 @@
 """Tests for SavedSearch aggregate."""
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -106,6 +107,35 @@ class TestSavedSearchCreate:
         )
         assert search.columns is None
 
+    def test_create_with_description(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id,
+            name="Described",
+            query=sample_query,
+            created_by=user_id,
+            description="Finds benzene analogs with high similarity",
+        )
+        assert search.description == "Finds benzene analogs with high similarity"
+
+    def test_create_without_description_defaults_none(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="No desc", query=sample_query, created_by=user_id
+        )
+        assert search.description is None
+
+    def test_new_fields_default_none(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="Defaults", query=sample_query, created_by=user_id
+        )
+        assert search.last_run_at is None
+        assert search.result_count is None
+
 
 class TestSavedSearchVisibility:
     def test_project_visibility_requires_project_id(
@@ -210,3 +240,89 @@ class TestSavedSearchUpdate:
         search.update(visibility=SearchVisibility.PROJECT, project_id=pid)
         assert search.visibility == SearchVisibility.PROJECT
         assert search.project_id == pid
+
+    def test_update_description(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
+        )
+        search.update(description="Updated description")
+        assert search.description == "Updated description"
+
+    def test_update_description_to_none(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id,
+            name="S1",
+            query=sample_query,
+            created_by=user_id,
+            description="Has a description",
+        )
+        search.update(description=None)
+        assert search.description is None
+
+    def test_update_without_description_preserves_existing(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id,
+            name="S1",
+            query=sample_query,
+            created_by=user_id,
+            description="Original",
+        )
+        search.update(name="S2")
+        assert search.description == "Original"
+
+
+class TestSavedSearchRecordExecution:
+    def test_record_execution_sets_fields(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
+        )
+        before = datetime.now(UTC)
+        search.record_execution(result_count=42)
+        after = datetime.now(UTC)
+        assert search.result_count == 42
+        assert search.last_run_at is not None
+        assert before <= search.last_run_at <= after
+
+    def test_record_execution_updates_updated_at(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
+        )
+        old_updated = search.updated_at
+        search.record_execution(result_count=10)
+        assert search.updated_at is not None
+        if old_updated is not None:
+            assert search.updated_at >= old_updated
+
+    def test_record_execution_overwrites_previous(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
+        )
+        search.record_execution(result_count=5)
+        first_run = search.last_run_at
+        search.record_execution(result_count=99)
+        assert search.result_count == 99
+        assert search.last_run_at is not None
+        assert first_run is not None
+        assert search.last_run_at >= first_run
+
+    def test_record_execution_zero_results(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
+    ) -> None:
+        search = SavedSearch.create(
+            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
+        )
+        search.record_execution(result_count=0)
+        assert search.result_count == 0
+        assert search.last_run_at is not None

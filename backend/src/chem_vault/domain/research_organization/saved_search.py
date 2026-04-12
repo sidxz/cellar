@@ -31,6 +31,9 @@ class SavedSearch(AggregateRoot):
         visibility: SearchVisibility = SearchVisibility.PRIVATE,
         project_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
+        description: str | None = None,
+        last_run_at: datetime | None = None,
+        result_count: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -45,6 +48,9 @@ class SavedSearch(AggregateRoot):
         self.visibility = visibility
         self.project_id = project_id
         self.created_by = created_by
+        self.description = description
+        self.last_run_at = last_run_at
+        self.result_count = result_count
         self._validate_visibility()
 
     def _validate_visibility(self) -> None:
@@ -64,6 +70,7 @@ class SavedSearch(AggregateRoot):
         visibility: SearchVisibility = SearchVisibility.PRIVATE,
         project_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
+        description: str | None = None,
     ) -> SavedSearch:
         search = cls(
             workspace_id=workspace_id,
@@ -73,6 +80,7 @@ class SavedSearch(AggregateRoot):
             visibility=visibility,
             project_id=project_id,
             created_by=created_by,
+            description=description,
         )
         search.register_event(
             SavedSearchCreated(
@@ -92,6 +100,7 @@ class SavedSearch(AggregateRoot):
         columns: dict[str, Any] | None = ...,  # type: ignore[assignment]
         visibility: SearchVisibility | None = None,
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        description: str | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields.
 
@@ -110,5 +119,13 @@ class SavedSearch(AggregateRoot):
             self.visibility = visibility
         if project_id is not ...:
             self.project_id = project_id
+        if description is not ...:
+            self.description = description
         self._validate_visibility()
+        self.updated_at = datetime.now(UTC)
+
+    def record_execution(self, *, result_count: int) -> None:
+        """Record that this search was executed, updating run metadata."""
+        self.last_run_at = datetime.now(UTC)
+        self.result_count = result_count
         self.updated_at = datetime.now(UTC)
