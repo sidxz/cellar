@@ -15,16 +15,16 @@ import { ProtocolList } from "./protocol-list";
 import { TargetList } from "./target-list";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateTargetDialog } from "./create-target-dialog";
-import { useCddEnabled } from "../hooks/use-cdd-enabled";
-import { CddImportDialog } from "./cdd-import-dialog";
+import { useVaultEnabled } from "../hooks/use-vault-enabled";
+import { VaultImportDialog } from "./vault-import-dialog";
 
 export function ScreeningDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [createTargetOpen, setCreateTargetOpen] = useState(false);
-  const [cddImportOpen, setCddImportOpen] = useState(false);
-  const { enabled: cddEnabled } = useCddEnabled();
+  const [vaultImportOpen, setVaultImportOpen] = useState(false);
+  const { enabled: vaultEnabled } = useVaultEnabled();
 
   return (
     <div>
@@ -48,10 +48,10 @@ export function ScreeningDashboard() {
 
           {tab === "protocols" && (
             <div className="flex items-center gap-2">
-              {cddEnabled && (
-                <Button variant="outline" onClick={() => setCddImportOpen(true)}>
+              {vaultEnabled && (
+                <Button variant="outline" onClick={() => setVaultImportOpen(true)}>
                   <Download className="mr-2 h-4 w-4" />
-                  Import from CDD
+                  Import from Vault
                 </Button>
               )}
               <Button onClick={() => setCreateProtocolOpen(true)}>
@@ -89,9 +89,9 @@ export function ScreeningDashboard() {
         open={createTargetOpen}
         onOpenChange={setCreateTargetOpen}
       />
-      <CddImportDialog
-        open={cddImportOpen}
-        onOpenChange={setCddImportOpen}
+      <VaultImportDialog
+        open={vaultImportOpen}
+        onOpenChange={setVaultImportOpen}
         onImported={(protocolId) => {
           router.push(`/assays/protocols/${protocolId}`);
         }}

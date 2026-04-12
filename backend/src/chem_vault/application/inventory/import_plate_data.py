@@ -1,4 +1,4 @@
-"""3-phase plate data import pipeline (CDD-style)."""
+"""3-phase plate data import pipeline (industry-standard)."""
 
 from __future__ import annotations
 

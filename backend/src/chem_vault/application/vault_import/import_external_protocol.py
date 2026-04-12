@@ -1,4 +1,4 @@
-"""ImportCddProtocol command -- fetch, map, and create a DRAFT Protocol."""
+"""ImportExternalProtocol command -- fetch, map, and create a DRAFT Protocol."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
-from chem_vault.application.cdd_import._check_config import check_cdd_configured
-from chem_vault.application.cdd_import.gateway import CddProtocolGateway
-from chem_vault.application.cdd_import.mapper import map_cdd_protocol
+from chem_vault.application.vault_import._check_config import check_vault_configured
+from chem_vault.application.vault_import.gateway import ExternalProtocolGateway
+from chem_vault.application.vault_import.mapper import map_external_protocol
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import ProtocolType
@@ -26,21 +26,21 @@ from chem_vault.domain.workspace_config.repository import (
     ExternalApiKeyRepository,
     WorkspaceSettingsRepository,
 )
-from chem_vault.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
+from chem_vault.application.vault_import.errors import VaultAuthError, VaultConnectionError, VaultNotFoundError
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 
 
 @dataclass(frozen=True, kw_only=True)
-class ImportCddProtocolCommand(Command):
+class ImportExternalProtocolCommand(Command):
     workspace_id: uuid.UUID
-    cdd_protocol_id: int
+    external_protocol_id: int
     name_override: str | None = None
 
 
-class ImportCddProtocol:
+class ImportExternalProtocol:
     def __init__(
         self,
-        gateway: CddProtocolGateway,
+        gateway: ExternalProtocolGateway,
         secret_provider: SecretProvider,
         settings_repo: WorkspaceSettingsRepository,
         api_key_repo: ExternalApiKeyRepository,
@@ -57,14 +57,14 @@ class ImportCddProtocol:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: ImportCddProtocolCommand, auth: AuthContext | None = None
+        self, input: ImportExternalProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         if auth is None:
             return Failure(AuthorizationError("Authentication required"))
         require_editor(auth)
 
         async with self._uow:
-            config = await check_cdd_configured(
+            config = await check_vault_configured(
                 input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
             )
             if isinstance(config, Failure):
@@ -73,20 +73,20 @@ class ImportCddProtocol:
             vault_id, api_key = config.unwrap()
 
             try:
-                raw = await self._gateway.get_protocol(vault_id, api_key, input.cdd_protocol_id)
-            except CddAuthError:
-                return Failure(ValidationError("CDD API key is invalid or expired"))
-            except CddNotFoundError:
-                return Failure(NotFoundError("CDD Protocol", str(input.cdd_protocol_id)))
-            except CddConnectionError:
-                return Failure(ValidationError("Could not connect to CDD Vault"))
+                raw = await self._gateway.get_protocol(vault_id, api_key, input.external_protocol_id)
+            except VaultAuthError:
+                return Failure(ValidationError("Vault API key is invalid or expired"))
+            except VaultNotFoundError:
+                return Failure(NotFoundError("External Protocol", str(input.external_protocol_id)))
+            except VaultConnectionError:
+                return Failure(ValidationError("Could not connect to external vault"))
 
-            mapping = map_cdd_protocol(raw)
+            mapping = map_external_protocol(raw)
 
             if not mapping.readouts:
                 return Failure(
                     ValidationError(
-                        "No mappable readouts found in CDD protocol. "
+                        "No mappable readouts found in external protocol. "
                         + (f"Warnings: {'; '.join(w.reason for w in mapping.warnings)}" if mapping.warnings else "")
                     )
                 )
@@ -119,7 +119,7 @@ class ImportCddProtocol:
                 for c in mapping.conditions
             ] or None
 
-            # Map CDD category to ProtocolType (case-insensitive)
+            # Map category to ProtocolType (case-insensitive)
             protocol_type = ProtocolType.BIOCHEMICAL
             if mapping.category:
                 cat_normalized = mapping.category.lower().replace(" ", "_").replace("-", "_")

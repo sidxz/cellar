@@ -3,7 +3,7 @@
 import { useApiKeys } from "@/features/workspace-config/hooks/use-api-keys";
 import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
 
-export function useCddEnabled() {
+export function useVaultEnabled() {
   const { data: apiKeys, isLoading: keysLoading } = useApiKeys();
   const { data: settings, isLoading: settingsLoading } = useWorkspaceSettings();
 
@@ -11,10 +11,10 @@ export function useCddEnabled() {
 
   if (loading) return { enabled: false, loading: true };
 
-  const hasCddKey = apiKeys?.some(
-    (k) => k.key_name === "cdd_vault" && k.is_active
+  const hasVaultKey = apiKeys?.some(
+    (k) => k.key_name === "external_vault" && k.is_active
   );
-  const hasVaultId = !!settings?.cdd_vault_id;
+  const hasVaultId = !!settings?.external_vault_id;
 
-  return { enabled: !!hasCddKey && hasVaultId, loading: false };
+  return { enabled: !!hasVaultKey && hasVaultId, loading: false };
 }

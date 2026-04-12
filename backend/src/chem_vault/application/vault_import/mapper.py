@@ -1,4 +1,4 @@
-"""Pure mapper: CDD Vault protocol JSON -> domain-ready DTOs.
+"""Pure mapper: external vault protocol JSON -> domain-ready DTOs.
 
 No I/O. No domain imports except enums and VOs needed for type mapping.
 """
@@ -20,19 +20,19 @@ from chem_vault.domain.screening_assay.enums import (
 )
 
 __all__ = [
-    "CddProtocolSummary",
+    "ExternalProtocolSummary",
     "MappedReadout",
     "MappedCondition",
     "MappingWarning",
-    "CddProtocolMappingResult",
-    "map_cdd_protocol_list",
-    "map_cdd_protocol",
+    "ExternalProtocolMappingResult",
+    "map_external_protocol_list",
+    "map_external_protocol",
 ]
 
 
 @dataclass(frozen=True)
-class CddProtocolSummary:
-    cdd_id: int
+class ExternalProtocolSummary:
+    external_id: int
     name: str
     readout_count: int
 
@@ -40,7 +40,7 @@ class CddProtocolSummary:
 @dataclass(frozen=True)
 class MappingWarning:
     field_name: str
-    cdd_type: str
+    source_type: str
     reason: str
 
 
@@ -66,17 +66,17 @@ class MappedCondition:
 
 
 @dataclass(frozen=True)
-class CddProtocolMappingResult:
+class ExternalProtocolMappingResult:
     name: str
     description: str | None
     category: str | None
     readouts: list[MappedReadout]
     conditions: list[MappedCondition]
     warnings: list[MappingWarning]
-    cdd_source_id: int
+    external_source_id: int
 
 
-_CDD_READOUT_TYPE_MAP: dict[str, ReadoutDataType] = {
+_READOUT_TYPE_MAP: dict[str, ReadoutDataType] = {
     "Number": ReadoutDataType.NUMERIC,
     "Text": ReadoutDataType.TEXT,
     "Pick List": ReadoutDataType.PICK_LIST,
@@ -86,29 +86,29 @@ _CDD_READOUT_TYPE_MAP: dict[str, ReadoutDataType] = {
     "Date": ReadoutDataType.DATE,
 }
 
-_CDD_CONDITION_TYPE_MAP: dict[str, ConditionDataType] = {
+_CONDITION_TYPE_MAP: dict[str, ConditionDataType] = {
     "Number": ConditionDataType.NUMERIC,
     "Text": ConditionDataType.TEXT,
     "Pick List": ConditionDataType.PICK_LIST,
 }
 
 
-def map_cdd_protocol_list(cdd_protocols: list[dict[str, Any]]) -> list[CddProtocolSummary]:
-    """Map a list of raw CDD protocol dicts to summary DTOs."""
+def map_external_protocol_list(protocols: list[dict[str, Any]]) -> list[ExternalProtocolSummary]:
+    """Map a list of raw external protocol dicts to summary DTOs."""
     return [
-        CddProtocolSummary(
-            cdd_id=p["id"],
+        ExternalProtocolSummary(
+            external_id=p["id"],
             name=p.get("name", f"Protocol {p['id']}"),
             readout_count=len(p.get("readout_definitions", [])),
         )
-        for p in cdd_protocols
+        for p in protocols
     ]
 
 
 def _collect_calculated_readout_ids(calculations: list[dict[str, Any]]) -> set[int]:
-    """Extract all auto-generated readout_definition IDs from CDD calculations.
+    """Extract all auto-generated readout_definition IDs from calculations.
 
-    CDD dose-response and percent inhibition calculations produce output
+    Dose-response and percent inhibition calculations produce output
     readout definitions (Hill slope, R squared, CI bounds, etc.) that appear
     in the flat readout_definitions list but are not user-defined readouts.
     """
@@ -136,10 +136,10 @@ def _build_dose_response_readouts(
     rd_by_id: dict[int, dict[str, Any]],
     start_order: int,
 ) -> list[MappedReadout]:
-    """Synthesize DOSE_RESPONSE readouts from CDD dose-response calculations.
+    """Synthesize DOSE_RESPONSE readouts from dose-response calculations.
 
-    CDD represents dose-response curves as calculations (not readout data types).
-    Each dose-response calculation has:
+    The external vault represents dose-response curves as calculations
+    (not readout data types). Each dose-response calculation has:
       - inputs: dose_readout_definition (X axis), response_readout_definition (Y axis)
       - outputs: intercept_readout_definitions (primary IC50/EC50 value + CI bounds + stats)
 
@@ -200,39 +200,39 @@ def _build_dose_response_readouts(
     return dr_readouts
 
 
-def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
-    """Map a single CDD protocol dict to a full mapping result with warnings."""
+def map_external_protocol(protocol_data: dict[str, Any]) -> ExternalProtocolMappingResult:
+    """Map a single external protocol dict to a full mapping result with warnings."""
     warnings: list[MappingWarning] = []
     readouts: list[MappedReadout] = []
     conditions: list[MappedCondition] = []
 
-    calculations = cdd_protocol.get("calculations", [])
+    calculations = protocol_data.get("calculations", [])
 
     # Collect IDs of auto-generated calculation outputs so we skip them
     calculated_ids = _collect_calculated_readout_ids(calculations)
 
-    # Build ID→readout lookup for resolving calculation input/output names
+    # Build ID->readout lookup for resolving calculation input/output names
     rd_by_id: dict[int, dict[str, Any]] = {
-        rd["id"]: rd for rd in cdd_protocol.get("readout_definitions", []) if "id" in rd
+        rd["id"]: rd for rd in protocol_data.get("readout_definitions", []) if "id" in rd
     }
 
-    # CDD readout_definitions includes both readouts and conditions.
+    # readout_definitions includes both readouts and conditions.
     # Conditions have "protocol_condition": true.
-    # CDD field names: "data_type" (not "type"), "unit_label" (not "unit"),
+    # Field names: "data_type" (not "type"), "unit_label" (not "unit"),
     # "precision_number" (not "precision").
     readout_idx = 0
-    for rd in cdd_protocol.get("readout_definitions", []):
-        # Skip auto-generated calculation outputs (Hill slope, R², CI, etc.)
+    for rd in protocol_data.get("readout_definitions", []):
+        # Skip auto-generated calculation outputs (Hill slope, R-squared, CI, etc.)
         rd_id = rd.get("id")
         if rd_id and rd_id in calculated_ids:
             continue
 
         rd_name = rd.get("name", f"Readout {readout_idx + 1}")
 
-        # CDD marks conditions with protocol_condition flag
+        # Conditions are marked with protocol_condition flag
         if rd.get("protocol_condition", False):
-            cdd_type_str = rd.get("data_type", "Text")
-            cd_type = _CDD_CONDITION_TYPE_MAP.get(cdd_type_str, ConditionDataType.TEXT)
+            src_type_str = rd.get("data_type", "Text")
+            cd_type = _CONDITION_TYPE_MAP.get(src_type_str, ConditionDataType.TEXT)
             conditions.append(
                 MappedCondition(
                     name=rd_name,
@@ -244,14 +244,14 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
             continue
 
         # Regular readout — map the data_type
-        cdd_type = rd.get("data_type") or rd.get("type") or ""
-        mapped_type = _CDD_READOUT_TYPE_MAP.get(cdd_type)
+        src_type = rd.get("data_type") or rd.get("type") or ""
+        mapped_type = _READOUT_TYPE_MAP.get(src_type)
         if mapped_type is None:
             warnings.append(
                 MappingWarning(
                     field_name=rd_name,
-                    cdd_type=cdd_type,
-                    reason=f"Unknown CDD readout type '{cdd_type}' — skipped",
+                    source_type=src_type,
+                    reason=f"Unknown readout type '{src_type}' — skipped",
                 )
             )
             continue
@@ -273,7 +273,7 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
                 warnings.append(
                     MappingWarning(
                         field_name=rd_name,
-                        cdd_type=cdd_type,
+                        source_type=src_type,
                         reason="Pick list type but no values found — using empty list",
                     )
                 )
@@ -298,17 +298,17 @@ def map_cdd_protocol(cdd_protocol: dict[str, Any]) -> CddProtocolMappingResult:
     dr_readouts = _build_dose_response_readouts(calculations, rd_by_id, readout_idx)
     readouts.extend(dr_readouts)
 
-    # CDD stores description and category in protocol_fields
-    pf = cdd_protocol.get("protocol_fields") or {}
-    description = pf.get("Description") or cdd_protocol.get("description")
-    category = pf.get("Category") or cdd_protocol.get("category")
+    # Description and category stored in protocol_fields
+    pf = protocol_data.get("protocol_fields") or {}
+    description = pf.get("Description") or protocol_data.get("description")
+    category = pf.get("Category") or protocol_data.get("category")
 
-    return CddProtocolMappingResult(
-        name=cdd_protocol.get("name", f"CDD Protocol {cdd_protocol['id']}"),
+    return ExternalProtocolMappingResult(
+        name=protocol_data.get("name", f"Protocol {protocol_data['id']}"),
         description=description or None,
         category=category or None,
         readouts=readouts,
         conditions=conditions,
         warnings=warnings,
-        cdd_source_id=cdd_protocol["id"],
+        external_source_id=protocol_data["id"],
     )

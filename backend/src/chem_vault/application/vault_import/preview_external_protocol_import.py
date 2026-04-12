@@ -1,4 +1,4 @@
-"""PreviewCddProtocolImport query -- fetch and map a single CDD protocol."""
+"""PreviewExternalProtocolImport query -- fetch and map a single external protocol."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
-from chem_vault.application.cdd_import._check_config import check_cdd_configured
-from chem_vault.application.cdd_import.gateway import CddProtocolGateway
-from chem_vault.application.cdd_import.mapper import (
-    CddProtocolMappingResult,
-    map_cdd_protocol,
+from chem_vault.application.vault_import._check_config import check_vault_configured
+from chem_vault.application.vault_import.gateway import ExternalProtocolGateway
+from chem_vault.application.vault_import.mapper import (
+    ExternalProtocolMappingResult,
+    map_external_protocol,
 )
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -22,19 +22,19 @@ from chem_vault.domain.workspace_config.repository import (
     ExternalApiKeyRepository,
     WorkspaceSettingsRepository,
 )
-from chem_vault.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
+from chem_vault.application.vault_import.errors import VaultAuthError, VaultConnectionError, VaultNotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
-class PreviewCddProtocolImportQuery(Query):
+class PreviewExternalProtocolImportQuery(Query):
     workspace_id: uuid.UUID
-    cdd_protocol_id: int
+    external_protocol_id: int
 
 
-class PreviewCddProtocolImport:
+class PreviewExternalProtocolImport:
     def __init__(
         self,
-        gateway: CddProtocolGateway,
+        gateway: ExternalProtocolGateway,
         secret_provider: SecretProvider,
         settings_repo: WorkspaceSettingsRepository,
         api_key_repo: ExternalApiKeyRepository,
@@ -47,12 +47,12 @@ class PreviewCddProtocolImport:
         self._uow = uow
 
     async def __call__(
-        self, input: PreviewCddProtocolImportQuery, auth: AuthContext | None = None
-    ) -> Result[CddProtocolMappingResult, DomainError]:
+        self, input: PreviewExternalProtocolImportQuery, auth: AuthContext | None = None
+    ) -> Result[ExternalProtocolMappingResult, DomainError]:
         require_editor(auth)
 
         async with self._uow:
-            config = await check_cdd_configured(
+            config = await check_vault_configured(
                 input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
             )
             if isinstance(config, Failure):
@@ -61,12 +61,12 @@ class PreviewCddProtocolImport:
             vault_id, api_key = config.unwrap()
 
         try:
-            raw = await self._gateway.get_protocol(vault_id, api_key, input.cdd_protocol_id)
-        except CddAuthError:
-            return Failure(ValidationError("CDD API key is invalid or expired"))
-        except CddNotFoundError:
-            return Failure(NotFoundError("CDD Protocol", str(input.cdd_protocol_id)))
-        except CddConnectionError:
-            return Failure(ValidationError("Could not connect to CDD Vault"))
+            raw = await self._gateway.get_protocol(vault_id, api_key, input.external_protocol_id)
+        except VaultAuthError:
+            return Failure(ValidationError("Vault API key is invalid or expired"))
+        except VaultNotFoundError:
+            return Failure(NotFoundError("External Protocol", str(input.external_protocol_id)))
+        except VaultConnectionError:
+            return Failure(ValidationError("Could not connect to external vault"))
 
-        return Success(map_cdd_protocol(raw))
+        return Success(map_external_protocol(raw))

@@ -48,8 +48,8 @@ class TestExternalApiKeyCreate:
     ) -> None:
         key = ExternalApiKey.create(
             workspace_id=ws_id,
-            key_name="cdd_vault",
-            label="CDD Vault Token",
+            key_name="external_vault",
+            label="External Vault Token",
             key_prefix="tk_...abc",
             created_by=user_id,
         )
@@ -60,7 +60,7 @@ class TestExternalApiKeyCreate:
         assert event.aggregate_id == key.id
         assert event.aggregate_type == "ExternalApiKey"
         assert event.workspace_id == ws_id
-        assert event.key_name == "cdd_vault"
+        assert event.key_name == "external_vault"
 
     def test_factory_no_description(
         self, ws_id: uuid.UUID, user_id: uuid.UUID

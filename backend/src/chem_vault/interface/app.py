@@ -45,12 +45,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with sentinel.lifespan(app):
         yield
 
-    # Cleanup: close httpx client used by CDD integration
+    # Cleanup: close httpx client used by vault integration
     import httpx
 
     try:
-        cdd_http = container[httpx.AsyncClient]
-        await cdd_http.aclose()
+        vault_http = container[httpx.AsyncClient]
+        await vault_http.aclose()
     except Exception:
         pass
 
@@ -179,8 +179,8 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.protocol_forms import router as protocol_forms_router
     app.include_router(protocol_forms_router)
 
-    from chem_vault.interface.routes.cdd_import import router as cdd_import_router
-    app.include_router(cdd_import_router)
+    from chem_vault.interface.routes.vault_import import router as vault_import_router
+    app.include_router(vault_import_router)
 
     from chem_vault.interface.routes.plate_setup import router as plate_setup_router
     app.include_router(plate_setup_router)

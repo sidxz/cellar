@@ -1,14 +1,14 @@
-"""Tests for CddVaultClient using respx to mock HTTP."""
+"""Tests for ExternalVaultClient using respx to mock HTTP."""
 
 import pytest
 import httpx
 import respx
 
-from chem_vault.infrastructure.cdd.client import CddVaultClient
-from chem_vault.application.cdd_import.errors import (
-    CddAuthError,
-    CddConnectionError,
-    CddNotFoundError,
+from chem_vault.infrastructure.vault_client.client import ExternalVaultClient
+from chem_vault.application.vault_import.errors import (
+    VaultAuthError,
+    VaultConnectionError,
+    VaultNotFoundError,
 )
 
 VAULT_ID = "12345"
@@ -16,13 +16,13 @@ API_KEY = "test-api-key"
 
 
 @pytest.fixture
-def client() -> CddVaultClient:
-    return CddVaultClient(http_client=httpx.AsyncClient())
+def client() -> ExternalVaultClient:
+    return ExternalVaultClient(http_client=httpx.AsyncClient())
 
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_list_protocols_returns_list(client: CddVaultClient):
+async def test_list_protocols_returns_list(client: ExternalVaultClient):
     respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols"
     ).mock(
@@ -46,7 +46,7 @@ async def test_list_protocols_returns_list(client: CddVaultClient):
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_list_protocols_sends_auth_header(client: CddVaultClient):
+async def test_list_protocols_sends_auth_header(client: ExternalVaultClient):
     route = respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols"
     ).mock(
@@ -58,27 +58,27 @@ async def test_list_protocols_sends_auth_header(client: CddVaultClient):
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_list_protocols_auth_error(client: CddVaultClient):
+async def test_list_protocols_auth_error(client: ExternalVaultClient):
     respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols"
     ).mock(return_value=httpx.Response(401, json={"error": "Unauthorized"}))
-    with pytest.raises(CddAuthError):
+    with pytest.raises(VaultAuthError):
         await client.list_protocols(VAULT_ID, API_KEY)
 
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_list_protocols_not_found(client: CddVaultClient):
+async def test_list_protocols_not_found(client: ExternalVaultClient):
     respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols"
     ).mock(return_value=httpx.Response(404, json={"error": "Not Found"}))
-    with pytest.raises(CddNotFoundError):
+    with pytest.raises(VaultNotFoundError):
         await client.list_protocols(VAULT_ID, API_KEY)
 
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_get_protocol_returns_dict(client: CddVaultClient):
+async def test_get_protocol_returns_dict(client: ExternalVaultClient):
     respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols/1"
     ).mock(
@@ -100,19 +100,19 @@ async def test_get_protocol_returns_dict(client: CddVaultClient):
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_get_protocol_not_found(client: CddVaultClient):
+async def test_get_protocol_not_found(client: ExternalVaultClient):
     respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols/999"
     ).mock(return_value=httpx.Response(404, json={"error": "Not Found"}))
-    with pytest.raises(CddNotFoundError):
+    with pytest.raises(VaultNotFoundError):
         await client.get_protocol(VAULT_ID, API_KEY, 999)
 
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_connection_error(client: CddVaultClient):
+async def test_connection_error(client: ExternalVaultClient):
     respx.get(
         f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/protocols"
     ).mock(side_effect=httpx.ConnectError("Connection refused"))
-    with pytest.raises(CddConnectionError):
+    with pytest.raises(VaultConnectionError):
         await client.list_protocols(VAULT_ID, API_KEY)

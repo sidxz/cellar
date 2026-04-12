@@ -23,12 +23,12 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import {
-  useCddProtocols,
-  useCddProtocolPreview,
-  useImportCddProtocol,
-} from "../hooks/use-cdd-import";
+  useVaultProtocols,
+  useVaultProtocolPreview,
+  useImportVaultProtocol,
+} from "../hooks/use-vault-import";
 
-interface CddImportDialogProps {
+interface VaultImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: (protocolId: string) => void;
@@ -36,13 +36,13 @@ interface CddImportDialogProps {
 
 type Step = "select" | "preview" | "importing";
 
-export function CddImportDialog({
+export function VaultImportDialog({
   open,
   onOpenChange,
   onImported,
-}: CddImportDialogProps) {
+}: VaultImportDialogProps) {
   const [step, setStep] = useState<Step>("select");
-  const [selectedCddId, setSelectedCddId] = useState<number | null>(null);
+  const [selectedExternalId, setSelectedExternalId] = useState<number | null>(null);
   const [nameOverride, setNameOverride] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,10 +51,10 @@ export function CddImportDialog({
     data: protocols,
     isLoading: protocolsLoading,
     error: protocolsError,
-  } = useCddProtocols(open);
+  } = useVaultProtocols(open);
   const { data: preview, isLoading: previewLoading } =
-    useCddProtocolPreview(step === "preview" ? selectedCddId : null);
-  const importMutation = useImportCddProtocol();
+    useVaultProtocolPreview(step === "preview" ? selectedExternalId : null);
+  const importMutation = useImportVaultProtocol();
 
   const filteredProtocols = useMemo(() => {
     if (!protocols) return [];
@@ -65,7 +65,7 @@ export function CddImportDialog({
 
   const reset = () => {
     setStep("select");
-    setSelectedCddId(null);
+    setSelectedExternalId(null);
     setNameOverride("");
     setError(null);
     setSearchQuery("");
@@ -76,19 +76,19 @@ export function CddImportDialog({
     onOpenChange(v);
   };
 
-  const handleSelectProtocol = (cddId: number) => {
-    setSelectedCddId(cddId);
+  const handleSelectProtocol = (externalId: number) => {
+    setSelectedExternalId(externalId);
     setStep("preview");
     setError(null);
   };
 
   const handleImport = async () => {
-    if (selectedCddId === null) return;
+    if (selectedExternalId === null) return;
     setStep("importing");
     setError(null);
     try {
       const result = await importMutation.mutateAsync({
-        cddId: selectedCddId,
+        externalId: selectedExternalId,
         nameOverride: nameOverride || undefined,
       });
       handleOpenChange(false);
@@ -110,7 +110,7 @@ export function CddImportDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
-          <DialogTitle>Import Protocol from CDD Vault</DialogTitle>
+          <DialogTitle>Import Protocol from External Vault</DialogTitle>
           <DialogDescription>
             {step === "select" && "Select a protocol to preview its readout mapping."}
             {step === "preview" && "Review the mapping before importing."}
@@ -130,19 +130,19 @@ export function CddImportDialog({
             {protocolsLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading protocols from CDD Vault...
+                Loading protocols from external vault...
               </div>
             )}
             {protocolsError && (
               <p className="text-sm text-destructive">
                 {protocolsError instanceof Error
                   ? protocolsError.message
-                  : "Failed to load CDD protocols"}
+                  : "Failed to load external protocols"}
               </p>
             )}
             {protocols && protocols.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No protocols found in CDD Vault.
+                No protocols found in external vault.
               </p>
             )}
             {protocols && protocols.length > 0 && (
@@ -169,9 +169,9 @@ export function CddImportDialog({
                     <TableBody>
                       {filteredProtocols.map((p) => (
                         <TableRow
-                          key={p.cdd_id}
+                          key={p.external_id}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => handleSelectProtocol(p.cdd_id)}
+                          onClick={() => handleSelectProtocol(p.external_id)}
                         >
                           <TableCell className="font-medium">
                             {p.name}

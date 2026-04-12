@@ -24,7 +24,7 @@ class ExternalApiKey(AggregateRoot):
     Stores *metadata only* (key name, label, masked prefix, active flag).
     The actual secret value is stored externally via a SecretProvider.
 
-    key_name is unique per workspace (e.g. "bioportal", "cdd_vault").
+    key_name is unique per workspace (e.g. "bioportal", "external_vault").
     """
 
     def __init__(

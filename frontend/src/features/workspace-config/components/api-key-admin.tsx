@@ -54,10 +54,10 @@ const KNOWN_API_KEYS = [
     help: "Get a free API key at bioportal.bioontology.org → Account → API Key",
   },
   {
-    key_name: "cdd_vault",
-    label: "CDD Vault (Protocol Import)",
-    description: "Enables importing protocols and data from CDD Vault",
-    help: "Find your API key in CDD Vault → Settings → API Key",
+    key_name: "external_vault",
+    label: "External Vault (Protocol Import)",
+    description: "Enables importing protocols and data from an external screening vault",
+    help: "Find your API key in your vault settings under API Key",
   },
 ] as const;
 

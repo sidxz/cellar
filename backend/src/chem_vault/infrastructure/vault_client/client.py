@@ -1,4 +1,4 @@
-"""CDD Vault REST API client — reusable HTTP adapter.
+"""External vault REST API client — reusable HTTP adapter.
 
 Returns raw dicts (parsed JSON). Domain mapping happens in the application layer.
 Designed for reuse across protocol, run, molecule, plate, project imports.
@@ -10,20 +10,20 @@ from typing import Any
 
 import httpx
 
-from chem_vault.application.cdd_import.errors import (
-    CddAuthError,
-    CddClientError,
-    CddConnectionError,
-    CddNotFoundError,
+from chem_vault.application.vault_import.errors import (
+    VaultAuthError,
+    VaultClientError,
+    VaultConnectionError,
+    VaultNotFoundError,
 )
 
-__all__ = ["CddVaultClient"]
+__all__ = ["ExternalVaultClient"]
 
 BASE_URL = "https://app.collaborativedrug.com/api/v1"
 
 
-class CddVaultClient:
-    """HTTP adapter for the CDD Vault REST API.
+class ExternalVaultClient:
+    """HTTP adapter for the external vault REST API.
 
     Stateless — vault_id and api_key passed per call.
     """
@@ -36,18 +36,18 @@ class CddVaultClient:
 
     def _check_response(self, response: httpx.Response) -> None:
         if response.status_code in (401, 403):
-            raise CddAuthError(
-                "CDD API key is invalid or expired",
+            raise VaultAuthError(
+                "Vault API key is invalid or expired",
                 status_code=response.status_code,
             )
         if response.status_code == 404:
-            raise CddNotFoundError(
-                "CDD resource not found",
+            raise VaultNotFoundError(
+                "Vault resource not found",
                 status_code=404,
             )
         if not response.is_success:
-            raise CddClientError(
-                f"CDD API returned {response.status_code}",
+            raise VaultClientError(
+                f"Vault API returned {response.status_code}",
                 status_code=response.status_code,
             )
 
@@ -55,12 +55,12 @@ class CddVaultClient:
         try:
             response = await self._http.get(url, headers=self._headers(api_key), timeout=30.0)
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
-            raise CddConnectionError(f"Cannot reach CDD Vault: {exc}") from exc
+            raise VaultConnectionError(f"Cannot reach external vault: {exc}") from exc
         self._check_response(response)
         return response.json()
 
     async def list_protocols(self, vault_id: str, api_key: str) -> list[dict[str, Any]]:
-        """Fetch all protocols from a CDD Vault, handling pagination."""
+        """Fetch all protocols from the external vault, handling pagination."""
         all_objects: list[dict[str, Any]] = []
         offset = 0
         page_size = 50
@@ -77,7 +77,7 @@ class CddVaultClient:
     async def get_protocol(
         self, vault_id: str, api_key: str, protocol_id: int
     ) -> dict[str, Any]:
-        """Fetch a single protocol by CDD ID."""
+        """Fetch a single protocol by external ID."""
         return await self._get(
             f"{BASE_URL}/vaults/{vault_id}/protocols/{protocol_id}", api_key
         )

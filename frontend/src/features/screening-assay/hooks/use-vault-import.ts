@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 
-export interface CddProtocolSummary {
-  cdd_id: number;
+export interface ExternalProtocolSummary {
+  external_id: number;
   name: string;
   readout_count: number;
 }
@@ -31,66 +31,66 @@ export interface MappedCondition {
 
 export interface MappingWarning {
   field_name: string;
-  cdd_type: string;
+  source_type: string;
   reason: string;
 }
 
-export interface CddProtocolMappingResult {
+export interface ExternalProtocolMappingResult {
   name: string;
   description: string | null;
   category: string | null;
   readouts: MappedReadout[];
   conditions: MappedCondition[];
   warnings: MappingWarning[];
-  cdd_source_id: number;
+  external_source_id: number;
 }
 
-const CDD_PROTOCOLS_KEY = ["cdd-import", "protocols"];
+const VAULT_PROTOCOLS_KEY = ["vault-import", "protocols"];
 
-export function useCddProtocols(enabled: boolean) {
+export function useVaultProtocols(enabled: boolean) {
   return useQuery({
-    queryKey: CDD_PROTOCOLS_KEY,
+    queryKey: VAULT_PROTOCOLS_KEY,
     queryFn: () =>
-      customInstance<CddProtocolSummary[]>({
-        url: "/api/v1/cdd-import/protocols",
+      customInstance<ExternalProtocolSummary[]>({
+        url: "/api/v1/vault-import/protocols",
         method: "GET",
       }),
     enabled,
-    staleTime: 5 * 60 * 1000, // 5 min — CDD protocols don't change often
+    staleTime: 5 * 60 * 1000, // 5 min — external protocols don't change often
   });
 }
 
-export function useCddProtocolPreview(cddId: number | null) {
+export function useVaultProtocolPreview(externalId: number | null) {
   return useQuery({
-    queryKey: ["cdd-import", "preview", cddId],
+    queryKey: ["vault-import", "preview", externalId],
     queryFn: () =>
-      customInstance<CddProtocolMappingResult>({
-        url: `/api/v1/cdd-import/protocols/${cddId}/preview`,
+      customInstance<ExternalProtocolMappingResult>({
+        url: `/api/v1/vault-import/protocols/${externalId}/preview`,
         method: "GET",
       }),
-    enabled: cddId !== null,
+    enabled: externalId !== null,
     staleTime: 5 * 60 * 1000,
   });
 }
 
-export function useImportCddProtocol() {
+export function useImportVaultProtocol() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
-      cddId,
+      externalId,
       nameOverride,
     }: {
-      cddId: number;
+      externalId: number;
       nameOverride?: string;
     }) =>
       customInstance({
-        url: `/api/v1/cdd-import/protocols/${cddId}`,
+        url: `/api/v1/vault-import/protocols/${externalId}`,
         method: "POST",
         data: nameOverride ? { name_override: nameOverride } : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["protocols"] });
-      showSuccess("Protocol imported from CDD Vault");
+      showSuccess("Protocol imported from external vault");
     },
   });
 }
