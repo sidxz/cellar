@@ -51,7 +51,10 @@ class FitDoseResponseCurves:
         """Fit curves for all DOSE_RESPONSE readout definitions in the protocol."""
         if not self._uow.is_active:
             async with self._uow:
-                return await self._fit(run=run, protocol=protocol, readout_data=readout_data)
+                result = await self._fit(run=run, protocol=protocol, readout_data=readout_data)
+                if isinstance(result, Success):
+                    await self._uow.commit()
+                return result
         return await self._fit(run=run, protocol=protocol, readout_data=readout_data)
 
     async def _fit(
