@@ -27,15 +27,16 @@ export function ExportToolbar({ gridRef, filename }: ExportToolbarProps) {
       const colDef = col.getColDef();
       return (colDef.headerName ?? colDef.field ?? col.getColId()) as string;
     });
-    const fields = columns.map((col) => col.getColDef().field ?? col.getColId());
 
-    // Extract filtered/sorted rows using node data
+    // Extract filtered/sorted rows — use getCellValue to respect valueGetter
     const rows: unknown[][] = [];
     api.forEachNodeAfterFilterAndSort((node) => {
       if (!node.data) return;
-      const data = node.data as Record<string, unknown>;
-      const row = fields.map((field) => {
-        const value = data[field];
+      const row = columns.map((col) => {
+        const value = api.getCellValue({
+          rowNode: node,
+          colKey: col,
+        });
         if (value !== null && value !== undefined && typeof value === "object") {
           return JSON.stringify(value);
         }
