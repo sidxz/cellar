@@ -767,28 +767,101 @@ export function DoseResponseChart({
     [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve]
   );
 
+  // Build cross-hair reference lines at (fitted_value, midpoint) for each curve
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shapes: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const annotations: any[] = [];
+  for (let i = 0; i < curves.length; i++) {
+    const curve = curves[i];
+    const color = TRACE_COLORS[i % TRACE_COLORS.length];
+    const midY = (curve.top + curve.bottom) / 2;
+    const ec50 = curve.fitted_value;
+
+    // Horizontal dashed line at midpoint
+    shapes.push({
+      type: "line",
+      xref: "paper",
+      x0: 0,
+      x1: 1,
+      yref: "y",
+      y0: midY,
+      y1: midY,
+      line: { color, width: 1, dash: "dot" },
+      opacity: 0.4,
+    });
+
+    // Vertical dashed line at fitted_value (IC50/EC50)
+    shapes.push({
+      type: "line",
+      xref: "x",
+      x0: ec50,
+      x1: ec50,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      line: { color, width: 1, dash: "dot" },
+      opacity: 0.4,
+    });
+
+    // Filled marker at the intersection point
+    traces.push({
+      type: "scatter",
+      mode: "markers",
+      x: [ec50],
+      y: [midY],
+      marker: {
+        color: "#fbbf24",
+        size: 10,
+        line: { color: "#ef4444", width: 2 },
+        symbol: "circle",
+      },
+      showlegend: false,
+      hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)} ${curve.fitted_unit ?? ""}<extra></extra>`,
+    });
+
+    // Label above with arrow pointing down to the marker
+    const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
+    annotations.push({
+      x: Math.log10(ec50),
+      y: midY,
+      xref: "x",
+      yref: "y",
+      text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
+      showarrow: true,
+      arrowhead: 2,
+      arrowsize: 0.8,
+      arrowcolor: "#ef4444",
+      ax: 0,
+      ay: -35,
+      font: { color: "#ef4444", size: 11 },
+    });
+  }
+
   const layout = {
     height: 350,
     autosize: true,
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
-    font: { color: "#a1a1aa" },
+    font: { color: "#71717a" },
     xaxis: {
-      title: { text: "Concentration" },
+      title: { text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration" },
       type: "log" as const,
-      gridcolor: "#27272a",
-      zerolinecolor: "#27272a",
+      gridcolor: "rgba(113,113,122,0.2)",
+      zerolinecolor: "rgba(113,113,122,0.3)",
     },
     yaxis: {
-      title: { text: "Response" },
-      gridcolor: "#27272a",
-      zerolinecolor: "#27272a",
+      title: { text: "Response (%)" },
+      gridcolor: "rgba(113,113,122,0.2)",
+      zerolinecolor: "rgba(113,113,122,0.3)",
     },
     legend: {
       orientation: "h" as const,
       y: -0.2,
-      font: { color: "#a1a1aa" },
+      font: { color: "#71717a" },
     },
+    shapes,
+    annotations,
     margin: { t: 20, b: 60, l: 60, r: 20 },
     clickmode: editMode ? "event" : undefined,
     dragmode: editMode ? false : "zoom",
