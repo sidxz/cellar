@@ -51,12 +51,12 @@ export function renderCurveToBase64(
   const toX = (logVal: number) => PAD + ((logVal - logMin) / logRange) * plotW;
   const toY = (yVal: number) => PAD + (1 - (yVal - yMin) / yRange) * plotH;
 
-  // Background
-  ctx.fillStyle = "#18181b";
+  // Background (light for Excel)
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
   // Axes
-  ctx.strokeStyle = "#3f3f46";
+  ctx.strokeStyle = "#d4d4d8";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(PAD, PAD);
@@ -65,7 +65,7 @@ export function renderCurveToBase64(
   ctx.stroke();
 
   // 50% gridline
-  ctx.strokeStyle = "#27272a";
+  ctx.strokeStyle = "#e4e4e7";
   ctx.setLineDash([2, 2]);
   ctx.beginPath();
   ctx.moveTo(PAD, toY(50));
@@ -118,7 +118,7 @@ export function renderCurveToBase64(
   }
 
   // Y-axis labels
-  ctx.fillStyle = "#71717a";
+  ctx.fillStyle = "#52525b";
   ctx.font = "9px sans-serif";
   ctx.textAlign = "right";
   ctx.fillText("0", PAD - 2, toY(0) + 3);

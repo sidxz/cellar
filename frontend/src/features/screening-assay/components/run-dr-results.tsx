@@ -20,6 +20,7 @@ import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar";
 import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
+import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
@@ -293,6 +294,18 @@ export function RunDoseResponseResults({
   isLoading,
 }: RunDoseResponseResultsProps) {
   const { data: protocol } = useProtocol(run.protocol_id);
+  const { data: molecules } = useMolecules();
+
+  const molMap = useMemo(() => {
+    const m = new Map<string, { smiles: string | null; synonyms: string[] }>();
+    for (const mol of molecules ?? []) {
+      m.set(mol.id, {
+        smiles: mol.structure?.smiles ?? null,
+        synonyms: mol.identifiers?.map((id) => id.identifier) ?? [],
+      });
+    }
+    return m;
+  }, [molecules]);
 
   // Hit criteria state
   const savedCriteria: HitCriterion[] =
@@ -366,21 +379,40 @@ export function RunDoseResponseResults({
         }
       }
 
+      // Add SMILES and Synonyms columns to main worksheet
+      const lastCol = worksheet.columnCount;
+      const smilesCol = lastCol + 1;
+      const synonymsCol = lastCol + 2;
+      worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
+      worksheet.getRow(1).getCell(smilesCol).font = { bold: true };
+      worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
+      worksheet.getRow(1).getCell(synonymsCol).font = { bold: true };
+      for (let r = 0; r < rows.length; r++) {
+        const mol = molMap.get(rows[r].molecule_id);
+        worksheet.getRow(r + 2).getCell(smilesCol).value = mol?.smiles ?? "";
+        worksheet.getRow(r + 2).getCell(synonymsCol).value =
+          (mol?.synonyms ?? []).join("; ");
+      }
+      worksheet.getColumn(smilesCol).width = 40;
+      worksheet.getColumn(synonymsCol).width = 30;
+
       // Raw data points sheet
       const rawSheet = workbook.addWorksheet("Raw Data Points");
-      const rawHeader = rawSheet.addRow(["Compound", "Concentration", "Response"]);
+      const rawHeader = rawSheet.addRow(["Compound", "SMILES", "Concentration", "Response"]);
       rawHeader.font = { bold: true };
       for (const row of rows) {
         const name = row.molecule_name || row.molecule_id;
+        const mol = molMap.get(row.molecule_id);
         if (row.data_points) {
           for (const pt of row.data_points) {
-            rawSheet.addRow([name, pt.x, pt.y]);
+            rawSheet.addRow([name, mol?.smiles ?? "", pt.x, pt.y]);
           }
         }
       }
       rawSheet.getColumn(1).width = 20;
-      rawSheet.getColumn(2).width = 15;
+      rawSheet.getColumn(2).width = 40;
       rawSheet.getColumn(3).width = 15;
+      rawSheet.getColumn(4).width = 15;
     },
     []
   );

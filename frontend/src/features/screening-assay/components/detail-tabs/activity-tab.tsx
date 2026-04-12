@@ -552,10 +552,28 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         }
       }
 
+      // Add SMILES and Synonyms columns to main worksheet
+      const lastCol = worksheet.columnCount;
+      const smilesCol = lastCol + 1;
+      const synonymsCol = lastCol + 2;
+      worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
+      worksheet.getRow(1).getCell(smilesCol).font = { bold: true };
+      worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
+      worksheet.getRow(1).getCell(synonymsCol).font = { bold: true };
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        worksheet.getRow(r + 2).getCell(smilesCol).value = row.smiles ?? "";
+        worksheet.getRow(r + 2).getCell(synonymsCol).value =
+          (row.synonyms ?? []).join("; ");
+      }
+      worksheet.getColumn(smilesCol).width = 40;
+      worksheet.getColumn(synonymsCol).width = 30;
+
       // Add raw data points sheet
       const rawSheet = workbook.addWorksheet("Raw Data Points");
       const rawHeader = rawSheet.addRow([
         "Compound",
+        "SMILES",
         "Concentration",
         "Response",
       ]);
@@ -567,14 +585,15 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         for (const rv of Object.values(row.readouts)) {
           if (rv.data_points) {
             for (const pt of rv.data_points) {
-              rawSheet.addRow([name, pt.x, pt.y]);
+              rawSheet.addRow([name, row.smiles ?? "", pt.x, pt.y]);
             }
           }
         }
       }
       rawSheet.getColumn(1).width = 20;
-      rawSheet.getColumn(2).width = 15;
+      rawSheet.getColumn(2).width = 40;
       rawSheet.getColumn(3).width = 15;
+      rawSheet.getColumn(4).width = 15;
     },
     []
   );

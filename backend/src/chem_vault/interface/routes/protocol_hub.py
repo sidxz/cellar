@@ -88,6 +88,8 @@ class CompoundActivityResponse(BaseModel):
     registration_number: str
     run_count: int
     last_tested: str | None = None
+    smiles: str | None = None
+    synonyms: list[str] = []
     readouts: dict[str, ReadoutValueResponse]
 
 
@@ -161,6 +163,8 @@ async def get_protocol_activity_summary(
                 registration_number=item.registration_number,
                 run_count=item.run_count,
                 last_tested=item.last_tested,
+                smiles=item.smiles,
+                synonyms=item.synonyms,
                 readouts={
                     name: ReadoutValueResponse(
                         best=rv.best,

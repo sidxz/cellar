@@ -70,6 +70,8 @@ class CompoundActivity:
     registration_number: str
     run_count: int
     last_tested: str | None
+    smiles: str | None = None
+    synonyms: list[str] = field(default_factory=list)
     readouts: dict[str, ReadoutValue] = field(default_factory=dict)
 
 
@@ -222,6 +224,7 @@ class GetProtocolActivitySummary:
                     combined.c.molecule_id,
                     MoleculeModel.name.label("molecule_name"),
                     MoleculeModel.registration_number,
+                    MoleculeModel.smiles,
                     func.max(combined.c.run_count).label("run_count"),
                     func.max(combined.c.last_tested).label("last_tested"),
                 )
@@ -230,9 +233,28 @@ class GetProtocolActivitySummary:
                     combined.c.molecule_id,
                     MoleculeModel.name,
                     MoleculeModel.registration_number,
+                    MoleculeModel.smiles,
                 )
             )
             mol_rows = (await session.execute(mol_stmt)).all()
+
+            # Batch-load synonyms for all molecules
+            from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
+                MoleculeIdentifierModel,
+            )
+            mol_ids = [r.molecule_id for r in mol_rows]
+            synonym_map: dict[uuid.UUID, list[str]] = {}
+            if mol_ids:
+                syn_stmt = (
+                    select(
+                        MoleculeIdentifierModel.molecule_id,
+                        MoleculeIdentifierModel.identifier,
+                    )
+                    .where(MoleculeIdentifierModel.molecule_id.in_(mol_ids))
+                )
+                syn_rows = (await session.execute(syn_stmt)).all()
+                for sr in syn_rows:
+                    synonym_map.setdefault(sr.molecule_id, []).append(sr.identifier)
 
             if not mol_rows:
                 return Success(
@@ -424,6 +446,8 @@ class GetProtocolActivitySummary:
                             if mol.last_tested is not None
                             else None
                         ),
+                        smiles=mol.smiles,
+                        synonyms=synonym_map.get(mol.molecule_id, []),
                         readouts=readouts,
                     )
                 )

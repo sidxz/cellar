@@ -637,6 +637,8 @@ export interface CompoundActivity {
   registration_number: string;
   run_count: number;
   last_tested: string | null;
+  smiles: string | null;
+  synonyms: string[];
   readouts: Record<string, ReadoutValue>;
 }
 
