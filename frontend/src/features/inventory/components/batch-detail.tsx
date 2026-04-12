@@ -27,6 +27,7 @@ import {
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useSaltCatalog, type SaltEntry } from "@/features/workspace-config/hooks/use-salt-catalog";
 import { useMolecule } from "@/features/chemical-registration/hooks/use-molecules";
+import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import { useBatch, useUpdateBatch } from "../hooks/use-batches";
 import { SampleList } from "./sample-list";
@@ -40,6 +41,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
   const query = useBatch(batchId);
   const { data: molecule } = useMolecule(query.data?.molecule_id);
   const { data: orgs } = useOrganizations();
+  const { data: members } = useWorkspaceMembers();
   const [editOpen, setEditOpen] = useState(false);
 
   return (
@@ -59,6 +61,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
       >
         {(batch) => {
           const supplier = orgs?.find((o) => o.id === batch.supplier_org_id);
+          const chemistName = members?.find((m) => m.user_id === batch.chemist)?.name ?? batch.chemist;
           return (
             <>
               {molecule && (
@@ -102,7 +105,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Chemist</p>
-                    <p className="font-medium">{batch.chemist}</p>
+                    <p className="font-medium">{chemistName}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Synthesis Date</p>
