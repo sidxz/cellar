@@ -49,6 +49,9 @@ class ReadoutValue:
     mean: float | None = None
     curve_class: str | None = None
     curve_params: CurveParams | None = None
+    data_points: list[dict[str, float]] | None = None
+    n: int | None = None
+    sd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -217,6 +220,8 @@ class GetProtocolActivitySummary:
                     ReadoutDefinitionModel.name.label("readout_name"),
                     func.max(ReadoutDataModel.value_numeric).label("best"),
                     func.avg(ReadoutDataModel.value_numeric).label("mean"),
+                    func.count(ReadoutDataModel.value_numeric).label("n"),
+                    func.stddev_samp(ReadoutDataModel.value_numeric).label("sd"),
                 )
                 .select_from(ReadoutDataModel)
                 .join(
@@ -232,7 +237,6 @@ class GetProtocolActivitySummary:
                     ReadoutDataModel.molecule_id.isnot(None),
                     ReadoutDataModel.value_numeric.isnot(None),
                     ReadoutDataModel.is_outlier == False,  # noqa: E712
-                    ReadoutDataModel.is_computed == False,  # noqa: E712
                 )
                 .group_by(ReadoutDataModel.molecule_id, ReadoutDefinitionModel.name)
             )
@@ -366,6 +370,8 @@ class GetProtocolActivitySummary:
                         readouts[rd_info.name] = ReadoutValue(
                             best=float(num_row.best) if num_row.best is not None else None,
                             mean=round(float(num_row.mean), 4) if num_row.mean is not None else None,
+                            n=int(num_row.n) if num_row.n is not None else None,
+                            sd=round(float(num_row.sd), 4) if num_row.sd is not None else None,
                         )
 
                 items.append(
