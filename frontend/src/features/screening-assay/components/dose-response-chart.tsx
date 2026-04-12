@@ -931,7 +931,7 @@ export function DoseResponseChart({
           <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
             <label className="flex items-center gap-1.5 cursor-pointer">
               <Checkbox checked={showCrossHair} onCheckedChange={(v) => setShowCrossHair(v === true)} />
-              IC50 marker
+              {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
             </label>
             <label className="flex items-center gap-1.5 cursor-pointer">
               <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
