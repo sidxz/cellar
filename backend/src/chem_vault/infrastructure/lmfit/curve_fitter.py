@@ -192,6 +192,13 @@ class LmfitCurveFitter:
         fitted_ec50 = float(best["ec50"].value)
         fitted_abs_hill = float(best["abs_hill"].value)
 
+        # --- Normalize top > bottom ---
+        # The internal model uses (conc/ec50)^|h| which is decreasing.
+        # When data increases with concentration (% inhibition), the fitter
+        # may put the high plateau in "bottom" and low in "top". Fix this.
+        if fitted_bottom > fitted_top:
+            fitted_top, fitted_bottom = fitted_bottom, fitted_top
+
         # --- Apply sign convention for hill_slope output ---
         is_inhibition = config.curve_type in _INHIBITION_CURVE_TYPES
         if is_inhibition:
@@ -256,6 +263,10 @@ class LmfitCurveFitter:
                             fitted_bottom = float(best["bottom"].value)
                             fitted_ec50 = float(best["ec50"].value)
                             fitted_abs_hill = float(best["abs_hill"].value)
+
+                            # Normalize top > bottom
+                            if fitted_bottom > fitted_top:
+                                fitted_top, fitted_bottom = fitted_bottom, fitted_top
 
                             is_inhibition = config.curve_type in _INHIBITION_CURVE_TYPES
                             hill_slope_out = -abs(fitted_abs_hill) if is_inhibition else abs(fitted_abs_hill)
