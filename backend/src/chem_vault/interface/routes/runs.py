@@ -34,6 +34,7 @@ from chem_vault.interface.dependencies import (
     RejectRunDep,
     StartRunDep,
     UnlockRunDep,
+    UoWDep,
     UpdateRunDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
@@ -59,6 +60,7 @@ class RunResponse(BaseModel):
     qc_metrics: dict[str, Any] | None = None
     notes: str | None = None
     plate_count: int
+    molecule_count: int = 0
     performed_at_org_id: uuid.UUID | None = None
     parent_run_id: uuid.UUID | None = None
     run_relationship_type: str | None = None
@@ -67,7 +69,7 @@ class RunResponse(BaseModel):
     conditions: dict[str, Any] | None = None
 
     @classmethod
-    def from_domain(cls, r) -> RunResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r, *, molecule_count: int = 0) -> RunResponse:  # type: ignore[no-untyped-def]
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -81,6 +83,7 @@ class RunResponse(BaseModel):
             qc_metrics=r.qc_metrics,
             notes=r.notes,
             plate_count=len(r.plates),
+            molecule_count=molecule_count,
             performed_at_org_id=r.performed_at_org_id,
             parent_run_id=r.parent_run_id,
             run_relationship_type=r.run_relationship_type.value if r.run_relationship_type else None,
@@ -161,13 +164,23 @@ async def list_runs_by_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     uc: ListRunsByProtocolDep,
+    uow: UoWDep,
 ) -> list[RunResponse]:
     result = await uc(
         ListRunsByProtocolQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
         auth=auth,
     )
     runs = result_to_response(result)
-    return [RunResponse.from_domain(r) for r in runs]
+
+    # Compute molecule counts in bulk
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+        SQLAlchemyReadoutDataRepository,
+    )
+    async with uow as u:
+        rd_repo = SQLAlchemyReadoutDataRepository(u)
+        counts = await rd_repo.get_molecule_counts(auth.workspace_id, [r.id for r in runs])
+
+    return [RunResponse.from_domain(r, molecule_count=counts.get(r.id, 0)) for r in runs]
 
 
 @router.get("/runs/{run_id}", response_model=RunResponse)

@@ -215,6 +215,26 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         return result.all()
 
+    async def get_molecule_counts(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, int]:
+        """Return {run_id: distinct_molecule_count} for the given runs."""
+        if not run_ids:
+            return {}
+        stmt = (
+            select(
+                ReadoutDataModel.run_id,
+                func.count(func.distinct(ReadoutDataModel.molecule_id)),
+            )
+            .where(
+                ReadoutDataModel.run_id.in_(run_ids),
+                ReadoutDataModel.molecule_id.is_not(None),
+            )
+            .group_by(ReadoutDataModel.run_id)
+        )
+        rows = await self._uow.session.execute(stmt)
+        return {row[0]: row[1] for row in rows.all()}
+
     async def delete_computed_for_run(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> int:
