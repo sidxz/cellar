@@ -71,6 +71,7 @@ class CompoundActivity:
     run_count: int
     last_tested: str | None
     smiles: str | None = None
+    batch_number: str | None = None
     synonyms: list[str] = field(default_factory=list)
     readouts: dict[str, ReadoutValue] = field(default_factory=dict)
 
@@ -326,6 +327,9 @@ class GetProtocolActivitySummary:
             # ----------------------------------------------------------
             # Query 3b: Best curve params — MIN fitted_value per molecule
             # ----------------------------------------------------------
+            from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
+                BatchModel,
+            )
             ranked_sub = (
                 select(
                     DoseResponseCurveModel.molecule_id,
@@ -337,6 +341,7 @@ class GetProtocolActivitySummary:
                     DoseResponseCurveModel.fitted_value,
                     DoseResponseCurveModel.r_squared,
                     DoseResponseCurveModel.raw_data,
+                    BatchModel.batch_number,
                     func.row_number()
                     .over(
                         partition_by=[
@@ -348,6 +353,7 @@ class GetProtocolActivitySummary:
                     .label("rn"),
                 )
                 .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+                .outerjoin(BatchModel, DoseResponseCurveModel.batch_id == BatchModel.id)
                 .where(
                     DoseResponseCurveModel.protocol_id == pid,
                     RunModel.status.in_(VALID_STATUSES),
@@ -381,6 +387,7 @@ class GetProtocolActivitySummary:
             items: list[CompoundActivity] = []
             for mol in mol_rows:
                 readouts: dict[str, ReadoutValue] = {}
+                best_batch_number: str | None = None
 
                 for rd_info in readout_defs:
                     if rd_info.data_type == "dose_response":
@@ -405,6 +412,8 @@ class GetProtocolActivitySummary:
                         data_points: list[dict[str, float]] | None = None
                         if bp_row is not None:
                             curve_class = bp_row.curve_class
+                            if best_batch_number is None:
+                                best_batch_number = getattr(bp_row, "batch_number", None)
                             curve_params = CurveParams(
                                 hill_slope=float(bp_row.hill_slope),
                                 top=float(bp_row.top),
@@ -450,6 +459,7 @@ class GetProtocolActivitySummary:
                             else None
                         ),
                         smiles=mol.smiles,
+                        batch_number=best_batch_number,
                         synonyms=synonym_map.get(mol.molecule_id, []),
                         readouts=readouts,
                     )

@@ -164,6 +164,11 @@ function buildColumnDefs(
               {params.data.molecule_name}
             </span>
           )}
+          {params.data.batch_number && (
+            <div className="text-[10px] text-muted-foreground">
+              Batch: {params.data.batch_number}
+            </div>
+          )}
         </div>
       );
     },

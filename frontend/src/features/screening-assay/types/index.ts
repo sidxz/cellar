@@ -638,6 +638,7 @@ export interface CompoundActivity {
   run_count: number;
   last_tested: string | null;
   smiles: string | null;
+  batch_number: string | null;
   synonyms: string[];
   readouts: Record<string, ReadoutValue>;
 }
