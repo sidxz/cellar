@@ -15,6 +15,10 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
+from chem_vault.domain.screening_assay.hit_criterion import (
+    HitCriterion,
+    validate_hit_criteria,
+)
 from chem_vault.domain.screening_assay.events import (
     ProtocolCreated,
     ProtocolPublished,
@@ -189,6 +193,7 @@ class Protocol(AggregateRoot):
         condition_definitions: list[ConditionDefinition] | None = None,
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
+        recommended_hit_criteria: list[HitCriterion] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -212,6 +217,7 @@ class Protocol(AggregateRoot):
         self.condition_definitions: list[ConditionDefinition] = condition_definitions or []
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
+        self.recommended_hit_criteria: list[HitCriterion] | None = recommended_hit_criteria
 
         # Bind owned entities to this aggregate
         for rd in self.readout_definitions:
@@ -342,6 +348,14 @@ class Protocol(AggregateRoot):
         if category is not ...:
             self.category = category
         self.updated_at = datetime.now(UTC)
+
+    def set_recommended_hit_criteria(
+        self, criteria: list[HitCriterion] | None
+    ) -> None:
+        """Set or clear recommended hit criteria for this protocol."""
+        if criteria is not None:
+            validate_hit_criteria(criteria)
+        self.recommended_hit_criteria = criteria
 
     # ------------------------------------------------------------------
     # Readout definition management
