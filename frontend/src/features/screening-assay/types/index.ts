@@ -254,6 +254,7 @@ export interface Protocol {
   control_layouts: Record<string, string> | null;
   ontology_annotations: Record<string, OntologyAnnotationTerm[]> | null;
   project_ids: string[];
+  recommended_hit_criteria: HitCriterion[] | null;
 }
 
 export interface Target {
@@ -568,4 +569,59 @@ export interface ImportReadoutsResult {
   matched: number;
   unmatched: number;
   readouts_created: number;
+}
+
+// ─── Hit Criteria + Protocol Stats + Activity ───────────────────────────────
+
+export interface HitCriterion {
+  readout_name: string;
+  operator: "gt" | "lt" | "gte" | "lte" | "in";
+  value: number | string[];
+}
+
+export interface RunCountsResponse {
+  total: number;
+  draft: number;
+  in_progress: number;
+  completed: number;
+  approved: number;
+  rejected: number;
+}
+
+export interface LatestRunResponse {
+  id: string;
+  run_date: string;
+  status: RunStatus;
+  plate_format: PlateFormat | null;
+  plate_count: number;
+  compound_count: number;
+  z_prime: number | null;
+}
+
+export interface ProtocolStats {
+  run_counts: RunCountsResponse;
+  compound_count: number;
+  hit_count: number | null;
+  hit_criteria_applied: boolean;
+  latest_run: LatestRunResponse | null;
+}
+
+export interface ActivitySummaryItem {
+  molecule_id: string;
+  molecule_name: string;
+  molecule_registration_number: string;
+  best_value: number | null;
+  mean_value: number | null;
+  run_count: number;
+  min_value: number | null;
+  max_value: number | null;
+  curve_class: CurveClass | null;
+  last_tested: string | null;
+}
+
+export interface ActivitySummary {
+  items: ActivitySummaryItem[];
+  readout_name: string;
+  readout_unit: string | null;
+  total_compounds: number;
 }
