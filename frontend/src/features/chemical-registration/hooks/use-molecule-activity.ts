@@ -24,6 +24,7 @@ export interface ProtocolActivityResponse {
     hill_slope: number;
     num_points: number;
     curve_class: string | null;
+    data_points: Array<{ x: number; y: number }> | null;
   }>;
 }
 

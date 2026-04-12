@@ -619,6 +619,9 @@ export interface ReadoutValue {
   mean: number | null;
   curve_class?: CurveClass | null;
   curve_params?: CurveParams | null;
+  data_points?: Array<{ x: number; y: number }> | null;
+  n?: number | null;
+  sd?: number | null;
 }
 
 export interface ReadoutDefInfo {
