@@ -283,6 +283,7 @@ export interface Run {
   qc_metrics: Record<string, unknown> | null;
   notes: string | null;
   plate_count: number;
+  molecule_count: number;
   performed_at_org_id: string | null;
   parent_run_id: string | null;
   run_relationship_type: RunRelationshipType | null;

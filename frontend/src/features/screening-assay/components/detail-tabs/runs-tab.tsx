@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FlaskConical } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
@@ -23,6 +23,8 @@ import {
   type Protocol,
   type Run,
 } from "../../types";
+import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 
 interface RunsTabProps {
   protocol: Protocol;
@@ -55,6 +57,17 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
   const router = useRouter();
   const { data: runs, isLoading } = useRunsByProtocol(protocolId);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const { data: members } = useWorkspaceMembers();
+  const { data: orgs } = useOrganizations();
+
+  const memberName = useCallback(
+    (userId: string) => members?.find((m) => m.user_id === userId)?.name ?? null,
+    [members]
+  );
+  const orgName = useCallback(
+    (orgId: string) => orgs?.find((o) => o.id === orgId)?.name ?? null,
+    [orgs]
+  );
 
   const filteredRuns = useMemo(() => {
     if (!runs) return [];
@@ -67,9 +80,48 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
       {
         headerName: "Run Date",
         field: "run_date",
-        flex: 1,
-        minWidth: 110,
+        width: 110,
         cellClass: "font-mono text-sm",
+      },
+      {
+        headerName: "Conditions",
+        field: "conditions",
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (p) => {
+          const c = p.data?.conditions;
+          if (!c) return null;
+          if (typeof c === "object" && "description" in c) return c.description;
+          return Object.entries(c).map(([k, v]) => `${k}: ${v}`).join(", ");
+        },
+        cellRenderer: (params: ICellRendererParams<Run>) => {
+          if (!params.value) return <span className="text-muted-foreground">&mdash;</span>;
+          const text = String(params.value);
+          return (
+            <span className="text-sm" title={text}>
+              {text.length > 80 ? `${text.slice(0, 80)}...` : text}
+            </span>
+          );
+        },
+      },
+      {
+        headerName: "Scientist",
+        field: "operator",
+        width: 120,
+        valueGetter: (p) => p.data ? memberName(p.data.operator) ?? p.data.operator.slice(0, 8) : null,
+      },
+      {
+        headerName: "Lab",
+        field: "performed_at_org_id",
+        width: 100,
+        valueGetter: (p) => p.data?.performed_at_org_id ? orgName(p.data.performed_at_org_id) ?? null : null,
+        valueFormatter: (p) => p.value ?? "\u2014",
+      },
+      {
+        headerName: "Molecules",
+        field: "molecule_count",
+        width: 90,
+        valueFormatter: (p) => p.value != null && p.value > 0 ? String(p.value) : "\u2014",
       },
       { headerName: "Plates", field: "plate_count", width: 80 },
       {
@@ -97,7 +149,7 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         ),
       },
     ],
-    []
+    [memberName, orgName]
   );
 
   return (
