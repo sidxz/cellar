@@ -178,7 +178,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
               </TabsContent>
 
               <TabsContent value="batches">
-                <BatchesTab moleculeId={compoundId} />
+                <BatchesTab
+                  moleculeId={compoundId}
+                  moleculeMw={mol.descriptors?.molecular_weight ?? undefined}
+                />
               </TabsContent>
 
               <TabsContent value="activity">
