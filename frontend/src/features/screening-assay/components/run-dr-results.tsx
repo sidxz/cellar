@@ -500,6 +500,20 @@ export function RunDoseResponseResults({
             {filteredRows.length} hit{filteredRows.length !== 1 ? "s" : ""}
           </Badge>
         )}
+        {run.qc_metrics?.z_prime != null && (() => {
+          const zp = run.qc_metrics!.z_prime as number;
+          const label = zp >= 0.5 ? "Excellent" : zp >= 0 ? "Marginal" : "Poor";
+          const cls = zp >= 0.5
+            ? "border-emerald-500/40 text-emerald-400"
+            : zp >= 0
+            ? "border-yellow-500/40 text-yellow-400"
+            : "border-red-500/40 text-red-400";
+          return (
+            <Badge variant="outline" className={cls}>
+              Z&prime; = {zp.toFixed(2)} &mdash; {label}
+            </Badge>
+          );
+        })()}
       </div>
 
       {/* Hit Criteria Filter Bar */}
