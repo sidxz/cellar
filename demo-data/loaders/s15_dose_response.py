@@ -83,7 +83,8 @@ async def load(ctx: DemoContext) -> int:
         points = [
             ConcentrationResponsePoint(
                 concentration=conc,
-                response=max(0, bottom + (top - bottom) / (1 + (conc / ic50) ** hill_slope) + rng.gauss(0, (top - bottom) * 0.03)),
+                # % Inhibition convention: high inhibition at high conc, low at low conc
+                response=max(0, bottom + (top - bottom) / (1 + (ic50 / conc) ** hill_slope) + rng.gauss(0, (top - bottom) * 0.03)),
             )
             for conc in concentrations
         ]

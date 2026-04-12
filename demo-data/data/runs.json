@@ -53,8 +53,8 @@
     "org_ref": "org_acme",
     "plate_format": "96",
     "conditions": {"Cell Line": "HeLa", "Exposure Time": "72 h"},
-    "notes": "Cytotoxicity counter-screen",
-    "transitions": ["start"]
+    "notes": "Cytotoxicity counter-screen — kinase inhibitor panel",
+    "transitions": ["start", "complete", "approve"]
   },
   "run_admet_01": {
     "protocol_ref": "proto_admet",

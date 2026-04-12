@@ -65,6 +65,25 @@ async def load(ctx: DemoContext) -> int:
                 )
                 pub_result.unwrap()
                 logger.info("protocol.published", key=key)
+
+            # Set recommended hit criteria if defined
+            hit_criteria = rec.get("recommended_hit_criteria")
+            if hit_criteria:
+                from chem_vault.application.screening.manage_protocol import (
+                    UpdateProtocol,
+                    UpdateProtocolCommand,
+                )
+                update_uc = ctx.container[UpdateProtocol]
+                cr = await update_uc(
+                    UpdateProtocolCommand(
+                        workspace_id=WORKSPACE_ID,
+                        protocol_id=entity.id,
+                        recommended_hit_criteria=hit_criteria,
+                    ),
+                    auth=ctx.auth,
+                )
+                cr.unwrap()
+                logger.info("protocol.hit_criteria_set", key=key, count=len(hit_criteria))
         else:
             # Conflict — look up existing protocol by name
             list_result = await list_uc(

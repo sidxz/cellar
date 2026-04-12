@@ -79,6 +79,20 @@
       "Selectivity Index": {"min": 0.5, "max": 300.0}
     }
   },
+  "run_viability_01": {
+    "protocol_ref": "proto_viability",
+    "mode": "single_point",
+    "seed": 150,
+    "molecules": [
+      "mol_imatinib", "mol_gefitinib", "mol_erlotinib", "mol_sorafenib", "mol_vemurafenib",
+      "mol_dabrafenib", "mol_osimertinib", "mol_lapatinib", "mol_crizotinib", "mol_sunitinib",
+      "mol_dasatinib", "mol_nilotinib", "mol_afatinib", "mol_bosutinib", "mol_lenvatinib"
+    ],
+    "readouts": {
+      "Absorbance": {"min": 0.05, "max": 2.5},
+      "% Viability": {"min": 15.0, "max": 105.0}
+    }
+  },
   "run_admet_01": {
     "protocol_ref": "proto_admet",
     "mode": "single_point",

@@ -39,7 +39,11 @@
         "unit": "min"
       }
     ],
-    "publish": true
+    "publish": true,
+    "recommended_hit_criteria": [
+      {"readout_name": "IC50", "operator": "lt", "value": 100},
+      {"readout_name": "Curve Class", "operator": "in", "value": ["full", "partial"]}
+    ]
   },
   "proto_cox2": {
     "name": "COX-2 Inhibition Assay",
@@ -83,7 +87,11 @@
         "unit": "uM"
       }
     ],
-    "publish": true
+    "publish": true,
+    "recommended_hit_criteria": [
+      {"readout_name": "IC50", "operator": "lt", "value": 500},
+      {"readout_name": "Curve Class", "operator": "in", "value": ["full"]}
+    ]
   },
   "proto_viability": {
     "name": "Cell Viability (MTT Assay)",
