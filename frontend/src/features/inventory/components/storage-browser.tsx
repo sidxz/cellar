@@ -28,11 +28,11 @@ import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   useDeleteStorageLocation,
-  useStorageLocations,
+  useStorageLocationsWithCounts,
   useUpdateStorageLocation,
 } from "../hooks/use-storage-locations";
 import { CreateStorageLocationDialog } from "./create-storage-location-dialog";
-import type { StorageLocation, StorageLocationType } from "../types";
+import type { StorageLocation, StorageLocationWithCount, StorageLocationType } from "../types";
 
 const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
   site: <MapPin className="h-4 w-4" />,
@@ -42,14 +42,14 @@ const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
   refrigerator: <Refrigerator className="h-4 w-4" />,
 };
 
-function buildTree(locations: StorageLocation[]): StorageLocation[] {
+function buildTree(locations: StorageLocationWithCount[]): StorageLocationWithCount[] {
   return locations.filter((loc) => loc.parent_id === null);
 }
 
 function getChildren(
-  locations: StorageLocation[],
+  locations: StorageLocationWithCount[],
   parentId: string
-): StorageLocation[] {
+): StorageLocationWithCount[] {
   return locations.filter((loc) => loc.parent_id === parentId);
 }
 
@@ -58,8 +58,8 @@ function LocationNode({
   allLocations,
   depth = 0,
 }: {
-  location: StorageLocation;
-  allLocations: StorageLocation[];
+  location: StorageLocationWithCount;
+  allLocations: StorageLocationWithCount[];
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
@@ -99,6 +99,17 @@ function LocationNode({
           <span className="text-xs text-muted-foreground">
             {location.temperature}
           </span>
+        )}
+        {location.rows != null && location.columns != null ? (
+          <span className="text-xs text-muted-foreground">
+            {location.sample_count}/{location.rows * location.columns}
+          </span>
+        ) : (
+          location.sample_count > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {location.sample_count} samples
+            </span>
+          )
         )}
         <div className="hidden gap-1 group-hover:flex">
           <Button
@@ -222,7 +233,7 @@ function EditStorageLocationDialog({
 }
 
 export function StorageBrowser() {
-  const { data: locations, isLoading } = useStorageLocations();
+  const { data: locations, isLoading } = useStorageLocationsWithCounts();
 
   if (isLoading) {
     return (
