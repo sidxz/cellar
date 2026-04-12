@@ -336,8 +336,14 @@ async def import_run_readouts(
 # ---------------------------------------------------------------------------
 
 
+class FitWarning(BaseModel):
+    molecule_name: str | None = None
+    reason: str
+
+
 class FitCurvesResponse(BaseModel):
     curves_fitted: int
+    warnings: list[FitWarning] = []
 
 
 @router.post(
@@ -382,8 +388,16 @@ async def fit_curves_for_run(
         readout_data = await rd_repo.find_by_run(auth.workspace_id, run_id)
 
     # Fit curves (uses its own UoW internally)
-    result = await fit_uc.fit_for_run(
-        run=run, protocol=protocol, readout_data=readout_data
-    )
-    curves = result_to_response(result)
-    return FitCurvesResponse(curves_fitted=len(curves))
+    try:
+        result = await fit_uc.fit_for_run(
+            run=run, protocol=protocol, readout_data=readout_data
+        )
+        curves = result_to_response(result)
+        return FitCurvesResponse(curves_fitted=len(curves))
+    except Exception as exc:
+        import structlog
+        structlog.get_logger().warning("fit_curves_failure", run_id=str(run_id), error=str(exc))
+        return FitCurvesResponse(
+            curves_fitted=0,
+            warnings=[FitWarning(reason=str(exc))],
+        )

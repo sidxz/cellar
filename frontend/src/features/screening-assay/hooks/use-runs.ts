@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateRunInput, Run } from "../types";
 
@@ -138,11 +138,21 @@ export function useUpdateRun() {
   });
 }
 
+interface FitWarning {
+  molecule_name?: string | null;
+  reason: string;
+}
+
+interface FitCurvesResponse {
+  curves_fitted: number;
+  warnings?: FitWarning[];
+}
+
 export function useFitCurves() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) =>
-      customInstance<{ curves_fitted: number }>({
+      customInstance<FitCurvesResponse>({
         url: `/api/v1/runs/${runId}/fit-curves`,
         method: "POST",
       }),
@@ -150,7 +160,13 @@ export function useFitCurves() {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: ["compound-curves"] });
       qc.invalidateQueries({ queryKey: ["protocol-activity"] });
-      showSuccess(`Fitted ${data.curves_fitted} dose-response curves`);
+      if (data.warnings && data.warnings.length > 0) {
+        showWarning(`Fit completed with ${data.warnings.length} warning(s)`, {
+          description: data.warnings.map((w: FitWarning) => w.reason).join("; "),
+        });
+      } else {
+        showSuccess(`Fitted ${data.curves_fitted} dose-response curves`);
+      }
     },
   });
 }

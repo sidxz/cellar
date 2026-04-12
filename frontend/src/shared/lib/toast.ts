@@ -11,3 +11,7 @@ export function showError(message: string) {
 export function showInfo(message: string) {
   toast.info(message);
 }
+
+export function showWarning(message: string, opts?: { description?: string }) {
+  toast.warning(message, opts);
+}
