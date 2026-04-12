@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Eye, Filter, FlaskConical, RotateCcw, Settings2 } from "lucide-react";
+import { Eye, Filter, FlaskConical, FolderPlus, RotateCcw, Settings2 } from "lucide-react";
 import type {
   ColDef,
   ICellRendererParams,
@@ -29,6 +29,7 @@ import { DoseResponseSparkline } from "../dose-response-sparkline";
 import { CurveNavigator } from "../curve-navigator";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
+import { CollectionPickerDialog } from "../collection-picker-dialog";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import {
   CURVE_CLASS_LABELS,
@@ -316,6 +317,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
 
   // Dialog state
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
 
   // Selection state
   const [selectedRows, setSelectedRows] = useState<CompoundActivity[]>([]);
@@ -754,9 +756,21 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
           {activity.items.length !== 1 ? "s" : ""}
           {activeCriteria.length > 0 ? " match criteria" : ""}
         </span>
-        {selectedRows.length > 0 && (
-          <span>{selectedRows.length} selected</span>
-        )}
+        <div className="flex items-center gap-2">
+          {selectedRows.length > 0 && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCollectionDialogOpen(true)}
+              >
+                <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
+                Add to Collection
+              </Button>
+              <span>{selectedRows.length} selected</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* AG Grid with dynamic columns */}
@@ -919,6 +933,13 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         currentCriteria={protocol.recommended_hit_criteria}
         open={criteriaDialogOpen}
         onOpenChange={setCriteriaDialogOpen}
+      />
+
+      {/* Collection picker dialog */}
+      <CollectionPickerDialog
+        open={collectionDialogOpen}
+        onOpenChange={setCollectionDialogOpen}
+        moleculeIds={selectedRows.map((r) => r.molecule_id)}
       />
     </div>
   );
