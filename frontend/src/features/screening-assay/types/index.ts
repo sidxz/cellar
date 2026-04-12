@@ -651,3 +651,24 @@ export interface ActivitySummaryV2 {
   readout_definitions: ReadoutDefInfo[];
   total_compounds: number;
 }
+
+// ─── Compound Flags ─────────────────────────────────────────────────────────
+
+export type FlagType = "star" | "outlier" | "follow_up";
+
+export const FLAG_TYPE_LABELS: Record<FlagType, string> = {
+  star: "Star",
+  outlier: "Outlier",
+  follow_up: "Follow-Up",
+};
+
+export interface CompoundFlag {
+  id: string;
+  workspace_id: string;
+  molecule_id: string;
+  protocol_id: string;
+  flagged_by: string;
+  flag_type: FlagType;
+  note: string | null;
+  created_at: string;
+}

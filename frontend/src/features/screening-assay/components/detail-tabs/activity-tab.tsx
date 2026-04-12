@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Eye, Filter, FlaskConical, FolderPlus, RotateCcw, Settings2 } from "lucide-react";
+import { Eye, Filter, FlaskConical, FolderPlus, RotateCcw, Settings2, Star } from "lucide-react";
 import type {
   ColDef,
   ICellRendererParams,
@@ -23,6 +23,8 @@ import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar
 import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { fetchStructureImages } from "@/shared/lib/export/structure-image";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
+import { useCompoundFlags, useCreateFlag, useDeleteFlag } from "../../hooks/use-compound-flags";
+import type { CompoundFlag as CompoundFlagType } from "../../types";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { DoseResponseChart } from "../dose-response-chart";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
@@ -307,6 +309,20 @@ interface ActivityTabProps {
 export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   const { data: activity, isLoading } = useProtocolActivity(protocolId);
 
+  // Compound flags
+  const { data: flags } = useCompoundFlags(protocolId);
+  const createFlag = useCreateFlag(protocolId);
+  const deleteFlag = useDeleteFlag(protocolId);
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
+
+  const flagsByMolecule = useMemo(() => {
+    const map = new Map<string, CompoundFlagType>();
+    for (const f of flags ?? []) {
+      if (f.flag_type === "star") map.set(f.molecule_id, f);
+    }
+    return map;
+  }, [flags]);
+
   // Hit criteria state
   const savedCriteria: HitCriterion[] =
     protocol.recommended_hit_criteria ?? [];
@@ -340,10 +356,13 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   // Derived data
   const readoutDefs = activity?.readout_definitions ?? [];
 
-  const filteredItems = useMemo(
-    () => applyFilters(activity?.items ?? [], activeCriteria),
-    [activity?.items, activeCriteria]
-  );
+  const filteredItems = useMemo(() => {
+    let items = applyFilters(activity?.items ?? [], activeCriteria);
+    if (showFlaggedOnly) {
+      items = items.filter((item) => flagsByMolecule.has(item.molecule_id));
+    }
+    return items;
+  }, [activity?.items, activeCriteria, showFlaggedOnly, flagsByMolecule]);
 
   // Curve navigation (prev/next in single-select mode)
   const selectedIndex = selectedRows.length === 1
@@ -365,11 +384,43 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     navigateTo(newIdx);
   }, [selectedIndex, filteredItems.length, navigateTo]);
 
-  // AG Grid columns (dynamic from readout definitions)
-  const columnDefs = useMemo<ColDef<CompoundActivity>[]>(
-    () => buildColumnDefs(readoutDefs),
-    [readoutDefs]
-  );
+  // AG Grid columns (dynamic from readout definitions + star column)
+  const columnDefs = useMemo<ColDef<CompoundActivity>[]>(() => {
+    const starCol: ColDef<CompoundActivity> = {
+      headerName: "",
+      colId: "star",
+      width: 45,
+      pinned: "left" as const,
+      sortable: false,
+      cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
+        if (!params.data) return null;
+        const flag = flagsByMolecule.get(params.data.molecule_id);
+        return (
+          <button
+            type="button"
+            className="flex items-center justify-center w-full h-full"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (flag) {
+                deleteFlag.mutate(flag.id);
+              } else {
+                createFlag.mutate({ molecule_id: params.data!.molecule_id });
+              }
+            }}
+          >
+            <Star
+              className={`h-4 w-4 transition-colors ${
+                flag
+                  ? "fill-yellow-400 text-yellow-400"
+                  : "text-muted-foreground/30 hover:text-yellow-400/50"
+              }`}
+            />
+          </button>
+        );
+      },
+    };
+    return [starCol, ...buildColumnDefs(readoutDefs)];
+  }, [readoutDefs, flagsByMolecule, createFlag, deleteFlag]);
 
   // ---------------------------------------------------------------------------
   // Compound detail panel
@@ -717,6 +768,20 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
             )}
 
             <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant={showFlaggedOnly ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setShowFlaggedOnly((v) => !v)}
+              >
+                <Star
+                  className={`mr-1 h-3.5 w-3.5 ${
+                    showFlaggedOnly
+                      ? "fill-yellow-400 text-yellow-400"
+                      : ""
+                  }`}
+                />
+                Flagged
+              </Button>
               {activeCriteria.length > 0 ? (
                 <Button
                   variant="ghost"
