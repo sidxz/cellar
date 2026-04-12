@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { TestTubes } from "lucide-react";
+import { Search, TestTubes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { Input } from "@/shared/components/ui/input";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -28,6 +29,7 @@ interface ProtocolListProps {
 const ALL_PROJECTS = "__all__";
 
 export function ProtocolList({ onSelect }: ProtocolListProps) {
+  const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>(ALL_PROJECTS);
   const { data: projects } = useProjects();
   const { data: protocols, isLoading, error } = useProtocols(
@@ -76,9 +78,19 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
 
   return (
     <div className="space-y-3">
-      {/* Project filter */}
-      {projects && projects.length > 0 && (
-        <div className="flex items-center gap-3">
+      {/* Search + Project filter */}
+      <div className="flex items-center gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search protocols..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {projects && projects.length > 0 && (
+          <>
           <span className="shrink-0 text-sm text-muted-foreground">
             Project:
           </span>
@@ -95,14 +107,16 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
               ))}
             </SelectContent>
           </Select>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       <DataGrid<Protocol>
         rowData={protocols}
         columnDefs={columnDefs}
         loading={isLoading}
         height="400px"
+        quickFilterText={search}
         suppressFilters
         onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
         emptyState={

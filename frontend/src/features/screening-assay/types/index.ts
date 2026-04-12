@@ -606,22 +606,39 @@ export interface ProtocolStats {
   latest_run: LatestRunResponse | null;
 }
 
-export interface ActivitySummaryItem {
-  molecule_id: string;
-  molecule_name: string;
-  molecule_registration_number: string;
-  best_value: number | null;
-  mean_value: number | null;
-  run_count: number;
-  min_value: number | null;
-  max_value: number | null;
-  curve_class: CurveClass | null;
-  last_tested: string | null;
+export interface CurveParams {
+  hill_slope: number;
+  top: number;
+  bottom: number;
+  fitted_value: number;
+  r_squared: number;
 }
 
-export interface ActivitySummary {
-  items: ActivitySummaryItem[];
-  readout_name: string;
-  readout_unit: string | null;
+export interface ReadoutValue {
+  best: number | null;
+  mean: number | null;
+  curve_class?: CurveClass | null;
+  curve_params?: CurveParams | null;
+}
+
+export interface ReadoutDefInfo {
+  name: string;
+  data_type: string;
+  unit: string | null;
+  best_direction: "high" | "low";
+}
+
+export interface CompoundActivity {
+  molecule_id: string;
+  molecule_name: string;
+  registration_number: string;
+  run_count: number;
+  last_tested: string | null;
+  readouts: Record<string, ReadoutValue>;
+}
+
+export interface ActivitySummaryV2 {
+  items: CompoundActivity[];
+  readout_definitions: ReadoutDefInfo[];
   total_compounds: number;
 }
