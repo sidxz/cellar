@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Filter, FlaskConical, RotateCcw, Settings2 } from "lucide-react";
+import { Eye, Filter, FlaskConical, RotateCcw, Settings2 } from "lucide-react";
 import type {
   ColDef,
   ICellRendererParams,
@@ -554,6 +554,8 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-3">
             <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Hit Criteria Filter</span>
+            <span className="text-muted-foreground">|</span>
 
             {activeCriteria.length > 0 ? (
               activeCriteria.map((rule, i) => (
@@ -562,12 +564,12 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                 </Badge>
               ))
             ) : (
-              <span className="text-sm text-muted-foreground">
-                No filter criteria
+              <span className="text-sm text-muted-foreground italic">
+                Disabled — showing all compounds
               </span>
             )}
 
-            {isModified && (
+            {isModified && activeCriteria.length > 0 && (
               <Badge
                 variant="outline"
                 className="border-yellow-500/40 text-yellow-400"
@@ -577,14 +579,23 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
             )}
 
             <div className="ml-auto flex items-center gap-2">
-              {isModified && (
+              {activeCriteria.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveCriteria([])}
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5" />
+                  Show All
+                </Button>
+              ) : (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setActiveCriteria(savedCriteria)}
                 >
-                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                  Reset
+                  <Filter className="mr-1 h-3.5 w-3.5" />
+                  Apply Filter
                 </Button>
               )}
               <Button

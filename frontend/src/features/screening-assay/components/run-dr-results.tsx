@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import { Filter, FlaskConical, Settings2, RotateCcw } from "lucide-react";
+import { Eye, Filter, FlaskConical, Settings2, RotateCcw } from "lucide-react";
 import type {
   ColDef,
   ICellRendererParams,
@@ -388,20 +388,30 @@ export function RunDoseResponseResults({
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-3">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            {activeCriteria.map((rule, i) => {
-              const op = { gt: ">", lt: "<", gte: ">=", lte: "<=", in: "in" }[
-                rule.operator
-              ] ?? rule.operator;
-              const val = Array.isArray(rule.value)
-                ? rule.value.join(", ")
-                : rule.value;
-              return (
-                <Badge key={i} variant="secondary">
-                  {rule.readout_name} {op} {val}
-                </Badge>
-              );
-            })}
-            {isModified && (
+            <span className="text-sm font-medium">Hit Criteria Filter</span>
+            <span className="text-muted-foreground">|</span>
+
+            {activeCriteria.length > 0 ? (
+              activeCriteria.map((rule, i) => {
+                const op = { gt: ">", lt: "<", gte: ">=", lte: "<=", in: "in" }[
+                  rule.operator
+                ] ?? rule.operator;
+                const val = Array.isArray(rule.value)
+                  ? rule.value.join(", ")
+                  : rule.value;
+                return (
+                  <Badge key={i} variant="secondary">
+                    {rule.readout_name} {op} {val}
+                  </Badge>
+                );
+              })
+            ) : (
+              <span className="text-sm text-muted-foreground italic">
+                Disabled — showing all compounds
+              </span>
+            )}
+
+            {isModified && activeCriteria.length > 0 && (
               <Badge
                 variant="outline"
                 className="border-yellow-500/40 text-yellow-400"
@@ -410,13 +420,23 @@ export function RunDoseResponseResults({
               </Badge>
             )}
             <div className="ml-auto flex items-center gap-2">
-              {isModified && (
+              {activeCriteria.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveCriteria([])}
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5" />
+                  Show All
+                </Button>
+              ) : (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setActiveCriteria(savedCriteria)}
                 >
-                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
+                  <Filter className="mr-1 h-3.5 w-3.5" />
+                  Apply Filter
                 </Button>
               )}
               <Button
