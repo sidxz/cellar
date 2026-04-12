@@ -52,7 +52,9 @@ class ReadoutDataResponse(BaseModel):
     run_id: uuid.UUID
     well_id: uuid.UUID | None = None
     molecule_id: uuid.UUID | None = None
+    registration_number: str | None = None
     batch_id: uuid.UUID | None = None
+    batch_number: str | None = None
     readout_definition_id: uuid.UUID
     value_numeric: float | None = None
     value_qualifier: str | None = None
@@ -61,14 +63,21 @@ class ReadoutDataResponse(BaseModel):
     is_computed: bool = False
 
     @classmethod
-    def from_domain(cls, rd) -> ReadoutDataResponse:  # type: ignore[no-untyped-def]
+    def from_domain(  # type: ignore[no-untyped-def]
+        cls,
+        rd,
+        registration_number: str | None = None,
+        batch_number: str | None = None,
+    ) -> ReadoutDataResponse:
         return cls(
             id=rd.id,
             workspace_id=rd.workspace_id,
             run_id=rd.run_id,
             well_id=rd.well_id,
             molecule_id=rd.molecule_id,
+            registration_number=registration_number,
             batch_id=rd.batch_id,
+            batch_number=batch_number,
             readout_definition_id=rd.readout_definition_id,
             value_numeric=rd.value.value if rd.value else None,
             value_qualifier=rd.value.qualifier.value if rd.value else None,
@@ -291,11 +300,48 @@ async def list_readout_data(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
     uc: ListReadoutDataByRunDep,
+    uow: UoWDep,
 ) -> list[ReadoutDataResponse]:
     query = ListReadoutDataByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
     result = await uc(query, auth=auth)
     data = result_to_response(result)
-    return [ReadoutDataResponse.from_domain(rd) for rd in data]
+
+    # Batch-resolve molecule registration_numbers and batch_numbers
+    from sqlalchemy import select as sa_select
+    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
+        MoleculeModel,
+    )
+    from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
+        BatchModel,
+    )
+
+    mol_ids = list({rd.molecule_id for rd in data if rd.molecule_id})
+    batch_ids = list({rd.batch_id for rd in data if rd.batch_id})
+    mol_map: dict[uuid.UUID, str] = {}
+    batch_map: dict[uuid.UUID, str] = {}
+
+    async with uow as u:
+        if mol_ids:
+            rows = (await u.session.execute(
+                sa_select(MoleculeModel.id, MoleculeModel.registration_number)
+                .where(MoleculeModel.id.in_(mol_ids))
+            )).all()
+            mol_map = {r.id: r.registration_number for r in rows}
+        if batch_ids:
+            rows = (await u.session.execute(
+                sa_select(BatchModel.id, BatchModel.batch_number)
+                .where(BatchModel.id.in_(batch_ids))
+            )).all()
+            batch_map = {r.id: r.batch_number for r in rows}
+
+    return [
+        ReadoutDataResponse.from_domain(
+            rd,
+            registration_number=mol_map.get(rd.molecule_id) if rd.molecule_id else None,
+            batch_number=batch_map.get(rd.batch_id) if rd.batch_id else None,
+        )
+        for rd in data
+    ]
 
 
 @router.post("/dose-response-curves", response_model=DoseResponseCurveResponse, status_code=201)

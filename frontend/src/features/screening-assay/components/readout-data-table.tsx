@@ -19,6 +19,9 @@ interface ReadoutDataTableProps {
 interface PivotRow {
   key: string;
   label: string;
+  registrationNumber: string;
+  moleculeName: string;
+  batchNumber: string;
   moleculeId: string;
   batchId: string;
   wellId: string | null;
@@ -70,7 +73,10 @@ export function ReadoutDataTable({
         const mol = molMap.get(row.molecule_id);
         group = {
           key,
-          label: mol ? `${mol.reg} \u2014 ${mol.name}` : "Unknown compound",
+          label: row.registration_number ?? mol?.reg ?? "Unknown",
+          registrationNumber: row.registration_number ?? mol?.reg ?? "",
+          moleculeName: mol?.name ?? "",
+          batchNumber: row.batch_number ?? "",
           moleculeId: row.molecule_id,
           batchId: row.batch_id ?? "",
           wellId: row.well_id,
@@ -88,10 +94,9 @@ export function ReadoutDataTable({
     const cols: ColDef<PivotRow>[] = [
       {
         headerName: "Compound",
-        field: "label",
+        field: "registrationNumber",
         pinned: "left",
-        minWidth: 180,
-        flex: 1,
+        width: 120,
         cellRenderer: (params: ICellRendererParams<PivotRow>) => {
           const row = params.data;
           if (!row) return null;
@@ -99,11 +104,21 @@ export function ReadoutDataTable({
             <EntityLink
               type="compound"
               id={row.moleculeId}
-              label={row.label}
+              label={row.registrationNumber}
               className="text-xs"
             />
           );
         },
+      },
+      {
+        headerName: "Name",
+        field: "moleculeName",
+        width: 130,
+      },
+      {
+        headerName: "Batch",
+        field: "batchNumber",
+        width: 100,
       },
     ];
 

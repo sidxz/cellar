@@ -296,7 +296,9 @@ export interface ReadoutData {
   run_id: string;
   well_id: string | null;
   molecule_id: string | null;
+  registration_number: string | null;
   batch_id: string | null;
+  batch_number: string | null;
   readout_definition_id: string;
   value_numeric: number | null;
   value_qualifier: string | null;
