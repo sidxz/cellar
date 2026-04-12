@@ -279,6 +279,7 @@ class GetProtocolActivitySummary:
                     DoseResponseCurveModel.bottom,
                     DoseResponseCurveModel.fitted_value,
                     DoseResponseCurveModel.r_squared,
+                    DoseResponseCurveModel.raw_data,
                     func.row_number()
                     .over(
                         partition_by=[
@@ -344,6 +345,7 @@ class GetProtocolActivitySummary:
 
                         curve_params: CurveParams | None = None
                         curve_class: str | None = None
+                        data_points: list[dict[str, float]] | None = None
                         if bp_row is not None:
                             curve_class = bp_row.curve_class
                             curve_params = CurveParams(
@@ -353,12 +355,22 @@ class GetProtocolActivitySummary:
                                 fitted_value=float(bp_row.fitted_value),
                                 r_squared=float(bp_row.r_squared),
                             )
+                            # Extract condensed data points from raw_data JSONB
+                            raw = bp_row.raw_data
+                            if raw and isinstance(raw, list):
+                                data_points = []
+                                for pt in raw:
+                                    conc = pt.get("concentration") or pt.get("x")
+                                    resp = pt.get("response") or pt.get("y")
+                                    if isinstance(conc, (int, float)) and isinstance(resp, (int, float)):
+                                        data_points.append({"x": float(conc), "y": float(resp)})
 
                         readouts[rd_info.name] = ReadoutValue(
                             best=float(dr_row.best) if dr_row.best is not None else None,
                             mean=round(float(dr_row.geo_mean), 6) if dr_row.geo_mean is not None else None,
                             curve_class=curve_class,
                             curve_params=curve_params,
+                            data_points=data_points,
                         )
                     else:
                         # Numeric readout
