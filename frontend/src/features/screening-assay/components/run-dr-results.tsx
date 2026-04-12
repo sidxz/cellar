@@ -26,6 +26,7 @@ import { DoseResponseSparkline } from "./dose-response-sparkline";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
+import { ComparisonTable } from "./comparison-table";
 import { useProtocol } from "../hooks/use-protocols";
 import {
   CURVE_CLASS_LABELS,
@@ -635,6 +636,34 @@ export function RunDoseResponseResults({
             <DoseResponseChart
               curves={selectedCurves}
               isInteractive={!run.is_locked}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Multi-select comparison — 2-5 compounds */}
+      {selectedRows.length >= 2 && selectedRows.length <= 5 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Comparison ({selectedRows.length} compounds)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ComparisonTable
+              rows={selectedRows.map((row, i) => ({
+                label: row.registration_number,
+                batch: row.batch_number,
+                color: ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#a855f7"][i % 5],
+                curve_type: row.curve_type,
+                fitted_value: row.fitted_value,
+                fitted_unit: row.fitted_unit,
+                hill_slope: row.hill_slope,
+                r_squared: row.r_squared,
+                curve_class: row.curve_class,
+                top: row.top,
+                bottom: row.bottom,
+              }))}
             />
           </CardContent>
         </Card>

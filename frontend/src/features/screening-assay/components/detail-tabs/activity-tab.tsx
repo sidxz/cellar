@@ -28,6 +28,7 @@ import { DoseResponseChart } from "../dose-response-chart";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
+import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import {
   CURVE_CLASS_LABELS,
   type CompoundActivity,
@@ -841,6 +842,16 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                 useResizeHandler
                 style={{ width: "100%", height: "350px" }}
               />
+            )}
+            {multiCurves && multiCurves.length > 0 && (
+              <div className="mt-4">
+                <ComparisonTable
+                  rows={buildComparisonRows(
+                    multiCurves,
+                    new Map(selectedRows.map((r) => [r.molecule_id, { label: r.registration_number, batch: r.batch_number }]))
+                  )}
+                />
+              </div>
             )}
           </CardContent>
         </Card>
