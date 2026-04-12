@@ -465,6 +465,8 @@ RefitDoseResponseCurveDep = Annotated[RefitDoseResponseCurve, Depends(_get_use_c
 ClassifyDoseResponseCurveDep = Annotated[ClassifyDoseResponseCurve, Depends(_get_use_case(ClassifyDoseResponseCurve))]
 MoleculeActivityServiceDep = Annotated[MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))]
 ReadoutCalculationEngineDep = Annotated[ReadoutCalculationEngine, Depends(_get_use_case(ReadoutCalculationEngine))]
+from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
+FitDoseResponseCurvesDep = Annotated[FitDoseResponseCurves, Depends(_get_use_case(FitDoseResponseCurves))]
 GetProtocolStatsDep = Annotated[GetProtocolStats, Depends(_get_use_case(GetProtocolStats))]
 GetProtocolActivitySummaryDep = Annotated[GetProtocolActivitySummary, Depends(_get_use_case(GetProtocolActivitySummary))]
 GetCompoundCurvesDep = Annotated[GetCompoundCurves, Depends(_get_use_case(GetCompoundCurves))]

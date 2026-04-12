@@ -21,8 +21,10 @@ from chem_vault.application.screening.plate_setup import (
     SetUpRunPlateCommand,
 )
 from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 from chem_vault.interface.dependencies import (
     AuthDep,
+    FitDoseResponseCurvesDep,
     ImportRunReadoutsDep,
     ParsePlateMapFileDep,
     ReadoutCalculationEngineDep,
@@ -346,29 +348,42 @@ class FitCurvesResponse(BaseModel):
 async def fit_curves_for_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    calc_engine: ReadoutCalculationEngineDep,
+    fit_uc: FitDoseResponseCurvesDep,
     uow: UoWDep,
 ) -> FitCurvesResponse:
     """Trigger dose-response curve fitting for a run.
 
-    Idempotent — deletes previous auto-fitted curves and re-fits from
-    the current readout data.  Uses the full ReadoutCalculationEngine
-    pipeline (normalisation + curve fitting).
+    Calls FitDoseResponseCurves directly — loads run (with wells),
+    protocol, and readout data, then fits 4PL curves.  Idempotent:
+    deletes previous curves before re-fitting.
     """
-    await calc_engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+    from chem_vault.interface.error_handlers import result_to_response
 
-    # Count resulting curves
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
-        DoseResponseCurveModel,
-    )
-    from sqlalchemy import func, select
+    # Load run, protocol, readout data through repos
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import SQLAlchemyRunRepository
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import SQLAlchemyProtocolRepository
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import SQLAlchemyReadoutDataRepository
 
     async with uow as u:
-        count = (
-            await u.session.execute(
-                select(func.count())
-                .select_from(DoseResponseCurveModel)
-                .where(DoseResponseCurveModel.run_id == run_id)
-            )
-        ).scalar_one()
-    return FitCurvesResponse(curves_fitted=count)
+        run_repo = SQLAlchemyRunRepository(u)
+        proto_repo = SQLAlchemyProtocolRepository(u)
+        rd_repo = SQLAlchemyReadoutDataRepository(u)
+
+        run = await run_repo.find_by_id_in_workspace(auth.workspace_id, run_id)
+        if run is None:
+            from chem_vault.domain.shared.errors import NotFoundError
+            raise NotFoundError("Run", str(run_id))
+
+        protocol = await proto_repo.find_by_id_in_workspace(auth.workspace_id, run.protocol_id)
+        if protocol is None:
+            from chem_vault.domain.shared.errors import NotFoundError
+            raise NotFoundError("Protocol", str(run.protocol_id))
+
+        readout_data = await rd_repo.find_by_run(auth.workspace_id, run_id)
+
+    # Fit curves (uses its own UoW internally)
+    result = await fit_uc.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data
+    )
+    curves = result_to_response(result)
+    return FitCurvesResponse(curves_fitted=len(curves))
