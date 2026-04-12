@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Filter, RotateCcw, Settings2, FlaskConical } from "lucide-react";
+import { Filter, FlaskConical, RotateCcw, Settings2 } from "lucide-react";
 import type {
   ColDef,
   ICellRendererParams,
@@ -20,13 +20,17 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
+import { useCompoundCurves } from "../../hooks/use-compound-curves";
+import { DoseResponseChart } from "../dose-response-chart";
+import { DoseResponseSparkline } from "../dose-response-sparkline";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import {
   CURVE_CLASS_LABELS,
-  type ActivitySummaryItem,
+  type CompoundActivity,
   type CurveClass,
   type HitCriterion,
   type Protocol,
+  type ReadoutDefInfo,
 } from "../../types";
 
 // ---------------------------------------------------------------------------
@@ -77,36 +81,38 @@ function curveClassBadge(cc: CurveClass | null) {
 }
 
 // ---------------------------------------------------------------------------
-// Client-side filter
+// Client-side filter (multi-readout)
 // ---------------------------------------------------------------------------
 
 function applyFilters(
-  items: ActivitySummaryItem[],
+  items: CompoundActivity[],
   criteria: HitCriterion[]
-): ActivitySummaryItem[] {
+): CompoundActivity[] {
   if (criteria.length === 0) return items;
   return items.filter((item) =>
     criteria.every((rule) => {
       if (rule.readout_name === "Curve Class") {
         if (rule.operator === "in" && Array.isArray(rule.value)) {
-          return (
-            item.curve_class != null && rule.value.includes(item.curve_class)
+          return Object.values(item.readouts).some(
+            (rv) =>
+              rv.curve_class != null &&
+              (rule.value as string[]).includes(rv.curve_class)
           );
         }
         return true;
       }
-      const val = item.best_value;
-      if (val == null) return false;
+      const readout = item.readouts[rule.readout_name];
+      if (!readout || readout.best == null) return false;
       const threshold = typeof rule.value === "number" ? rule.value : 0;
       switch (rule.operator) {
         case "gt":
-          return val > threshold;
+          return readout.best > threshold;
         case "lt":
-          return val < threshold;
+          return readout.best < threshold;
         case "gte":
-          return val >= threshold;
+          return readout.best >= threshold;
         case "lte":
-          return val <= threshold;
+          return readout.best <= threshold;
         default:
           return true;
       }
@@ -122,6 +128,126 @@ function criterionLabel(rule: HitCriterion): string {
   const op = OPERATOR_LABELS[rule.operator] ?? rule.operator;
   const val = Array.isArray(rule.value) ? rule.value.join(", ") : rule.value;
   return `${rule.readout_name} ${op} ${val}`;
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic column generation
+// ---------------------------------------------------------------------------
+
+function buildColumnDefs(
+  readoutDefs: ReadoutDefInfo[]
+): ColDef<CompoundActivity>[] {
+  const cols: ColDef<CompoundActivity>[] = [];
+
+  // Fixed left: Compound
+  cols.push({
+    headerName: "Compound",
+    field: "registration_number",
+    pinned: "left",
+    flex: 1,
+    minWidth: 160,
+    headerCheckboxSelection: true,
+    checkboxSelection: true,
+    cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
+      if (!params.data) return null;
+      return (
+        <div className="leading-tight">
+          <span className="font-medium">
+            {params.data.registration_number}
+          </span>
+          {params.data.molecule_name && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              {params.data.molecule_name}
+            </span>
+          )}
+        </div>
+      );
+    },
+  });
+
+  // Per readout definition
+  let isFirstReadout = true;
+  for (const rd of readoutDefs) {
+    const isDR = rd.data_type === "dose_response";
+    const unitSuffix = rd.unit ? ` (${rd.unit})` : "";
+
+    // Best column
+    cols.push({
+      headerName: `${rd.name} Best${unitSuffix}`,
+      colId: `${rd.name}_best`,
+      width: 120,
+      valueGetter: (p) => p.data?.readouts?.[rd.name]?.best ?? null,
+      valueFormatter: (p) =>
+        p.value != null ? Number(p.value).toPrecision(4) : "--",
+      // Default sort on first readout
+      ...(isFirstReadout
+        ? { sort: isDR ? ("asc" as const) : ("desc" as const) }
+        : {}),
+    });
+
+    // Mean column
+    cols.push({
+      headerName: `${rd.name} Mean${unitSuffix}`,
+      colId: `${rd.name}_mean`,
+      width: 120,
+      valueGetter: (p) => p.data?.readouts?.[rd.name]?.mean ?? null,
+      valueFormatter: (p) =>
+        p.value != null ? Number(p.value).toPrecision(4) : "--",
+    });
+
+    // DR-specific extra columns
+    if (isDR) {
+      cols.push({
+        headerName: "Class",
+        colId: `${rd.name}_class`,
+        width: 90,
+        valueGetter: (p) =>
+          p.data?.readouts?.[rd.name]?.curve_class ?? null,
+        cellRenderer: (params: ICellRendererParams<CompoundActivity>) =>
+          curveClassBadge(params.value ?? null),
+      });
+
+      cols.push({
+        headerName: "Curve",
+        colId: `${rd.name}_curve`,
+        width: 130,
+        cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
+          if (!params.data) return null;
+          const rv = params.data.readouts?.[rd.name];
+          const cp = rv?.curve_params;
+          const cc = rv?.curve_class;
+          if (!cp) return <span className="text-muted-foreground">--</span>;
+          return <DoseResponseSparkline params={cp} curveClass={cc} />;
+        },
+      });
+    }
+
+    isFirstReadout = false;
+  }
+
+  // Fixed right: Runs + Last Tested
+  cols.push({
+    headerName: "Runs",
+    field: "run_count",
+    width: 70,
+  });
+
+  cols.push({
+    headerName: "Last Tested",
+    field: "last_tested",
+    width: 110,
+    cellClass: "font-mono",
+    valueFormatter: (p) => {
+      if (!p.value) return "--";
+      return new Date(p.value as string).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    },
+  });
+
+  return cols;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,10 +278,10 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
 
   // Selection state
-  const [selectedRows, setSelectedRows] = useState<ActivitySummaryItem[]>([]);
+  const [selectedRows, setSelectedRows] = useState<CompoundActivity[]>([]);
 
   const handleSelectionChanged = useCallback(
-    (event: SelectionChangedEvent<ActivitySummaryItem>) => {
+    (event: SelectionChangedEvent<CompoundActivity>) => {
       setSelectedRows(event.api.getSelectedRows());
     },
     []
@@ -170,121 +296,51 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   }
 
   // Derived data
-  const readoutName = activity?.readout_name ?? "Value";
-  const readoutUnit = activity?.readout_unit;
-  const unitSuffix = readoutUnit ? ` (${readoutUnit})` : "";
+  const readoutDefs = activity?.readout_definitions ?? [];
 
   const filteredItems = useMemo(
     () => applyFilters(activity?.items ?? [], activeCriteria),
     [activity?.items, activeCriteria]
   );
 
-  // ---------------------------------------------------------------------------
-  // AG Grid columns
-  // ---------------------------------------------------------------------------
-
-  const columnDefs = useMemo<ColDef<ActivitySummaryItem>[]>(
-    () => [
-      {
-        headerName: "Compound",
-        field: "molecule_registration_number",
-        flex: 1,
-        minWidth: 160,
-        headerCheckboxSelection: true,
-        checkboxSelection: true,
-        cellRenderer: (params: ICellRendererParams<ActivitySummaryItem>) => {
-          if (!params.data) return null;
-          return (
-            <div className="leading-tight">
-              <span className="font-medium">
-                {params.data.molecule_registration_number}
-              </span>
-              {params.data.molecule_name && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {params.data.molecule_name}
-                </span>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        headerName: `Best${unitSuffix}`,
-        field: "best_value",
-        width: 110,
-        sort: "asc",
-        valueFormatter: (p) =>
-          p.value != null ? Number(p.value).toPrecision(4) : "--",
-      },
-      {
-        headerName: `Mean${unitSuffix}`,
-        field: "mean_value",
-        width: 110,
-        valueFormatter: (p) =>
-          p.value != null ? Number(p.value).toPrecision(4) : "--",
-      },
-      {
-        headerName: "Runs",
-        field: "run_count",
-        width: 70,
-      },
-      {
-        headerName: "Range",
-        colId: "range",
-        width: 120,
-        valueGetter: (p) => {
-          if (!p.data) return null;
-          const { min_value, max_value } = p.data;
-          if (min_value == null || max_value == null) return null;
-          if (min_value === max_value)
-            return Number(min_value).toPrecision(3);
-          return `${Number(min_value).toPrecision(3)}\u2013${Number(max_value).toPrecision(3)}`;
-        },
-      },
-      {
-        headerName: "Curve Class",
-        field: "curve_class",
-        width: 110,
-        cellRenderer: (params: ICellRendererParams<ActivitySummaryItem>) =>
-          curveClassBadge(params.value ?? null),
-      },
-      {
-        headerName: "Last Tested",
-        field: "last_tested",
-        width: 110,
-        cellClass: "font-mono",
-        valueFormatter: (p) => {
-          if (!p.value) return "--";
-          return new Date(p.value as string).toLocaleDateString(undefined, {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          });
-        },
-      },
-    ],
-    [unitSuffix]
+  // AG Grid columns (dynamic from readout definitions)
+  const columnDefs = useMemo<ColDef<CompoundActivity>[]>(
+    () => buildColumnDefs(readoutDefs),
+    [readoutDefs]
   );
 
   // ---------------------------------------------------------------------------
-  // Plotly comparison chart data
+  // Compound detail panel
   // ---------------------------------------------------------------------------
 
+  const singleSelectedMoleculeId =
+    selectedRows.length === 1 ? selectedRows[0].molecule_id : null;
+
+  const { data: compoundCurves, isLoading: curvesLoading } =
+    useCompoundCurves(protocolId, singleSelectedMoleculeId);
+
+  // Comparison bar chart data (2-5 selected, first readout)
   const chartData = useMemo(() => {
-    if (selectedRows.length === 0) return null;
+    if (selectedRows.length < 2 || selectedRows.length > 5) return null;
+    const firstReadout = readoutDefs[0];
+    if (!firstReadout) return null;
     return [
       {
         type: "bar" as const,
-        x: selectedRows.map((r) => r.molecule_registration_number),
-        y: selectedRows.map((r) => r.best_value ?? 0),
+        x: selectedRows.map((r) => r.registration_number),
+        y: selectedRows.map(
+          (r) => r.readouts?.[firstReadout.name]?.best ?? 0
+        ),
         marker: { color: "#3b82f6" },
         hoverinfo: "x+y",
       },
     ];
-  }, [selectedRows]);
+  }, [selectedRows, readoutDefs]);
 
-  const chartLayout = useMemo(
-    () => ({
+  const chartLayout = useMemo(() => {
+    const firstReadout = readoutDefs[0];
+    const unitSuffix = firstReadout?.unit ? ` (${firstReadout.unit})` : "";
+    return {
       height: 350,
       autosize: true,
       paper_bgcolor: "transparent",
@@ -296,14 +352,13 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         tickangle: -45,
       },
       yaxis: {
-        title: { text: `Best ${readoutName}${unitSuffix}` },
+        title: { text: `Best ${firstReadout?.name ?? "Value"}${unitSuffix}` },
         gridcolor: "#27272a",
       },
       margin: { l: 60, r: 20, t: 20, b: 80 },
       bargap: 0.3,
-    }),
-    [readoutName, unitSuffix]
-  );
+    };
+  }, [readoutDefs]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -328,56 +383,76 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     );
   }
 
+  const hasCriteria =
+    savedCriteria.length > 0 || activeCriteria.length > 0;
+
   return (
     <div className="space-y-4">
-      {/* Filter bar */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-3">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-
-          {activeCriteria.length > 0 ? (
-            activeCriteria.map((rule, i) => (
-              <Badge key={i} variant="secondary">
-                {criterionLabel(rule)}
-              </Badge>
-            ))
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              No filter criteria
-            </span>
-          )}
-
-          {isModified && (
-            <Badge
-              variant="outline"
-              className="border-yellow-500/40 text-yellow-400"
-            >
-              Modified
-            </Badge>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
-            {isModified && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setActiveCriteria(savedCriteria)}
-              >
-                <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                Reset
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCriteriaDialogOpen(true)}
-            >
-              <Settings2 className="mr-1 h-3.5 w-3.5" />
-              Edit Criteria
+      {/* Hit Criteria CTA or Filter Bar */}
+      {!hasCriteria ? (
+        <Card className="border-2 border-dashed">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="font-medium">No hit criteria defined</p>
+              <p className="text-sm text-muted-foreground">
+                Define recommended criteria so your team knows which compounds
+                qualify as hits.
+              </p>
+            </div>
+            <Button onClick={() => setCriteriaDialogOpen(true)}>
+              <Settings2 className="mr-2 h-4 w-4" /> Set Hit Criteria
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-3">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+
+            {activeCriteria.length > 0 ? (
+              activeCriteria.map((rule, i) => (
+                <Badge key={i} variant="secondary">
+                  {criterionLabel(rule)}
+                </Badge>
+              ))
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                No filter criteria
+              </span>
+            )}
+
+            {isModified && (
+              <Badge
+                variant="outline"
+                className="border-yellow-500/40 text-yellow-400"
+              >
+                Modified
+              </Badge>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              {isModified && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveCriteria(savedCriteria)}
+                >
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                  Reset
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCriteriaDialogOpen(true)}
+              >
+                <Settings2 className="mr-1 h-3.5 w-3.5" />
+                Edit Criteria
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filtered count indicator */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -391,12 +466,13 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         )}
       </div>
 
-      {/* AG Grid */}
-      <DataGrid<ActivitySummaryItem>
+      {/* AG Grid with dynamic columns */}
+      <DataGrid<CompoundActivity>
         rowData={filteredItems}
         columnDefs={columnDefs}
         height="500px"
         rowSelection="multiple"
+        rowHeight={70}
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`${protocol.name}-activity`}
@@ -409,8 +485,33 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         }
       />
 
-      {/* Comparison chart — only when rows selected */}
-      {chartData && selectedRows.length > 0 && (
+      {/* Compound detail panel */}
+      {selectedRows.length === 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {selectedRows[0].registration_number}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {curvesLoading ? (
+              <Skeleton className="h-[350px] w-full" />
+            ) : compoundCurves && compoundCurves.length > 0 ? (
+              <DoseResponseChart
+                curves={compoundCurves}
+                isInteractive={false}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No dose-response curves available for this compound.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Comparison chart — 2-5 selected */}
+      {chartData && selectedRows.length >= 2 && selectedRows.length <= 5 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -428,6 +529,14 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
             />
           </CardContent>
         </Card>
+      )}
+
+      {/* >5 selected — count text */}
+      {selectedRows.length > 5 && (
+        <p className="text-sm text-muted-foreground">
+          {selectedRows.length} compounds selected. Select 5 or fewer to see a
+          comparison chart, or 1 to see dose-response curves.
+        </p>
       )}
 
       {/* Hit criteria dialog */}
