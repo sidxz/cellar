@@ -20,7 +20,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
-import { useCompoundCurves } from "../../hooks/use-compound-curves";
+import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { DoseResponseChart } from "../dose-response-chart";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
@@ -177,9 +177,25 @@ function buildColumnDefs(
       colId: `${rd.name}_best`,
       width: 120,
       valueGetter: (p) => p.data?.readouts?.[rd.name]?.best ?? null,
-      valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toPrecision(4) : "--",
-      // Default sort on first readout
+      cellRenderer: !isDR
+        ? (params: ICellRendererParams<CompoundActivity>) => {
+            if (params.value == null) return "--";
+            const rv = params.data?.readouts?.[rd.name];
+            return (
+              <div className="leading-tight">
+                <span>{Number(params.value).toPrecision(4)}</span>
+                {rv?.n != null && rv.n > 1 && (
+                  <div className="text-[10px] text-muted-foreground">
+                    n={rv.n}{rv.sd != null ? `, SD=${rv.sd.toPrecision(2)}` : ""}
+                  </div>
+                )}
+              </div>
+            );
+          }
+        : undefined,
+      valueFormatter: isDR
+        ? (p) => (p.value != null ? Number(p.value).toPrecision(4) : "--")
+        : undefined,
       ...(isFirstReadout
         ? { sort: isDR ? ("asc" as const) : ("desc" as const) }
         : {}),
@@ -210,14 +226,15 @@ function buildColumnDefs(
       cols.push({
         headerName: "Curve",
         colId: `${rd.name}_curve`,
-        width: 130,
+        width: 150,
         cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
           if (!params.data) return null;
           const rv = params.data.readouts?.[rd.name];
           const cp = rv?.curve_params;
           const cc = rv?.curve_class;
+          const dp = rv?.data_points;
           if (!cp) return <span className="text-muted-foreground">--</span>;
-          return <DoseResponseSparkline params={cp} curveClass={cc} />;
+          return <DoseResponseSparkline params={cp} dataPoints={dp} curveClass={cc} />;
         },
       });
     }
@@ -319,9 +336,127 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   const { data: compoundCurves, isLoading: curvesLoading } =
     useCompoundCurves(protocolId, singleSelectedMoleculeId);
 
-  // Comparison bar chart data (2-5 selected, first readout)
-  const chartData = useMemo(() => {
-    if (selectedRows.length < 2 || selectedRows.length > 5) return null;
+  // Multi-compound curve overlay (2-5 selected)
+  const multiMoleculeIds = useMemo(
+    () =>
+      selectedRows.length >= 2 && selectedRows.length <= 5
+        ? selectedRows.map((r) => r.molecule_id)
+        : [],
+    [selectedRows]
+  );
+
+  const { data: multiCurves, isLoading: multiCurvesLoading } =
+    useMultiCompoundCurves(protocolId, multiMoleculeIds);
+
+  const hasDRCurves = multiCurves && multiCurves.length > 0;
+
+  // Build Plotly curve overlay traces
+  const overlayTraces = useMemo(() => {
+    if (!multiCurves || multiCurves.length === 0) return null;
+    const TRACE_COLORS = [
+      "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#a855f7",
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const traces: any[] = [];
+
+    const byMolecule = new Map<string, typeof multiCurves>();
+    for (const curve of multiCurves) {
+      const mid = curve.molecule_id;
+      if (!byMolecule.has(mid)) byMolecule.set(mid, []);
+      byMolecule.get(mid)!.push(curve);
+    }
+
+    let colorIdx = 0;
+    for (const [molId, curves] of byMolecule) {
+      const color = TRACE_COLORS[colorIdx % TRACE_COLORS.length];
+      const row = selectedRows.find((r) => r.molecule_id === molId);
+      const label = row?.registration_number ?? molId.slice(0, 8);
+      const bestCurve = curves[0];
+
+      const allX = curves.flatMap((c) =>
+        (c.raw_data ?? [])
+          .map(
+            (pt: Record<string, unknown>) =>
+              (pt.concentration ?? pt.x) as number
+          )
+          .filter((v): v is number => typeof v === "number")
+      );
+      const xMin = Math.max(
+        Math.min(...allX, bestCurve.fitted_value) * 0.1,
+        1e-12
+      );
+      const xMax = Math.max(...allX, bestCurve.fitted_value) * 10;
+
+      // Data points scatter
+      const rawPts = bestCurve.raw_data ?? [];
+      const ptX = rawPts
+        .map(
+          (p: Record<string, unknown>) =>
+            (p.concentration ?? p.x) as number
+        )
+        .filter((v): v is number => typeof v === "number");
+      const ptY = rawPts
+        .map(
+          (p: Record<string, unknown>) =>
+            (p.response ?? p.y) as number
+        )
+        .filter((v): v is number => typeof v === "number");
+
+      if (ptX.length > 0) {
+        traces.push({
+          type: "scatter",
+          mode: "markers",
+          name: label,
+          legendgroup: label,
+          x: ptX,
+          y: ptY,
+          marker: { color, size: 6 },
+          showlegend: true,
+          hovertemplate: `${label}<br>x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>`,
+        });
+      }
+
+      // Fitted sigmoid
+      const logMin = Math.log10(xMin);
+      const logMax = Math.log10(xMax);
+      const lineX: number[] = [];
+      const lineY: number[] = [];
+      for (let i = 0; i <= 80; i++) {
+        const logX = logMin + (logMax - logMin) * (i / 80);
+        const x = Math.pow(10, logX);
+        const y =
+          bestCurve.bottom +
+          (bestCurve.top - bestCurve.bottom) /
+            (1 +
+              Math.pow(x / bestCurve.fitted_value, bestCurve.hill_slope));
+        lineX.push(x);
+        lineY.push(y);
+      }
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: `${label} fit`,
+        legendgroup: label,
+        x: lineX,
+        y: lineY,
+        line: { color, width: 2 },
+        showlegend: false,
+        hoverinfo: "skip",
+      });
+
+      colorIdx++;
+    }
+    return traces;
+  }, [multiCurves, selectedRows]);
+
+  // Fallback bar chart for single-point-only selection
+  const barChartData = useMemo(() => {
+    if (
+      hasDRCurves ||
+      selectedRows.length < 2 ||
+      selectedRows.length > 5
+    )
+      return null;
     const firstReadout = readoutDefs[0];
     if (!firstReadout) return null;
     return [
@@ -335,11 +470,12 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         hoverinfo: "x+y",
       },
     ];
-  }, [selectedRows, readoutDefs]);
+  }, [selectedRows, readoutDefs, hasDRCurves]);
 
-  const chartLayout = useMemo(() => {
+  const comparisonLayout = useMemo(() => {
     const firstReadout = readoutDefs[0];
     const unitSuffix = firstReadout?.unit ? ` (${firstReadout.unit})` : "";
+    const isDR = firstReadout?.data_type === "dose_response";
     return {
       height: 350,
       autosize: true,
@@ -347,13 +483,23 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       plot_bgcolor: "transparent",
       font: { color: "#a1a1aa" },
       xaxis: {
-        title: { text: "Compound" },
+        title: { text: isDR ? "Concentration" : "Compound" },
+        type: isDR ? ("log" as const) : undefined,
         gridcolor: "#27272a",
-        tickangle: -45,
+        ...(isDR ? {} : { tickangle: -45 }),
       },
       yaxis: {
-        title: { text: `Best ${firstReadout?.name ?? "Value"}${unitSuffix}` },
+        title: {
+          text: isDR
+            ? "Response (%)"
+            : `Best ${firstReadout?.name ?? "Value"}${unitSuffix}`,
+        },
         gridcolor: "#27272a",
+      },
+      legend: {
+        orientation: "h" as const,
+        y: -0.25,
+        font: { color: "#a1a1aa" },
       },
       margin: { l: 60, r: 20, t: 20, b: 80 },
       bargap: 0.3,
@@ -485,22 +631,62 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         }
       />
 
-      {/* Compound detail panel */}
+      {/* Compound detail panel — single select */}
       {selectedRows.length === 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
               {selectedRows[0].registration_number}
+              {selectedRows[0].molecule_name && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  {selectedRows[0].molecule_name}
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             {curvesLoading ? (
               <Skeleton className="h-[350px] w-full" />
             ) : compoundCurves && compoundCurves.length > 0 ? (
-              <DoseResponseChart
-                curves={compoundCurves}
-                isInteractive={false}
-              />
+              <>
+                <DoseResponseChart
+                  curves={compoundCurves}
+                  isInteractive={false}
+                />
+                {/* Per-run breakdown table */}
+                <div className="rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Run</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Batch</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Fitted Value</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">R²</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Hill Slope</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {compoundCurves.map((curve) => (
+                        <tr key={curve.id} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-mono text-xs">{curve.run_id.slice(0, 8)}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {curve.batch_number ?? curve.batch_id.slice(0, 8)}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
+                          </td>
+                          <td className="px-3 py-2 font-mono">{curve.r_squared.toFixed(3)}</td>
+                          <td className="px-3 py-2">
+                            {curve.curve_class ? curveClassBadge(curve.curve_class) : "--"}
+                          </td>
+                          <td className="px-3 py-2 font-mono">{curve.hill_slope.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 No dose-response curves available for this compound.
@@ -510,19 +696,42 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         </Card>
       )}
 
-      {/* Comparison chart — 2-5 selected */}
-      {chartData && selectedRows.length >= 2 && selectedRows.length <= 5 && (
+      {/* Curve overlay — 2-5 selected with DR data */}
+      {overlayTraces && selectedRows.length >= 2 && selectedRows.length <= 5 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Comparison ({selectedRows.length} compound
-              {selectedRows.length !== 1 ? "s" : ""})
+              Dose-Response Comparison ({selectedRows.length} compounds)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {multiCurvesLoading ? (
+              <Skeleton className="h-[350px] w-full" />
+            ) : (
+              <Plot
+                data={overlayTraces}
+                layout={comparisonLayout}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler
+                style={{ width: "100%", height: "350px" }}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Fallback bar chart — 2-5 selected, no DR data */}
+      {barChartData && !hasDRCurves && selectedRows.length >= 2 && selectedRows.length <= 5 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Comparison ({selectedRows.length} compounds)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <Plot
-              data={chartData}
-              layout={chartLayout}
+              data={barChartData}
+              layout={comparisonLayout}
               config={{ displayModeBar: false, responsive: true }}
               useResizeHandler
               style={{ width: "100%", height: "350px" }}
