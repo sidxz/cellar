@@ -3,6 +3,8 @@
 import { FlaskConical } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/empty-state";
+import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
+import type { CurveParams, CurveClass } from "@/features/screening-assay/types";
 import {
   Card,
   CardContent,
@@ -76,6 +78,7 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                       <TableHead>R²</TableHead>
                       <TableHead>Points</TableHead>
                       <TableHead>Class</TableHead>
+                      <TableHead>Curve</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -98,6 +101,25 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                         <TableCell>{curve.num_points}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {curve.curve_class ?? "\u2014"}
+                        </TableCell>
+                        <TableCell>
+                          {curve.hill_slope != null ? (
+                            <DoseResponseSparkline
+                              params={{
+                                hill_slope: curve.hill_slope,
+                                top: 100,
+                                bottom: 0,
+                                fitted_value: curve.fitted_value,
+                                r_squared: curve.r_squared,
+                              }}
+                              dataPoints={curve.data_points}
+                              curveClass={curve.curve_class as CurveClass | null}
+                              width={120}
+                              height={50}
+                            />
+                          ) : (
+                            "--"
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
