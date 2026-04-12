@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   Archive,
+  Copy,
   FlaskConical,
   LayoutDashboard,
   Paperclip,
@@ -110,6 +111,15 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   >
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => versionMutation.mutate(protocolId)}
+                    disabled={versionMutation.isPending}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    {versionMutation.isPending ? "Duplicating..." : "Duplicate"}
                   </Button>
                   <Button
                     size="sm"
