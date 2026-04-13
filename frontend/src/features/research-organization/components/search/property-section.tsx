@@ -1,9 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -11,39 +9,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import type { PropertyCriterion, PropertyOperator } from "../../types";
+import type { PropertyCriterion } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const PROPERTY_FIELDS = [
-  { value: "molecular_weight", label: "Molecular Weight" },
+  { value: "molecular_weight", label: "MW" },
   { value: "logp", label: "LogP" },
   { value: "tpsa", label: "TPSA" },
   { value: "hbd", label: "HBD" },
   { value: "hba", label: "HBA" },
-  { value: "rotatable_bonds", label: "Rotatable Bonds" },
-  { value: "heavy_atom_count", label: "Heavy Atom Count" },
-  { value: "aromatic_rings", label: "Aromatic Rings" },
-  { value: "ring_count", label: "Ring Count" },
-  { value: "ro5_violations", label: "Ro5 Violations" },
-] as const;
-
-const PROPERTY_OPERATORS: { value: PropertyOperator; label: string }[] = [
-  { value: "eq", label: "=" },
-  { value: "lt", label: "<" },
-  { value: "lte", label: "<=" },
-  { value: "gt", label: ">" },
-  { value: "gte", label: ">=" },
-  { value: "between", label: "Between" },
+  { value: "rotatable_bonds", label: "RotB" },
+  { value: "heavy_atom_count", label: "HAC" },
+  { value: "aromatic_rings", label: "AroR" },
+  { value: "ring_count", label: "Rings" },
+  { value: "ro5_violations", label: "Ro5" },
 ];
 
 function defaultPropertyCriterion(): PropertyCriterion {
-  return { type: "property", field: "molecular_weight", operator: "gte", value: undefined, min: undefined, max: undefined };
+  return {
+    type: "property",
+    field: "molecular_weight",
+    operator: "between",
+    value: undefined,
+    min: undefined,
+    max: undefined,
+  };
 }
 
-// ─── Single property term ───────────────────────────────────────────────────
+// ─── Single compact row ─────────────────────────────────────────────────────
 
-function PropertyTerm({
+function PropertyRow({
   criterion,
   onChange,
   onRemove,
@@ -52,102 +48,67 @@ function PropertyTerm({
   onChange: (c: PropertyCriterion) => void;
   onRemove: () => void;
 }) {
-  const isBetween = criterion.operator === "between";
-
   return (
-    <div className="flex items-end gap-2">
-      <div className="w-44">
-        <Label className="text-xs text-muted-foreground">Property</Label>
-        <Select
-          value={criterion.field}
-          onValueChange={(v) => onChange({ ...criterion, field: v })}
-        >
-          <SelectTrigger className="h-9">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PROPERTY_FIELDS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="flex items-center gap-2">
+      {/* Property select */}
+      <Select
+        value={criterion.field}
+        onValueChange={(v) => onChange({ ...criterion, field: v })}
+      >
+        <SelectTrigger className="h-7 w-20 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PROPERTY_FIELDS.map((f) => (
+            <SelectItem key={f.value} value={f.value} className="text-xs">
+              {f.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <div className="w-28">
-        <Label className="text-xs text-muted-foreground">Operator</Label>
-        <Select
-          value={criterion.operator}
-          onValueChange={(v) =>
-            onChange({
-              ...criterion,
-              operator: v as PropertyOperator,
-              ...(v === "between"
-                ? { value: undefined, min: criterion.min, max: criterion.max }
-                : { min: undefined, max: undefined, value: criterion.value }),
-            })
-          }
-        >
-          <SelectTrigger className="h-9">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PROPERTY_OPERATORS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Min input */}
+      <Input
+        className="h-7 w-20 text-center text-xs"
+        type="number"
+        placeholder="Min"
+        value={criterion.min ?? ""}
+        onChange={(e) =>
+          onChange({
+            ...criterion,
+            operator: "between",
+            min: e.target.value ? Number(e.target.value) : undefined,
+          })
+        }
+      />
 
-      {isBetween ? (
-        <>
-          <div className="w-24">
-            <Label className="text-xs text-muted-foreground">Min</Label>
-            <Input
-              className="h-9"
-              type="number"
-              placeholder="Min"
-              value={criterion.min ?? ""}
-              onChange={(e) =>
-                onChange({ ...criterion, min: e.target.value ? Number(e.target.value) : undefined })
-              }
-            />
-          </div>
-          <div className="w-24">
-            <Label className="text-xs text-muted-foreground">Max</Label>
-            <Input
-              className="h-9"
-              type="number"
-              placeholder="Max"
-              value={criterion.max ?? ""}
-              onChange={(e) =>
-                onChange({ ...criterion, max: e.target.value ? Number(e.target.value) : undefined })
-              }
-            />
-          </div>
-        </>
-      ) : (
-        <div className="w-28">
-          <Label className="text-xs text-muted-foreground">Value</Label>
-          <Input
-            className="h-9"
-            type="number"
-            placeholder="Value"
-            value={criterion.value ?? ""}
-            onChange={(e) =>
-              onChange({ ...criterion, value: e.target.value ? Number(e.target.value) : undefined })
-            }
-          />
-        </div>
-      )}
+      {/* Dash separator */}
+      <span className="text-xs text-muted-foreground select-none">–</span>
 
-      <div className="flex-1" />
-      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
-        <Trash2 className="h-4 w-4 text-muted-foreground" />
-      </Button>
+      {/* Max input */}
+      <Input
+        className="h-7 w-20 text-center text-xs"
+        type="number"
+        placeholder="Max"
+        value={criterion.max ?? ""}
+        onChange={(e) =>
+          onChange({
+            ...criterion,
+            operator: "between",
+            max: e.target.value ? Number(e.target.value) : undefined,
+          })
+        }
+      />
+
+      {/* Remove button */}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-1 flex items-center justify-center rounded p-0.5 transition-colors"
+        aria-label="Remove property filter"
+      >
+        <Trash2 className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-red-400 transition-colors" />
+      </button>
     </div>
   );
 }
@@ -174,29 +135,32 @@ export function PropertySection({ criteria, onChange }: PropertySectionProps) {
 
   return (
     <div className="space-y-2">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Properties</Label>
-        <Button
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Properties
+        </span>
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
           onClick={addTerm}
+          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-0.5"
         >
-          <Plus className="mr-1 h-3 w-3" />
+          <Plus className="h-3 w-3" />
           Add a term
-        </Button>
+        </button>
       </div>
 
+      {/* Empty state */}
       {criteria.length === 0 && (
-        <p className="text-xs text-muted-foreground py-1">
-          No property filters. Click "Add a term" to filter by molecular properties.
+        <p className="text-xs italic text-muted-foreground py-1">
+          No property filters added.
         </p>
       )}
 
-      <div className="space-y-2">
+      {/* Rows */}
+      <div className="space-y-1.5">
         {criteria.map((c, i) => (
-          <PropertyTerm
+          <PropertyRow
             key={`property-${i}`}
             criterion={c}
             onChange={(updated) => updateTerm(i, updated)}
