@@ -128,11 +128,16 @@ class MoleculeActivityService:
         protocol_columns: list[str],
     ) -> dict[uuid.UUID, dict[str, ActivityValue]]:
         # Parse column specs
+        # Formats: "drc:{proto_id}:{curve_type}", "rd:{rd_def_id}" or "rd:{proto_id}:{rd_def_id}"
         rd_def_ids: list[uuid.UUID] = []
+        rd_col_map: dict[uuid.UUID, str] = {}  # rd_def_id -> original col key
         drc_specs: list[tuple[uuid.UUID, str]] = []  # (protocol_id, curve_type)
         for col in protocol_columns:
             if col.startswith("rd:"):
-                rd_def_ids.append(uuid.UUID(col[3:]))
+                # Support both "rd:{id}" and "rd:{proto}:{id}" — last segment is always the def ID
+                rd_id = uuid.UUID(col.split(":")[-1])
+                rd_def_ids.append(rd_id)
+                rd_col_map[rd_id] = col  # preserve original key for response
             elif col.startswith("drc:"):
                 parts = col.split(":")
                 drc_specs.append((uuid.UUID(parts[1]), parts[2]))
@@ -160,7 +165,7 @@ class MoleculeActivityService:
             # Readout columns
             mol_rds = rd_data.get(mol_id, {})
             for rd_def_id in rd_def_ids:
-                col_key = f"rd:{rd_def_id}"
+                col_key = rd_col_map.get(rd_def_id, f"rd:{rd_def_id}")
                 agg = mol_rds.get(rd_def_id)
                 if agg:
                     mol_activity[col_key] = ActivityValue(

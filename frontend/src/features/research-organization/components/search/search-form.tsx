@@ -123,16 +123,22 @@ function decomposeQuery(query: SearchQuery | undefined) {
  * Derive protocol column IDs from activity criteria for cross-protocol display.
  *
  * Always includes a drc: column for each protocol so the DR plot renders.
- * If the user filtered by a specific curve type, use that; otherwise default
- * to the first available curve type (ic50 as fallback).
+ * If the user also filtered by a readout definition, adds an rd: column
+ * so the readout value appears alongside the curve.
  */
 function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] {
   const columns: string[] = [];
   for (const c of activityCriteria) {
     if (!c.protocol_id) continue;
+    // Always add DR curve column
     const curveType = c.curve_type ?? "ic50";
-    const colId = `drc:${c.protocol_id}:${curveType}`;
-    if (!columns.includes(colId)) columns.push(colId);
+    const drcCol = `drc:${c.protocol_id}:${curveType}`;
+    if (!columns.includes(drcCol)) columns.push(drcCol);
+    // If a readout was selected, add readout column too
+    if (c.readout_definition_id) {
+      const rdCol = `rd:${c.protocol_id}:${c.readout_definition_id}`;
+      if (!columns.includes(rdCol)) columns.push(rdCol);
+    }
   }
   return columns;
 }

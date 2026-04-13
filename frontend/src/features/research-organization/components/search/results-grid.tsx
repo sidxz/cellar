@@ -159,11 +159,12 @@ function buildProtocolColumnGroups(
   protocolColumns: string[],
   protocols: Protocol[],
 ): ColGroupDef[] {
-  // Group columns by protocol ID
+  // Group columns by protocol ID — supports both drc: and rd: prefixes
   const grouped = new Map<string, string[]>();
   for (const colId of protocolColumns) {
     const parts = colId.split(":");
-    if (parts[0] !== "drc" || !parts[1]) continue;
+    const prefix = parts[0];
+    if ((prefix !== "drc" && prefix !== "rd") || !parts[1]) continue;
     const protoId = parts[1];
     if (!grouped.has(protoId)) grouped.set(protoId, []);
     grouped.get(protoId)!.push(colId);
@@ -177,44 +178,74 @@ function buildProtocolColumnGroups(
     const children: ColDef<EnrichedMolecule>[] = [];
 
     for (const colId of colIds) {
-      const curveType = colId.split(":")[2]?.toUpperCase() ?? "";
+      const parts = colId.split(":");
+      const prefix = parts[0];
 
-      // Fitted value column
-      children.push({
-        headerName: curveType,
-        width: 120,
-        valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
-        cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-          const av = params.data?.activity?.[colId];
-          if (!av?.value) {
-            return <span className="text-muted-foreground">&mdash;</span>;
-          }
-          const q =
-            av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
-          return (
-            <span className="inline-flex items-center font-mono text-xs">
-              {q}
-              {av.value.toPrecision(4)}
-              {av.unit ? ` ${av.unit}` : ""}
-              <CurveClassBadge
-                curveClass={av.curve_params?.curve_class ?? null}
-              />
-            </span>
-          );
-        },
-      });
+      if (prefix === "rd") {
+        // Readout value column — resolve name from protocol's readout definitions
+        const rdId = parts[2];
+        const rd = proto?.readout_definitions?.find((r) => r.id === rdId);
+        const rdName = rd?.name ?? "Readout";
+        const rdUnit = rd?.unit ? ` (${rd.unit})` : "";
 
-      // Plot column
-      children.push({
-        headerName: `${curveType} Plot`,
-        width: 240,
-        sortable: false,
-        filter: false,
-        cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-          const av = params.data?.activity?.[colId];
-          return <DoseResponseCell value={av} />;
-        },
-      });
+        children.push({
+          headerName: `${rdName}${rdUnit}`,
+          width: 130,
+          valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
+          cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+            const av = params.data?.activity?.[colId];
+            if (av?.value == null) {
+              return <span className="text-muted-foreground">&mdash;</span>;
+            }
+            const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
+            return (
+              <span className="font-mono text-xs">
+                {q}{av.value.toPrecision(4)}{av.unit ? ` ${av.unit}` : ""}
+              </span>
+            );
+          },
+        });
+      } else {
+        // Dose-response curve columns (drc:)
+        const curveType = parts[2]?.toUpperCase() ?? "";
+
+        // Fitted value column
+        children.push({
+          headerName: curveType,
+          width: 120,
+          valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
+          cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+            const av = params.data?.activity?.[colId];
+            if (!av?.value) {
+              return <span className="text-muted-foreground">&mdash;</span>;
+            }
+            const q =
+              av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
+            return (
+              <span className="inline-flex items-center font-mono text-xs">
+                {q}
+                {av.value.toPrecision(4)}
+                {av.unit ? ` ${av.unit}` : ""}
+                <CurveClassBadge
+                  curveClass={av.curve_params?.curve_class ?? null}
+                />
+              </span>
+            );
+          },
+        });
+
+        // Plot column
+        children.push({
+          headerName: `${curveType} Plot`,
+          width: 240,
+          sortable: false,
+          filter: false,
+          cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+            const av = params.data?.activity?.[colId];
+            return <DoseResponseCell value={av} />;
+          },
+        });
+      }
     }
 
     groups.push({
