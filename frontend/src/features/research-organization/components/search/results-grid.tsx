@@ -47,14 +47,18 @@ const ROW_HEIGHTS: Record<string, number> = {
 function CurveClassBadge({ curveClass }: { curveClass: string | null }) {
   if (!curveClass) return null;
   const upper = curveClass.toUpperCase();
-  let variant: "default" | "success" | "warning" | "destructive" | "outline" =
-    "outline";
-  if (upper === "F" || upper === "FULL") variant = "success";
-  else if (upper === "P" || upper === "PARTIAL") variant = "warning";
-  else if (upper === "I" || upper === "INACTIVE") variant = "destructive";
+  let colorClass = "";
+  if (upper === "F" || upper === "FULL")
+    colorClass = "bg-emerald-500/12 text-emerald-400";
+  else if (upper === "P" || upper === "PARTIAL")
+    colorClass = "bg-yellow-500/12 text-yellow-400";
+  else if (upper === "I" || upper === "INACTIVE")
+    colorClass = "bg-red-500/12 text-red-400";
 
   return (
-    <Badge variant={variant} className="ml-1.5 text-[10px] px-1 py-0">
+    <Badge
+      className={`ml-1.5 text-[10px] px-1 py-0 border-0 ${colorClass}`}
+    >
       {upper.charAt(0)}
     </Badge>
   );
@@ -215,6 +219,7 @@ function buildProtocolColumnGroups(
 
     groups.push({
       headerName,
+      headerClass: "ag-protocol-group-header",
       children,
     });
   }
@@ -290,9 +295,9 @@ export function ResultsGrid({
 
   if (loading) {
     return (
-      <div className="space-y-3 p-4">
+      <div className="space-y-2 p-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
+          <Skeleton key={i} className="h-16 w-full" />
         ))}
       </div>
     );
@@ -300,14 +305,23 @@ export function ResultsGrid({
 
   if (results.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        No results to display. Run a search to see compounds here.
-      </div>
+      <p className="py-12 text-center text-sm text-muted-foreground">
+        No results to display.
+      </p>
     );
   }
 
   return (
     <div style={{ height: "100%", width: "100%" }}>
+      <style>{`
+        .ag-protocol-group-header .ag-header-group-cell-label {
+          color: #818cf8 !important;
+          font-weight: 600;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+      `}</style>
       <AgGridReact<EnrichedMolecule>
         ref={gridRef}
         theme={chemVaultTheme}
