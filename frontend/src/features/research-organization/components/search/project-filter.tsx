@@ -50,14 +50,14 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
       {selectedProjects.map((project) => (
         <span
           key={project.id}
-          className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-xs text-indigo-400"
+          className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs text-primary"
         >
           {project.name}
           <button
             type="button"
             aria-label={`Remove ${project.name}`}
             onClick={() => removeProject(project.id)}
-            className="inline-flex items-center justify-center rounded-full text-indigo-400/70 hover:text-indigo-300 focus:outline-none"
+            className="inline-flex items-center justify-center rounded-full text-primary/70 hover:text-primary/80 focus:outline-none"
           >
             <X className="size-3" />
           </button>
@@ -69,7 +69,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 focus:outline-none"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 focus:outline-none"
           >
             <Plus className="size-3" />
             Add

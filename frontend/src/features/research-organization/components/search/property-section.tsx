@@ -107,7 +107,7 @@ function PropertyRow({
         className="ml-1 flex items-center justify-center rounded p-0.5 transition-colors"
         aria-label="Remove property filter"
       >
-        <Trash2 className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-red-400 transition-colors" />
+        <Trash2 className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-destructive transition-colors" />
       </button>
     </div>
   );
@@ -143,7 +143,7 @@ export function PropertySection({ criteria, onChange }: PropertySectionProps) {
         <button
           type="button"
           onClick={addTerm}
-          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-0.5"
+          className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-0.5"
         >
           <Plus className="h-3 w-3" />
           Add a term

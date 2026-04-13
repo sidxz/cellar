@@ -33,7 +33,7 @@ export function ResultsToolbar({
         results
       </span>
       {selectedCount > 0 && (
-        <span className="text-sm text-indigo-400 font-medium">
+        <span className="text-sm text-primary font-medium">
           · {selectedCount} selected
         </span>
       )}
@@ -42,7 +42,7 @@ export function ResultsToolbar({
         <button
           type="button"
           onClick={onSelectAll}
-          className="text-indigo-400 hover:text-indigo-300"
+          className="text-primary hover:text-primary/80"
         >
           all
         </button>
@@ -50,7 +50,7 @@ export function ResultsToolbar({
         <button
           type="button"
           onClick={onSelectNone}
-          className="text-indigo-400 hover:text-indigo-300"
+          className="text-primary hover:text-primary/80"
         >
           none
         </button>
@@ -80,7 +80,7 @@ export function ResultsToolbar({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-xs gap-1.5 border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
+          className="h-7 text-xs gap-1.5 border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
           onClick={onSaveSearch}
         >
           <BookmarkPlus className="h-3.5 w-3.5" />

@@ -315,7 +315,7 @@ export function ResultsGrid({
     <div style={{ height: "100%", width: "100%" }}>
       <style>{`
         .ag-protocol-group-header .ag-header-group-cell-label {
-          color: #818cf8 !important;
+          color: hsl(var(--primary)) !important;
           font-weight: 600;
           font-size: 11px;
           text-transform: uppercase;

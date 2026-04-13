@@ -76,7 +76,7 @@ function ActivityRow({
         <button
           type="button"
           onClick={onRemove}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
           aria-label="Remove criterion"
         >
           <Minus className="h-3 w-3" />
@@ -307,7 +307,7 @@ export function ProtocolSection({ criteria, onChange }: ProtocolSectionProps) {
         <button
           type="button"
           onClick={addTerm}
-          className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
         >
           <Plus className="h-3 w-3" />
           Add a term

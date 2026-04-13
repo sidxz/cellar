@@ -106,7 +106,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
         {filled && (
           <button
             type="button"
-            className="text-xs text-muted-foreground/40 hover:text-red-400 transition-colors"
+            className="text-xs text-muted-foreground/40 hover:text-destructive transition-colors"
             onClick={handleClear}
           >
             Clear
@@ -131,7 +131,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
                 value={st.value}
                 checked={active}
                 onChange={() => handleTypeChange(st.value)}
-                className="accent-indigo-500"
+                className="accent-primary"
               />
               {st.label}
               {/* Inline threshold for similarity */}

@@ -74,7 +74,7 @@ function CollectionTerm({
       <button
         type="button"
         onClick={onRemove}
-        className="text-muted-foreground/40 hover:text-red-400"
+        className="text-muted-foreground/40 hover:text-destructive"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -112,7 +112,7 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
         <button
           type="button"
           onClick={addTerm}
-          className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80"
         >
           <Plus className="h-3 w-3" /> Add a term
         </button>
