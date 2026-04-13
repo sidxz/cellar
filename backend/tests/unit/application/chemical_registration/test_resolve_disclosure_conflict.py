@@ -111,6 +111,14 @@ class FakeDisclosureRepo:
     async def find_by_id(self, id: uuid.UUID) -> DisclosureRequest | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> DisclosureRequest | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
+
     async def save(self, aggregate: DisclosureRequest) -> None:
         self._store[aggregate.id] = aggregate
 
@@ -124,6 +132,14 @@ class FakeMoleculeRepo:
 
     async def find_by_id(self, id: uuid.UUID) -> Molecule | None:
         return self._store.get(id)
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Molecule | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
 
     async def find_by_inchi_key(
         self, workspace_id: uuid.UUID, inchi_key: str
@@ -158,6 +174,7 @@ class FakeStructureProcessor:
 def _make_conflict_dr(molecule_id: uuid.UUID) -> DisclosureRequest:
     """Create a DisclosureRequest in CONFLICT state."""
     dr = DisclosureRequest.create(
+        workspace_id=WS_ID,
         molecule_id=molecule_id,
         disclosed_smiles="c1ccccc1",
         requested_by=USER_ID,
@@ -327,6 +344,7 @@ class TestValidation:
 
         # Create a DR in PENDING state (not CONFLICT)
         dr = DisclosureRequest.create(
+            workspace_id=WS_ID,
             molecule_id=mol.id,
             disclosed_smiles="c1ccccc1",
             requested_by=USER_ID,

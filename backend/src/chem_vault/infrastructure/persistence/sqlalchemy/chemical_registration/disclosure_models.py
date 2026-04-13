@@ -12,15 +12,15 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base import (
     Base,
     EntityModelMixin,
     VersionMixin,
+    WorkspaceIdMixin,
 )
 
 
-class BulkDisclosureModel(Base, EntityModelMixin, VersionMixin):
+class BulkDisclosureModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     """Bulk disclosure operation — groups multiple DisclosureRequests from a single file upload."""
 
     __tablename__ = "bulk_disclosures"
 
-    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     source_file: Mapped[str] = mapped_column(String(500), nullable=False)
     partner_org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
@@ -44,7 +44,7 @@ class BulkDisclosureModel(Base, EntityModelMixin, VersionMixin):
     completed_at: Mapped[str | None] = mapped_column(DateTime(timezone=True))
 
 
-class DisclosureRequestModel(Base, EntityModelMixin, VersionMixin):
+class DisclosureRequestModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     """Formal request to disclose the structure of an undisclosed molecule."""
 
     __tablename__ = "disclosure_requests"

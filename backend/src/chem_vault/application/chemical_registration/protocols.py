@@ -24,6 +24,15 @@ class QCResultDTO:
 
 
 @dataclass(frozen=True)
+class DetectedSaltDTO:
+    """Salt fragment detected during standardization — application-layer DTO."""
+
+    salt_smiles: str
+    salt_fragment_mw: float
+    stoichiometry: int
+
+
+@dataclass(frozen=True)
 class ProcessedStructureDTO:
     """Processed structure — application-layer DTO."""
 
@@ -31,6 +40,7 @@ class ProcessedStructureDTO:
     descriptors: ComputedDescriptors
     fingerprints: dict[str, bytes]
     qc_result: QCResultDTO
+    detected_salt: DetectedSaltDTO | None = None
 
 
 class StructureProcessorProtocol(Protocol):
@@ -42,3 +52,7 @@ class StructureProcessorProtocol(Protocol):
         *,
         qc_reject_threshold: int | None = None,
     ) -> Result[ProcessedStructureDTO, DomainError]: ...
+
+    def smiles_to_mol_block(self, smiles: str) -> str | None:
+        """Convert a SMILES string to a V2000 MOL block, or None if invalid."""
+        ...

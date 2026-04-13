@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import {
   Select,
   SelectContent,
@@ -48,16 +48,10 @@ export function AuditList() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <ShieldCheck className="size-6 text-muted-foreground" />
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
-          <p className="text-sm text-muted-foreground">
-            Complete history of operations across the workspace.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Audit Log"
+        subtitle="Complete history of operations across the workspace."
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

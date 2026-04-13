@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { MoleculeName } from "@/shared/components/entity-name";
 import {
   Select,
@@ -25,36 +27,6 @@ import {
 } from "../types/sample-request";
 import { CreateSampleRequestDialog } from "./create-sample-request-dialog";
 
-function statusVariant(
-  s: SampleRequestStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "fulfilled":
-      return "default";
-    case "approved":
-    case "preparing":
-      return "secondary";
-    case "rejected":
-    case "cancelled":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
-
-function priorityVariant(
-  p: RequestPriority
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (p) {
-    case "critical":
-      return "destructive";
-    case "urgent":
-      return "secondary";
-    default:
-      return "outline";
-  }
-}
-
 export function SampleRequestListPage() {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -71,10 +43,10 @@ export function SampleRequestListPage() {
         field: "priority",
         width: 110,
         cellRenderer: (params: ICellRendererParams<SampleRequest>) => (
-          <Badge variant={priorityVariant(params.value as RequestPriority)}>
-            {REQUEST_PRIORITY_LABELS[params.value as RequestPriority] ??
-              params.value}
-          </Badge>
+          <PriorityBadge
+            priority={params.value}
+            label={REQUEST_PRIORITY_LABELS[params.value as RequestPriority] ?? params.value}
+          />
         ),
       },
       {
@@ -103,11 +75,10 @@ export function SampleRequestListPage() {
         field: "status",
         width: 120,
         cellRenderer: (params: ICellRendererParams<SampleRequest>) => (
-          <Badge variant={statusVariant(params.value as SampleRequestStatus)}>
-            {SAMPLE_REQUEST_STATUS_LABELS[
-              params.value as SampleRequestStatus
-            ] ?? params.value}
-          </Badge>
+          <StatusBadge
+            status={params.value}
+            label={SAMPLE_REQUEST_STATUS_LABELS[params.value as SampleRequestStatus] ?? params.value}
+          />
         ),
       },
       {
@@ -124,19 +95,15 @@ export function SampleRequestListPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Sample Requests</h1>
-          <p className="mt-1 text-muted-foreground">
-            Track and manage sample requests across the workspace.
-          </p>
-        </div>
+      <PageHeader
+        title="Sample Requests"
+        subtitle="Track and manage sample requests across the workspace."
+      >
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Request
         </Button>
-      </div>
+      </PageHeader>
 
       {/* Status filter */}
       <div className="flex items-center gap-3">
@@ -166,13 +133,11 @@ export function SampleRequestListPage() {
         height="500px"
         onRowClick={(req) => router.push(`/inventory/sample-requests/${req.id}`)}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <ClipboardList className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No sample requests</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              No requests match the current filter.
-            </p>
-          </div>
+          <EmptyState
+            icon={ClipboardList}
+            title="No sample requests"
+            description="No requests match the current filter."
+          />
         }
       />
 

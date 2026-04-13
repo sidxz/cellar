@@ -30,6 +30,8 @@ class ReadoutDataType(StrEnum):
     PICK_LIST = "pick_list"
     FILE = "file"
     DATE = "date"
+    DOSE_RESPONSE = "dose_response"
+    BATCH_LINK = "batch_link"
 
 
 class ReadoutAggregation(StrEnum):
@@ -73,16 +75,9 @@ class TargetType(StrEnum):
     TISSUE = "tissue"
 
 
-class PlateFormat(StrEnum):
-    """Microplate well count."""
-
-    F6 = "6"
-    F12 = "12"
-    F24 = "24"
-    F48 = "48"
-    F96 = "96"
-    F384 = "384"
-    F1536 = "1536"
+# PlateFormat is shared across screening and inventory — canonical definition
+# lives in domain.shared.enums. Re-exported here for backwards compatibility.
+from chem_vault.domain.shared.enums import PlateFormat as PlateFormat  # noqa: F401
 
 
 class WellType(StrEnum):
@@ -111,6 +106,23 @@ class RunRelationshipType(StrEnum):
     CONFIRMATION_OF = "confirmation_of"
     REPEAT_OF = "repeat_of"
     FOLLOW_UP_TO = "follow_up_to"
+
+
+class HillSlopeConstraint(StrEnum):
+    """How the Hill slope parameter is constrained during curve fitting."""
+
+    UNCONSTRAINED = "unconstrained"
+    FIXED_AT_ONE = "fixed_at_one"
+    POSITIVE_ONLY = "positive_only"
+    NEGATIVE_ONLY = "negative_only"
+
+
+class NormalizationScope(StrEnum):
+    """Scope for control-based normalization of readout values."""
+
+    PER_PLATE = "per_plate"
+    PER_RUN = "per_run"
+    NONE = "none"
 
 
 class CurveType(StrEnum):

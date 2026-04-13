@@ -30,6 +30,11 @@ class AsyncUnitOfWork:
         self._tracked_aggregates: list[AggregateRoot] = []
 
     @property
+    def is_active(self) -> bool:
+        """True if the UoW context manager has been entered."""
+        return self._session is not None
+
+    @property
     def session(self) -> AsyncSession:
         """The active session. Raises if the UoW context is not entered."""
         if self._session is None:

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import type { CreateStorageLocationInput, StorageLocation, UpdateStorageLocationInput } from "../types";
+import type { CreateStorageLocationInput, StorageLocation, StorageLocationWithCount, UpdateStorageLocationInput } from "../types";
 
 const STORAGE_KEY = ["storage-locations"];
 
@@ -65,5 +65,20 @@ export function useDeleteStorageLocation() {
         method: "DELETE",
       }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: STORAGE_KEY }); showSuccess("Location deleted"); },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Storage locations with sample counts
+// ---------------------------------------------------------------------------
+
+export function useStorageLocationsWithCounts() {
+  return useQuery({
+    queryKey: ["storage-locations", "with-counts"],
+    queryFn: () =>
+      customInstance<StorageLocationWithCount[]>({
+        url: "/api/v1/storage-locations-summary",
+        method: "GET",
+      }),
   });
 }

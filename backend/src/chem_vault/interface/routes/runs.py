@@ -4,18 +4,39 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends
-from lagom import Container
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.screening.create_run import CreateRun, CreateRunCommand
-from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
-from chem_vault.application.screening.lock_run import LockRun, UnlockRun
-from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
+from chem_vault.application.screening.get_run import GetRun, GetRunQuery, ListRunsByProtocol, ListRunsByProtocolQuery
+from chem_vault.application.screening.lock_run import LockRun, LockRunCommand, UnlockRun, UnlockRunCommand
+from chem_vault.application.screening.manage_run import (
+    ApproveRun,
+    ApproveRunCommand,
+    CompleteRun,
+    CompleteRunCommand,
+    RejectRun,
+    RejectRunCommand,
+    StartRun,
+    StartRunCommand,
+)
 from chem_vault.application.screening.update_run import UpdateRun, UpdateRunCommand
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.interface.dependencies import (
+    ApproveRunDep,
+    AuthDep,
+    CompleteRunDep,
+    CreateRunDep,
+    GetRunDep,
+    ListRunsByProtocolDep,
+    LockRunDep,
+    RejectRunDep,
+    StartRunDep,
+    UnlockRunDep,
+    UoWDep,
+    UpdateRunDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["runs"])
@@ -39,14 +60,16 @@ class RunResponse(BaseModel):
     qc_metrics: dict[str, Any] | None = None
     notes: str | None = None
     plate_count: int
+    molecule_count: int = 0
     performed_at_org_id: uuid.UUID | None = None
     parent_run_id: uuid.UUID | None = None
     run_relationship_type: str | None = None
     plate_format: str | None = None
+    plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
 
     @classmethod
-    def from_domain(cls, r) -> RunResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r, *, molecule_count: int = 0) -> RunResponse:  # type: ignore[no-untyped-def]
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -60,10 +83,12 @@ class RunResponse(BaseModel):
             qc_metrics=r.qc_metrics,
             notes=r.notes,
             plate_count=len(r.plates),
+            molecule_count=molecule_count,
             performed_at_org_id=r.performed_at_org_id,
             parent_run_id=r.parent_run_id,
             run_relationship_type=r.run_relationship_type.value if r.run_relationship_type else None,
             plate_format=r.plate_format.value if r.plate_format else None,
+            plate_template_id=r.plate_template_id,
             conditions=r.conditions,
         )
 
@@ -80,6 +105,7 @@ class CreateRunRequest(BaseModel):
     parent_run_id: uuid.UUID | None = None
     run_relationship_type: str | None = None
     plate_format: str | None = None
+    plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
     notes: str | None = None
 
@@ -107,42 +133,6 @@ class UpdateRunRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Dependency resolvers
-# ---------------------------------------------------------------------------
-
-
-def _create_run(c: Annotated[Container, Depends(get_container)]) -> CreateRun:
-    return c[CreateRun]
-
-def _get_run(c: Annotated[Container, Depends(get_container)]) -> GetRun:
-    return c[GetRun]
-
-def _list_runs(c: Annotated[Container, Depends(get_container)]) -> ListRunsByProtocol:
-    return c[ListRunsByProtocol]
-
-def _start_run(c: Annotated[Container, Depends(get_container)]) -> StartRun:
-    return c[StartRun]
-
-def _complete_run(c: Annotated[Container, Depends(get_container)]) -> CompleteRun:
-    return c[CompleteRun]
-
-def _approve_run(c: Annotated[Container, Depends(get_container)]) -> ApproveRun:
-    return c[ApproveRun]
-
-def _reject_run(c: Annotated[Container, Depends(get_container)]) -> RejectRun:
-    return c[RejectRun]
-
-def _lock_run(c: Annotated[Container, Depends(get_container)]) -> LockRun:
-    return c[LockRun]
-
-def _unlock_run(c: Annotated[Container, Depends(get_container)]) -> UnlockRun:
-    return c[UnlockRun]
-
-def _update_run(c: Annotated[Container, Depends(get_container)]) -> UpdateRun:
-    return c[UpdateRun]
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -151,7 +141,7 @@ def _update_run(c: Annotated[Container, Depends(get_container)]) -> UpdateRun:
 async def create_run(
     auth: AuthDep,
     body: CreateRunRequest,
-    uc: Annotated[CreateRun, Depends(_create_run)],
+    uc: CreateRunDep,
 ) -> RunResponse:
     cmd = CreateRunCommand(
         workspace_id=auth.workspace_id,
@@ -161,6 +151,7 @@ async def create_run(
         parent_run_id=body.parent_run_id,
         run_relationship_type=body.run_relationship_type,
         plate_format=body.plate_format,
+        plate_template_id=body.plate_template_id,
         conditions=body.conditions,
         notes=body.notes,
     )
@@ -172,20 +163,36 @@ async def create_run(
 async def list_runs_by_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[ListRunsByProtocol, Depends(_list_runs)],
+    uc: ListRunsByProtocolDep,
+    uow: UoWDep,
 ) -> list[RunResponse]:
-    result = await uc(protocol_id, auth=auth)
+    result = await uc(
+        ListRunsByProtocolQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+        auth=auth,
+    )
     runs = result_to_response(result)
-    return [RunResponse.from_domain(r) for r in runs]
+
+    # Compute molecule counts in bulk
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+        SQLAlchemyReadoutDataRepository,
+    )
+    async with uow as u:
+        rd_repo = SQLAlchemyReadoutDataRepository(u)
+        counts = await rd_repo.get_molecule_counts(auth.workspace_id, [r.id for r in runs])
+
+    return [RunResponse.from_domain(r, molecule_count=counts.get(r.id, 0)) for r in runs]
 
 
 @router.get("/runs/{run_id}", response_model=RunResponse)
 async def get_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetRun, Depends(_get_run)],
+    uc: GetRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, auth=auth)
+    result = await uc(
+        GetRunQuery(workspace_id=auth.workspace_id, run_id=run_id),
+        auth=auth,
+    )
     return RunResponse.from_domain(result_to_response(result))
 
 
@@ -194,7 +201,7 @@ async def update_run(
     run_id: uuid.UUID,
     body: UpdateRunRequest,
     auth: AuthDep,
-    uc: Annotated[UpdateRun, Depends(_update_run)],
+    uc: UpdateRunDep,
 ) -> RunResponse:
     from chem_vault.application.shared.sentinel import UNSET
 
@@ -212,9 +219,9 @@ async def update_run(
 async def start_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[StartRun, Depends(_start_run)],
+    uc: StartRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, auth=auth)
+    result = await uc(StartRunCommand(workspace_id=auth.workspace_id, run_id=run_id), auth=auth)
     return RunResponse.from_domain(result_to_response(result))
 
 
@@ -223,9 +230,12 @@ async def complete_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     body: CompleteRunRequest,
-    uc: Annotated[CompleteRun, Depends(_complete_run)],
+    uc: CompleteRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, plate_count=body.plate_count, data_point_count=body.data_point_count, auth=auth)
+    result = await uc(
+        CompleteRunCommand(workspace_id=auth.workspace_id, run_id=run_id, plate_count=body.plate_count, data_point_count=body.data_point_count),
+        auth=auth,
+    )
     return RunResponse.from_domain(result_to_response(result))
 
 
@@ -233,9 +243,9 @@ async def complete_run(
 async def approve_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[ApproveRun, Depends(_approve_run)],
+    uc: ApproveRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, auth=auth)
+    result = await uc(ApproveRunCommand(workspace_id=auth.workspace_id, run_id=run_id), auth=auth)
     return RunResponse.from_domain(result_to_response(result))
 
 
@@ -244,9 +254,9 @@ async def reject_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     body: RejectRequest,
-    uc: Annotated[RejectRun, Depends(_reject_run)],
+    uc: RejectRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, reason=body.reason, auth=auth)
+    result = await uc(RejectRunCommand(workspace_id=auth.workspace_id, run_id=run_id, reason=body.reason), auth=auth)
     return RunResponse.from_domain(result_to_response(result))
 
 
@@ -255,9 +265,17 @@ async def lock_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     body: LockRequest,
-    uc: Annotated[LockRun, Depends(_lock_run)],
+    uc: LockRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, reason=body.reason, auth=auth)
+    result = await uc(
+        LockRunCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            reason=body.reason,
+            locked_by=auth.user_id,
+        ),
+        auth=auth,
+    )
     return RunResponse.from_domain(result_to_response(result))
 
 
@@ -266,7 +284,15 @@ async def unlock_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     body: UnlockRequest,
-    uc: Annotated[UnlockRun, Depends(_unlock_run)],
+    uc: UnlockRunDep,
 ) -> RunResponse:
-    result = await uc(run_id, reason=body.reason, auth=auth)
+    result = await uc(
+        UnlockRunCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            reason=body.reason,
+            unlocked_by=auth.user_id,
+        ),
+        auth=auth,
+    )
     return RunResponse.from_domain(result_to_response(result))

@@ -3,14 +3,27 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_same_workspace
+from chem_vault.application.auth import AuthContext
+from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.protocol import Protocol
 from chem_vault.domain.screening_assay.repository import ProtocolRepository
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
+
+
+@dataclass(frozen=True, kw_only=True)
+class GetProtocolQuery(Query):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListProtocolsQuery(Query):
+    workspace_id: uuid.UUID
 
 
 class GetProtocol:
@@ -19,13 +32,12 @@ class GetProtocol:
         self._repo = repo
 
     async def __call__(
-        self, protocol_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: GetProtocolQuery, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         async with self._uow:
-            protocol = await self._repo.find_by_id(protocol_id)
+            protocol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.protocol_id)
             if protocol is None:
-                return Failure(NotFoundError("Protocol"))
-            require_same_workspace(auth, protocol.workspace_id)
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             return Success(protocol)
 
 
@@ -35,10 +47,8 @@ class ListProtocols:
         self._repo = repo
 
     async def __call__(
-        self, auth: AuthContext | None = None
+        self, input: ListProtocolsQuery, auth: AuthContext | None = None
     ) -> Result[list[Protocol], DomainError]:
-        if auth is None:
-            return Failure(NotFoundError("Protocol"))
         async with self._uow:
-            protocols = await self._repo.find_by_workspace(auth.workspace_id)
+            protocols = await self._repo.find_by_workspace(input.workspace_id)
             return Success(protocols)

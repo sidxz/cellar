@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from lagom import Container
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.inventory.delete_storage_location import (
@@ -17,13 +15,22 @@ from chem_vault.application.inventory.manage_storage import (
     CreateStorageLocation,
     CreateStorageLocationCommand,
     GetStorageLocationChildren,
+    GetStorageLocationChildrenQuery,
     ListStorageLocations,
+    ListStorageLocationsQuery,
 )
 from chem_vault.application.inventory.update_storage_location import (
     UpdateStorageLocation,
     UpdateStorageLocationCommand,
 )
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    CreateStorageLocationDep,
+    DeleteStorageLocationDep,
+    GetStorageLocationChildrenDep,
+    ListStorageLocationsDep,
+    UpdateStorageLocationDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/storage-locations", tags=["storage"])
@@ -83,26 +90,6 @@ class UpdateStorageLocationRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Deps
-# ---------------------------------------------------------------------------
-
-def _create(c: Annotated[Container, Depends(get_container)]) -> CreateStorageLocation:
-    return c[CreateStorageLocation]
-
-def _list(c: Annotated[Container, Depends(get_container)]) -> ListStorageLocations:
-    return c[ListStorageLocations]
-
-def _children(c: Annotated[Container, Depends(get_container)]) -> GetStorageLocationChildren:
-    return c[GetStorageLocationChildren]
-
-def _update(c: Annotated[Container, Depends(get_container)]) -> UpdateStorageLocation:
-    return c[UpdateStorageLocation]
-
-def _delete(c: Annotated[Container, Depends(get_container)]) -> DeleteStorageLocation:
-    return c[DeleteStorageLocation]
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -111,7 +98,7 @@ def _delete(c: Annotated[Container, Depends(get_container)]) -> DeleteStorageLoc
 async def create_storage_location(
     auth: AuthDep,
     body: CreateStorageLocationRequest,
-    uc: Annotated[CreateStorageLocation, Depends(_create)],
+    uc: CreateStorageLocationDep,
 ) -> StorageLocationResponse:
     cmd = CreateStorageLocationCommand(
         workspace_id=auth.workspace_id,
@@ -131,9 +118,12 @@ async def create_storage_location(
 @router.get("", response_model=list[StorageLocationResponse])
 async def list_storage_locations(
     auth: AuthDep,
-    uc: Annotated[ListStorageLocations, Depends(_list)],
+    uc: ListStorageLocationsDep,
 ) -> list[StorageLocationResponse]:
-    result = await uc(auth.workspace_id, auth=auth)
+    result = await uc(
+        ListStorageLocationsQuery(workspace_id=auth.workspace_id),
+        auth=auth,
+    )
     locations = result_to_response(result)
     return [StorageLocationResponse.from_domain(loc) for loc in locations]
 
@@ -142,9 +132,12 @@ async def list_storage_locations(
 async def get_children(
     location_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[GetStorageLocationChildren, Depends(_children)],
+    uc: GetStorageLocationChildrenDep,
 ) -> list[StorageLocationResponse]:
-    result = await uc(location_id, auth=auth)
+    result = await uc(
+        GetStorageLocationChildrenQuery(workspace_id=auth.workspace_id, parent_id=location_id),
+        auth=auth,
+    )
     children = result_to_response(result)
     return [StorageLocationResponse.from_domain(loc) for loc in children]
 
@@ -154,7 +147,7 @@ async def update_storage_location(
     location_id: uuid.UUID,
     body: UpdateStorageLocationRequest,
     auth: AuthDep,
-    uc: Annotated[UpdateStorageLocation, Depends(_update)],
+    uc: UpdateStorageLocationDep,
 ) -> StorageLocationResponse:
     from chem_vault.application.shared.sentinel import UNSET
 
@@ -176,7 +169,7 @@ async def update_storage_location(
 async def delete_storage_location(
     location_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[DeleteStorageLocation, Depends(_delete)],
+    uc: DeleteStorageLocationDep,
 ) -> None:
     cmd = DeleteStorageLocationCommand(
         workspace_id=auth.workspace_id, location_id=location_id

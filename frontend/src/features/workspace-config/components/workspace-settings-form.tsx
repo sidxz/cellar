@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
+import { PageHeader } from "@/shared/components/page-header";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -48,6 +49,7 @@ export function WorkspaceSettingsForm() {
   const [sigRequired, setSigRequired] = useState<string[]>([]);
   const [formulationScheme, setFormulationScheme] = useState("");
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
+  const [cddVaultId, setExternalVaultId] = useState("");
 
   useEffect(() => {
     if (settings) {
@@ -63,6 +65,7 @@ export function WorkspaceSettingsForm() {
           ? settings.custom_field_definitions
           : []
       );
+      setExternalVaultId(settings.cdd_vault_id ?? "");
     }
   }, [settings]);
 
@@ -82,6 +85,7 @@ export function WorkspaceSettingsForm() {
       audit_reason_policy: auditReasonPolicy,
       signature_required_for: sigRequired,
       formulation_number_scheme: formulationScheme || null,
+      cdd_vault_id: cddVaultId || null,
       custom_field_definitions: customFields.filter((f) => f.name.trim()),
     });
   };
@@ -94,11 +98,10 @@ export function WorkspaceSettingsForm() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight">Workspace Settings</h1>
-      <p className="mt-1 text-muted-foreground">
-        Configure registration rules, audit policies, and workspace-level
-        defaults.
-      </p>
+      <PageHeader
+        title="Workspace Settings"
+        subtitle="Configure registration rules, audit policies, and workspace-level defaults."
+      />
 
       <div className="mt-6 space-y-6">
         {/* General */}
@@ -135,6 +138,25 @@ export function WorkspaceSettingsForm() {
               />
               <p className="text-xs text-muted-foreground">
                 Pattern for auto-generated formulation numbers.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Integrations */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Integrations</h2>
+          <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="grid gap-2">
+              <Label>CDD Vault ID</Label>
+              <Input
+                value={cddVaultId}
+                onChange={(e) => setExternalVaultId(e.target.value)}
+                placeholder="e.g., 12345"
+              />
+              <p className="text-xs text-muted-foreground">
+                Numeric Vault ID from external screening platform. Required for protocol import.
+                Find it in your vault URL.
               </p>
             </div>
           </div>

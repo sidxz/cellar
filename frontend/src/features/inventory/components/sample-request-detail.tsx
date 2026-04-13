@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ClipboardList, Pencil } from "lucide-react";
-import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { useAuthz } from "@sentinel-auth/nextjs";
-import { Badge } from "@/shared/components/ui/badge";
+import { PriorityBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import {
@@ -24,8 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { MoleculeName, MemberName, BatchName, SampleName } from "@/shared/components/entity-name";
 import {
   useSampleRequest,
@@ -49,36 +48,6 @@ interface SampleRequestDetailProps {
   requestId: string;
 }
 
-function statusVariant(
-  s: SampleRequestStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "fulfilled":
-      return "default";
-    case "approved":
-    case "preparing":
-      return "secondary";
-    case "rejected":
-    case "cancelled":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
-
-function priorityVariant(
-  p: RequestPriority
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (p) {
-    case "critical":
-      return "destructive";
-    case "urgent":
-      return "secondary";
-    default:
-      return "outline";
-  }
-}
-
 const TERMINAL_STATUSES = new Set<SampleRequestStatus>([
   "fulfilled",
   "rejected",
@@ -86,7 +55,7 @@ const TERMINAL_STATUSES = new Set<SampleRequestStatus>([
 ]);
 
 export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
-  const { data: request, isLoading } = useSampleRequest(requestId);
+  const query = useSampleRequest(requestId);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [fulfillOpen, setFulfillOpen] = useState(false);
@@ -95,213 +64,202 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
   const startPreparing = useStartPreparingSampleRequest();
   const cancel = useCancelSampleRequest();
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (!request) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <ClipboardList className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">Request not found</h3>
-      </div>
-    );
-  }
-
-  const isTerminal = TERMINAL_STATUSES.has(request.status);
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/inventory/sample-requests">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Sample Request{request.purpose ? ` \u2014 ${request.purpose.length > 40 ? request.purpose.slice(0, 40) + "\u2026" : request.purpose}` : ""}
-            </h1>
-            <Badge variant={statusVariant(request.status)}>
-              {SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-            </Badge>
-            <Badge variant={priorityVariant(request.priority)}>
-              {REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
-            </Badge>
-          </div>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Requested by <MemberName id={request.requester_id} />
-          </p>
-        </div>
+    <>
+      <DetailShell
+        query={query}
+        backHref="/inventory/sample-requests"
+        backLabel="Back to Sample Requests"
+        title={(r) =>
+          `Sample Request${r.purpose ? ` \u2014 ${r.purpose.length > 40 ? r.purpose.slice(0, 40) + "\u2026" : r.purpose}` : ""}`
+        }
+        badge={(r) => ({
+          status: r.status,
+          label: SAMPLE_REQUEST_STATUS_LABELS[r.status] ?? r.status,
+        })}
+        notFoundMessage="Request not found."
+        actions={(r) => {
+          const isTerminal = TERMINAL_STATUSES.has(r.status);
+          if (isTerminal) return undefined;
+          return (
+            <>
+              {r.status === "submitted" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditOpen(true)}
+                  >
+                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setApproveOpen(true)}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    Reject
+                  </Button>
+                </>
+              )}
+              {r.status === "approved" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    startPreparing.mutate({ id: requestId })
+                  }
+                  disabled={startPreparing.isPending}
+                >
+                  {startPreparing.isPending ? "Starting..." : "Start Preparing"}
+                </Button>
+              )}
+              {r.status === "preparing" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFulfillOpen(true)}
+                >
+                  Fulfill
+                </Button>
+              )}
+              {(r.status === "submitted" ||
+                r.status === "approved" ||
+                r.status === "preparing") && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => cancel.mutate({ id: requestId })}
+                  disabled={cancel.isPending}
+                >
+                  {cancel.isPending ? "Cancelling..." : "Cancel"}
+                </Button>
+              )}
+            </>
+          );
+        }}
+      >
+        {(request) => (
+          <>
+            <div className="-mt-3 flex items-center gap-2">
+              <PriorityBadge
+                priority={request.priority}
+                label={REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
+              />
+              <span className="text-muted-foreground text-sm">
+                Requested by <MemberName id={request.requester_id} />
+              </span>
+            </div>
 
-        {/* Action buttons by status */}
-        {!isTerminal && (
-          <div className="flex gap-2">
-            {request.status === "submitted" && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditOpen(true)}
-                >
-                  <Pencil className="mr-1 h-3.5 w-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setApproveOpen(true)}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRejectOpen(true)}
-                >
-                  Reject
-                </Button>
-              </>
-            )}
-            {request.status === "approved" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  startPreparing.mutate({ id: requestId })
-                }
-                disabled={startPreparing.isPending}
-              >
-                {startPreparing.isPending ? "Starting..." : "Start Preparing"}
-              </Button>
-            )}
-            {request.status === "preparing" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFulfillOpen(true)}
-              >
-                Fulfill
-              </Button>
-            )}
-            {(request.status === "submitted" ||
-              request.status === "approved" ||
-              request.status === "preparing") && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => cancel.mutate({ id: requestId })}
-                disabled={cancel.isPending}
-              >
-                {cancel.isPending ? "Cancelling..." : "Cancel"}
-              </Button>
-            )}
-          </div>
+            {/* Details card */}
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold">Request Details</h2>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Compound</p>
+                  <p className="font-medium text-sm">
+                    <MoleculeName id={request.molecule_id} />
+                  </p>
+                </div>
+                {request.batch_id && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Preferred Batch</p>
+                    <p className="font-medium text-sm"><BatchName id={request.batch_id} /></p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <p className="font-medium">
+                    {request.amount_value} {request.amount_unit}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Priority</p>
+                  <p className="font-medium">
+                    {REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="font-medium">
+                    {SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+                  </p>
+                </div>
+                {request.assigned_to && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Assigned To</p>
+                    <p className="font-medium text-sm"><MemberName id={request.assigned_to} /></p>
+                  </div>
+                )}
+                {request.fulfilled_sample_id && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Fulfilled Sample</p>
+                    <p className="font-medium text-sm">
+                      <SampleName id={request.fulfilled_sample_id} />
+                    </p>
+                  </div>
+                )}
+                {request.fulfilled_at && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Fulfilled At</p>
+                    <p className="font-medium">
+                      {new Date(request.fulfilled_at).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground">Purpose</p>
+                <p className="mt-1 text-sm">{request.purpose}</p>
+              </div>
+              {request.rejection_reason && (
+                <div className="mt-4">
+                  <p className="text-xs text-muted-foreground">Rejection Reason</p>
+                  <p className="mt-1 text-sm text-destructive">
+                    {request.rejection_reason}
+                  </p>
+                </div>
+              )}
+            </Card>
+          </>
         )}
-      </div>
-
-      {/* Details card */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold">Request Details</h2>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Compound</p>
-            <p className="font-medium text-sm">
-              <MoleculeName id={request.molecule_id} />
-            </p>
-          </div>
-          {request.batch_id && (
-            <div>
-              <p className="text-xs text-muted-foreground">Preferred Batch</p>
-              <p className="font-medium text-sm"><BatchName id={request.batch_id} /></p>
-            </div>
-          )}
-          <div>
-            <p className="text-xs text-muted-foreground">Amount</p>
-            <p className="font-medium">
-              {request.amount_value} {request.amount_unit}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Priority</p>
-            <p className="font-medium">
-              {REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Status</p>
-            <p className="font-medium">
-              {SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-            </p>
-          </div>
-          {request.assigned_to && (
-            <div>
-              <p className="text-xs text-muted-foreground">Assigned To</p>
-              <p className="font-medium text-sm"><MemberName id={request.assigned_to} /></p>
-            </div>
-          )}
-          {request.fulfilled_sample_id && (
-            <div>
-              <p className="text-xs text-muted-foreground">Fulfilled Sample</p>
-              <p className="font-medium text-sm">
-                <SampleName id={request.fulfilled_sample_id} />
-              </p>
-            </div>
-          )}
-          {request.fulfilled_at && (
-            <div>
-              <p className="text-xs text-muted-foreground">Fulfilled At</p>
-              <p className="font-medium">
-                {new Date(request.fulfilled_at).toLocaleString()}
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="mt-4">
-          <p className="text-xs text-muted-foreground">Purpose</p>
-          <p className="mt-1 text-sm">{request.purpose}</p>
-        </div>
-        {request.rejection_reason && (
-          <div className="mt-4">
-            <p className="text-xs text-muted-foreground">Rejection Reason</p>
-            <p className="mt-1 text-sm text-destructive">
-              {request.rejection_reason}
-            </p>
-          </div>
-        )}
-      </Card>
+      </DetailShell>
 
       {/* Action dialogs */}
-      {request.status === "submitted" && (
+      {query.data?.status === "submitted" && (
         <EditSampleRequestDialog
-          request={request}
+          request={query.data}
           open={editOpen}
           onOpenChange={setEditOpen}
         />
       )}
-      <ApproveDialog
-        request={request}
-        open={approveOpen}
-        onOpenChange={setApproveOpen}
-      />
-      <RejectDialog
-        request={request}
-        open={rejectOpen}
-        onOpenChange={setRejectOpen}
-      />
-      <FulfillDialog
-        request={request}
-        open={fulfillOpen}
-        onOpenChange={setFulfillOpen}
-      />
-    </div>
+      {query.data && (
+        <>
+          <ApproveDialog
+            request={query.data}
+            open={approveOpen}
+            onOpenChange={setApproveOpen}
+          />
+          <RejectDialog
+            request={query.data}
+            open={rejectOpen}
+            onOpenChange={setRejectOpen}
+          />
+          <FulfillDialog
+            request={query.data}
+            open={fulfillOpen}
+            onOpenChange={setFulfillOpen}
+          />
+        </>
+      )}
+    </>
   );
 }
 

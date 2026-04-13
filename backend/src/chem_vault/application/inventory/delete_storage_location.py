@@ -43,8 +43,10 @@ class DeleteStorageLocation:
         require_admin(auth)
 
         async with self._uow:
-            loc = await self._repo.find_by_id(input.location_id)
-            if loc is None or loc.workspace_id != input.workspace_id:
+            loc = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.location_id
+            )
+            if loc is None:
                 return Failure(NotFoundError("StorageLocation", str(input.location_id)))
 
             # Prevent deletion if location has children

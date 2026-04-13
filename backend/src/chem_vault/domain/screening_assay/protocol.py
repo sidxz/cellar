@@ -5,13 +5,19 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
+    PlateFormat,
     ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
+)
+from chem_vault.domain.screening_assay.hit_criterion import (
+    HitCriterion,
+    validate_hit_criteria,
 )
 from chem_vault.domain.screening_assay.events import (
     ProtocolCreated,
@@ -20,6 +26,7 @@ from chem_vault.domain.screening_assay.events import (
 )
 from chem_vault.domain.shared.entity import AggregateRoot, Entity
 from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from chem_vault.domain.shared.ontology import OntologyTerm
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +71,8 @@ class ReadoutDefinition(Entity):
         is_calculated: bool = False,
         calculation_formula: str | None = None,
         display_order: int = 0,
+        pick_list_values: list[str] | None = None,
+        dose_response_config: DoseResponseConfig | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -76,6 +85,26 @@ class ReadoutDefinition(Entity):
                 "Calculated readout requires a calculation_formula"
             )
 
+        # pick_list type requires values
+        if data_type == ReadoutDataType.PICK_LIST and not pick_list_values:
+            raise ValidationError(
+                "ReadoutDefinition with pick_list data type requires pick_list_values"
+            )
+        if data_type != ReadoutDataType.PICK_LIST and pick_list_values is not None:
+            raise ValidationError(
+                "pick_list_values can only be set for pick_list data type"
+            )
+
+        # dose_response type requires config
+        if data_type == ReadoutDataType.DOSE_RESPONSE and dose_response_config is None:
+            raise ValidationError(
+                "ReadoutDefinition with dose_response data type requires dose_response_config"
+            )
+        if data_type != ReadoutDataType.DOSE_RESPONSE and dose_response_config is not None:
+            raise ValidationError(
+                "dose_response_config can only be set for dose_response data type"
+            )
+
         self.protocol_id = protocol_id
         self.name = name.strip()
         self.data_type = data_type
@@ -86,6 +115,8 @@ class ReadoutDefinition(Entity):
         self.is_calculated = is_calculated
         self.calculation_formula = calculation_formula
         self.display_order = display_order
+        self.pick_list_values = pick_list_values
+        self.dose_response_config = dose_response_config
 
 
 class ConditionDefinition(Entity):
@@ -160,6 +191,9 @@ class Protocol(AggregateRoot):
         created_by: uuid.UUID,
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
+        control_layouts: dict[str, uuid.UUID] | None = None,
+        ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
+        recommended_hit_criteria: list[HitCriterion] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -181,6 +215,9 @@ class Protocol(AggregateRoot):
         self.created_by = created_by
         self.readout_definitions: list[ReadoutDefinition] = readout_definitions or []
         self.condition_definitions: list[ConditionDefinition] = condition_definitions or []
+        self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
+        self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
+        self.recommended_hit_criteria: list[HitCriterion] | None = recommended_hit_criteria
 
         # Bind owned entities to this aggregate
         for rd in self.readout_definitions:
@@ -312,6 +349,18 @@ class Protocol(AggregateRoot):
             self.category = category
         self.updated_at = datetime.now(UTC)
 
+    def set_recommended_hit_criteria(
+        self, criteria: list[HitCriterion] | None
+    ) -> None:
+        """Set or clear recommended hit criteria for this protocol.
+
+        Intentionally NOT draft-guarded — protocol owners set criteria on
+        active protocols after publishing.
+        """
+        if criteria is not None:
+            validate_hit_criteria(criteria)
+        self.recommended_hit_criteria = criteria
+
     # ------------------------------------------------------------------
     # Readout definition management
     # ------------------------------------------------------------------
@@ -323,6 +372,25 @@ class Protocol(AggregateRoot):
             raise ConflictError(
                 f"ReadoutDefinition with name '{definition.name}' already exists"
             )
+
+        # Cross-readout validation for dose_response type
+        if (
+            definition.data_type == ReadoutDataType.DOSE_RESPONSE
+            and definition.dose_response_config is not None
+        ):
+            existing_names = {rd.name for rd in self.readout_definitions}
+            cfg = definition.dose_response_config
+            if cfg.x_readout_name not in existing_names:
+                raise ValidationError(
+                    f"Dose-response X-axis readout '{cfg.x_readout_name}' "
+                    "not found among existing readout definitions"
+                )
+            if cfg.y_readout_name not in existing_names:
+                raise ValidationError(
+                    f"Dose-response Y-axis readout '{cfg.y_readout_name}' "
+                    "not found among existing readout definitions"
+                )
+
         definition.protocol_id = self.id
         self.readout_definitions.append(definition)
         self.updated_at = datetime.now(UTC)
@@ -381,3 +449,41 @@ class Protocol(AggregateRoot):
 
         self.condition_definitions.pop(idx)
         self.updated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------
+    # Control layout management
+    # ------------------------------------------------------------------
+
+    def set_control_layout(
+        self, plate_format: PlateFormat, template_id: uuid.UUID
+    ) -> None:
+        """Set a default control layout (plate template) for a plate format."""
+        self._guard_draft()
+        self.control_layouts[plate_format.value] = template_id
+        self.updated_at = datetime.now(UTC)
+
+    def remove_control_layout(self, plate_format: PlateFormat) -> None:
+        """Remove the default control layout for a plate format."""
+        self._guard_draft()
+        if plate_format.value in self.control_layouts:
+            del self.control_layouts[plate_format.value]
+            self.updated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------
+    # Ontology annotation management
+    # ------------------------------------------------------------------
+
+    def set_ontology_annotation(self, slot: str, terms: list[OntologyTerm]) -> None:
+        """Set ontology terms for a named annotation slot."""
+        self._guard_draft()
+        if not slot or not slot.strip():
+            raise ValidationError("Ontology annotation slot name must not be empty")
+        self.ontology_annotations[slot.strip()] = terms
+        self.updated_at = datetime.now(UTC)
+
+    def remove_ontology_annotation(self, slot: str) -> None:
+        """Remove all ontology terms for a named annotation slot."""
+        self._guard_draft()
+        if slot in self.ontology_annotations:
+            del self.ontology_annotations[slot]
+            self.updated_at = datetime.now(UTC)

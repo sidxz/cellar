@@ -35,6 +35,7 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+.infisical-bootstrapped
 
 # Dev server logs/pids
 .logs/
@@ -56,3 +57,12 @@ docker-compose.override.yml
 
 # Alembic
 backend/alembic/versions/*.pyc
+
+# Docs (local only)
+docs/
+CLAUDE.md
+
+# Superpowers brainstorm sessions
+.superpowers/
+
+backend/data/

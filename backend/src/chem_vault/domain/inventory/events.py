@@ -198,3 +198,39 @@ class SynthesisFailed(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class SynthesisRequestFulfilled(DomainEvent):
     fulfilled_batch_id: uuid.UUID
+
+
+# ---------------------------------------------------------------------------
+# Registered plate events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateRegistered(DomainEvent):
+    barcode: str
+    format: str
+    plate_type: str
+    registered_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateWellsMapped(DomainEvent):
+    well_count: int
+    batch_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateMoved(DomainEvent):
+    old_location_id: uuid.UUID | None
+    new_location_id: uuid.UUID | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateStatusChanged(DomainEvent):
+    old_status: str
+    new_status: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateDisposed(DomainEvent):
+    barcode: str

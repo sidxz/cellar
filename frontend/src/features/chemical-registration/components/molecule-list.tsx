@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Plus, Upload } from "lucide-react";
+import { Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useMolecules } from "../hooks/use-molecules";
+import { useSdfExport } from "../hooks/use-sdf-export";
 import {
   LIFECYCLE_LABELS,
   MOLECULE_TYPE_LABELS,
@@ -16,30 +20,12 @@ import {
   type Molecule,
   type MoleculeType,
 } from "../types";
+import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
 import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
 import { BulkRegistrationDialog } from "./bulk-registration-dialog";
 import { CompoundSearchBar } from "./compound-search-bar";
 import { DisclosureDialog } from "./disclosure-dialog";
 import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
-
-function lifecycleBadgeVariant(
-  stage: LifecycleStage
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (stage) {
-    case "active":
-    case "hit":
-    case "lead":
-      return "default";
-    case "preclinical_candidate":
-    case "development_candidate":
-      return "secondary";
-    case "deprioritized":
-    case "archived":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 export function MoleculeList() {
   const router = useRouter();
@@ -48,24 +34,36 @@ export function MoleculeList() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
+  const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
+
+  const { exportSdf } = useSdfExport();
+  const handleSdfExport = useCallback(() => {
+    if (!molecules?.length) return;
+    exportSdf(molecules.map((m) => m.id));
+  }, [molecules, exportSdf]);
 
   const columnDefs = useMemo<ColDef<Molecule>[]>(
     () => [
       {
         headerName: "Structure",
         field: "structure",
-        width: 72,
+        width: 120,
         sortable: false,
         filter: false,
         resizable: false,
+        autoHeight: true,
         cellRenderer: (params: ICellRendererParams<Molecule>) => {
           const mol = params.data;
           if (!mol) return null;
           if (mol.structure_status === "disclosed" && mol.structure?.smiles) {
-            return <StructureThumbnail smiles={mol.structure.smiles} size={40} />;
+            return (
+              <div className="py-1">
+                <StructureThumbnail smiles={mol.structure.smiles} size={80} />
+              </div>
+            );
           }
           return (
-            <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+            <div className="flex h-[80px] w-[80px] items-center justify-center rounded bg-muted text-xs text-muted-foreground">
               N/A
             </div>
           );
@@ -96,14 +94,12 @@ export function MoleculeList() {
         headerName: "Stage",
         field: "lifecycle_stage",
         width: 130,
-        cellRenderer: (params: ICellRendererParams<Molecule>) => {
-          const stage = params.value as LifecycleStage;
-          return (
-            <Badge variant={lifecycleBadgeVariant(stage)}>
-              {LIFECYCLE_LABELS[stage] ?? stage}
-            </Badge>
-          );
-        },
+        cellRenderer: (params: ICellRendererParams<Molecule>) => (
+          <StatusBadge
+            status={params.value}
+            label={LIFECYCLE_LABELS[params.value as LifecycleStage] ?? params.value}
+          />
+        ),
       },
       {
         headerName: "Status",
@@ -155,35 +151,29 @@ export function MoleculeList() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-destructive/50 p-12 text-center">
-        <p className="text-sm text-destructive">
-          Failed to load compounds. Is the backend running?
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-      </div>
+      <ErrorState message="Failed to load compounds. Is the backend running?" details={error.message} />
     );
   }
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Compounds</h1>
-          <p className="mt-1 text-muted-foreground">
-            Search, register, and manage chemical compounds.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setBulkOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Bulk Upload
-          </Button>
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Register Compound
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Compounds"
+        subtitle="Search, register, and manage chemical compounds."
+      >
+        <Button variant="outline" size="sm" onClick={handleSdfExport} disabled={!molecules?.length}>
+          <Download className="h-4 w-4" />
+          Export SDF
+        </Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}>
+          <Upload className="mr-2 h-4 w-4" />
+          Bulk Upload
+        </Button>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Register Compound
+        </Button>
+      </PageHeader>
 
       <div className="mt-4">
         <CompoundSearchBar />
@@ -195,23 +185,32 @@ export function MoleculeList() {
           columnDefs={columnDefs}
           loading={isLoading}
           height="calc(100vh - 280px)"
+          exportFilename="compounds"
           onRowClick={(mol) => {
             router.push(`/compounds/${mol.id}`);
           }}
-          emptyState={
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-              <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-              <h3 className="mt-4 text-lg font-semibold">
-                No compounds registered
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Register your first compound to get started.
-              </p>
-              <Button className="mt-4" onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Register Compound
+          selectionToolbar={(selected) => (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {selected.length} selected
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPickerMolIds(selected.map((m) => m.id))}
+              >
+                <ListPlus className="mr-1 h-4 w-4" />
+                Add to Collection
               </Button>
-            </div>
+            </>
+          )}
+          emptyState={
+            <EmptyState
+              icon={FlaskConical}
+              title="No compounds registered"
+              description="Register your first compound to get started."
+              action={{ label: "Register Compound", onClick: () => setDialogOpen(true), icon: Plus }}
+            />
           }
         />
       </div>
@@ -235,6 +234,14 @@ export function MoleculeList() {
           onOpenChange={(open) => !open && setMergeMol(null)}
         />
       )}
+      <CollectionPickerDialog
+        open={pickerMolIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setPickerMolIds([]);
+        }}
+        moleculeIds={pickerMolIds}
+        onComplete={() => setPickerMolIds([])}
+      />
     </>
   );
 }

@@ -1,0 +1,177 @@
+{
+  "proto_kinase": {
+    "name": "EGFR Kinase Inhibition IC50",
+    "description": "Biochemical assay measuring inhibition of EGFR kinase activity using a fluorescence-based ADP detection method. Compounds tested at 10 concentrations in 3-fold serial dilution from 10 uM.",
+    "protocol_type": "biochemical",
+    "target_ref": "target_egfr",
+    "category": "Enzyme Assay",
+    "readout_definitions": [
+      {
+        "name": "% Inhibition",
+        "data_type": "numeric",
+        "unit": "%",
+        "precision": 1,
+        "normalization": "percent_inhibition",
+        "display_order": 1
+      },
+      {
+        "name": "IC50",
+        "data_type": "dose_response",
+        "unit": "nM",
+        "precision": 2,
+        "display_order": 2,
+        "dose_response_config": {
+          "curve_type": "ic50",
+          "x_readout_name": "Concentration",
+          "y_readout_name": "% Inhibition"
+        }
+      }
+    ],
+    "condition_definitions": [
+      {
+        "name": "ATP Concentration",
+        "data_type": "numeric",
+        "unit": "uM"
+      },
+      {
+        "name": "Incubation Time",
+        "data_type": "numeric",
+        "unit": "min"
+      }
+    ],
+    "publish": true,
+    "recommended_hit_criteria": [
+      {"readout_name": "IC50", "operator": "lt", "value": 100},
+      {"readout_name": "Curve Class", "operator": "in", "value": ["full", "partial"]}
+    ]
+  },
+  "proto_cox2": {
+    "name": "COX-2 Inhibition Assay",
+    "description": "Enzyme inhibition assay for cyclooxygenase-2 using a colorimetric method. Measures prostaglandin E2 production. Selectivity index calculated relative to COX-1 IC50.",
+    "protocol_type": "biochemical",
+    "target_ref": "target_cox2",
+    "category": "Enzyme Assay",
+    "readout_definitions": [
+      {
+        "name": "% Inhibition",
+        "data_type": "numeric",
+        "unit": "%",
+        "precision": 1,
+        "normalization": "percent_inhibition",
+        "display_order": 1
+      },
+      {
+        "name": "IC50",
+        "data_type": "dose_response",
+        "unit": "nM",
+        "precision": 2,
+        "display_order": 2,
+        "dose_response_config": {
+          "curve_type": "ic50",
+          "x_readout_name": "Concentration",
+          "y_readout_name": "% Inhibition"
+        }
+      },
+      {
+        "name": "Selectivity Index",
+        "data_type": "numeric",
+        "unit": "",
+        "precision": 1,
+        "display_order": 3
+      }
+    ],
+    "condition_definitions": [
+      {
+        "name": "Substrate Concentration",
+        "data_type": "numeric",
+        "unit": "uM"
+      }
+    ],
+    "publish": true,
+    "recommended_hit_criteria": [
+      {"readout_name": "IC50", "operator": "lt", "value": 500},
+      {"readout_name": "Curve Class", "operator": "in", "value": ["full"]}
+    ]
+  },
+  "proto_viability": {
+    "name": "Cell Viability (MTT Assay)",
+    "description": "Colorimetric assay measuring cellular metabolic activity via MTT reduction. Used to assess compound cytotoxicity and cell proliferation effects.",
+    "protocol_type": "cell_based",
+    "target_ref": null,
+    "category": "Cell-Based Assay",
+    "readout_definitions": [
+      {
+        "name": "Absorbance",
+        "data_type": "numeric",
+        "unit": "AU",
+        "precision": 3,
+        "display_order": 1
+      },
+      {
+        "name": "% Viability",
+        "data_type": "numeric",
+        "unit": "%",
+        "precision": 1,
+        "normalization": "percent_control",
+        "display_order": 2
+      }
+    ],
+    "condition_definitions": [
+      {
+        "name": "Cell Line",
+        "data_type": "text"
+      },
+      {
+        "name": "Exposure Time",
+        "data_type": "numeric",
+        "unit": "h"
+      }
+    ],
+    "publish": true
+  },
+  "proto_admet": {
+    "name": "ADMET Panel",
+    "description": "Multi-parameter ADMET profiling panel including kinetic solubility, Caco-2 permeability, microsomal stability, and LogD measurement.",
+    "protocol_type": "admet",
+    "target_ref": null,
+    "category": "ADMET",
+    "readout_definitions": [
+      {
+        "name": "Kinetic Solubility",
+        "data_type": "numeric",
+        "unit": "uM",
+        "precision": 1,
+        "display_order": 1
+      },
+      {
+        "name": "LogD 7.4",
+        "data_type": "numeric",
+        "unit": "",
+        "precision": 2,
+        "display_order": 2
+      },
+      {
+        "name": "Caco-2 Papp",
+        "data_type": "numeric",
+        "unit": "10-6 cm/s",
+        "precision": 2,
+        "display_order": 3
+      },
+      {
+        "name": "Microsomal Stability",
+        "data_type": "numeric",
+        "unit": "% remaining",
+        "precision": 1,
+        "display_order": 4
+      }
+    ],
+    "condition_definitions": [
+      {
+        "name": "Species",
+        "data_type": "pick_list",
+        "pick_list_values": ["Human", "Mouse", "Rat"]
+      }
+    ],
+    "publish": true
+  }
+}

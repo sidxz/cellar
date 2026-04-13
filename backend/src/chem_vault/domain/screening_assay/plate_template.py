@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from chem_vault.domain.screening_assay.enums import PlateFormat
 from chem_vault.domain.shared.entity import Entity
 from chem_vault.domain.shared.errors import ValidationError
+
+# Sentinel value for distinguishing "not provided" from "explicitly None"
+_UNSET = object()
 
 
 class PlateTemplate(Entity):
@@ -26,7 +30,7 @@ class PlateTemplate(Entity):
         workspace_id: uuid.UUID,
         name: str,
         format: PlateFormat,
-        template_map: dict,
+        template_map: dict[str, Any],
         description: str | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
@@ -55,7 +59,7 @@ class PlateTemplate(Entity):
         workspace_id: uuid.UUID,
         name: str,
         format: PlateFormat,
-        template_map: dict,
+        template_map: dict[str, Any],
         description: str | None = None,
         created_by: uuid.UUID,
     ) -> PlateTemplate:
@@ -67,3 +71,28 @@ class PlateTemplate(Entity):
             description=description,
             created_by=created_by,
         )
+
+    # ------------------------------------------------------------------
+    # Mutation
+    # ------------------------------------------------------------------
+
+    def update(
+        self,
+        *,
+        name: str | None = None,
+        format: PlateFormat | None = None,
+        template_map: dict[str, Any] | None = None,
+        description: str | None = _UNSET,  # type: ignore[assignment]
+    ) -> None:
+        """Update mutable fields. Pass ``None`` for description to clear it."""
+        if name is not None:
+            if not name.strip():
+                raise ValidationError("PlateTemplate name must not be empty")
+            self.name = name.strip()
+        if format is not None:
+            self.format = format
+        if template_map is not None:
+            self.template_map = template_map
+        if description is not _UNSET:
+            self.description = description
+        self.updated_at = datetime.now(UTC)

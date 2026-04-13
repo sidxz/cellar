@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Truck } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
 import { OrgName } from "@/shared/components/entity-name";
 import {
   Select,
@@ -22,23 +24,6 @@ import {
   type ShipmentSummary,
 } from "../types/shipment";
 import { CreateShipmentDialog } from "./create-shipment-dialog";
-
-function statusBadgeVariant(
-  status: ShipmentStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "delivered":
-      return "default";
-    case "shipped":
-    case "in_transit":
-      return "secondary";
-    case "returned":
-      return "destructive";
-    case "preparing":
-    default:
-      return "outline";
-  }
-}
 
 export function ShipmentListPage() {
   const router = useRouter();
@@ -77,10 +62,10 @@ export function ShipmentListPage() {
         field: "status",
         width: 130,
         cellRenderer: (params: ICellRendererParams<ShipmentSummary>) => (
-          <Badge variant={statusBadgeVariant(params.value as ShipmentStatus)}>
-            {SHIPMENT_STATUS_LABELS[params.value as ShipmentStatus] ??
-              params.value}
-          </Badge>
+          <StatusBadge
+            status={params.value}
+            label={SHIPMENT_STATUS_LABELS[params.value as ShipmentStatus] ?? params.value}
+          />
         ),
       },
       {
@@ -95,19 +80,15 @@ export function ShipmentListPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Shipments</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage outbound sample shipments and chain-of-custody.
-          </p>
-        </div>
+      <PageHeader
+        title="Shipments"
+        subtitle="Manage outbound sample shipments and chain-of-custody."
+      >
         <Button onClick={() => setCreateOpen(true)}>
           <Truck className="mr-2 h-4 w-4" />
           New Shipment
         </Button>
-      </div>
+      </PageHeader>
 
       {/* Status filter */}
       <div className="flex items-center gap-3">
@@ -137,13 +118,11 @@ export function ShipmentListPage() {
         height="500px"
         onRowClick={(row) => router.push(`/inventory/shipments/${row.id}`)}
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <Truck className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No shipments</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create the first shipment to get started.
-            </p>
-          </div>
+          <EmptyState
+            icon={Truck}
+            title="No shipments"
+            description="Create the first shipment to get started."
+          />
         }
       />
 

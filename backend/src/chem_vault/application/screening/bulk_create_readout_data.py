@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -21,7 +22,7 @@ from chem_vault.domain.screening_assay.repository import (
     RunRepository,
 )
 from chem_vault.domain.shared.enums import Qualifier
-from chem_vault.domain.shared.errors import DomainError, ValidationError
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import QualifiedValue
 
 
@@ -53,7 +54,7 @@ class BulkReadoutResult:
     total_count: int = 0
     success_count: int = 0
     error_count: int = 0
-    errors: list[dict] = field(default_factory=list)
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 class BulkCreateReadoutData:
@@ -133,9 +134,10 @@ class BulkCreateReadoutData:
 
     async def _resolve_readout_definition_id(
         self,
+        workspace_id: uuid.UUID,
         item: ReadoutDataItem,
         idx: int,
-        run_protocol_cache: dict[uuid.UUID, dict],
+        run_protocol_cache: dict[uuid.UUID, dict[str, Any]],
     ) -> Result[uuid.UUID, DomainError]:
         """Resolve readout_definition_id, looking up by name from the run's protocol if needed."""
         if item.readout_definition_id is not None:
@@ -148,12 +150,12 @@ class BulkCreateReadoutData:
                 ))
             # Cache protocol readout definitions per run to avoid repeated lookups
             if item.run_id not in run_protocol_cache:
-                run = await self._run_repo.find_by_id(item.run_id)
+                run = await self._run_repo.find_by_id_in_workspace(workspace_id, item.run_id)
                 if run is None:
                     return Failure(ValidationError(
                         f"Item {idx}: run '{item.run_id}' not found"
                     ))
-                protocol = await self._protocol_repo.find_by_id(run.protocol_id)
+                protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, run.protocol_id)
                 if protocol is None:
                     return Failure(ValidationError(
                         f"Item {idx}: protocol for run '{item.run_id}' not found"
@@ -183,16 +185,26 @@ class BulkCreateReadoutData:
             return Failure(ValidationError("No items provided"))
 
         async with self._uow:
-            # Check locks for all unique run IDs — reject entire batch if any locked
+            # Verify all referenced runs belong to this workspace
             run_ids = {item.run_id for item in input.items}
+            if self._run_repo is not None:
+                for run_id in run_ids:
+                    run = await self._run_repo.find_by_id_in_workspace(
+                        input.workspace_id, run_id
+                    )
+                    if run is None:
+                        return Failure(NotFoundError("Run", str(run_id)))
+
+            # Check locks for all unique run IDs — reject entire batch if any locked
             for run_id in run_ids:
-                lock_result = await self._guard.guard_write(run_id)
-                if isinstance(lock_result, Failure):
-                    return lock_result  # type: ignore[return-value]
+                try:
+                    await self._guard.guard_write(input.workspace_id, run_id)
+                except DomainError as exc:
+                    return Failure(exc)
 
             result = BulkReadoutResult(total_count=len(input.items))
             entities: list[ReadoutData] = []
-            run_protocol_cache: dict[uuid.UUID, dict] = {}
+            run_protocol_cache: dict[uuid.UUID, dict[str, Any]] = {}
 
             for idx, item in enumerate(input.items):
                 # Resolve human-readable identifiers to UUIDs
@@ -213,7 +225,7 @@ class BulkCreateReadoutData:
                     continue
 
                 readout_def_result = await self._resolve_readout_definition_id(
-                    item, idx, run_protocol_cache
+                    input.workspace_id, item, idx, run_protocol_cache
                 )
                 if isinstance(readout_def_result, Failure):
                     result.error_count += 1
@@ -245,7 +257,7 @@ class BulkCreateReadoutData:
                     )
                     entities.append(rd)
                     result.success_count += 1
-                except Exception as e:
+                except (ValueError, TypeError) as e:
                     result.error_count += 1
                     result.errors.append({"index": idx, "error": str(e)})
 

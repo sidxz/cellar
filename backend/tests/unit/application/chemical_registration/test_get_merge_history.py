@@ -58,6 +58,14 @@ class FakeMoleculeRepo:
     async def find_by_id(self, id: uuid.UUID) -> Molecule | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Molecule | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
+
 
 class FakeMergeEventRepo:
     def __init__(self) -> None:
@@ -66,12 +74,13 @@ class FakeMergeEventRepo:
     def add(self, event: MergeEvent) -> None:
         self._store.append(event)
 
-    async def find_by_molecule(self, molecule_id: uuid.UUID) -> list[MergeEvent]:
+    async def find_by_molecule(self, workspace_id: uuid.UUID, molecule_id: uuid.UUID) -> list[MergeEvent]:
         return [
             e
             for e in self._store
-            if e.source_molecule_id == molecule_id
-            or e.target_molecule_id == molecule_id
+            if e.workspace_id == workspace_id
+            and (e.source_molecule_id == molecule_id
+                 or e.target_molecule_id == molecule_id)
         ]
 
 
@@ -104,6 +113,7 @@ class TestGetMergeHistory:
         mol_repo.add(target)
 
         event = MergeEvent.create(
+            workspace_id=WS_ID,
             source_molecule_id=mol.id,
             target_molecule_id=target.id,
             reason=MergeReason.MANUAL_MERGE,
@@ -133,6 +143,7 @@ class TestGetMergeHistory:
         mol_repo.add(target)
 
         event = MergeEvent.create(
+            workspace_id=WS_ID,
             source_molecule_id=source.id,
             target_molecule_id=target.id,
             reason=MergeReason.DISCLOSURE_RESOLVED,

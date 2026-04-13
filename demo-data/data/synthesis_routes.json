@@ -1,0 +1,168 @@
+{
+  "route_imatinib": {
+    "molecule_ref": "mol_imatinib",
+    "name": "Imatinib - Convergent Synthesis",
+    "description": "Published convergent synthesis route via Suzuki coupling of pyrimidine and pyridine fragments followed by amide bond formation.",
+    "route_type": "convergent",
+    "scale": "gram",
+    "source": "literature",
+    "source_reference": "J. Med. Chem. 1996, 39, 2285",
+    "steps": [
+      {
+        "step_number": 1,
+        "name": "Pyrimidine Core Formation",
+        "named_reaction": "Cyclization",
+        "product_description": "2-Amino-4-methylpyrimidine intermediate",
+        "conditions": {"solvent": "DMF", "temperature": "120 C", "time": "4 h"},
+        "reagents": [{"name": "Guanidine hydrochloride", "role": "reactant"}, {"name": "K2CO3", "role": "base"}]
+      },
+      {
+        "step_number": 2,
+        "name": "Suzuki Coupling",
+        "named_reaction": "Suzuki coupling",
+        "product_description": "Biaryl pyrimidine-pyridine intermediate",
+        "conditions": {"solvent": "Dioxane/Water", "temperature": "85 C", "catalyst": "Pd(PPh3)4", "time": "12 h"},
+        "reagents": [{"name": "3-Pyridylboronic acid", "role": "reactant"}, {"name": "Na2CO3", "role": "base"}]
+      },
+      {
+        "step_number": 3,
+        "name": "Amide Bond Formation",
+        "named_reaction": "Amide coupling",
+        "product_description": "Imatinib free base",
+        "conditions": {"solvent": "DCM", "temperature": "25 C", "time": "2 h"},
+        "reagents": [{"name": "HATU", "role": "reagent"}, {"name": "DIPEA", "role": "base"}]
+      }
+    ]
+  },
+  "route_gefitinib": {
+    "molecule_ref": "mol_gefitinib",
+    "name": "Gefitinib - Linear Synthesis",
+    "description": "Linear synthesis via SNAr displacement on 4-chloroquinazoline followed by alkylation.",
+    "route_type": "linear",
+    "scale": "gram",
+    "source": "literature",
+    "source_reference": "Bioorg. Med. Chem. Lett. 1997, 7, 2849",
+    "steps": [
+      {
+        "step_number": 1,
+        "name": "Quinazoline Ring Closure",
+        "named_reaction": "Niementowski quinazoline synthesis",
+        "product_description": "4-Chloro-6,7-dimethoxyquinazoline",
+        "conditions": {"solvent": "POCl3", "temperature": "110 C", "time": "3 h"},
+        "reagents": [{"name": "2-Amino-4,5-dimethoxybenzamide", "role": "reactant"}]
+      },
+      {
+        "step_number": 2,
+        "name": "Aniline Displacement",
+        "named_reaction": "SNAr",
+        "product_description": "N-(3-Chloro-4-fluorophenyl)quinazolinamine",
+        "conditions": {"solvent": "iPrOH", "temperature": "80 C", "time": "6 h"},
+        "reagents": [{"name": "3-Chloro-4-fluoroaniline", "role": "reactant"}, {"name": "Et3N", "role": "base"}]
+      },
+      {
+        "step_number": 3,
+        "name": "O-Alkylation",
+        "named_reaction": "Williamson ether synthesis",
+        "product_description": "Gefitinib",
+        "conditions": {"solvent": "DMF", "temperature": "60 C", "time": "8 h"},
+        "reagents": [{"name": "4-(3-Chloropropyl)morpholine", "role": "reagent"}, {"name": "K2CO3", "role": "base"}]
+      }
+    ]
+  },
+  "route_celecoxib": {
+    "molecule_ref": "mol_celecoxib",
+    "name": "Celecoxib - Pyrazole Synthesis",
+    "description": "One-pot pyrazole formation via [3+2] cyclocondensation of diketone with hydrazine.",
+    "route_type": "linear",
+    "scale": "gram",
+    "source": "literature",
+    "source_reference": "J. Med. Chem. 1997, 40, 1347",
+    "steps": [
+      {
+        "step_number": 1,
+        "name": "Claisen Condensation",
+        "named_reaction": "Claisen condensation",
+        "product_description": "1,3-Diketone intermediate",
+        "conditions": {"solvent": "THF", "temperature": "-78 C to 25 C", "time": "3 h"},
+        "reagents": [{"name": "LDA", "role": "base"}, {"name": "Methyl 4-methylbenzoate", "role": "reactant"}]
+      },
+      {
+        "step_number": 2,
+        "name": "Pyrazole Cyclization",
+        "named_reaction": "Knorr pyrazole synthesis",
+        "product_description": "Celecoxib",
+        "conditions": {"solvent": "EtOH", "temperature": "78 C", "time": "12 h"},
+        "reagents": [{"name": "4-(Sulfonamido)phenylhydrazine", "role": "reactant"}]
+      }
+    ]
+  },
+  "route_losartan": {
+    "molecule_ref": "mol_losartan",
+    "name": "Losartan - Imidazole Route",
+    "description": "Multi-step synthesis via imidazole alkylation and tetrazole formation.",
+    "route_type": "linear",
+    "scale": "milligram",
+    "source": "manual",
+    "steps": [
+      {
+        "step_number": 1,
+        "name": "Imidazole N-Alkylation",
+        "named_reaction": "N-Alkylation",
+        "product_description": "N-Benzylimidazole intermediate",
+        "conditions": {"solvent": "DMF", "temperature": "80 C", "time": "6 h"},
+        "reagents": [{"name": "2-Butyl-4-chloro-5-formylimidazole", "role": "reactant"}, {"name": "NaH", "role": "base"}]
+      },
+      {
+        "step_number": 2,
+        "name": "Tetrazole Formation",
+        "named_reaction": "[3+2] cycloaddition",
+        "product_description": "Biphenyl tetrazole intermediate",
+        "conditions": {"solvent": "Toluene", "temperature": "110 C", "time": "24 h"},
+        "reagents": [{"name": "TMSN3", "role": "reagent"}, {"name": "Bu2SnO", "role": "catalyst"}]
+      },
+      {
+        "step_number": 3,
+        "name": "Aldehyde Reduction",
+        "named_reaction": "Borohydride reduction",
+        "product_description": "Losartan",
+        "conditions": {"solvent": "MeOH", "temperature": "0 C", "time": "1 h"},
+        "reagents": [{"name": "NaBH4", "role": "reagent"}]
+      }
+    ]
+  },
+  "route_osimertinib": {
+    "molecule_ref": "mol_osimertinib",
+    "name": "Osimertinib - Acrylamide Warhead",
+    "description": "Synthesis of third-generation EGFR inhibitor featuring irreversible covalent acrylamide warhead.",
+    "route_type": "linear",
+    "scale": "milligram",
+    "source": "literature",
+    "source_reference": "J. Med. Chem. 2014, 57, 8249",
+    "steps": [
+      {
+        "step_number": 1,
+        "name": "Pyrimidine Core SNAr",
+        "named_reaction": "SNAr",
+        "product_description": "Diaminopyrimidine intermediate",
+        "conditions": {"solvent": "nBuOH", "temperature": "120 C", "time": "8 h"},
+        "reagents": [{"name": "2,4-Dichloro-5-nitropyrimidine", "role": "reactant"}, {"name": "Indole amine", "role": "reactant"}]
+      },
+      {
+        "step_number": 2,
+        "name": "Nitro Reduction",
+        "named_reaction": "Catalytic hydrogenation",
+        "product_description": "Amino intermediate",
+        "conditions": {"solvent": "EtOAc", "catalyst": "Pd/C", "atmosphere": "H2"},
+        "reagents": [{"name": "Pd/C 10%", "role": "catalyst"}, {"name": "H2 (1 atm)", "role": "reagent"}]
+      },
+      {
+        "step_number": 3,
+        "name": "Acryloylation",
+        "named_reaction": "Acyl chloride amidation",
+        "product_description": "Osimertinib",
+        "conditions": {"solvent": "DCM", "temperature": "0 C", "time": "30 min"},
+        "reagents": [{"name": "Acryloyl chloride", "role": "reagent"}, {"name": "Et3N", "role": "base"}]
+      }
+    ]
+  }
+}

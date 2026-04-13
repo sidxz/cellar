@@ -60,7 +60,7 @@ class SQLAlchemyControlledVocabularyRepository(
             .order_by(ControlledVocabularyModel.name)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
 
     async def find_by_name(
         self, workspace_id: uuid.UUID, name: str
@@ -71,10 +71,11 @@ class SQLAlchemyControlledVocabularyRepository(
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(ControlledVocabularyModel).where(
-            ControlledVocabularyModel.id == id
+            ControlledVocabularyModel.workspace_id == workspace_id,
+            ControlledVocabularyModel.id == id,
         )
         await self._session.execute(stmt)

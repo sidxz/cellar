@@ -1,0 +1,308 @@
+{
+  "_comment": "50 FDA-approved drugs with public SMILES from ChEMBL/PubChem. Grouped by therapeutic area.",
+
+  "mol_imatinib": {
+    "name": "Imatinib",
+    "smiles": "Cc1ccc(NC(=O)c2ccc(CN3CCN(C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_gefitinib": {
+    "name": "Gefitinib",
+    "smiles": "COc1cc2ncnc(Nc3ccc(F)c(Cl)c3)c2cc1OCCCN1CCOCC1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_erlotinib": {
+    "name": "Erlotinib",
+    "smiles": "COCCOc1cc2ncnc(Nc3cccc(C#C)c3)c2cc1OCCOC",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_sorafenib": {
+    "name": "Sorafenib",
+    "smiles": "CNC(=O)c1cc(Oc2ccc(NC(=O)Nc3ccc(Cl)c(C(F)(F)F)c3)cc2)ccn1",
+    "category": "oncology",
+    "org_ref": "org_nci"
+  },
+  "mol_vemurafenib": {
+    "name": "Vemurafenib",
+    "smiles": "CCCS(=O)(=O)Nc1ccc(-c2c(-c3ccnc(N)n3)[nH]c3cc(F)ccc23)cc1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_dabrafenib": {
+    "name": "Dabrafenib",
+    "smiles": "CC(C)(C)c1nc(-c2cccc(NS(=O)(=O)c3c(F)cccc3F)c2F)c(-c2ccnc(N)n2)s1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_osimertinib": {
+    "name": "Osimertinib",
+    "smiles": "COc1cc(N(C)CCN(C)C)c(NC(=O)C=C)cc1Nc1nccc(-c2cn(C)c3ccccc23)n1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_lapatinib": {
+    "name": "Lapatinib",
+    "smiles": "CS(=O)(=O)CCNCc1ccc(-c2ccc3ncnc(Nc4ccc(OCc5cccc(F)c5)c(Cl)c4)c3c2)o1",
+    "category": "oncology",
+    "org_ref": "org_nci"
+  },
+  "mol_crizotinib": {
+    "name": "Crizotinib",
+    "smiles": "CC(Oc1cc(-c2cnn(C3CCNCC3)c2)cnc1N)c1c(Cl)ccc(F)c1Cl",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_sunitinib": {
+    "name": "Sunitinib",
+    "smiles": "CCN(CC)CCNC(=O)c1c(C)[nH]c(/C=C2\\C(=O)Nc3ccc(F)cc32)c1C",
+    "category": "oncology",
+    "org_ref": "org_nci"
+  },
+  "mol_dasatinib": {
+    "name": "Dasatinib",
+    "smiles": "Cc1nc(Nc2ncc(C(=O)Nc3c(C)cccc3Cl)s2)cc(N2CCN(CCO)CC2)n1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_nilotinib": {
+    "name": "Nilotinib",
+    "smiles": "Cc1cn(-c2cc(NC(=O)c3ccc(C)c(Nc4nccc(-c5cccnc5)n4)c3)cc(C(F)(F)F)c2)cn1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_afatinib": {
+    "name": "Afatinib",
+    "smiles": "CN(C)/C=C/C(=O)Nc1cc2c(Nc3ccc(F)c(Cl)c3)ncnc2cc1OC1CCOC1",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+  "mol_bosutinib": {
+    "name": "Bosutinib",
+    "smiles": "COc1cc(Nc2c(C#N)cnc3cc(OCCCN4CCN(C)CC4)c(OC)cc23)c(Cl)cc1Cl",
+    "category": "oncology",
+    "org_ref": "org_nci"
+  },
+  "mol_lenvatinib": {
+    "name": "Lenvatinib",
+    "smiles": "COc1cc2nccc(Oc3ccc(NC(=O)NC4CC4)c(C(F)(F)F)c3)c2cc1C(N)=O",
+    "category": "oncology",
+    "org_ref": "org_acme"
+  },
+
+  "mol_celecoxib": {
+    "name": "Celecoxib",
+    "smiles": "Cc1ccc(-c2cc(C(F)(F)F)nn2-c2ccc(S(N)(=O)=O)cc2)cc1",
+    "category": "anti_inflammatory",
+    "org_ref": "org_acme"
+  },
+  "mol_indomethacin": {
+    "name": "Indomethacin",
+    "smiles": "COc1ccc2c(c1)c(CC(=O)O)c(C)n2C(=O)c1ccc(Cl)cc1",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_naproxen": {
+    "name": "Naproxen",
+    "smiles": "COc1ccc2cc(CC(C)C(=O)O)ccc2c1",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_ibuprofen": {
+    "name": "Ibuprofen",
+    "smiles": "CC(C)Cc1ccc(C(C)C(=O)O)cc1",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_diclofenac": {
+    "name": "Diclofenac",
+    "smiles": "OC(=O)Cc1ccccc1Nc1c(Cl)cccc1Cl",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_meloxicam": {
+    "name": "Meloxicam",
+    "smiles": "CN1C(C(=O)Nc2ccccn2)=C(O)c2ccc(Cl)cc2S1(=O)=O",
+    "category": "anti_inflammatory",
+    "org_ref": "org_acme"
+  },
+  "mol_piroxicam": {
+    "name": "Piroxicam",
+    "smiles": "CN1C(C(=O)Nc2ccccn2)=C(O)c2ccccc2S1(=O)=O",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_aspirin": {
+    "name": "Aspirin",
+    "smiles": "CC(=O)Oc1ccccc1C(=O)O",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_sulindac": {
+    "name": "Sulindac",
+    "smiles": "CC1=C(CC(=O)O)c2cc(F)ccc2/C1=C\\c1ccc(S(C)=O)cc1",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+  "mol_ketoprofen": {
+    "name": "Ketoprofen",
+    "smiles": "CC(C(=O)O)c1cccc(C(=O)c2ccccc2)c1",
+    "category": "anti_inflammatory",
+    "org_ref": "org_sigma"
+  },
+
+  "mol_risperidone": {
+    "name": "Risperidone",
+    "smiles": "Cc1nc2n(c1C(=O)CCN1CCC(c3noc4cc(F)ccc34)CC1)CCCC2=O",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_olanzapine": {
+    "name": "Olanzapine",
+    "smiles": "Cc1cc2c(s1)Nc1ccccc1N=C2N1CCN(C)CC1",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_quetiapine": {
+    "name": "Quetiapine",
+    "smiles": "OCCOCCN1CCN(C2=Nc3ccccc3Sc3ccccc32)CC1",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_aripiprazole": {
+    "name": "Aripiprazole",
+    "smiles": "O=C1CCc2ccc(OCCCCN3CCN(c4cccc5c4OCC5)CC3)cc2N1",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_haloperidol": {
+    "name": "Haloperidol",
+    "smiles": "OC1(c2ccc(Cl)cc2)CCN(CCCC(=O)c2ccc(F)cc2)CC1",
+    "category": "cns",
+    "org_ref": "org_sigma"
+  },
+  "mol_fluoxetine": {
+    "name": "Fluoxetine",
+    "smiles": "CNCCC(Oc1ccc(C(F)(F)F)cc1)c1ccccc1",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_sertraline": {
+    "name": "Sertraline",
+    "smiles": "CNC1CCC(c2ccc(Cl)c(Cl)c2)c2ccccc21",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_paroxetine": {
+    "name": "Paroxetine",
+    "smiles": "Fc1ccc(C2CCNCC2COc2ccc3c(c2)OCO3)cc1",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_donepezil": {
+    "name": "Donepezil",
+    "smiles": "COc1cc2CC(CC(=O)c3ccccc3)C(=O)c2cc1OC",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+  "mol_memantine": {
+    "name": "Memantine",
+    "smiles": "CC12CC3CC(C)(C1)CC(N)(C3)C2",
+    "category": "cns",
+    "org_ref": "org_neurotech"
+  },
+
+  "mol_lisinopril": {
+    "name": "Lisinopril",
+    "smiles": "NCCCC(NC(CCc1ccccc1)C(=O)O)C(=O)N1CCCC1C(=O)O",
+    "category": "cardiovascular",
+    "org_ref": "org_acme"
+  },
+  "mol_enalapril": {
+    "name": "Enalapril",
+    "smiles": "CCOC(=O)C(CCc1ccccc1)NC(C)C(=O)N1CCCC1C(=O)O",
+    "category": "cardiovascular",
+    "org_ref": "org_acme"
+  },
+  "mol_captopril": {
+    "name": "Captopril",
+    "smiles": "CC(CS)C(=O)N1CCCC1C(=O)O",
+    "category": "cardiovascular",
+    "org_ref": "org_sigma"
+  },
+  "mol_amlodipine": {
+    "name": "Amlodipine",
+    "smiles": "CCOC(=O)C1=C(COCCN)NC(C)=C(C(=O)OC)C1c1ccccc1Cl",
+    "category": "cardiovascular",
+    "org_ref": "org_acme"
+  },
+  "mol_losartan": {
+    "name": "Losartan",
+    "smiles": "CCCCc1nc(Cl)c(CO)n1Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1",
+    "category": "cardiovascular",
+    "org_ref": "org_acme"
+  },
+  "mol_valsartan": {
+    "name": "Valsartan",
+    "smiles": "CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C",
+    "category": "cardiovascular",
+    "org_ref": "org_acme"
+  },
+  "mol_atorvastatin": {
+    "name": "Atorvastatin",
+    "smiles": "CC(C)c1n(CC[C@@H](O)C[C@@H](O)CC(=O)O)c(-c2ccccc2)c(-c2ccc(F)cc2)c1C(=O)Nc1ccccc1",
+    "category": "cardiovascular",
+    "org_ref": "org_sigma"
+  },
+  "mol_metoprolol": {
+    "name": "Metoprolol",
+    "smiles": "COCCc1ccc(OCC(O)CNC(C)C)cc1",
+    "category": "cardiovascular",
+    "org_ref": "org_sigma"
+  },
+
+  "mol_remdesivir": {
+    "name": "Remdesivir",
+    "smiles": "CCC(CC)COC(=O)C(C)NP(=O)(OCC1OC(C#N)(c2ccc3c(N)ncnn23)C(O)C1O)Oc1ccccc1",
+    "category": "anti_infective",
+    "org_ref": "org_nci"
+  },
+  "mol_oseltamivir": {
+    "name": "Oseltamivir",
+    "smiles": "CCOC(=O)C1=CC(OC(CC)CC)C(NC(C)=O)C(N)C1",
+    "category": "anti_infective",
+    "org_ref": "org_sigma"
+  },
+  "mol_acyclovir": {
+    "name": "Acyclovir",
+    "smiles": "Nc1nc2c(ncn2COCCO)c(=O)[nH]1",
+    "category": "anti_infective",
+    "org_ref": "org_sigma"
+  },
+  "mol_amoxicillin": {
+    "name": "Amoxicillin",
+    "smiles": "CC1(C)SC2C(NC(=O)C(N)c3ccc(O)cc3)C(=O)N2C1C(=O)O",
+    "category": "anti_infective",
+    "org_ref": "org_sigma"
+  },
+  "mol_ciprofloxacin": {
+    "name": "Ciprofloxacin",
+    "smiles": "O=C(O)c1cn(C2CC2)c2cc(N3CCNCC3)c(F)cc2c1=O",
+    "category": "anti_infective",
+    "org_ref": "org_sigma"
+  },
+  "mol_fluconazole": {
+    "name": "Fluconazole",
+    "smiles": "OC(Cn1cncn1)(Cn1cncn1)c1ccc(F)cc1F",
+    "category": "anti_infective",
+    "org_ref": "org_sigma"
+  },
+  "mol_ivermectin": {
+    "name": "Ivermectin",
+    "smiles": "CCC(C(CC1CC(C(CC=CC=CC(CC(C(=O)C2CC(CC3CCC(C(C(C)CC4CC(OC5CC(OC)C(OC6CC(OC)C(O)C(C)O6)C(C)O5)OC4=O)O3)O)O2)C)OC)C)O1)C)O",
+    "category": "anti_infective",
+    "org_ref": "org_nci"
+  }
+}

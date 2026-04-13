@@ -73,8 +73,8 @@ class AddIdentifier:
         require_editor(auth)
 
         async with self._uow:
-            mol = await self._repo.find_by_id(input.molecule_id)
-            if mol is None or mol.workspace_id != input.workspace_id:
+            mol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             # Workspace-unique check: identifier must not exist on another molecule
@@ -130,8 +130,8 @@ class RemoveIdentifier:
         require_editor(auth)
 
         async with self._uow:
-            mol = await self._repo.find_by_id(input.molecule_id)
-            if mol is None or mol.workspace_id != input.workspace_id:
+            mol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             try:
@@ -156,7 +156,7 @@ class ListIdentifiers:
         self, input: ListIdentifiersQuery
     ) -> Result[list[MoleculeIdentifier], DomainError]:
         async with self._uow:
-            mol = await self._repo.find_by_id(input.molecule_id)
-            if mol is None or mol.workspace_id != input.workspace_id:
+            mol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
             return Success(mol.identifiers)

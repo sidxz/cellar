@@ -72,6 +72,14 @@ class FakeMoleculeRepository:
     async def find_by_id(self, id: uuid.UUID) -> Molecule | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Molecule | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
+
 
 class FakeRelationshipRepository:
     def __init__(self) -> None:

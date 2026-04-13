@@ -67,7 +67,7 @@ class SQLAlchemyOrganizationRepository(
             stmt = stmt.where(OrganizationModel.is_active.is_(True))
         stmt = stmt.order_by(OrganizationModel.name)
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
 
     async def find_by_name(
         self, workspace_id: uuid.UUID, name: str
@@ -78,4 +78,4 @@ class SQLAlchemyOrganizationRepository(
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None

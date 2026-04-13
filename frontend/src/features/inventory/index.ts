@@ -6,3 +6,6 @@ export { StorageBrowser } from "./components/storage-browser";
 export { CreateBatchDialog } from "./components/create-batch-dialog";
 export { CreateSampleDialog } from "./components/create-sample-dialog";
 export { CreateStorageLocationDialog } from "./components/create-storage-location-dialog";
+export { PlateList } from "./components/plate-list";
+export { RegisterPlateDialog } from "./components/register-plate-dialog";
+export { PlateDetail } from "./components/plate-detail";

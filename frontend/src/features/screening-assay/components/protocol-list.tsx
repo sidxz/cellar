@@ -1,15 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
-import { TestTubes } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, TestTubes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { Input } from "@/shared/components/ui/input";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
 import { useProtocols } from "../hooks/use-protocols";
 import {
   PROTOCOL_TYPE_LABELS,
   type Protocol,
-  type ProtocolStatus,
   type ProtocolType,
 } from "../types";
 
@@ -17,21 +26,15 @@ interface ProtocolListProps {
   onSelect?: (protocolId: string) => void;
 }
 
-function statusBadgeVariant(
-  status: ProtocolStatus
-): "default" | "outline" | "destructive" {
-  switch (status) {
-    case "active":
-      return "default";
-    case "draft":
-      return "outline";
-    case "retired":
-      return "destructive";
-  }
-}
+const ALL_PROJECTS = "__all__";
 
 export function ProtocolList({ onSelect }: ProtocolListProps) {
-  const { data: protocols, isLoading, error } = useProtocols();
+  const [search, setSearch] = useState("");
+  const [projectFilter, setProjectFilter] = useState<string>(ALL_PROJECTS);
+  const { data: projects } = useProjects();
+  const { data: protocols, isLoading, error } = useProtocols(
+    projectFilter !== ALL_PROJECTS ? projectFilter : undefined
+  );
 
   const columnDefs = useMemo<ColDef<Protocol>[]>(
     () => [
@@ -60,9 +63,7 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
         field: "status",
         width: 100,
         cellRenderer: (params: ICellRendererParams<Protocol>) => (
-          <Badge variant={statusBadgeVariant(params.value as ProtocolStatus)}>
-            {params.value}
-          </Badge>
+          <StatusBadge status={params.value} />
         ),
       },
     ],
@@ -71,32 +72,61 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
-        <p className="text-sm text-destructive">
-          Failed to load protocols. Is the backend running?
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-      </div>
+      <ErrorState message="Failed to load protocols. Is the backend running?" details={error.message} />
     );
   }
 
   return (
-    <DataGrid<Protocol>
-      rowData={protocols}
-      columnDefs={columnDefs}
-      loading={isLoading}
-      height="400px"
-      suppressFilters
-      onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
-      emptyState={
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <TestTubes className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No protocols</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create your first screening protocol to get started.
-          </p>
+    <div className="space-y-3">
+      {/* Search + Project filter */}
+      <div className="flex items-center gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search protocols..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
-      }
-    />
+        {projects && projects.length > 0 && (
+          <>
+          <span className="shrink-0 text-sm text-muted-foreground">
+            Project:
+          </span>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          </>
+        )}
+      </div>
+
+      <DataGrid<Protocol>
+        rowData={protocols}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="400px"
+        quickFilterText={search}
+        suppressFilters
+        onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
+        emptyState={
+          <EmptyState
+            icon={TestTubes}
+            title="No protocols"
+            description="Create your first screening protocol to get started."
+          />
+        }
+      />
+    </div>
   );
 }

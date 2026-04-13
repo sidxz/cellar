@@ -83,6 +83,7 @@ class SQLAlchemySampleRequestRepository(
         )
 
     def _update_model(self, model: SampleRequestModel, aggregate: SampleRequest) -> None:
+        model.batch_id = aggregate.batch_id
         model.purpose = aggregate.purpose
         model.priority = aggregate.priority.value
         model.requested_amount_value = aggregate.requested_amount.value

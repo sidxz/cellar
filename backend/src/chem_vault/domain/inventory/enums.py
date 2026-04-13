@@ -111,3 +111,40 @@ VALID_PARENT_TYPES: dict[StorageLocationType, set[StorageLocationType | None]] =
     StorageLocationType.BOX: {StorageLocationType.SHELF, StorageLocationType.RACK, StorageLocationType.DRAWER},
     StorageLocationType.DRAWER: {StorageLocationType.SHELF, StorageLocationType.RACK},
 }
+
+
+class PlateType(StrEnum):
+    """Type/role of a registered plate."""
+
+    COMPOUND_STORAGE = "compound_storage"
+    MOTHER = "mother"
+    DAUGHTER = "daughter"
+    ARCHIVE = "archive"
+    ASSAY = "assay"
+    DOSE_RESPONSE = "dose_response"
+    REPLICATE = "replicate"
+    CONTROL = "control"
+    CHERRY_PICK = "cherry_pick"
+    DILUTION = "dilution"
+    REFORMATTED = "reformatted"
+    POOLED = "pooled"
+
+
+class PlateStatus(StrEnum):
+    """Lifecycle status of a registered plate."""
+
+    REGISTERED = "registered"
+    IN_USE = "in_use"
+    STORED = "stored"
+    DEPLETED = "depleted"
+    DISPOSED = "disposed"
+
+
+# Valid plate status transitions
+VALID_PLATE_TRANSITIONS: dict[PlateStatus, set[PlateStatus]] = {
+    PlateStatus.REGISTERED: {PlateStatus.IN_USE, PlateStatus.STORED, PlateStatus.DISPOSED},
+    PlateStatus.IN_USE: {PlateStatus.STORED, PlateStatus.DEPLETED},
+    PlateStatus.STORED: {PlateStatus.IN_USE, PlateStatus.DEPLETED, PlateStatus.DISPOSED},
+    PlateStatus.DEPLETED: {PlateStatus.DISPOSED},
+    PlateStatus.DISPOSED: set(),
+}

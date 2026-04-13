@@ -16,6 +16,7 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.domain.chemical_registration.enums import DisclosureStatus, MergeReason
+from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.repository import (
     DisclosureRequestRepository,
     MoleculeRepository,
@@ -81,17 +82,17 @@ class ResolveDisclosureConflict:
             )
 
         async with self._uow:
-            dr = await self._disclosure_repo.find_by_id(input.disclosure_id)
+            dr = await self._disclosure_repo.find_by_id_in_workspace(input.workspace_id, input.disclosure_id)
             if dr is None:
                 return Failure(
                     NotFoundError("DisclosureRequest", str(input.disclosure_id))
                 )
 
-            # Workspace isolation via the molecule
-            molecule = await self._molecule_repo.find_by_id(dr.molecule_id)
-            if molecule is None or molecule.workspace_id != input.workspace_id:
+            # Load the molecule for disclosure operations
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, dr.molecule_id)
+            if molecule is None:
                 return Failure(
-                    NotFoundError("DisclosureRequest", str(input.disclosure_id))
+                    NotFoundError("Molecule", str(dr.molecule_id))
                 )
 
             if dr.status != DisclosureStatus.CONFLICT:
@@ -123,7 +124,7 @@ class ResolveDisclosureConflict:
     async def _handle_accept_as_new(
         self,
         dr: DisclosureRequest,
-        molecule: object,
+        molecule: Molecule,
         input: ResolveConflictCommand,
     ) -> Result[DisclosureRequest, DomainError]:
         # Re-process the SMILES to get structure + descriptors
@@ -137,7 +138,7 @@ class ResolveDisclosureConflict:
         processed = process_result.unwrap()
 
         # Disclose the molecule in-place
-        molecule.disclose(  # type: ignore[union-attr]
+        molecule.disclose(
             structure=processed.structure,
             descriptors=processed.descriptors,
             disclosed_by=input.resolved_by,
@@ -148,7 +149,7 @@ class ResolveDisclosureConflict:
             inchi_key=processed.structure.inchi_key,
         )
 
-        await self._molecule_repo.save(molecule)  # type: ignore[arg-type]
+        await self._molecule_repo.save(molecule)
         await self._disclosure_repo.save(dr)
         events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
@@ -157,7 +158,7 @@ class ResolveDisclosureConflict:
     async def _handle_accept_merge(
         self,
         dr: DisclosureRequest,
-        molecule: object,
+        molecule: Molecule,
         input: ResolveConflictCommand,
         auth: AuthContext | None,
     ) -> Result[DisclosureRequest, DomainError]:
@@ -196,6 +197,7 @@ class ResolveDisclosureConflict:
         # Delegate merge to MergeService (opens its own UoW)
         merge_result = await self._merge_service(
             MergeCommand(
+                workspace_id=input.workspace_id,
                 source_molecule_id=dr.molecule_id,
                 target_molecule_id=target.id,
                 reason=MergeReason.DISCLOSURE_RESOLVED,
@@ -206,9 +208,14 @@ class ResolveDisclosureConflict:
             auth=auth,
         )
 
-        # Update DR based on merge outcome
+        # Update DR based on merge outcome.
+        # NOTE: Intentional UoW re-entry — AsyncUnitOfWork.__aenter__ creates a
+        # fresh session + tracked-aggregates list on each entry, so opening a new
+        # ``async with self._uow`` block after the previous one exited is safe.
+        # The MergeService has already committed its own UoW above, so there is
+        # no nesting; the two transactions are sequential.
         async with self._uow:
-            loaded_dr = await self._disclosure_repo.find_by_id(dr.id)
+            loaded_dr = await self._disclosure_repo.find_by_id_in_workspace(input.workspace_id, dr.id)
             if loaded_dr is None:
                 return Failure(
                     NotFoundError("DisclosureRequest", str(dr.id))

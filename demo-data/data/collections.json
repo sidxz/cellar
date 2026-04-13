@@ -1,0 +1,50 @@
+{
+  "coll_primary_hits": {
+    "name": "Primary Screening Hits",
+    "description": "Compounds showing >50% inhibition at 10 uM in primary EGFR kinase screen",
+    "project_ref": "proj_kinase",
+    "visibility": "shared",
+    "molecule_refs": [
+      "mol_gefitinib", "mol_erlotinib", "mol_osimertinib", "mol_afatinib",
+      "mol_lapatinib", "mol_dasatinib", "mol_nilotinib", "mol_crizotinib"
+    ]
+  },
+  "coll_lead_series": {
+    "name": "Lead Series A - Quinazolines",
+    "description": "EGFR-targeted quinazoline scaffold series with confirmed sub-100nM activity",
+    "project_ref": "proj_kinase",
+    "visibility": "shared",
+    "molecule_refs": [
+      "mol_gefitinib", "mol_erlotinib", "mol_osimertinib", "mol_afatinib", "mol_lapatinib"
+    ]
+  },
+  "coll_admet_flagged": {
+    "name": "ADMET Flagged",
+    "description": "Compounds with unfavorable ADMET properties requiring optimization",
+    "project_ref": null,
+    "visibility": "shared",
+    "molecule_refs": [
+      "mol_sorafenib", "mol_sunitinib", "mol_ivermectin", "mol_remdesivir"
+    ]
+  },
+  "coll_fda_reference": {
+    "name": "FDA Approved Reference Set",
+    "description": "Curated set of FDA-approved reference compounds used as positive controls across assay panels",
+    "project_ref": null,
+    "visibility": "shared",
+    "molecule_refs": [
+      "mol_aspirin", "mol_ibuprofen", "mol_ciprofloxacin", "mol_metoprolol",
+      "mol_atorvastatin", "mol_fluconazole", "mol_acyclovir", "mol_captopril"
+    ]
+  },
+  "coll_cns_candidates": {
+    "name": "CNS Drug Candidates",
+    "description": "Active compounds from 5-HT2A screening program for CNS indications",
+    "project_ref": "proj_cns",
+    "visibility": "shared",
+    "molecule_refs": [
+      "mol_risperidone", "mol_olanzapine", "mol_quetiapine", "mol_aripiprazole",
+      "mol_haloperidol", "mol_fluoxetine"
+    ]
+  }
+}

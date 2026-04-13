@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.workspace_config.events import WorkspaceSettingsUpdated
@@ -24,25 +25,27 @@ class WorkspaceSettings(AggregateRoot):
         self,
         *,
         id: uuid.UUID,
-        registration_rules: dict | None = None,
-        custom_field_definitions: dict | None = None,
+        registration_rules: dict[str, Any] | None = None,
+        custom_field_definitions: list[dict[str, Any]] | None = None,
         default_molecule_type: str | None = None,
-        audit_reason_policy: dict | None = None,
+        audit_reason_policy: str | None = None,
         signature_required_for: list[str] | None = None,
         audit_retention_days: int | None = None,
-        formulation_number_scheme: dict | None = None,
+        formulation_number_scheme: str | None = None,
+        cdd_vault_id: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         self.registration_rules = registration_rules or {}
-        self.custom_field_definitions = custom_field_definitions or {}
+        self.custom_field_definitions = custom_field_definitions if isinstance(custom_field_definitions, list) else []
         self.default_molecule_type = default_molecule_type
-        self.audit_reason_policy = audit_reason_policy or {}
+        self.audit_reason_policy = audit_reason_policy if isinstance(audit_reason_policy, str) else None
         self.signature_required_for = signature_required_for or []
         self.audit_retention_days = audit_retention_days
-        self.formulation_number_scheme = formulation_number_scheme or {}
+        self.formulation_number_scheme = formulation_number_scheme if isinstance(formulation_number_scheme, str) else None
+        self.cdd_vault_id = cdd_vault_id
 
     @property
     def workspace_id(self) -> uuid.UUID:
@@ -64,7 +67,7 @@ class WorkspaceSettings(AggregateRoot):
         for key in (
             "registration_rules", "custom_field_definitions", "default_molecule_type",
             "audit_reason_policy", "signature_required_for", "audit_retention_days",
-            "formulation_number_scheme",
+            "formulation_number_scheme", "cdd_vault_id",
         ):
             if key in fields:
                 setattr(self, key, fields[key])

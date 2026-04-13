@@ -22,6 +22,9 @@ from chem_vault.domain.shared.errors import ValidationError
 # ---------------------------------------------------------------------------
 
 
+WS_ID = uuid.uuid4()
+
+
 @pytest.fixture
 def molecule_id() -> uuid.UUID:
     return uuid.uuid4()
@@ -52,6 +55,7 @@ def _make(
 ) -> DisclosureRequest:
     """Create a DisclosureRequest and clear creation events for transition tests."""
     req = DisclosureRequest.create(
+        workspace_id=WS_ID,
         molecule_id=molecule_id,
         disclosed_smiles="CCO",
         requested_by=user_id,
@@ -73,6 +77,7 @@ class TestDisclosureRequestCreation:
         self, molecule_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         req = DisclosureRequest.create(
+            workspace_id=WS_ID,
             molecule_id=molecule_id,
             disclosed_smiles="CCO",
             requested_by=user_id,
@@ -98,6 +103,7 @@ class TestDisclosureRequestCreation:
         self, molecule_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         req = DisclosureRequest.create(
+            workspace_id=WS_ID,
             molecule_id=molecule_id,
             disclosed_smiles="CCO",
             requested_by=user_id,
@@ -119,6 +125,7 @@ class TestDisclosureRequestCreation:
         bulk_id: uuid.UUID,
     ) -> None:
         req = DisclosureRequest.create(
+            workspace_id=WS_ID,
             molecule_id=molecule_id,
             disclosed_smiles="CCO",
             requested_by=user_id,
@@ -134,6 +141,7 @@ class TestDisclosureRequestCreation:
     ) -> None:
         with pytest.raises(ValidationError, match="disclosed_smiles must not be empty"):
             DisclosureRequest.create(
+                workspace_id=WS_ID,
                 molecule_id=molecule_id,
                 disclosed_smiles="",
                 requested_by=user_id,
@@ -144,6 +152,7 @@ class TestDisclosureRequestCreation:
     ) -> None:
         with pytest.raises(ValidationError, match="disclosed_smiles must not be empty"):
             DisclosureRequest.create(
+                workspace_id=WS_ID,
                 molecule_id=molecule_id,
                 disclosed_smiles="   ",
                 requested_by=user_id,
@@ -153,6 +162,7 @@ class TestDisclosureRequestCreation:
         self, molecule_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         req = DisclosureRequest.create(
+            workspace_id=WS_ID,
             molecule_id=molecule_id,
             disclosed_smiles="  CCO  ",
             requested_by=user_id,

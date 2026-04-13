@@ -41,12 +41,12 @@ class ListRelationships:
     ) -> Result[list[MoleculeRelationship], DomainError]:
         async with self._uow:
             # Workspace isolation
-            mol = await self._molecule_repo.find_by_id(input.molecule_id)
-            if mol is None or mol.workspace_id != input.workspace_id:
+            mol = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
-            as_source = await self._relationship_repo.find_by_source(input.molecule_id)
-            as_target = await self._relationship_repo.find_by_target(input.molecule_id)
+            as_source = await self._relationship_repo.find_by_source(input.workspace_id, input.molecule_id)
+            as_target = await self._relationship_repo.find_by_target(input.workspace_id, input.molecule_id)
 
             # Deduplicate (shouldn't overlap, but safe)
             seen = set()

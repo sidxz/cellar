@@ -84,8 +84,9 @@ class TestRequireSameWorkspace:
     def test_none_auth_passes(self) -> None:
         require_same_workspace(None, uuid.uuid4())
 
-    def test_none_workspace_passes(self) -> None:
-        require_same_workspace(FakeAuth(), None)
+    def test_none_workspace_raises(self) -> None:
+        with pytest.raises(AuthorizationError):
+            require_same_workspace(FakeAuth(), None)
 
     def test_matching_workspace_passes(self) -> None:
         wid = uuid.uuid4()

@@ -11,6 +11,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Column,
     Date,
     DateTime,
     Float,
@@ -18,6 +19,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     Text,
     Uuid,
 )
@@ -29,6 +31,28 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base import (
     EntityModelMixin,
     VersionMixin,
     WorkspaceIdMixin,
+)
+
+
+# ---------------------------------------------------------------------------
+# Association tables
+# ---------------------------------------------------------------------------
+
+protocol_projects = Table(
+    "protocol_projects",
+    Base.metadata,
+    Column(
+        "protocol_id",
+        Uuid(as_uuid=True),
+        ForeignKey("protocols.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "project_id",
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
@@ -98,6 +122,9 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         String(20), nullable=False, server_default="draft"
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    control_layouts: Mapped[dict | None] = mapped_column(JSONB)
+    ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
+    recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)
 
     # Owned entity collections
     readout_definitions: Mapped[list[ReadoutDefinitionModel]] = relationship(
@@ -145,6 +172,8 @@ class ReadoutDefinitionModel(Base, EntityModelMixin):
     display_order: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    pick_list_values: Mapped[list | None] = mapped_column(JSONB)
+    dose_response_config: Mapped[dict | None] = mapped_column(JSONB)
 
     protocol: Mapped[ProtocolModel] = relationship(
         "ProtocolModel", back_populates="readout_definitions"
@@ -201,6 +230,9 @@ class RunModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     )
     run_relationship_type: Mapped[str | None] = mapped_column(String(30))
     plate_format: Mapped[str | None] = mapped_column(String(10))
+    plate_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("plate_templates.id", ondelete="SET NULL")
+    )
     conditions: Mapped[dict | None] = mapped_column(JSONB)
     qc_metrics: Mapped[dict | None] = mapped_column(JSONB)
     is_locked: Mapped[bool] = mapped_column(
@@ -293,8 +325,8 @@ class ReadoutDataModel(Base, EntityModelMixin, WorkspaceIdMixin):
         Uuid, ForeignKey("runs.id"), nullable=False
     )
     well_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
-    molecule_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
-    batch_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    molecule_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     readout_definition_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("readout_definitions.id"), nullable=False
     )
@@ -302,6 +334,9 @@ class ReadoutDataModel(Base, EntityModelMixin, WorkspaceIdMixin):
     value_qualifier: Mapped[str | None] = mapped_column(String(5))
     value_text: Mapped[str | None] = mapped_column(Text)
     is_outlier: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    is_computed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
 

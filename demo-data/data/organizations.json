@@ -1,0 +1,44 @@
+{
+  "org_acme": {
+    "name": "Acme Pharmaceuticals",
+    "org_type": "INTERNAL",
+    "contact_name": "Dr. Sarah Chen",
+    "contact_email": "s.chen@acmepharma.com",
+    "notes": "Internal R&D organization"
+  },
+  "org_biosynth": {
+    "name": "BioSynth CRO",
+    "org_type": "CRO",
+    "contact_name": "James Rodriguez",
+    "contact_email": "j.rodriguez@biosynthcro.com",
+    "notes": "Contract research organization for custom synthesis"
+  },
+  "org_sigma": {
+    "name": "Sigma-Aldrich",
+    "org_type": "VENDOR",
+    "contact_name": "Vendor Support",
+    "contact_email": "orders@sigmaaldrich.com",
+    "notes": "Chemical reagent and reference compound supplier"
+  },
+  "org_mit": {
+    "name": "MIT Chemistry Department",
+    "org_type": "ACADEMIC",
+    "contact_name": "Prof. David Liu",
+    "contact_email": "d.liu@mit.edu",
+    "notes": "Academic collaboration partner"
+  },
+  "org_neurotech": {
+    "name": "NeuroTech Biopharma",
+    "org_type": "PHARMA_PARTNER",
+    "contact_name": "Dr. Maria Gonzalez",
+    "contact_email": "m.gonzalez@neurotechbio.com",
+    "notes": "Pharma partner for CNS drug discovery collaboration"
+  },
+  "org_nci": {
+    "name": "National Cancer Institute",
+    "org_type": "GOVERNMENT",
+    "contact_name": "NCI Chemical Biology",
+    "contact_email": "ncichembio@nih.gov",
+    "notes": "Government institute — NCI compound library screening"
+  }
+}

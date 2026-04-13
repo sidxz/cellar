@@ -31,10 +31,10 @@ function downloadCsvTemplate() {
   // Multiple identifier columns supported — each compound can carry
   // CAS, vendor ID, ChEMBL, PubChem, and custom IDs in the same row.
   // All ID columns are optional; include only the ones you have.
-  const header = "name,smiles,molecule_type,cas_number,vendor_id,chembl_id,pubchem_cid,custom_id,custom_id_1,custom_id_2";
-  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,VENDOR-001,CHEMBL25,2244,,,";
-  const example2 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,58-08-2,,CHEMBL113,2519,,,";
-  const example3 = "Undisclosed Partner Compound,,small_molecule,,PARTNER-042,,,PROJECT-X-017,PLATE-042,LOT-2026-A";
+  const header = "name,smiles,molecule_type,cas_number,vendor_id,chembl_id,pubchem_cid,custom_id,amount,amount_unit,salt_code,salt_stoichiometry,purity,source,appearance";
+  const example1 = "Aspirin,CC(=O)Oc1ccccc1C(O)=O,small_molecule,50-78-2,VENDOR-001,CHEMBL25,2244,,,mg,,,99.5,synthesized,white powder";
+  const example2 = "Sodium Aspirin,[Na+].CC(=O)Oc1ccccc1C(=O)[O-],small_molecule,,,,,,100,mg,Na,1,98.0,purchased,";
+  const example3 = "Caffeine,Cn1c(=O)c2c(ncn2C)n(C)c1=O,small_molecule,58-08-2,,CHEMBL113,2519,,50,mg,,,99.9,synthesized,white crystals";
   const csv = [header, example1, example2, example3].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -243,6 +243,8 @@ export function BulkRegistrationDialog({
                   <tr className="border-b">
                     <th className="px-3 py-2 text-left">Row</th>
                     <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-left">Batch</th>
+                    <th className="px-3 py-2 text-left">Salt</th>
                     <th className="px-3 py-2 text-left">Detail</th>
                   </tr>
                 </thead>
@@ -258,6 +260,12 @@ export function BulkRegistrationDialog({
                         ) : (
                           <XCircle className="h-4 w-4 text-red-500" />
                         )}
+                      </td>
+                      <td className="px-3 py-1.5 text-muted-foreground font-mono">
+                        {item.batch_number ?? "\u2014"}
+                      </td>
+                      <td className="px-3 py-1.5 text-muted-foreground">
+                        {item.salt_matched ? "matched" : "\u2014"}
                       </td>
                       <td className="px-3 py-1.5 text-muted-foreground">
                         {item.error ??

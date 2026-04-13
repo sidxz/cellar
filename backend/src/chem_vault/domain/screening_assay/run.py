@@ -156,6 +156,7 @@ class Run(AggregateRoot):
         parent_run_id: uuid.UUID | None = None,
         run_relationship_type: RunRelationshipType | None = None,
         plate_format: PlateFormat | None = None,
+        plate_template_id: uuid.UUID | None = None,
         conditions: dict[str, Any] | None = None,
         qc_metrics: dict[str, Any] | None = None,
         is_locked: bool = False,
@@ -189,6 +190,7 @@ class Run(AggregateRoot):
         self.parent_run_id = parent_run_id
         self.run_relationship_type = run_relationship_type
         self.plate_format = plate_format
+        self.plate_template_id = plate_template_id
         self.conditions = conditions
         self.qc_metrics = qc_metrics
         self.is_locked = is_locked
@@ -233,6 +235,7 @@ class Run(AggregateRoot):
         parent_run_id: uuid.UUID | None = None,
         run_relationship_type: RunRelationshipType | None = None,
         plate_format: PlateFormat | None = None,
+        plate_template_id: uuid.UUID | None = None,
         conditions: dict[str, Any] | None = None,
         notes: str | None = None,
         eln_entry_id: uuid.UUID | None = None,
@@ -246,6 +249,7 @@ class Run(AggregateRoot):
             parent_run_id=parent_run_id,
             run_relationship_type=run_relationship_type,
             plate_format=plate_format,
+            plate_template_id=plate_template_id,
             conditions=conditions,
             notes=notes,
             eln_entry_id=eln_entry_id,
@@ -349,6 +353,10 @@ class Run(AggregateRoot):
         self._guard_not_locked()
         plate.run_id = self.id
         self.plates.append(plate)
+        # Sync plate's wells into the flat wells list so _update_model can find them
+        for well in getattr(plate, "wells", []):
+            well.plate_id = plate.id
+            self.wells.append(well)
         self.updated_at = datetime.now(UTC)
 
     # ------------------------------------------------------------------

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
+from sqlalchemy.sql import expression
 
+from chem_vault.application.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit, LightCondition
@@ -13,7 +16,8 @@ from chem_vault.domain.shared.value_objects import Amount, BatchNumber, Concentr
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel, SampleModel
 
 
 class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
@@ -31,7 +35,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             .order_by(BatchModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_batch_number(
         self, workspace_id: uuid.UUID, batch_number: str
@@ -42,12 +46,23 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        return self._to_domain(model) if model else None
+        return self._to_domain_tracked(model) if model else None
 
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> BatchNumber:
-        stmt = (
+        # Batch number = {molecule_reg_number}-{seq} (e.g., CV-00001-001).
+        # Count existing batches for this molecule to determine the next seq.
+
+        # 1. Get molecule registration number
+        mol_stmt = select(MoleculeModel.registration_number).where(
+            MoleculeModel.id == molecule_id
+        )
+        mol_result = await self._session.execute(mol_stmt)
+        reg_number = mol_result.scalar_one()
+
+        # 2. Count existing batches for this molecule
+        count_stmt = (
             select(func.count())
             .select_from(BatchModel)
             .where(
@@ -55,9 +70,121 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
                 BatchModel.molecule_id == molecule_id,
             )
         )
+        count_result = await self._session.execute(count_stmt)
+        count = count_result.scalar() or 0
+
+        return BatchNumber(value=f"{reg_number}-{count + 1:03d}")
+
+    # ------------------------------------------------------------------
+    # Global list (read-model query — returns flat dicts, not aggregates)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape special LIKE/ILIKE characters."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    async def list_global(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        search: str | None = None,
+        sources: list[str] | None = None,
+        expiring_within_days: int | None = None,
+        cursor: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> PageResult[dict]:
+        # Sample stats subquery: count + any-low-stock per batch
+        sample_sub = (
+            select(
+                SampleModel.batch_id,
+                func.count().label("sample_count"),
+                func.bool_or(
+                    case(
+                        (
+                            (SampleModel.low_stock_threshold.isnot(None))
+                            & (SampleModel.amount_value < SampleModel.low_stock_threshold),
+                            expression.true(),
+                        ),
+                        else_=expression.false(),
+                    )
+                ).label("has_low_stock_sample"),
+            )
+            .where(SampleModel.workspace_id == workspace_id)
+            .group_by(SampleModel.batch_id)
+            .subquery("sample_stats")
+        )
+
+        stmt = (
+            select(
+                BatchModel.id,
+                BatchModel.batch_number,
+                BatchModel.molecule_id,
+                MoleculeModel.name.label("molecule_name"),
+                MoleculeModel.registration_number.label("molecule_registration_number"),
+                BatchModel.source,
+                BatchModel.amount_value,
+                BatchModel.amount_unit,
+                BatchModel.purity,
+                BatchModel.salt_name,
+                BatchModel.appearance,
+                BatchModel.expiry_date,
+                func.coalesce(sample_sub.c.sample_count, 0).label("sample_count"),
+                func.coalesce(sample_sub.c.has_low_stock_sample, expression.false()).label(
+                    "has_low_stock_sample"
+                ),
+                BatchModel.created_at,
+            )
+            .join(MoleculeModel, BatchModel.molecule_id == MoleculeModel.id)
+            .outerjoin(sample_sub, BatchModel.id == sample_sub.c.batch_id)
+            .where(BatchModel.workspace_id == workspace_id)
+        )
+
+        # --- filters ---
+        if search:
+            pattern = f"%{self._escape_like(search)}%"
+            stmt = stmt.where(
+                or_(
+                    BatchModel.batch_number.ilike(pattern),
+                    MoleculeModel.name.ilike(pattern),
+                    MoleculeModel.registration_number.ilike(pattern),
+                )
+            )
+
+        if sources:
+            stmt = stmt.where(BatchModel.source.in_(sources))
+
+        if expiring_within_days is not None:
+            deadline = date.today() + timedelta(days=expiring_within_days)
+            stmt = stmt.where(
+                BatchModel.expiry_date.isnot(None),
+                BatchModel.expiry_date <= deadline,
+            )
+
+        # --- cursor pagination (keyset on created_at DESC, id DESC) ---
+        if cursor is not None:
+            # Look up the cursor row's created_at so we can do a proper keyset
+            cursor_sub = select(BatchModel.created_at).where(BatchModel.id == cursor).scalar_subquery()
+            stmt = stmt.where(
+                (BatchModel.created_at < cursor_sub)
+                | ((BatchModel.created_at == cursor_sub) & (BatchModel.id < cursor))
+            )
+
+        stmt = stmt.order_by(BatchModel.created_at.desc(), BatchModel.id.desc())
+
+        # Fetch limit + 1 to detect next page
+        stmt = stmt.limit(limit + 1)
+
         result = await self._session.execute(stmt)
-        count = result.scalar() or 0
-        return BatchNumber(value=f"B-{count + 1:03d}")
+        rows = result.mappings().all()
+
+        has_next = len(rows) > limit
+        page_rows = rows[:limit]
+
+        items = [dict(row) for row in page_rows]
+        next_cursor = str(items[-1]["id"]) if has_next and items else None
+
+        return PageResult(items=items, next_cursor=next_cursor)
 
     # ------------------------------------------------------------------
     # Mapping
@@ -82,7 +209,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             workspace_id=model.workspace_id,
             molecule_id=model.molecule_id,
             batch_number=BatchNumber(value=model.batch_number),
-            salt_form=model.salt_form,
+            salt_entry_id=model.salt_entry_id,
+            salt_name=model.salt_name,
+            salt_smiles=model.salt_smiles,
+            salt_stoichiometry=model.salt_stoichiometry,
+            formula_weight=model.formula_weight,
             purity=model.purity,
             amount=Amount(value=model.amount_value, unit=AmountUnit(model.amount_unit)),
             concentration=concentration,
@@ -112,7 +243,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             workspace_id=aggregate.workspace_id,
             molecule_id=aggregate.molecule_id,
             batch_number=aggregate.batch_number.value,
-            salt_form=aggregate.salt_form,
+            salt_entry_id=aggregate.salt_entry_id,
+            salt_name=aggregate.salt_name,
+            salt_smiles=aggregate.salt_smiles,
+            salt_stoichiometry=aggregate.salt_stoichiometry,
+            formula_weight=aggregate.formula_weight,
             purity=aggregate.purity,
             amount_value=aggregate.amount.value,
             amount_unit=aggregate.amount.unit.value,
@@ -140,12 +275,27 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
 
     def _update_model(self, model: BatchModel, aggregate: Batch) -> None:
         model.molecule_id = aggregate.molecule_id
-        model.salt_form = aggregate.salt_form
+        model.salt_entry_id = aggregate.salt_entry_id
+        model.salt_name = aggregate.salt_name
+        model.salt_smiles = aggregate.salt_smiles
+        model.salt_stoichiometry = aggregate.salt_stoichiometry
+        model.formula_weight = aggregate.formula_weight
         model.purity = aggregate.purity
         model.amount_value = aggregate.amount.value
         model.amount_unit = aggregate.amount.unit.value
         model.concentration_value = aggregate.concentration.value if aggregate.concentration else None
         model.concentration_unit = aggregate.concentration.unit.value if aggregate.concentration else None
+        model.source = aggregate.source.value
+        model.supplier_org_id = aggregate.supplier_org_id
+        model.vendor_catalog_number = aggregate.vendor_catalog_number
+        model.vendor_lot_number = aggregate.vendor_lot_number
+        model.chemist = aggregate.chemist
+        model.synthesis_date = aggregate.synthesis_date
+        model.expiry_date = aggregate.expiry_date
+        model.notebook_reference = aggregate.notebook_reference
+        model.synthesis_route_id = aggregate.synthesis_route_id
+        model.synthesis_step_id = aggregate.synthesis_step_id
+        model.synthesis_request_id = aggregate.synthesis_request_id
         model.appearance = aggregate.appearance
         model.custom_fields = aggregate.custom_fields
         model.storage_conditions_notes = aggregate.storage_conditions_notes

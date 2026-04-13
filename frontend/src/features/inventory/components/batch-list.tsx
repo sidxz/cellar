@@ -2,19 +2,36 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes } from "lucide-react";
+import { AlertTriangle, Boxes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { useBatchesByMolecule } from "../hooks/use-batches";
-import { BATCH_SOURCE_LABELS, type Batch, type BatchSource } from "../types";
+import {
+  useBatchesByMolecule,
+  useBatchesGlobal,
+  type BatchGlobalParams,
+} from "../hooks/use-batches";
+import {
+  BATCH_SOURCE_LABELS,
+  type Batch,
+  type BatchListItem,
+  type BatchSource,
+} from "../types";
 
-interface BatchListProps {
+// ---------------------------------------------------------------------------
+// ScopedBatchList — batches for a single molecule (compound detail page)
+// ---------------------------------------------------------------------------
+
+interface ScopedBatchListProps {
   moleculeId?: string;
   onSelectBatch?: (batchId: string | null) => void;
 }
 
-export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
+export function ScopedBatchList({
+  moleculeId,
+  onSelectBatch,
+}: ScopedBatchListProps) {
   const router = useRouter();
   const { data: batches, isLoading } = useBatchesByMolecule(moleculeId);
 
@@ -51,7 +68,7 @@ export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
       },
       {
         headerName: "Salt Form",
-        field: "salt_form",
+        field: "salt_name",
         width: 110,
         valueFormatter: (p) => p.value ?? "\u2014",
       },
@@ -69,13 +86,11 @@ export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
 
   if (!moleculeId) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <Boxes className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">Select a compound</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Select a compound from the Compounds page to view its batches.
-        </p>
-      </div>
+      <EmptyState
+        icon={Boxes}
+        title="Select a compound"
+        description="Select a compound from the Compounds page to view its batches."
+      />
     );
   }
 
@@ -94,13 +109,117 @@ export function BatchList({ moleculeId, onSelectBatch }: BatchListProps) {
             }
       }
       emptyState={
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <Boxes className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No batches</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            No batches have been created for this compound yet.
-          </p>
-        </div>
+        <EmptyState
+          icon={Boxes}
+          title="No batches"
+          description="No batches have been created for this compound yet."
+        />
+      }
+    />
+  );
+}
+
+// Backward-compatible alias for existing imports
+export { ScopedBatchList as BatchList };
+
+// ---------------------------------------------------------------------------
+// GlobalBatchList — all batches across compounds (inventory hub)
+// ---------------------------------------------------------------------------
+
+interface GlobalBatchListProps {
+  params?: BatchGlobalParams;
+}
+
+export function GlobalBatchList({ params }: GlobalBatchListProps) {
+  const router = useRouter();
+  const { data, isLoading } = useBatchesGlobal(params);
+
+  const columnDefs = useMemo<ColDef<BatchListItem>[]>(
+    () => [
+      {
+        headerName: "Batch #",
+        field: "batch_number",
+        cellClass: "font-mono text-sm",
+        flex: 1,
+        minWidth: 140,
+      },
+      {
+        headerName: "Compound",
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (p) =>
+          p.data
+            ? `${p.data.molecule_name} (${p.data.molecule_registration_number})`
+            : "",
+      },
+      {
+        headerName: "Source",
+        field: "source",
+        width: 130,
+        cellRenderer: (params: ICellRendererParams<BatchListItem>) => (
+          <Badge variant="outline">
+            {BATCH_SOURCE_LABELS[params.value as BatchSource] ?? params.value}
+          </Badge>
+        ),
+      },
+      {
+        headerName: "Amount",
+        width: 120,
+        valueGetter: (p) =>
+          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+      },
+      {
+        headerName: "Purity",
+        field: "purity",
+        width: 90,
+        valueFormatter: (p) => (p.value != null ? `${p.value}%` : "\u2014"),
+      },
+      {
+        headerName: "Salt Form",
+        field: "salt_name",
+        width: 110,
+        valueFormatter: (p) => p.value ?? "\u2014",
+      },
+      {
+        headerName: "Samples",
+        field: "sample_count",
+        width: 100,
+        cellRenderer: (params: ICellRendererParams<BatchListItem>) => {
+          if (params.data == null) return null;
+          return (
+            <span className="flex items-center gap-1">
+              {params.data.sample_count}
+              {params.data.has_low_stock_sample && (
+                <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+              )}
+            </span>
+          );
+        },
+      },
+      {
+        headerName: "Created",
+        field: "created_at",
+        width: 120,
+        valueFormatter: (p) =>
+          p.value ? new Date(p.value).toLocaleDateString() : "\u2014",
+      },
+    ],
+    []
+  );
+
+  return (
+    <DataGrid<BatchListItem>
+      rowData={data?.items}
+      columnDefs={columnDefs}
+      loading={isLoading}
+      height="500px"
+      onRowClick={(batch) => router.push(`/inventory/batches/${batch.id}`)}
+      emptyState={
+        <EmptyState
+          icon={Boxes}
+          title="No batches"
+          description="No batches have been registered yet."
+        />
       }
     />
   );

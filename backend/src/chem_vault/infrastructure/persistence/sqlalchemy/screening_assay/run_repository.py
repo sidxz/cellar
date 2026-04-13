@@ -72,9 +72,12 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             runs.append(domain)
         return runs
 
-    async def is_locked(self, run_id: uuid.UUID) -> bool:
+    async def is_locked(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
         """Efficient lock check — selects only the is_locked column."""
-        stmt = select(RunModel.is_locked).where(RunModel.id == run_id)
+        stmt = select(RunModel.is_locked).where(
+            RunModel.workspace_id == workspace_id,
+            RunModel.id == run_id,
+        )
         result = await self._session.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
@@ -140,6 +143,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                 else None
             ),
             plate_format=PlateFormat(model.plate_format) if model.plate_format else None,
+            plate_template_id=model.plate_template_id,
             conditions=model.conditions,
             qc_metrics=model.qc_metrics,
             is_locked=model.is_locked,
@@ -171,6 +175,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                 else None
             ),
             plate_format=aggregate.plate_format.value if aggregate.plate_format else None,
+            plate_template_id=aggregate.plate_template_id,
             conditions=aggregate.conditions,
             qc_metrics=aggregate.qc_metrics,
             is_locked=aggregate.is_locked,
@@ -195,6 +200,17 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
 
     def _update_model(self, model: RunModel, aggregate: Run) -> None:
         model.status = aggregate.status.value
+        model.run_date = aggregate.run_date
+        model.operator = aggregate.operator
+        model.performed_at_org_id = aggregate.performed_at_org_id
+        model.parent_run_id = aggregate.parent_run_id
+        model.run_relationship_type = (
+            aggregate.run_relationship_type.value
+            if aggregate.run_relationship_type
+            else None
+        )
+        model.plate_format = aggregate.plate_format.value if aggregate.plate_format else None
+        model.plate_template_id = aggregate.plate_template_id
         model.conditions = aggregate.conditions
         model.qc_metrics = aggregate.qc_metrics
         model.is_locked = aggregate.is_locked

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -29,7 +30,7 @@ from chem_vault.domain.chemical_registration.synthesis_route import (
     SynthesisRoute,
 )
 from chem_vault.application.shared.sentinel import UNSET
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import ReactionConditions, ReactionOutcome
 
 
@@ -62,14 +63,15 @@ class AddReactionStepCommand(Command):
     reaction_smarts: str | None = None
     product_molecule_id: uuid.UUID | None = None
     product_description: str | None = None
-    conditions: dict | None = None
-    reagents: list[dict] = field(default_factory=list)
+    conditions: dict[str, Any] | None = None
+    reagents: list[dict[str, Any]] = field(default_factory=list)
     preceding_step_ids: list[uuid.UUID] = field(default_factory=list)
     notes: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class UpdateSynthesisRouteCommand(Command):
+    workspace_id: uuid.UUID
     route_id: uuid.UUID
     name: str | object = UNSET
     description: str | None | object = UNSET
@@ -78,11 +80,13 @@ class UpdateSynthesisRouteCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteSynthesisRouteCommand(Command):
+    workspace_id: uuid.UUID
     route_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class RemoveReactionStepCommand(Command):
+    workspace_id: uuid.UUID
     route_id: uuid.UUID
     step_id: uuid.UUID
 
@@ -99,6 +103,25 @@ class RecordStepOutcomeCommand(Command):
     batch_id: uuid.UUID | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class ValidateSynthesisRouteCommand(Command):
+    workspace_id: uuid.UUID
+    route_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetPreferredRouteCommand(Command):
+    workspace_id: uuid.UUID
+    route_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeprecateSynthesisRouteCommand(Command):
+    workspace_id: uuid.UUID
+    route_id: uuid.UUID
+    reason: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
@@ -106,6 +129,7 @@ class RecordStepOutcomeCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class GetSynthesisRouteQuery(Query):
+    workspace_id: uuid.UUID
     route_id: uuid.UUID
 
 
@@ -136,12 +160,13 @@ class CreateSynthesisRoute:
     async def __call__(
         self, input: CreateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required to create a synthesis route"))
         require_editor(auth)
         async with self._uow:
-            molecule = await self._molecule_repo.find_by_id(input.target_molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.target_molecule_id)
             if molecule is None:
                 return Failure(NotFoundError("Molecule", str(input.target_molecule_id)))
-            require_same_workspace(auth, molecule.workspace_id)
 
             route = SynthesisRoute.create(
                 workspace_id=input.workspace_id,
@@ -152,7 +177,7 @@ class CreateSynthesisRoute:
                 scale=RouteScale(input.scale) if input.scale else None,
                 source=RouteSource(input.source),
                 source_reference=input.source_reference,
-                created_by=auth.user_id if auth else uuid.uuid4(),
+                created_by=auth.user_id,
             )
             await self._route_repo.save(route)
             events = await self._uow.commit()
@@ -168,11 +193,11 @@ class GetSynthesisRoute:
     async def __call__(
         self, input: GetSynthesisRouteQuery, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
-            route = await self._route_repo.find_by_id(input.route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
                 return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
-            require_same_workspace(auth, route.workspace_id)
             return Success(route)
 
 
@@ -208,10 +233,9 @@ class AddReactionStep:
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(input.route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
                 return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
-            require_same_workspace(auth, route.workspace_id)
 
             conditions = None
             if input.conditions:
@@ -268,10 +292,9 @@ class RecordStepOutcome:
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(input.route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
                 return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
-            require_same_workspace(auth, route.workspace_id)
 
             outcome = ReactionOutcome(
                 yield_percent=input.yield_percent,
@@ -298,14 +321,13 @@ class ValidateSynthesisRoute:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, route_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: ValidateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
-                return Failure(NotFoundError("SynthesisRoute", str(route_id)))
-            require_same_workspace(auth, route.workspace_id)
+                return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
             route.validate_route()
             await self._route_repo.save(route)
             events = await self._uow.commit()
@@ -325,14 +347,13 @@ class SetPreferredRoute:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, route_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: SetPreferredRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
-                return Failure(NotFoundError("SynthesisRoute", str(route_id)))
-            require_same_workspace(auth, route.workspace_id)
+                return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
 
             # Demote current preferred (if any)
             current_preferred = await self._route_repo.find_preferred(route.workspace_id, route.target_molecule_id)
@@ -361,15 +382,14 @@ class DeprecateSynthesisRoute:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, route_id: uuid.UUID, reason: str | None = None, auth: AuthContext | None = None
+        self, input: DeprecateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
-                return Failure(NotFoundError("SynthesisRoute", str(route_id)))
-            require_same_workspace(auth, route.workspace_id)
-            route.deprecate(reason=reason)
+                return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
+            route.deprecate(reason=input.reason)
             await self._route_repo.save(route)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -392,10 +412,9 @@ class UpdateSynthesisRoute:
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(input.route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
                 return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
-            require_same_workspace(auth, route.workspace_id)
 
             if route.status != RouteStatus.DRAFT:
                 return Failure(ValidationError("Can only update draft synthesis routes"))
@@ -429,10 +448,9 @@ class DeleteSynthesisRoute:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(input.route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
                 return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
-            require_same_workspace(auth, route.workspace_id)
 
             if route.status != RouteStatus.DRAFT:
                 return Failure(ValidationError("Can only delete draft synthesis routes"))
@@ -459,10 +477,9 @@ class RemoveReactionStep:
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
         async with self._uow:
-            route = await self._route_repo.find_by_id(input.route_id)
+            route = await self._route_repo.find_by_id_in_workspace(input.workspace_id, input.route_id)
             if route is None:
                 return Failure(NotFoundError("SynthesisRoute", str(input.route_id)))
-            require_same_workspace(auth, route.workspace_id)
 
             if route.status != RouteStatus.DRAFT:
                 return Failure(ValidationError("Can only remove steps from draft synthesis routes"))

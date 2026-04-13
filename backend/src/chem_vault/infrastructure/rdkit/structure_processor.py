@@ -5,6 +5,7 @@ from __future__ import annotations
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.chemical_registration.protocols import (
+    DetectedSaltDTO,
     ProcessedStructureDTO,
     QCResultDTO,
 )
@@ -86,11 +87,31 @@ class StructureProcessor:
             molfile=std_mol.molfile,
         )
 
+        # 6. Map detected salt (if any)
+        detected_salt_dto: DetectedSaltDTO | None = None
+        if std_mol.detected_salt is not None:
+            detected_salt_dto = DetectedSaltDTO(
+                salt_smiles=std_mol.detected_salt.salt_smiles,
+                salt_fragment_mw=std_mol.detected_salt.salt_fragment_mw,
+                stoichiometry=std_mol.detected_salt.stoichiometry,
+            )
+
         return Success(
             ProcessedStructureDTO(
                 structure=structure,
                 descriptors=descriptors,
                 fingerprints=fingerprints,
                 qc_result=qc_result,
+                detected_salt=detected_salt_dto,
             )
         )
+
+    def smiles_to_mol_block(self, smiles: str) -> str | None:
+        """Convert a SMILES string to a V2000 MOL block, or None if invalid."""
+        from rdkit import Chem
+        from rdkit.Chem import MolToMolBlock
+
+        rdmol = Chem.MolFromSmiles(smiles)
+        if rdmol is None:
+            return None
+        return MolToMolBlock(rdmol)

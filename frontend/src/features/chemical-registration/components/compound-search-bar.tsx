@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, Pencil } from "lucide-react";
+import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -13,20 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useMoleculeSearch, useSearchMolecules } from "../hooks/use-molecules";
+import { StructureRenderer } from "@/shared/components/chemistry";
+import { useMoleculeSearch, useSearchMolecules, type SearchResult } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
   type LifecycleStage,
-  type Molecule,
 } from "../types";
 
 type SearchType = "name_id" | "exact" | "substructure" | "similarity";
@@ -51,15 +44,18 @@ export function CompoundSearchBar() {
   } | undefined>(undefined);
 
   const isTextMode = searchType === "name_id";
+  const [editorOpen, setEditorOpen] = useState(false);
 
   // Text search (name/ID) uses the list endpoint with ?q=
   const { data: textResults, isLoading: textLoading, isError: textError } = useMoleculeSearch(activeTextSearch);
   // Structure search uses the dedicated search endpoint
   const { data: structResults, isLoading: structLoading, isError: structError } = useSearchMolecules(activeStructSearch);
 
-  const results = isTextMode ? textResults : structResults;
+  const textData: SearchResult[] | undefined = textResults?.map((m) => ({ molecule: m, similarity: null }));
+  const results = isTextMode ? textData : structResults;
   const isLoading = isTextMode ? textLoading : structLoading;
   const isError = isTextMode ? textError : structError;
+  const showSimilarity = searchType === "similarity";
 
   const handleSearch = () => {
     if (!query.trim()) return;
@@ -141,6 +137,17 @@ export function CompoundSearchBar() {
           </div>
         )}
 
+        {!isTextMode && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setEditorOpen(true)}
+            title="Draw structure"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+
         <Button onClick={handleSearch} disabled={!query.trim()}>
           <Search className="mr-2 h-4 w-4" />
           Search
@@ -167,42 +174,62 @@ export function CompoundSearchBar() {
             {results.length} result{results.length !== 1 ? "s" : ""} found
           </div>
           {results.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Reg #</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Formula</TableHead>
-                  <TableHead>Stage</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {results.map((mol: Molecule) => (
-                  <TableRow
-                    key={mol.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/compounds/${mol.id}`)}
-                  >
-                    <TableCell className="font-mono text-sm">
-                      {mol.registration_number}
-                    </TableCell>
-                    <TableCell className="font-medium">{mol.name}</TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {mol.molecular_formula ?? "—"}
-                    </TableCell>
-                    <TableCell>
+            <div className="divide-y">
+              {results.map((r) => (
+                <div
+                  key={r.molecule.id}
+                  className="flex gap-4 p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => router.push(`/compounds/${r.molecule.id}`)}
+                >
+                  {/* Structure */}
+                  <div className="shrink-0">
+                    {r.molecule.structure?.smiles ? (
+                      <StructureRenderer
+                        smiles={r.molecule.structure.smiles}
+                        width={200}
+                        height={160}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center rounded border border-dashed text-xs text-muted-foreground" style={{ width: 200, height: 160 }}>
+                        Undisclosed
+                      </div>
+                    )}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-medium">{r.molecule.registration_number}</span>
                       <Badge variant="outline">
-                        {LIFECYCLE_LABELS[
-                          mol.lifecycle_stage as LifecycleStage
-                        ] ?? mol.lifecycle_stage}
+                        {LIFECYCLE_LABELS[r.molecule.lifecycle_stage as LifecycleStage] ?? r.molecule.lifecycle_stage}
                       </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      {showSimilarity && r.similarity != null && (
+                        <span className={
+                          r.similarity > 0.8 ? "text-emerald-400 font-medium text-sm" :
+                          r.similarity > 0.6 ? "text-yellow-400 text-sm" : "text-muted-foreground text-sm"
+                        }>
+                          {(r.similarity * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium truncate">{r.molecule.name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      {r.molecule.molecular_formula ?? "—"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
+      )}
+      {!isTextMode && (
+        <StructureEditorDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          initialStructure={query}
+          onApply={(s) => setQuery(s)}
+          outputFormat={searchType === "substructure" ? "smarts" : "smiles"}
+        />
       )}
     </div>
   );

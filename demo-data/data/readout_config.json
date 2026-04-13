@@ -1,0 +1,112 @@
+{
+  "_comment": "Defines which molecules get readout data per run, with value ranges and RNG seeds for reproducibility. Runs with mode=dose_response generate well-based Hill-equation data for auto-curve-fitting.",
+
+  "run_kinase_01": {
+    "protocol_ref": "proto_kinase",
+    "mode": "dose_response",
+    "seed": 42,
+    "molecules": [
+      "mol_imatinib", "mol_gefitinib", "mol_erlotinib", "mol_sorafenib", "mol_vemurafenib",
+      "mol_dabrafenib", "mol_osimertinib", "mol_lapatinib", "mol_crizotinib", "mol_sunitinib",
+      "mol_dasatinib", "mol_nilotinib", "mol_afatinib", "mol_bosutinib", "mol_lenvatinib"
+    ],
+    "ic50_nM": {
+      "mol_imatinib":    5800.0,
+      "mol_gefitinib":     33.0,
+      "mol_erlotinib":      2.0,
+      "mol_sorafenib":    580.0,
+      "mol_vemurafenib":   31.0,
+      "mol_dabrafenib":     0.7,
+      "mol_osimertinib":   12.0,
+      "mol_lapatinib":     10.8,
+      "mol_crizotinib":   120.0,
+      "mol_sunitinib":     80.0,
+      "mol_dasatinib":      0.6,
+      "mol_nilotinib":     25.0,
+      "mol_afatinib":       0.5,
+      "mol_bosutinib":      4.0,
+      "mol_lenvatinib":    22.0
+    },
+    "top": 100.0,
+    "bottom": 0.0,
+    "hill_slope": 1.0,
+    "noise_pct": 3.0
+  },
+  "run_kinase_02": {
+    "protocol_ref": "proto_kinase",
+    "mode": "dose_response",
+    "seed": 43,
+    "molecules": [
+      "mol_gefitinib", "mol_erlotinib", "mol_osimertinib", "mol_afatinib", "mol_lapatinib"
+    ],
+    "ic50_nM": {
+      "mol_gefitinib":     28.0,
+      "mol_erlotinib":      1.8,
+      "mol_osimertinib":   11.0,
+      "mol_afatinib":       0.5,
+      "mol_lapatinib":     11.5
+    },
+    "top": 100.0,
+    "bottom": 0.0,
+    "hill_slope": 1.0,
+    "noise_pct": 3.0
+  },
+  "run_cox2_01": {
+    "protocol_ref": "proto_cox2",
+    "mode": "dose_response",
+    "seed": 100,
+    "molecules": [
+      "mol_celecoxib", "mol_indomethacin", "mol_naproxen", "mol_ibuprofen", "mol_diclofenac",
+      "mol_meloxicam", "mol_piroxicam", "mol_aspirin", "mol_sulindac", "mol_ketoprofen"
+    ],
+    "ic50_nM": {
+      "mol_celecoxib":     40.0,
+      "mol_indomethacin": 260.0,
+      "mol_naproxen":    5200.0,
+      "mol_ibuprofen":  15000.0,
+      "mol_diclofenac":    50.0,
+      "mol_meloxicam":     18.0,
+      "mol_piroxicam":    420.0,
+      "mol_aspirin":    32000.0,
+      "mol_sulindac":    2100.0,
+      "mol_ketoprofen":  3800.0
+    },
+    "top": 100.0,
+    "bottom": 0.0,
+    "hill_slope": 1.0,
+    "noise_pct": 4.0,
+    "extra_readouts": {
+      "Selectivity Index": {"min": 0.5, "max": 300.0}
+    }
+  },
+  "run_viability_01": {
+    "protocol_ref": "proto_viability",
+    "mode": "single_point",
+    "seed": 150,
+    "molecules": [
+      "mol_imatinib", "mol_gefitinib", "mol_erlotinib", "mol_sorafenib", "mol_vemurafenib",
+      "mol_dabrafenib", "mol_osimertinib", "mol_lapatinib", "mol_crizotinib", "mol_sunitinib",
+      "mol_dasatinib", "mol_nilotinib", "mol_afatinib", "mol_bosutinib", "mol_lenvatinib"
+    ],
+    "readouts": {
+      "Absorbance": {"min": 0.05, "max": 2.5},
+      "% Viability": {"min": 15.0, "max": 105.0}
+    }
+  },
+  "run_admet_01": {
+    "protocol_ref": "proto_admet",
+    "mode": "single_point",
+    "seed": 200,
+    "molecules": [
+      "mol_imatinib", "mol_gefitinib", "mol_erlotinib", "mol_celecoxib", "mol_indomethacin",
+      "mol_losartan", "mol_amlodipine", "mol_fluoxetine", "mol_risperidone", "mol_ciprofloxacin",
+      "mol_aspirin", "mol_atorvastatin", "mol_naproxen", "mol_ibuprofen", "mol_metoprolol"
+    ],
+    "readouts": {
+      "Kinetic Solubility": {"min": 1.0, "max": 500.0},
+      "LogD 7.4": {"min": -1.0, "max": 5.5},
+      "Caco-2 Papp": {"min": 0.5, "max": 60.0},
+      "Microsomal Stability": {"min": 5.0, "max": 95.0}
+    }
+  }
+}

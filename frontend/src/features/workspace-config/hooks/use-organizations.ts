@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type {
   CreateOrganizationInput,
   Organization,
@@ -11,6 +11,13 @@ import type {
 
 const ORGS_KEY = ["organizations"];
 
+const orgHooks = createCrudHooks<Organization, CreateOrganizationInput, UpdateOrganizationInput>({
+  entityName: "Organization",
+  baseUrl: "/api/v1/organizations",
+  queryKey: ORGS_KEY,
+});
+
+/** Custom list — supports includeInactive boolean flag. */
 export function useOrganizations(includeInactive = false) {
   return useQuery({
     queryKey: [...ORGS_KEY, { includeInactive }],
@@ -23,28 +30,5 @@ export function useOrganizations(includeInactive = false) {
   });
 }
 
-export function useCreateOrganization() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateOrganizationInput) =>
-      customInstance<Organization>({
-        url: "/api/v1/organizations",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ORGS_KEY }); showSuccess("Organization created"); },
-  });
-}
-
-export function useUpdateOrganization(orgId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateOrganizationInput) =>
-      customInstance<Organization>({
-        url: `/api/v1/organizations/${orgId}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ORGS_KEY }); showSuccess("Organization updated"); },
-  });
-}
+export const useCreateOrganization = orgHooks.useCreate;
+export const useUpdateOrganization = orgHooks.useUpdate;

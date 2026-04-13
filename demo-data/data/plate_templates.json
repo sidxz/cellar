@@ -1,0 +1,25 @@
+{
+  "tpl_96_standard": {
+    "name": "96-Well Standard Screening",
+    "format": "F96",
+    "description": "Standard 96-well plate layout with edge controls. Columns 1,12 = controls; columns 2-11 = samples.",
+    "template_map": {
+      "A1": "POSITIVE_CONTROL", "B1": "POSITIVE_CONTROL", "C1": "POSITIVE_CONTROL", "D1": "POSITIVE_CONTROL",
+      "E1": "NEGATIVE_CONTROL", "F1": "NEGATIVE_CONTROL", "G1": "NEGATIVE_CONTROL", "H1": "NEGATIVE_CONTROL",
+      "A12": "POSITIVE_CONTROL", "B12": "POSITIVE_CONTROL", "C12": "POSITIVE_CONTROL", "D12": "POSITIVE_CONTROL",
+      "E12": "NEGATIVE_CONTROL", "F12": "NEGATIVE_CONTROL", "G12": "NEGATIVE_CONTROL", "H12": "NEGATIVE_CONTROL"
+    }
+  },
+  "tpl_384_dose": {
+    "name": "384-Well Dose Response",
+    "format": "F384",
+    "description": "384-well plate layout for dose-response curves. Columns 1-2 and 23-24 = controls; columns 3-22 = dose-response series.",
+    "template_map": {
+      "A1": "POSITIVE_CONTROL", "A2": "POSITIVE_CONTROL",
+      "B1": "POSITIVE_CONTROL", "B2": "POSITIVE_CONTROL",
+      "A23": "NEGATIVE_CONTROL", "A24": "NEGATIVE_CONTROL",
+      "B23": "NEGATIVE_CONTROL", "B24": "NEGATIVE_CONTROL",
+      "P1": "BLANK", "P2": "BLANK", "P23": "BLANK", "P24": "BLANK"
+    }
+  }
+}

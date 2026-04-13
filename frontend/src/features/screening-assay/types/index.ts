@@ -25,7 +25,14 @@ export const PROTOCOL_STATUS_LABELS: Record<ProtocolStatus, string> = {
   retired: "Retired",
 };
 
-export type ReadoutDataType = "numeric" | "text" | "pick_list" | "file" | "date";
+export type ReadoutDataType =
+  | "numeric"
+  | "text"
+  | "pick_list"
+  | "file"
+  | "date"
+  | "dose_response"
+  | "batch_link";
 
 export const READOUT_DATA_TYPE_LABELS: Record<ReadoutDataType, string> = {
   numeric: "Numeric",
@@ -33,6 +40,8 @@ export const READOUT_DATA_TYPE_LABELS: Record<ReadoutDataType, string> = {
   pick_list: "Pick List",
   file: "File",
   date: "Date",
+  dose_response: "Dose-Response (Plot)",
+  batch_link: "Batch Link",
 };
 
 export type ReadoutAggregation =
@@ -159,6 +168,38 @@ export const CURVE_CLASS_LABELS: Record<CurveClass, string> = {
   inactive: "Inactive",
 };
 
+export type HillSlopeConstraint =
+  | "unconstrained"
+  | "fixed_at_one"
+  | "positive_only"
+  | "negative_only";
+
+export const HILL_SLOPE_CONSTRAINT_LABELS: Record<HillSlopeConstraint, string> = {
+  unconstrained: "Unconstrained",
+  fixed_at_one: "Fixed at 1",
+  positive_only: "Positive Only",
+  negative_only: "Negative Only",
+};
+
+export type NormalizationScope = "per_plate" | "per_run" | "none";
+
+export const NORMALIZATION_SCOPE_LABELS: Record<NormalizationScope, string> = {
+  per_plate: "Per Plate",
+  per_run: "Per Run",
+  none: "None",
+};
+
+export interface DoseResponseConfig {
+  curve_type: CurveType;
+  x_readout_name: string;
+  y_readout_name: string;
+  hill_slope_constraint: HillSlopeConstraint;
+  activity_threshold: number | null;
+  normalization_scope: NormalizationScope;
+  top_constraint: number | null;
+  bottom_constraint: number | null;
+}
+
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface ReadoutDefinition {
@@ -172,6 +213,8 @@ export interface ReadoutDefinition {
   is_calculated: boolean;
   calculation_formula: string | null;
   display_order: number;
+  pick_list_values: string[] | null;
+  dose_response_config: DoseResponseConfig | null;
 }
 
 export interface ConditionDefinition {
@@ -180,6 +223,18 @@ export interface ConditionDefinition {
   data_type: string;
   unit: string | null;
   pick_list_values: string[] | null;
+}
+
+export interface OntologyAnnotationTerm {
+  term_id: string;
+  label: string;
+  ontology_source: string;
+  uri: string | null;
+}
+
+export interface OntologyAnnotation {
+  slot_name: string;
+  terms: OntologyAnnotationTerm[];
 }
 
 export interface Protocol {
@@ -196,6 +251,10 @@ export interface Protocol {
   created_by: string;
   readout_definitions: ReadoutDefinition[];
   condition_definitions: ConditionDefinition[];
+  control_layouts: Record<string, string> | null;
+  ontology_annotations: Record<string, OntologyAnnotationTerm[]> | null;
+  project_ids: string[];
+  recommended_hit_criteria: HitCriterion[] | null;
 }
 
 export interface Target {
@@ -224,6 +283,7 @@ export interface Run {
   qc_metrics: Record<string, unknown> | null;
   notes: string | null;
   plate_count: number;
+  molecule_count: number;
   performed_at_org_id: string | null;
   parent_run_id: string | null;
   run_relationship_type: RunRelationshipType | null;
@@ -236,20 +296,25 @@ export interface ReadoutData {
   workspace_id: string;
   run_id: string;
   well_id: string | null;
-  molecule_id: string;
-  batch_id: string;
+  molecule_id: string | null;
+  registration_number: string | null;
+  batch_id: string | null;
+  batch_number: string | null;
   readout_definition_id: string;
   value_numeric: number | null;
   value_qualifier: string | null;
   value_text: string | null;
   is_outlier: boolean;
+  is_computed: boolean;
 }
 
 export interface DoseResponseCurve {
   id: string;
   workspace_id: string;
   molecule_id: string;
+  molecule_name: string | null;
   batch_id: string;
+  batch_number: string | null;
   protocol_id: string;
   run_id: string;
   curve_type: CurveType;
@@ -267,6 +332,45 @@ export interface DoseResponseCurve {
   excluded_points: Array<Record<string, unknown>> | null;
 }
 
+// ─── Plate Template ─────────────────────────────────────────────────────────
+
+export type WellDesignation =
+  | "compound"
+  | "positive_control"
+  | "negative_control"
+  | "empty";
+
+export const WELL_DESIGNATION_LABELS: Record<WellDesignation, string> = {
+  compound: "Compound",
+  positive_control: "Positive Control",
+  negative_control: "Negative Control",
+  empty: "Empty",
+};
+
+export interface PlateTemplate {
+  id: string;
+  workspace_id: string;
+  name: string;
+  format: PlateFormat;
+  template_map: Record<string, WellDesignation>;
+  description: string | null;
+  created_by: string;
+}
+
+export interface CreatePlateTemplateInput {
+  name: string;
+  format: PlateFormat;
+  template_map: Record<string, WellDesignation>;
+  description?: string | null;
+}
+
+export interface UpdatePlateTemplateInput {
+  name?: string;
+  format?: PlateFormat;
+  template_map?: Record<string, WellDesignation>;
+  description?: string | null;
+}
+
 // ─── Create Input Types ───────────────────────────────────────────────────────
 
 export interface CreateReadoutDefinitionInput {
@@ -279,6 +383,8 @@ export interface CreateReadoutDefinitionInput {
   is_calculated?: boolean;
   calculation_formula?: string | null;
   display_order?: number;
+  pick_list_values?: string[] | null;
+  dose_response_config?: DoseResponseConfig | null;
 }
 
 export interface CreateConditionDefinitionInput {
@@ -324,6 +430,7 @@ export interface CreateRunInput {
   protocol_id: string;
   run_date: string;
   plate_format?: PlateFormat | null;
+  plate_template_id?: string | null;
   performed_at_org_id?: string | null;
   parent_run_id?: string | null;
   run_relationship_type?: RunRelationshipType | null;
@@ -365,4 +472,203 @@ export interface CreateDoseResponseCurveInput {
   curve_class?: CurveClass | null;
   raw_data?: Array<Record<string, unknown>> | null;
   excluded_points?: Array<Record<string, unknown>> | null;
+}
+
+// ─── Condition Grouping ──────────────────────────────────────────────────────
+
+export interface AggregatedReadoutResponse {
+  readout_definition_id: string;
+  name: string;
+  value: number;
+  unit: string | null;
+  aggregation: string;
+  count: number;
+}
+
+export interface ConditionGroupResponse {
+  condition_value: string;
+  run_count: number;
+  aggregated_readouts: AggregatedReadoutResponse[];
+}
+
+export interface ConditionGroupsResponse {
+  condition_name: string;
+  groups: ConditionGroupResponse[];
+}
+
+// ─── Refit / Classify Input Types ────────────────────────────────────────────
+
+export interface RefitDoseResponseInput {
+  excluded_point_indices: number[];
+  hill_slope_constraint?: string | null;
+  top_constraint?: number | null;
+  bottom_constraint?: number | null;
+}
+
+export interface ClassifyDoseResponseInput {
+  curve_class: string;
+}
+
+// ─── Plate Setup ─────────────────────────────────────────────────────────────
+
+export interface PlateMapWell {
+  well_id: string;
+  position: string;
+  row: string;
+  column: number;
+  well_type: string;
+  molecule_id: string | null;
+  molecule_name: string | null;
+  batch_id: string | null;
+  batch_number: string | null;
+  concentration: number | null;
+  concentration_unit: string | null;
+}
+
+export interface PlateMapSummary {
+  total_wells: number;
+  sample_wells: number;
+  control_wells: number;
+  compounds: number;
+  concentrations_per_compound: number;
+  replicates: number;
+}
+
+export interface PlateMapResponse {
+  plate_number: number;
+  format: string;
+  wells: PlateMapWell[];
+  summary: PlateMapSummary;
+}
+
+export interface CompoundAssignment {
+  molecule_ref: string;
+  batch_ref?: string | null;
+  well_positions: string[];
+}
+
+export interface ParsedPlateMap {
+  assignments: CompoundAssignment[];
+  unresolved: string[];
+  row_count: number;
+}
+
+export interface PlateSetupInput {
+  compound_assignments: CompoundAssignment[];
+  plate_number?: number;
+  concentration_series?: number[];
+  concentration_unit?: string;
+}
+
+export interface PlateSetupResult {
+  plate_id: string;
+  wells_created: number;
+  compounds_assigned: number;
+  unresolved: string[];
+}
+
+export interface ImportReadoutsResult {
+  total_rows: number;
+  matched: number;
+  unmatched: number;
+  readouts_created: number;
+}
+
+// ─── Hit Criteria + Protocol Stats + Activity ───────────────────────────────
+
+export interface HitCriterion {
+  readout_name: string;
+  operator: "gt" | "lt" | "gte" | "lte" | "in";
+  value: number | string[];
+}
+
+export interface RunCountsResponse {
+  total: number;
+  draft: number;
+  in_progress: number;
+  completed: number;
+  approved: number;
+  rejected: number;
+}
+
+export interface LatestRunResponse {
+  id: string;
+  run_date: string;
+  status: RunStatus;
+  plate_format: PlateFormat | null;
+  plate_count: number;
+  compound_count: number;
+  z_prime: number | null;
+}
+
+export interface ProtocolStats {
+  run_counts: RunCountsResponse;
+  compound_count: number;
+  hit_count: number | null;
+  hit_criteria_applied: boolean;
+  latest_run: LatestRunResponse | null;
+}
+
+export interface CurveParams {
+  hill_slope: number;
+  top: number;
+  bottom: number;
+  fitted_value: number;
+  r_squared: number;
+}
+
+export interface ReadoutValue {
+  best: number | null;
+  mean: number | null;
+  curve_class?: CurveClass | null;
+  curve_params?: CurveParams | null;
+  data_points?: Array<{ x: number; y: number }> | null;
+  n?: number | null;
+  sd?: number | null;
+}
+
+export interface ReadoutDefInfo {
+  name: string;
+  data_type: string;
+  unit: string | null;
+  best_direction: "high" | "low";
+}
+
+export interface CompoundActivity {
+  molecule_id: string;
+  molecule_name: string;
+  registration_number: string;
+  run_count: number;
+  last_tested: string | null;
+  smiles: string | null;
+  batch_number: string | null;
+  synonyms: string[];
+  readouts: Record<string, ReadoutValue>;
+}
+
+export interface ActivitySummaryV2 {
+  items: CompoundActivity[];
+  readout_definitions: ReadoutDefInfo[];
+  total_compounds: number;
+}
+
+// ─── Compound Flags ─────────────────────────────────────────────────────────
+
+export type FlagType = "star" | "outlier" | "follow_up";
+
+export const FLAG_TYPE_LABELS: Record<FlagType, string> = {
+  star: "Star",
+  outlier: "Outlier",
+  follow_up: "Follow-Up",
+};
+
+export interface CompoundFlag {
+  id: string;
+  workspace_id: string;
+  molecule_id: string;
+  protocol_id: string;
+  flagged_by: string;
+  flag_type: FlagType;
+  note: string | null;
+  created_at: string;
 }

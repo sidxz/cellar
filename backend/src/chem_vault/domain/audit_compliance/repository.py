@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.audit_compliance.models import AuditOperation
 
 
+@runtime_checkable
 class AuditRepository(Protocol):
     """Append-only repository for audit operations.
 
@@ -22,10 +23,16 @@ class AuditRepository(Protocol):
         """Retrieve an audit operation by ID."""
         ...
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> AuditOperation | None:
+        """Retrieve an audit operation by ID, scoped to workspace."""
+        ...
+
     async def find_by_entity(
-        self, entity_type: str, entity_id: uuid.UUID
+        self, workspace_id: uuid.UUID, entity_type: str, entity_id: uuid.UUID
     ) -> list[AuditOperation]:
-        """Retrieve all audit operations for a given entity."""
+        """Retrieve all audit operations for a given entity within a workspace."""
         ...
 
     async def find_all(

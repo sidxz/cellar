@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
+from typing import Any
 
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.inventory.events import BatchCreated, BatchReassigned
@@ -28,7 +29,11 @@ class Batch(AggregateRoot):
         workspace_id: uuid.UUID,
         molecule_id: uuid.UUID,
         batch_number: BatchNumber,
-        salt_form: str | None = None,
+        salt_entry_id: uuid.UUID | None = None,
+        salt_name: str | None = None,
+        salt_smiles: str | None = None,
+        salt_stoichiometry: int = 1,
+        formula_weight: float | None = None,
         purity: float | None = None,
         amount: Amount,
         concentration: Concentration | None = None,
@@ -43,7 +48,7 @@ class Batch(AggregateRoot):
         storage_conditions: StorageCondition | None = None,
         storage_conditions_notes: str | None = None,
         appearance: str | None = None,
-        custom_fields: dict | None = None,
+        custom_fields: dict[str, Any] | None = None,
         synthesis_route_id: uuid.UUID | None = None,
         synthesis_step_id: uuid.UUID | None = None,
         synthesis_request_id: uuid.UUID | None = None,
@@ -59,7 +64,11 @@ class Batch(AggregateRoot):
         self.workspace_id = workspace_id
         self.molecule_id = molecule_id
         self._batch_number = batch_number
-        self.salt_form = salt_form
+        self.salt_entry_id = salt_entry_id
+        self.salt_name = salt_name
+        self.salt_smiles = salt_smiles
+        self.salt_stoichiometry = salt_stoichiometry
+        self.formula_weight = formula_weight
         self.purity = purity
         self.amount = amount
         self.concentration = concentration
@@ -97,7 +106,11 @@ class Batch(AggregateRoot):
         amount: Amount,
         source: BatchSource,
         chemist: uuid.UUID,
-        salt_form: str | None = None,
+        salt_entry_id: uuid.UUID | None = None,
+        salt_name: str | None = None,
+        salt_smiles: str | None = None,
+        salt_stoichiometry: int = 1,
+        formula_weight: float | None = None,
         purity: float | None = None,
         concentration: Concentration | None = None,
         supplier_org_id: uuid.UUID | None = None,
@@ -109,7 +122,7 @@ class Batch(AggregateRoot):
         storage_conditions: StorageCondition | None = None,
         storage_conditions_notes: str | None = None,
         appearance: str | None = None,
-        custom_fields: dict | None = None,
+        custom_fields: dict[str, Any] | None = None,
     ) -> Batch:
         batch = cls(
             workspace_id=workspace_id,
@@ -118,7 +131,11 @@ class Batch(AggregateRoot):
             amount=amount,
             source=source,
             chemist=chemist,
-            salt_form=salt_form,
+            salt_entry_id=salt_entry_id,
+            salt_name=salt_name,
+            salt_smiles=salt_smiles,
+            salt_stoichiometry=salt_stoichiometry,
+            formula_weight=formula_weight,
             purity=purity,
             concentration=concentration,
             supplier_org_id=supplier_org_id,
@@ -182,7 +199,11 @@ class Batch(AggregateRoot):
     def update(
         self,
         *,
-        salt_form: str | None = ...,  # type: ignore[assignment]
+        salt_entry_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        salt_name: str | None = ...,  # type: ignore[assignment]
+        salt_smiles: str | None = ...,  # type: ignore[assignment]
+        salt_stoichiometry: int = ...,  # type: ignore[assignment]
+        formula_weight: float | None = ...,  # type: ignore[assignment]
         purity: float | None = ...,  # type: ignore[assignment]
         amount: Amount | None = None,
         concentration: Concentration | None = ...,  # type: ignore[assignment]
@@ -191,15 +212,23 @@ class Batch(AggregateRoot):
         notebook_reference: str | None = ...,  # type: ignore[assignment]
         storage_conditions: StorageCondition | None = ...,  # type: ignore[assignment]
         storage_conditions_notes: str | None = ...,  # type: ignore[assignment]
-        custom_fields: dict | None = ...,  # type: ignore[assignment]
+        custom_fields: dict[str, Any] | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields. Uses sentinel ``...`` for optional nullable fields."""
         if purity is not ...:
             if purity is not None and not (0 < purity <= 100):
                 raise ValidationError("Purity must be in range (0, 100]")
             self.purity = purity
-        if salt_form is not ...:
-            self.salt_form = salt_form
+        if salt_entry_id is not ...:
+            self.salt_entry_id = salt_entry_id
+        if salt_name is not ...:
+            self.salt_name = salt_name
+        if salt_smiles is not ...:
+            self.salt_smiles = salt_smiles
+        if salt_stoichiometry is not ...:
+            self.salt_stoichiometry = salt_stoichiometry
+        if formula_weight is not ...:
+            self.formula_weight = formula_weight
         if amount is not None:
             self.amount = amount
         if concentration is not ...:

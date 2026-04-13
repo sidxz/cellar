@@ -34,6 +34,7 @@ from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFound
 class MergeCommand(Command):
     """Input for a molecule merge operation."""
 
+    workspace_id: uuid.UUID
     source_molecule_id: uuid.UUID
     target_molecule_id: uuid.UUID
     reason: MergeReason
@@ -116,13 +117,13 @@ class MergeService:
         """Core merge logic — no UoW management, no commit."""
 
         # --- Load aggregates ---
-        source = await self._molecule_repo.find_by_id(input.source_molecule_id)
+        source = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.source_molecule_id)
         if source is None:
             return Failure(
                 NotFoundError("Molecule", str(input.source_molecule_id))
             )
 
-        target = await self._molecule_repo.find_by_id(input.target_molecule_id)
+        target = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.target_molecule_id)
         if target is None:
             return Failure(
                 NotFoundError("Molecule", str(input.target_molecule_id))
@@ -191,7 +192,7 @@ class MergeService:
 
         # --- Side effects (e.g., re-point Batch FKs) ---
         await self._side_effect_registry.execute_all(
-            self._uow.session,  # type: ignore[arg-type]
+            self._uow,
             source.id,
             target.id,
         )

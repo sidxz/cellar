@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { StructureEditorDialog } from "@/shared/components/chemistry";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +30,7 @@ export function DisclosureDialog({
 }: DisclosureDialogProps) {
   const submitMutation = useSubmitDisclosure();
 
+  const [editorOpen, setEditorOpen] = useState(false);
   const [smiles, setSmiles] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,7 @@ export function DisclosureDialog({
   const reset = () => {
     setSmiles("");
     setNotes("");
+    setEditorOpen(false);
     setError(null);
   };
 
@@ -88,7 +92,18 @@ export function DisclosureDialog({
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="disclosure-smiles">SMILES</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="disclosure-smiles">SMILES</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditorOpen(true)}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Draw
+              </Button>
+            </div>
             <Textarea
               id="disclosure-smiles"
               placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O"
@@ -96,6 +111,14 @@ export function DisclosureDialog({
               onChange={(e) => setSmiles(e.target.value)}
               rows={3}
               className="font-mono text-sm"
+            />
+
+            <StructureEditorDialog
+              open={editorOpen}
+              onOpenChange={setEditorOpen}
+              initialStructure={smiles}
+              onApply={(s) => setSmiles(s)}
+              outputFormat="smiles"
             />
           </div>
 

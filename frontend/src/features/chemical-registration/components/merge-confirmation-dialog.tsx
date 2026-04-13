@@ -10,9 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
 import { useMergeMolecules } from "../hooks/use-disclosures";
 import type { Molecule } from "../types";
 
@@ -29,30 +29,30 @@ export function MergeConfirmationDialog({
 }: MergeConfirmationDialogProps) {
   const mergeMutation = useMergeMolecules(sourceMolecule.id);
 
-  const [targetId, setTargetId] = useState("");
+  const [targetId, setTargetId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
-    setTargetId("");
+    setTargetId(null);
     setNotes("");
     setError(null);
   };
 
   const handleMerge = async () => {
     setError(null);
-    if (!targetId.trim()) {
-      setError("Target molecule ID is required");
+    if (!targetId) {
+      setError("Please select a target compound");
       return;
     }
-    if (targetId.trim() === sourceMolecule.id) {
-      setError("Cannot merge a molecule into itself");
+    if (targetId === sourceMolecule.id) {
+      setError("Cannot merge a compound into itself");
       return;
     }
 
     try {
       await mergeMutation.mutateAsync({
-        target_molecule_id: targetId.trim(),
+        target_molecule_id: targetId,
         reason: "manual_merge",
         notes: notes.trim() || null,
       });
@@ -94,13 +94,10 @@ export function MergeConfirmationDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="merge-target">Target Molecule ID</Label>
-            <Input
-              id="merge-target"
-              placeholder="UUID of the target molecule"
-              value={targetId}
-              onChange={(e) => setTargetId(e.target.value)}
-              className="font-mono text-sm"
+            <Label>Target Compound</Label>
+            <MoleculeSelector
+              selectedId={targetId}
+              onSelect={setTargetId}
             />
           </div>
 
@@ -125,7 +122,7 @@ export function MergeConfirmationDialog({
           <Button
             variant="destructive"
             onClick={handleMerge}
-            disabled={mergeMutation.isPending}
+            disabled={!targetId || mergeMutation.isPending}
           >
             {mergeMutation.isPending ? "Merging..." : "Merge"}
           </Button>

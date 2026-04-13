@@ -21,6 +21,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useCreateRun } from "../hooks/use-runs";
+import { usePlateTemplates } from "../hooks/use-plate-templates";
 import { PLATE_FORMAT_LABELS, type PlateFormat } from "../types";
 
 interface CreateRunDialogProps {
@@ -39,13 +40,16 @@ export function CreateRunDialog({
   onOpenChange,
 }: CreateRunDialogProps) {
   const createMutation = useCreateRun();
+  const { data: plateTemplates } = usePlateTemplates();
   const [runDate, setRunDate] = useState(todayISO);
   const [plateFormat, setPlateFormat] = useState<string>("96");
+  const [plateTemplateId, setPlateTemplateId] = useState<string>("");
   const [notes, setNotes] = useState("");
 
   const resetForm = () => {
     setRunDate(todayISO());
     setPlateFormat("96");
+    setPlateTemplateId("");
     setNotes("");
   };
 
@@ -55,6 +59,7 @@ export function CreateRunDialog({
         protocol_id: protocolId,
         run_date: runDate,
         plate_format: plateFormat as PlateFormat,
+        plate_template_id: plateTemplateId || null,
         notes: notes || null,
       },
       {
@@ -101,6 +106,28 @@ export function CreateRunDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {plateTemplates && plateTemplates.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Plate Template (optional)</Label>
+              <Select
+                value={plateTemplateId}
+                onValueChange={setPlateTemplateId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {plateTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <Label>Notes (optional)</Label>

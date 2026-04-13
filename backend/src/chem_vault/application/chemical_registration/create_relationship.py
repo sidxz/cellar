@@ -65,14 +65,14 @@ class CreateRelationship:
 
         async with self._uow:
             # Validate both molecules exist in workspace
-            source = await self._molecule_repo.find_by_id(input.source_molecule_id)
-            if source is None or source.workspace_id != input.workspace_id:
+            source = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.source_molecule_id)
+            if source is None:
                 return Failure(
                     NotFoundError("Molecule", str(input.source_molecule_id))
                 )
 
-            target = await self._molecule_repo.find_by_id(input.target_molecule_id)
-            if target is None or target.workspace_id != input.workspace_id:
+            target = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.target_molecule_id)
+            if target is None:
                 return Failure(
                     NotFoundError("Molecule", str(input.target_molecule_id))
                 )

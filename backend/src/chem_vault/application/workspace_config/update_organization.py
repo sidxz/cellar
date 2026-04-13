@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -46,8 +47,8 @@ class UpdateOrganization:
         require_editor(auth)
 
         async with self._uow:
-            org = await self._repo.find_by_id(input.org_id)
-            if org is None or org.workspace_id != input.workspace_id:
+            org = await self._repo.find_by_id_in_workspace(input.workspace_id, input.org_id)
+            if org is None:
                 return Failure(NotFoundError("Organization", str(input.org_id)))
 
             # Name uniqueness check
@@ -61,7 +62,7 @@ class UpdateOrganization:
                     )
 
             # Build kwargs dict — only include fields that were provided
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             if input.name is not None:
                 fields["name"] = input.name
             if input.org_type is not None:

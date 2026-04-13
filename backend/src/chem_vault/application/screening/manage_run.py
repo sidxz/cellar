@@ -3,15 +3,44 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.repository import RunRepository
 from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.errors import DomainError, NotFoundError
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError
+
+
+@dataclass(frozen=True, kw_only=True)
+class StartRunCommand(Command):
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompleteRunCommand(Command):
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
+    plate_count: int = 0
+    data_point_count: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class ApproveRunCommand(Command):
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class RejectRunCommand(Command):
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
+    reason: str
 
 
 class StartRun:
@@ -26,14 +55,13 @@ class StartRun:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, run_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: StartRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
         require_editor(auth)
         async with self._uow:
-            run = await self._repo.find_by_id(run_id)
+            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
-                return Failure(NotFoundError("Run"))
-            require_same_workspace(auth, run.workspace_id)
+                return Failure(NotFoundError("Run", str(input.run_id)))
             run.start()
             await self._repo.save(run)
             events = await self._uow.commit()
@@ -53,19 +81,14 @@ class CompleteRun:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self,
-        run_id: uuid.UUID,
-        plate_count: int = 0,
-        data_point_count: int = 0,
-        auth: AuthContext | None = None,
+        self, input: CompleteRunCommand, auth: AuthContext | None = None,
     ) -> Result[Run, DomainError]:
         require_editor(auth)
         async with self._uow:
-            run = await self._repo.find_by_id(run_id)
+            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
-                return Failure(NotFoundError("Run"))
-            require_same_workspace(auth, run.workspace_id)
-            run.complete(plate_count=plate_count, data_point_count=data_point_count)
+                return Failure(NotFoundError("Run", str(input.run_id)))
+            run.complete(plate_count=input.plate_count, data_point_count=input.data_point_count)
             await self._repo.save(run)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -84,15 +107,16 @@ class ApproveRun:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, run_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: ApproveRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required to approve a run"))
         require_editor(auth)
         async with self._uow:
-            run = await self._repo.find_by_id(run_id)
+            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
-                return Failure(NotFoundError("Run"))
-            require_same_workspace(auth, run.workspace_id)
-            run.approve(approved_by=auth.user_id if auth else uuid.uuid4())
+                return Failure(NotFoundError("Run", str(input.run_id)))
+            run.approve(approved_by=auth.user_id)
             await self._repo.save(run)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
@@ -111,18 +135,16 @@ class RejectRun:
         self._dispatcher = dispatcher
 
     async def __call__(
-        self,
-        run_id: uuid.UUID,
-        reason: str,
-        auth: AuthContext | None = None,
+        self, input: RejectRunCommand, auth: AuthContext | None = None,
     ) -> Result[Run, DomainError]:
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required to reject a run"))
         require_editor(auth)
         async with self._uow:
-            run = await self._repo.find_by_id(run_id)
+            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
-                return Failure(NotFoundError("Run"))
-            require_same_workspace(auth, run.workspace_id)
-            run.reject(rejected_by=auth.user_id if auth else uuid.uuid4(), reason=reason)
+                return Failure(NotFoundError("Run", str(input.run_id)))
+            run.reject(rejected_by=auth.user_id, reason=input.reason)
             await self._repo.save(run)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)

@@ -276,7 +276,7 @@ async def list_synthesis_requests(
 async def get_synthesis_request(
     request_id: uuid.UUID, auth: AuthDep, uc: GetSynthesisRequestDep
 ) -> SynthesisRequestResponse:
-    result = await uc(GetSynthesisRequestQuery(request_id=request_id), auth=auth)
+    result = await uc(GetSynthesisRequestQuery(workspace_id=auth.workspace_id, request_id=request_id), auth=auth)
     request = result_to_response(result)
     return SynthesisRequestResponse.from_domain(request)
 
@@ -291,6 +291,7 @@ async def update_synthesis_request(
     from chem_vault.application.shared.sentinel import UNSET
 
     cmd = UpdateSynthesisRequestCommand(
+        workspace_id=auth.workspace_id,
         request_id=request_id,
         purpose=body.purpose if "purpose" in body.model_fields_set else UNSET,
         priority=body.priority if "priority" in body.model_fields_set else UNSET,
@@ -307,7 +308,7 @@ async def update_synthesis_request(
 async def delete_synthesis_request(
     request_id: uuid.UUID, auth: AuthDep, uc: DeleteSynthesisRequestDep
 ) -> None:
-    result = await uc(DeleteSynthesisRequestCommand(request_id=request_id), auth=auth)
+    result = await uc(DeleteSynthesisRequestCommand(workspace_id=auth.workspace_id, request_id=request_id), auth=auth)
     result_to_response(result)
 
 
@@ -316,7 +317,7 @@ async def submit_synthesis_request(
     request_id: uuid.UUID, auth: AuthDep, uc: SubmitSynthesisRequestDep
 ) -> SynthesisRequestResponse:
     result = await uc(
-        SubmitSynthesisRequestCommand(request_id=request_id),
+        SubmitSynthesisRequestCommand(workspace_id=auth.workspace_id, request_id=request_id),
         auth=auth,
     )
     request = result_to_response(result)
@@ -328,7 +329,7 @@ async def approve_synthesis_request(
     request_id: uuid.UUID, auth: AuthDep, uc: ApproveSynthesisRequestDep
 ) -> SynthesisRequestResponse:
     result = await uc(
-        ApproveSynthesisRequestCommand(request_id=request_id, approved_by=auth.user_id),
+        ApproveSynthesisRequestCommand(workspace_id=auth.workspace_id, request_id=request_id, approved_by=auth.user_id),
         auth=auth,
     )
     request = result_to_response(result)
@@ -341,7 +342,7 @@ async def reject_synthesis_request(
 ) -> SynthesisRequestResponse:
     result = await uc(
         RejectSynthesisRequestCommand(
-            request_id=request_id, reason=body.reason, rejected_by=auth.user_id
+            workspace_id=auth.workspace_id, request_id=request_id, reason=body.reason, rejected_by=auth.user_id
         ),
         auth=auth,
     )
@@ -359,6 +360,7 @@ async def assign_synthesis_request(
         assigned_to = auth.user_id
     result = await uc(
         AssignSynthesisRequestCommand(
+            workspace_id=auth.workspace_id,
             request_id=request_id,
             assignment_type=body.assignment_type,
             assigned_to=assigned_to,
@@ -376,7 +378,7 @@ async def start_synthesis(
 ) -> SynthesisRequestResponse:
     result = await uc(
         StartSynthesisCommand(
-            request_id=request_id, proposed_route_id=body.proposed_route_id
+            workspace_id=auth.workspace_id, request_id=request_id, proposed_route_id=body.proposed_route_id
         ),
         auth=auth,
     )
@@ -390,6 +392,7 @@ async def flag_infeasible(
 ) -> SynthesisRequestResponse:
     result = await uc(
         FlagInfeasibleCommand(
+            workspace_id=auth.workspace_id,
             request_id=request_id,
             feasibility_status=body.feasibility_status,
             feasibility_notes=body.feasibility_notes,
@@ -406,6 +409,7 @@ async def complete_synthesis(
 ) -> SynthesisRequestResponse:
     result = await uc(
         CompleteSynthesisCommand(
+            workspace_id=auth.workspace_id,
             request_id=request_id,
             actual_cost_value=body.actual_cost_value,
             actual_cost_unit=body.actual_cost_unit,
@@ -421,7 +425,7 @@ async def fulfill_synthesis_request(
     request_id: uuid.UUID, body: FulfillRequest, auth: AuthDep, uc: FulfillSynthesisRequestDep
 ) -> SynthesisRequestResponse:
     result = await uc(
-        FulfillSynthesisRequestCommand(request_id=request_id, batch_id=body.batch_id),
+        FulfillSynthesisRequestCommand(workspace_id=auth.workspace_id, request_id=request_id, batch_id=body.batch_id),
         auth=auth,
     )
     request = result_to_response(result)
@@ -433,7 +437,7 @@ async def fail_synthesis(
     request_id: uuid.UUID, body: FailRequest, auth: AuthDep, uc: FailSynthesisDep
 ) -> SynthesisRequestResponse:
     result = await uc(
-        FailSynthesisCommand(request_id=request_id, reason=body.reason),
+        FailSynthesisCommand(workspace_id=auth.workspace_id, request_id=request_id, reason=body.reason),
         auth=auth,
     )
     request = result_to_response(result)
@@ -445,7 +449,7 @@ async def cancel_synthesis_request(
     request_id: uuid.UUID, auth: AuthDep, uc: CancelSynthesisRequestDep
 ) -> SynthesisRequestResponse:
     result = await uc(
-        CancelSynthesisRequestCommand(request_id=request_id),
+        CancelSynthesisRequestCommand(workspace_id=auth.workspace_id, request_id=request_id),
         auth=auth,
     )
     request = result_to_response(result)

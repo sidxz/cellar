@@ -1,0 +1,18 @@
+{
+  "proj_kinase": {
+    "name": "Kinase Inhibitor Discovery",
+    "description": "Discovery program targeting EGFR and BRAF kinases for oncology indications. Focused on next-generation inhibitors with improved selectivity profiles."
+  },
+  "proj_antiinflam": {
+    "name": "Anti-inflammatory Program",
+    "description": "Lead optimization of selective COX-2 inhibitors with reduced cardiovascular risk. Includes ADMET profiling and in vivo efficacy studies."
+  },
+  "proj_cardio": {
+    "name": "Cardiovascular Lead Optimization",
+    "description": "Optimization of ACE2 modulators and angiotensin receptor antagonists for hypertension and heart failure indications."
+  },
+  "proj_cns": {
+    "name": "CNS Drug Discovery",
+    "description": "Collaborative program with NeuroTech Biopharma targeting 5-HT2A and related serotonin receptors for treatment of schizophrenia and mood disorders."
+  }
+}

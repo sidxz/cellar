@@ -19,9 +19,21 @@ from chem_vault.infrastructure.messaging.merge_handlers import (
 )
 
 
+class FakeUoW:
+    """Minimal UoW stub that exposes a mock session."""
+
+    def __init__(self, session: AsyncMock) -> None:
+        self.session = session
+
+
 @pytest.fixture
 def session() -> AsyncMock:
     return AsyncMock()
+
+
+@pytest.fixture
+def uow(session: AsyncMock) -> FakeUoW:
+    return FakeUoW(session)
 
 
 @pytest.fixture
@@ -37,10 +49,10 @@ def target_id() -> uuid.UUID:
 class TestBatchMergeSideEffect:
     @pytest.mark.asyncio
     async def test_updates_molecule_id(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         handler = BatchMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         session.execute.assert_awaited_once()
         args = session.execute.call_args
@@ -56,10 +68,10 @@ class TestBatchMergeSideEffect:
 class TestReadoutDataMergeSideEffect:
     @pytest.mark.asyncio
     async def test_updates_molecule_id(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         handler = ReadoutDataMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         session.execute.assert_awaited_once()
         args = session.execute.call_args
@@ -74,10 +86,10 @@ class TestReadoutDataMergeSideEffect:
 class TestDoseResponseCurveMergeSideEffect:
     @pytest.mark.asyncio
     async def test_updates_molecule_id(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         handler = DoseResponseCurveMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         session.execute.assert_awaited_once()
         args = session.execute.call_args
@@ -92,20 +104,20 @@ class TestDoseResponseCurveMergeSideEffect:
 class TestMoleculeRelationshipMergeSideEffect:
     @pytest.mark.asyncio
     async def test_executes_five_statements(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         """Should execute: 1 self-ref delete, 2 duplicate deletes, 2 updates."""
         handler = MoleculeRelationshipMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         assert session.execute.await_count == 5
 
     @pytest.mark.asyncio
     async def test_deletes_self_referential_first(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         handler = MoleculeRelationshipMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         first_call = session.execute.call_args_list[0]
         sql_text = str(first_call[0][0].text)
@@ -115,10 +127,10 @@ class TestMoleculeRelationshipMergeSideEffect:
 
     @pytest.mark.asyncio
     async def test_updates_remaining_references_last(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         handler = MoleculeRelationshipMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         calls = session.execute.call_args_list
 
@@ -134,10 +146,10 @@ class TestMoleculeRelationshipMergeSideEffect:
 
     @pytest.mark.asyncio
     async def test_all_statements_use_correct_params(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         handler = MoleculeRelationshipMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         expected_params = {"source": source_id, "target": target_id}
         for c in session.execute.call_args_list:
@@ -145,11 +157,11 @@ class TestMoleculeRelationshipMergeSideEffect:
 
     @pytest.mark.asyncio
     async def test_dedup_queries_scope_by_workspace_id(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         """Dedup DELETE USING joins must include workspace_id for tenant isolation."""
         handler = MoleculeRelationshipMergeSideEffect()
-        await handler.on_merge(session, source_id, target_id)
+        await handler.on_merge(uow, source_id, target_id)
 
         calls = session.execute.call_args_list
         # Steps 2 and 3 are the dedup deletes (indices 1, 2)
@@ -163,7 +175,7 @@ class TestRegistryIntegration:
 
     @pytest.mark.asyncio
     async def test_all_handlers_callable(
-        self, session: AsyncMock, source_id: uuid.UUID, target_id: uuid.UUID
+        self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
         from chem_vault.application.chemical_registration.merge_side_effect_registry import (
             MergeSideEffectRegistry,
@@ -175,7 +187,7 @@ class TestRegistryIntegration:
         registry.register(DoseResponseCurveMergeSideEffect())
         registry.register(MoleculeRelationshipMergeSideEffect())
 
-        await registry.execute_all(session, source_id, target_id)
+        await registry.execute_all(uow, source_id, target_id)
 
         # 1 (batch) + 1 (readout) + 1 (drc) + 5 (relationships) = 8
         assert session.execute.await_count == 8

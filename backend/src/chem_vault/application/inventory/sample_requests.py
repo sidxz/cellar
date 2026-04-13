@@ -7,17 +7,18 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.enums import RequestPriority, SampleRequestStatus
-from chem_vault.domain.inventory.repository import SampleRequestRepository
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.domain.inventory.repository import BatchRepository, SampleRepository, SampleRequestRepository
 from chem_vault.domain.inventory.sample_request import SampleRequest
 from chem_vault.domain.shared.enums import AmountUnit
 from chem_vault.application.shared.sentinel import UNSET
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import Amount
 
 
@@ -40,34 +41,40 @@ class CreateSampleRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class ApproveSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     assigned_to: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class RejectSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     reason: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class FulfillSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     sample_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class CancelSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class StartPreparingSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
 class UpdateSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
     purpose: str | object = UNSET
     priority: str | object = UNSET
@@ -82,6 +89,7 @@ class UpdateSampleRequestCommand(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class GetSampleRequestQuery(Query):
+    workspace_id: uuid.UUID
     request_id: uuid.UUID
 
 
@@ -102,16 +110,36 @@ class CreateSampleRequest:
         uow: UnitOfWork,
         repo: SampleRequestRepository,
         dispatcher: EventDispatcherProtocol,
+        molecule_repo: MoleculeRepository | None = None,
+        batch_repo: BatchRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._molecule_repo = molecule_repo
+        self._batch_repo = batch_repo
 
     async def __call__(
         self, input: CreateSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
+            # Verify molecule belongs to this workspace
+            if self._molecule_repo is not None:
+                mol = await self._molecule_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.molecule_id
+                )
+                if mol is None:
+                    return Failure(NotFoundError("Molecule", str(input.molecule_id)))
+
+            # Verify batch belongs to this workspace (if provided)
+            if input.batch_id is not None and self._batch_repo is not None:
+                batch = await self._batch_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.batch_id
+                )
+                if batch is None:
+                    return Failure(NotFoundError("Batch", str(input.batch_id)))
+
             requested_amount = Amount(
                 value=input.amount_value,
                 unit=AmountUnit(input.amount_unit),
@@ -140,10 +168,11 @@ class GetSampleRequest:
         self, input: GetSampleRequestQuery, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             return Success(request)
 
 
@@ -155,7 +184,8 @@ class ListSampleRequests:
     async def __call__(
         self, input: ListSampleRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SampleRequest], DomainError]:
-        require_same_workspace(auth, input.workspace_id)
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required"))
         async with self._uow:
             requests = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status
@@ -179,10 +209,11 @@ class ApproveSampleRequest:
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.approve(assigned_to=input.assigned_to)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -206,10 +237,11 @@ class RejectSampleRequest:
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.reject(reason=input.reason)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -223,20 +255,32 @@ class FulfillSampleRequest:
         uow: UnitOfWork,
         repo: SampleRequestRepository,
         dispatcher: EventDispatcherProtocol,
+        sample_repo: SampleRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._sample_repo = sample_repo
 
     async def __call__(
         self, input: FulfillSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
+
+            # Verify sample belongs to this workspace
+            if self._sample_repo is not None:
+                sample = await self._sample_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.sample_id
+                )
+                if sample is None:
+                    return Failure(NotFoundError("Sample", str(input.sample_id)))
+
             request.fulfill(sample_id=input.sample_id)
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -260,10 +304,11 @@ class CancelSampleRequest:
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.cancel()
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -287,10 +332,11 @@ class StartPreparingSampleRequest:
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
             request.start_preparing()
             await self._repo.save(request)
             events = await self._uow.commit()
@@ -314,10 +360,11 @@ class UpdateSampleRequest:
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
         async with self._uow:
-            request = await self._repo.find_by_id(input.request_id)
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
-            require_same_workspace(auth, request.workspace_id)
 
             if request.status != SampleRequestStatus.SUBMITTED:
                 return Failure(ValidationError("Can only update submitted sample requests"))

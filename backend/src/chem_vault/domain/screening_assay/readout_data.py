@@ -32,6 +32,7 @@ class ReadoutData(Entity):
         value: QualifiedValue | None = None,
         value_text: str | None = None,
         is_outlier: bool = False,
+        is_computed: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -46,3 +47,4 @@ class ReadoutData(Entity):
         self.value = value
         self.value_text = value_text
         self.is_outlier = is_outlier
+        self.is_computed = is_computed

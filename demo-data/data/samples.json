@@ -1,0 +1,30 @@
+{
+  "sample_imatinib_01": {"batch_ref": "batch_imatinib_01", "barcode": "SMP-IMAT-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_imatinib_02": {"batch_ref": "batch_imatinib_01", "barcode": "SMP-IMAT-002", "container_type": "tube", "amount_value": 5.0, "amount_unit": "mg", "concentration_value": 10.0, "concentration_unit": "mM", "solvent": "DMSO", "location_ref": "loc_box_r001"},
+  "sample_gefitinib_01": {"batch_ref": "batch_gefitinib_01", "barcode": "SMP-GEF-001", "container_type": "vial", "amount_value": 25.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_erlotinib_01": {"batch_ref": "batch_erlotinib_01", "barcode": "SMP-ERL-001", "container_type": "vial", "amount_value": 30.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_sorafenib_01": {"batch_ref": "batch_sorafenib_01", "barcode": "SMP-SOR-001", "container_type": "vial", "amount_value": 20.0, "amount_unit": "mg", "location_ref": "loc_box_a002"},
+  "sample_vemurafenib_01": {"batch_ref": "batch_vemurafenib_01", "barcode": "SMP-VEM-001", "container_type": "vial", "amount_value": 25.0, "amount_unit": "mg", "location_ref": "loc_box_a002"},
+  "sample_dabrafenib_01": {"batch_ref": "batch_dabrafenib_01", "barcode": "SMP-DAB-001", "container_type": "vial", "amount_value": 30.0, "amount_unit": "mg", "location_ref": "loc_box_a002"},
+  "sample_osimertinib_01": {"batch_ref": "batch_osimertinib_01", "barcode": "SMP-OSI-001", "container_type": "vial", "amount_value": 20.0, "amount_unit": "mg", "location_ref": "loc_box_a002"},
+  "sample_lapatinib_01": {"batch_ref": "batch_lapatinib_01", "barcode": "SMP-LAP-001", "container_type": "vial", "amount_value": 25.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+  "sample_dasatinib_01": {"batch_ref": "batch_dasatinib_01", "barcode": "SMP-DAS-001", "container_type": "vial", "amount_value": 25.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+  "sample_afatinib_01": {"batch_ref": "batch_afatinib_01", "barcode": "SMP-AFA-001", "container_type": "tube", "amount_value": 5.0, "amount_unit": "mg", "concentration_value": 10.0, "concentration_unit": "mM", "solvent": "DMSO", "location_ref": "loc_box_r001"},
+
+  "sample_celecoxib_01": {"batch_ref": "batch_celecoxib_01", "barcode": "SMP-CEL-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_indomethacin_01": {"batch_ref": "batch_indomethacin_01", "barcode": "SMP-IND-001", "container_type": "vial", "amount_value": 100.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+  "sample_naproxen_01": {"batch_ref": "batch_naproxen_01", "barcode": "SMP-NAP-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+  "sample_ibuprofen_01": {"batch_ref": "batch_ibuprofen_01", "barcode": "SMP-IBU-001", "container_type": "vial", "amount_value": 100.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+  "sample_diclofenac_01": {"batch_ref": "batch_diclofenac_01", "barcode": "SMP-DIC-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+  "sample_aspirin_01": {"batch_ref": "batch_aspirin_01", "barcode": "SMP-ASP-001", "container_type": "vial", "amount_value": 200.0, "amount_unit": "mg", "location_ref": "loc_box_b001"},
+
+  "sample_risperidone_01": {"batch_ref": "batch_risperidone_01", "barcode": "SMP-RIS-001", "container_type": "vial", "amount_value": 10.0, "amount_unit": "mg", "location_ref": "loc_box_r001"},
+  "sample_fluoxetine_01": {"batch_ref": "batch_fluoxetine_01", "barcode": "SMP-FLX-001", "container_type": "vial", "amount_value": 20.0, "amount_unit": "mg", "location_ref": "loc_box_r001"},
+  "sample_donepezil_01": {"batch_ref": "batch_donepezil_01", "barcode": "SMP-DON-001", "container_type": "vial", "amount_value": 10.0, "amount_unit": "mg", "location_ref": "loc_box_r001"},
+
+  "sample_losartan_01": {"batch_ref": "batch_losartan_01", "barcode": "SMP-LOS-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_amlodipine_01": {"batch_ref": "batch_amlodipine_01", "barcode": "SMP-AML-001", "container_type": "vial", "amount_value": 20.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_atorvastatin_01": {"batch_ref": "batch_atorvastatin_01", "barcode": "SMP-ATV-001", "container_type": "vial", "amount_value": 10.0, "amount_unit": "mg", "location_ref": "loc_box_a001"},
+  "sample_metoprolol_01": {"batch_ref": "batch_metoprolol_01", "barcode": "SMP-MET-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_a002"},
+  "sample_ciprofloxacin_01": {"batch_ref": "batch_ciprofloxacin_01", "barcode": "SMP-CIP-001", "container_type": "vial", "amount_value": 50.0, "amount_unit": "mg", "location_ref": "loc_box_a002"}
+}

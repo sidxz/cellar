@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import type {
   Molecule,
@@ -14,6 +15,16 @@ import type {
 
 const MOLECULES_KEY = ["molecules"];
 
+const moleculeHooks = createCrudHooks<Molecule, RegisterMoleculeInput, UpdateMoleculeInput>({
+  entityName: "Compound",
+  baseUrl: "/api/v1/molecules",
+  queryKey: MOLECULES_KEY,
+});
+
+export const useMolecule = moleculeHooks.useGet;
+export const useUpdateMolecule = moleculeHooks.useUpdate;
+
+/** Custom list — unwraps PaginatedResponse and supports filters. */
 export function useMolecules(filters?: {
   molecule_type?: string;
   lifecycle_stage?: string;
@@ -32,18 +43,7 @@ export function useMolecules(filters?: {
   });
 }
 
-export function useMolecule(id: string | undefined) {
-  return useQuery({
-    queryKey: [...MOLECULES_KEY, id],
-    queryFn: () =>
-      customInstance<Molecule>({
-        url: `/api/v1/molecules/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
-
+/** Custom create — returns RegistrationResponse, not Molecule. */
 export function useRegisterMolecule() {
   const qc = useQueryClient();
   return useMutation({
@@ -60,18 +60,7 @@ export function useRegisterMolecule() {
   });
 }
 
-export function useUpdateMolecule(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpdateMoleculeInput) =>
-      customInstance<Molecule>({
-        url: `/api/v1/molecules/${id}`,
-        method: "PATCH",
-        data,
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
-  });
-}
+// --- Custom search hooks ---
 
 export function useMoleculeSearch(q: string) {
   return useQuery({
@@ -86,6 +75,23 @@ export function useMoleculeSearch(q: string) {
     },
     enabled: q.length >= 2,
   });
+}
+
+export interface SimilaritySearchResult {
+  molecule: Molecule;
+  similarity: number;
+}
+
+export type SearchResult = {
+  molecule: Molecule;
+  similarity: number | null;
+};
+
+interface StructureSearchResponse {
+  search_type: string;
+  molecules: Molecule[] | null;
+  similarity_results: SimilaritySearchResult[] | null;
+  count: number;
 }
 
 export function useSearchMolecules(params: {
@@ -103,14 +109,27 @@ export function useSearchMolecules(params: {
       }
     : undefined;
 
+  const isSimilarity = params?.search_type === "similarity";
+
   return useQuery({
     queryKey: [...MOLECULES_KEY, "search", params],
-    queryFn: () =>
-      customInstance<Molecule[]>({
+    queryFn: async () => {
+      const data = await customInstance<StructureSearchResponse>({
         url: "/api/v1/molecules/search",
         method: "GET",
         params: queryParams,
-      }),
+      });
+      if (isSimilarity && data.similarity_results) {
+        return data.similarity_results.map((r) => ({
+          molecule: r.molecule,
+          similarity: r.similarity,
+        }));
+      }
+      return (data.molecules ?? []).map((m) => ({
+        molecule: m,
+        similarity: null,
+      }));
+    },
     enabled: !!params?.query,
   });
 }
@@ -127,7 +146,7 @@ export function useMoleculeByIdentifier(identifier: string | undefined) {
   });
 }
 
-// --- Identifiers ---
+// --- Identifiers (nested under molecule) ---
 
 export function useAddIdentifier(moleculeId: string) {
   const qc = useQueryClient();
@@ -158,7 +177,7 @@ export function useRemoveIdentifier(moleculeId: string) {
   });
 }
 
-// --- Relationships ---
+// --- Relationships (nested under molecule) ---
 
 export function useRelationships(moleculeId: string | undefined) {
   return useQuery({

@@ -5,9 +5,15 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
+    CurveType,
+    HillSlopeConstraint,
+    NormalizationScope,
     ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
@@ -19,6 +25,7 @@ from chem_vault.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from chem_vault.domain.shared.ontology import OntologyTerm
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -26,6 +33,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
     ConditionDefinitionModel,
     ProtocolModel,
     ReadoutDefinitionModel,
+    protocol_projects,
 )
 
 
@@ -86,6 +94,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             protocols.append(domain)
         return protocols
 
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[Protocol]:
+        """Bulk-fetch protocols by a list of IDs within a workspace."""
+        if not ids:
+            return []
+        stmt = select(ProtocolModel).where(
+            ProtocolModel.workspace_id == workspace_id,
+            ProtocolModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a protocol by ID (only for DRAFT protocols)."""
         model = await self._session.get(ProtocolModel, id)
@@ -93,8 +114,128 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             await self._session.delete(model)
 
     # ------------------------------------------------------------------
+    # Project association methods
+    # ------------------------------------------------------------------
+
+    async def add_to_project(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Link a protocol to a project (idempotent via ON CONFLICT DO NOTHING).
+
+        Defense-in-depth: only inserts if BOTH the protocol AND the project
+        belong to the workspace.
+        """
+        from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+            ProjectModel,
+        )
+
+        # Verify protocol belongs to workspace
+        ownership_stmt = select(ProtocolModel.id).where(
+            ProtocolModel.id == protocol_id,
+            ProtocolModel.workspace_id == workspace_id,
+        )
+        ownership_result = await self._session.execute(ownership_stmt)
+        if ownership_result.scalar_one_or_none() is None:
+            return
+
+        # Verify project belongs to workspace
+        project_stmt = select(ProjectModel.id).where(
+            ProjectModel.id == project_id,
+            ProjectModel.workspace_id == workspace_id,
+        )
+        project_result = await self._session.execute(project_stmt)
+        if project_result.scalar_one_or_none() is None:
+            return
+
+        stmt = (
+            pg_insert(protocol_projects)
+            .values(protocol_id=protocol_id, project_id=project_id)
+            .on_conflict_do_nothing()
+        )
+        await self._session.execute(stmt)
+
+    async def remove_from_project(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Unlink a protocol from a project.
+
+        Defense-in-depth: only deletes if the protocol belongs to the workspace.
+        """
+        stmt = protocol_projects.delete().where(
+            protocol_projects.c.protocol_id == protocol_id,
+            protocol_projects.c.project_id == project_id,
+            protocol_projects.c.protocol_id.in_(
+                select(ProtocolModel.id).where(
+                    ProtocolModel.workspace_id == workspace_id
+                )
+            ),
+        )
+        await self._session.execute(stmt)
+
+    async def find_by_project(
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+    ) -> list[Protocol]:
+        """Return all protocols linked to a project, newest first."""
+        subq = select(protocol_projects.c.protocol_id).where(
+            protocol_projects.c.project_id == project_id
+        )
+        stmt = (
+            select(ProtocolModel)
+            .where(
+                ProtocolModel.workspace_id == workspace_id,
+                ProtocolModel.id.in_(subq),
+            )
+            .order_by(ProtocolModel.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        protocols = []
+        for model in result.scalars().all():
+            domain = self._to_domain(model)
+            self._uow.track(domain)
+            protocols.append(domain)
+        return protocols
+
+    async def find_project_ids(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return all project IDs linked to a given protocol, scoped to workspace."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+            ProjectModel,
+        )
+
+        stmt = (
+            select(protocol_projects.c.project_id)
+            .join(ProjectModel, protocol_projects.c.project_id == ProjectModel.id)
+            .where(
+                protocol_projects.c.protocol_id == protocol_id,
+                ProjectModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _reconstruct_dose_response_config(
+        data: dict | None,
+    ) -> DoseResponseConfig | None:
+        if data is None:
+            return None
+        return DoseResponseConfig(
+            curve_type=CurveType(data["curve_type"]),
+            x_readout_name=data["x_readout_name"],
+            y_readout_name=data["y_readout_name"],
+            hill_slope_constraint=HillSlopeConstraint(
+                data.get("hill_slope_constraint", "unconstrained")
+            ),
+            activity_threshold=data.get("activity_threshold"),
+            normalization_scope=NormalizationScope(
+                data.get("normalization_scope", "per_plate")
+            ),
+            top_constraint=data.get("top_constraint"),
+            bottom_constraint=data.get("bottom_constraint"),
+        )
 
     def _to_domain(self, model: ProtocolModel) -> Protocol:
         readout_defs = [
@@ -110,6 +251,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 is_calculated=rd.is_calculated,
                 calculation_formula=rd.calculation_formula,
                 display_order=rd.display_order,
+                pick_list_values=rd.pick_list_values,
+                dose_response_config=self._reconstruct_dose_response_config(
+                    rd.dose_response_config
+                ),
                 created_at=rd.created_at,
                 updated_at=rd.updated_at,
             )
@@ -130,6 +275,30 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             for cd in model.condition_definitions
         ]
 
+        # Reconstruct control_layouts: DB stores {format_str: uuid_str}
+        control_layouts = None
+        if model.control_layouts:
+            control_layouts = {
+                k: uuid.UUID(v) if isinstance(v, str) else v
+                for k, v in model.control_layouts.items()
+            }
+
+        # Reconstruct ontology_annotations: DB stores {slot: [{term_id, label, ...}]}
+        ontology_annotations = None
+        if model.ontology_annotations:
+            ontology_annotations = {
+                slot: [
+                    OntologyTerm(
+                        term_id=t["term_id"],
+                        label=t["label"],
+                        ontology_source=t["ontology_source"],
+                        uri=t.get("uri"),
+                    )
+                    for t in terms
+                ]
+                for slot, terms in model.ontology_annotations.items()
+            }
+
         return Protocol(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -144,10 +313,42 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             created_by=model.created_by,
             readout_definitions=readout_defs,
             condition_definitions=condition_defs,
+            control_layouts=control_layouts,
+            ontology_annotations=ontology_annotations,
+            recommended_hit_criteria=[
+                HitCriterion.from_dict(c) for c in (model.recommended_hit_criteria or [])
+            ] or None,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
         )
+
+    @staticmethod
+    def _serialize_control_layouts(
+        layouts: dict[str, uuid.UUID] | None,
+    ) -> dict[str, str] | None:
+        if not layouts:
+            return None
+        return {k: str(v) for k, v in layouts.items()}
+
+    @staticmethod
+    def _serialize_ontology_annotations(
+        annotations: dict[str, list[OntologyTerm]] | None,
+    ) -> dict | None:
+        if not annotations:
+            return None
+        return {
+            slot: [
+                {
+                    "term_id": t.term_id,
+                    "label": t.label,
+                    "ontology_source": t.ontology_source,
+                    "uri": t.uri,
+                }
+                for t in terms
+            ]
+            for slot, terms in annotations.items()
+        }
 
     def _to_model(self, aggregate: Protocol) -> ProtocolModel:
         model = ProtocolModel(
@@ -163,6 +364,11 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             status=aggregate.status.value,
             created_by=aggregate.created_by,
             version=aggregate.version,
+            control_layouts=self._serialize_control_layouts(aggregate.control_layouts),
+            ontology_annotations=self._serialize_ontology_annotations(aggregate.ontology_annotations),
+            recommended_hit_criteria=[c.to_dict() for c in aggregate.recommended_hit_criteria]
+            if aggregate.recommended_hit_criteria
+            else None,
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -181,6 +387,13 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.protocol_version = aggregate.protocol_version
         model.parent_protocol_id = aggregate.parent_protocol_id
         model.status = aggregate.status.value
+        model.control_layouts = self._serialize_control_layouts(aggregate.control_layouts)
+        model.ontology_annotations = self._serialize_ontology_annotations(aggregate.ontology_annotations)
+        model.recommended_hit_criteria = (
+            [c.to_dict() for c in aggregate.recommended_hit_criteria]
+            if aggregate.recommended_hit_criteria
+            else None
+        )
 
         # Replace owned entity collections
         model.readout_definitions = [
@@ -195,7 +408,27 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _serialize_dose_response_config(
+        config: DoseResponseConfig | None,
+    ) -> dict | None:
+        if config is None:
+            return None
+        from dataclasses import asdict
+        return asdict(config)
+
+    @staticmethod
     def _readout_def_to_model(rd: ReadoutDefinition) -> ReadoutDefinitionModel:
+        dose_response_dict = None
+        if rd.dose_response_config is not None:
+            from dataclasses import asdict
+
+            raw = asdict(rd.dose_response_config)
+            # Convert enums to their string values for JSON serialization
+            raw["curve_type"] = rd.dose_response_config.curve_type.value
+            raw["hill_slope_constraint"] = rd.dose_response_config.hill_slope_constraint.value
+            raw["normalization_scope"] = rd.dose_response_config.normalization_scope.value
+            dose_response_dict = raw
+
         return ReadoutDefinitionModel(
             id=rd.id,
             protocol_id=rd.protocol_id,
@@ -208,6 +441,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             is_calculated=rd.is_calculated,
             calculation_formula=rd.calculation_formula,
             display_order=rd.display_order,
+            pick_list_values=rd.pick_list_values,
+            dose_response_config=dose_response_dict,
         )
 
     @staticmethod

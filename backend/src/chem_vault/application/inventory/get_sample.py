@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_same_workspace
+from chem_vault.application.auth import AuthContext
+from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import SampleRepository
 from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
+
+
+@dataclass(frozen=True, kw_only=True)
+class GetSampleQuery(Query):
+    workspace_id: uuid.UUID
+    sample_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListSamplesByBatchQuery(Query):
+    workspace_id: uuid.UUID
+    batch_id: uuid.UUID
 
 
 class GetSample:
@@ -19,13 +33,14 @@ class GetSample:
         self._repo = repo
 
     async def __call__(
-        self, sample_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: GetSampleQuery, auth: AuthContext | None = None
     ) -> Result[Sample, DomainError]:
         async with self._uow:
-            sample = await self._repo.find_by_id(sample_id)
+            sample = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.sample_id
+            )
             if sample is None:
-                return Failure(NotFoundError("Sample"))
-            require_same_workspace(auth, sample.workspace_id)
+                return Failure(NotFoundError("Sample", str(input.sample_id)))
             return Success(sample)
 
 
@@ -36,13 +51,11 @@ class ListSamplesByBatch:
 
     async def __call__(
         self,
-        batch_id: uuid.UUID,
+        input: ListSamplesByBatchQuery,
         auth: AuthContext | None = None,
     ) -> Result[list[Sample], DomainError]:
-        if auth is None:
-            return Failure(NotFoundError("Sample"))
         async with self._uow:
             samples = await self._repo.find_by_batch(
-                auth.workspace_id, batch_id
+                input.workspace_id, input.batch_id
             )
             return Success(samples)

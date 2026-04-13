@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from chem_vault.domain.inventory.enums import StorageLocationType
 from chem_vault.domain.inventory.storage_location import StorageLocation
@@ -13,6 +13,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
+    SampleModel,
     StorageLocationModel,
 )
 
@@ -31,7 +32,7 @@ class SQLAlchemyStorageLocationRepository(
             .order_by(StorageLocationModel.name)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_children(
         self, workspace_id: uuid.UUID, parent_id: uuid.UUID
@@ -45,7 +46,57 @@ class SQLAlchemyStorageLocationRepository(
             .order_by(StorageLocationModel.name)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
+    async def find_by_workspace_with_counts(
+        self, workspace_id: uuid.UUID
+    ) -> list[dict]:
+        """Return all storage locations with available-sample counts."""
+        # Subquery: count available samples per location
+        sample_counts = (
+            select(
+                SampleModel.location_id,
+                func.count().label("sample_count"),
+            )
+            .where(
+                SampleModel.workspace_id == workspace_id,
+                SampleModel.status == "available",
+            )
+            .group_by(SampleModel.location_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                StorageLocationModel,
+                func.coalesce(sample_counts.c.sample_count, 0).label("sample_count"),
+            )
+            .outerjoin(
+                sample_counts,
+                StorageLocationModel.id == sample_counts.c.location_id,
+            )
+            .where(StorageLocationModel.workspace_id == workspace_id)
+            .order_by(StorageLocationModel.name)
+        )
+        result = await self._session.execute(stmt)
+        rows: list[dict] = []
+        for loc_model, count in result.all():
+            rows.append(
+                {
+                    "id": loc_model.id,
+                    "workspace_id": loc_model.workspace_id,
+                    "name": loc_model.name,
+                    "type": loc_model.type,
+                    "parent_id": loc_model.parent_id,
+                    "barcode": loc_model.barcode,
+                    "temperature": loc_model.temperature,
+                    "rows": loc_model.rows,
+                    "columns": loc_model.columns,
+                    "capacity": loc_model.capacity,
+                    "sample_count": count,
+                }
+            )
+        return rows
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(StorageLocationModel).where(

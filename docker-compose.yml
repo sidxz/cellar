@@ -74,6 +74,9 @@ services:
       STORAGE_ROOT: /data/storage
       APP_ENV: development
       LOG_LEVEL: DEBUG
+      INFISICAL_BASE_URL: http://infisical:8080
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
     ports:
       - "8000:8000"
     volumes:
@@ -88,7 +91,41 @@ services:
     ports:
       - "3000:3000"
 
+  infisical-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: infisical
+      POSTGRES_DB: infisical
+    volumes:
+      - infisical-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  infisical:
+    image: infisical/infisical:latest
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION_URI: postgres://infisical:infisical@infisical-db:5432/infisical
+      REDIS_URL: redis://valkey:6379
+      ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY:-6f2b5e3c8a1d4f7e9b0c2d5a8e3f1b4c}
+      JWT_SIGNUP_SECRET: ${INFISICAL_JWT_SIGNUP:-dev-signup-secret-change-in-prod}
+      JWT_AUTH_SECRET: ${INFISICAL_JWT_AUTH:-dev-auth-secret-change-in-prod}
+      JWT_REFRESH_SECRET: ${INFISICAL_JWT_REFRESH:-dev-refresh-secret-change-in-prod}
+      SITE_URL: http://localhost:8089
+      AUTH_SECRET: ${INFISICAL_AUTH_SECRET:-dev-auth-secret-32-chars-minimum!}
+    ports:
+      - "8089:8080"
+
 volumes:
   pgdata:
   temporal-pgdata:
   file-storage:
+  infisical-pgdata:

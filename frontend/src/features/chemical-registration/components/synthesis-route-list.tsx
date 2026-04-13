@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { GitBranch, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -34,25 +35,6 @@ import {
   type SynthesisRouteSummary,
 } from "../types/synthesis-route";
 import { SynthesisRouteDetail } from "./synthesis-route-detail";
-
-// ---------------------------------------------------------------------------
-// Badge helpers
-// ---------------------------------------------------------------------------
-
-function routeStatusVariant(
-  s: RouteStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "preferred":
-      return "default";
-    case "validated":
-      return "secondary";
-    case "deprecated":
-      return "destructive";
-    default:
-      return "outline"; // draft
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Create Route Dialog
@@ -207,14 +189,12 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
         headerName: "Status",
         field: "status",
         width: 120,
-        cellRenderer: (params: ICellRendererParams<SynthesisRouteSummary>) => {
-          const status = params.value as RouteStatus;
-          return (
-            <Badge variant={routeStatusVariant(status)}>
-              {ROUTE_STATUS_LABELS[status] ?? status}
-            </Badge>
-          );
-        },
+        cellRenderer: (params: ICellRendererParams<SynthesisRouteSummary>) => (
+          <StatusBadge
+            status={params.value}
+            label={ROUTE_STATUS_LABELS[params.value as RouteStatus] ?? params.value}
+          />
+        ),
       },
       {
         headerName: "Steps",
@@ -252,12 +232,7 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-destructive/50 p-12 text-center">
-        <p className="text-sm text-destructive">
-          Failed to load synthesis routes.
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
-      </div>
+      <ErrorState message="Failed to load synthesis routes." details={error.message} />
     );
   }
 
@@ -286,23 +261,12 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
           height="calc(100vh - 320px)"
           onRowClick={(route) => setSelectedRouteId(route.id)}
           emptyState={
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-              <GitBranch className="h-12 w-12 text-muted-foreground/40" />
-              <h3 className="mt-4 text-lg font-semibold">
-                No synthesis routes
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Add the first synthetic pathway for this compound.
-              </p>
-              <Button
-                className="mt-4"
-                size="sm"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New Route
-              </Button>
-            </div>
+            <EmptyState
+              icon={GitBranch}
+              title="No synthesis routes"
+              description="Add the first synthetic pathway for this compound."
+              action={{ label: "New Route", onClick: () => setCreateOpen(true), icon: Plus }}
+            />
           }
         />
       </div>

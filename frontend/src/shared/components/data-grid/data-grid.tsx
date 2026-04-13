@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import {
   AllCommunityModule,
@@ -8,9 +8,12 @@ import {
   type ColDef,
   type RowClickedEvent,
   type GridReadyEvent,
+  type SelectionChangedEvent,
 } from "ag-grid-community";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { useGridPreferences } from "@/shared/hooks/use-grid-preferences";
 import { chemVaultTheme } from "./ag-grid-theme";
+import { ExportToolbar, type ExcelEnhancer } from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -27,6 +30,15 @@ export interface DataGridProps<TData = unknown>
   height?: string | number;
   /** Suppress built-in column filters. Default: false */
   suppressFilters?: boolean;
+  /** When provided, renders CSV + Excel export buttons above the grid */
+  exportFilename?: string;
+  /** Optional enhancer for Excel exports — adds images, extra sheets, etc. */
+  excelEnhancer?: ExcelEnhancer;
+  /** When provided, persists column state (width, order, visibility) to localStorage. */
+  preferencesKey?: string;
+  /** Render prop for selection toolbar. Shown above grid when rows are selected.
+   *  Automatically enables rowSelection="multiple" on the grid. */
+  selectionToolbar?: (selectedRows: TData[]) => ReactNode;
 }
 
 export function DataGrid<TData = unknown>({
@@ -37,8 +49,16 @@ export function DataGrid<TData = unknown>({
   onRowClick,
   height = "400px",
   suppressFilters = false,
+  exportFilename,
+  excelEnhancer,
+  preferencesKey,
+  selectionToolbar,
   ...rest
 }: DataGridProps<TData>) {
+  const gridRef = useRef<AgGridReact<TData>>(null);
+  const [selectedRows, setSelectedRows] = useState<TData[]>([]);
+  const prefs = useGridPreferences(preferencesKey ?? "__unused__");
+  const hasPrefs = !!preferencesKey;
   const defaultColDef = useMemo<ColDef<TData>>(
     () => ({
       sortable: true,
@@ -61,9 +81,23 @@ export function DataGrid<TData = unknown>({
     [onRowClick]
   );
 
-  const handleGridReady = useCallback((event: GridReadyEvent<TData>) => {
-    event.api.sizeColumnsToFit();
-  }, []);
+  const handleGridReady = useCallback(
+    (event: GridReadyEvent<TData>) => {
+      if (hasPrefs) {
+        prefs.applyState(gridRef);
+      } else {
+        event.api.sizeColumnsToFit();
+      }
+    },
+    [hasPrefs, prefs, gridRef]
+  );
+
+  const handleSelectionChanged = useCallback(
+    (event: SelectionChangedEvent<TData>) => {
+      setSelectedRows(event.api.getSelectedRows());
+    },
+    []
+  );
 
   if (loading) {
     return (
@@ -80,19 +114,37 @@ export function DataGrid<TData = unknown>({
   }
 
   return (
-    <div style={{ height, width: "100%" }}>
-      <AgGridReact<TData>
-        theme={chemVaultTheme}
-        rowData={rowData ?? []}
-        columnDefs={columnDefs}
-        defaultColDef={defaultColDef}
-        onRowClicked={onRowClick ? handleRowClicked : undefined}
-        onGridReady={handleGridReady}
-        rowClass={onRowClick ? "cursor-pointer" : undefined}
-        suppressCellFocus
-        animateRows={false}
-        {...rest}
-      />
+    <div>
+      {exportFilename && rowData?.length ? (
+        <div className="mb-2 flex justify-end">
+          <ExportToolbar gridRef={gridRef} filename={exportFilename} excelEnhancer={excelEnhancer} />
+        </div>
+      ) : null}
+      {selectionToolbar && selectedRows.length > 0 ? (
+        <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+          {selectionToolbar(selectedRows)}
+        </div>
+      ) : null}
+      <div style={{ height, width: "100%" }}>
+        <AgGridReact<TData>
+          ref={gridRef}
+          theme={chemVaultTheme}
+          rowData={rowData ?? []}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onRowClicked={onRowClick ? handleRowClicked : undefined}
+          onGridReady={handleGridReady}
+          onSelectionChanged={selectionToolbar ? handleSelectionChanged : undefined}
+          rowSelection={selectionToolbar ? "multiple" : undefined}
+          onColumnResized={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
+          onColumnMoved={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
+          onColumnVisible={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
+          rowClass={onRowClick ? "cursor-pointer" : undefined}
+          suppressCellFocus
+          animateRows={false}
+          {...rest}
+        />
+      </div>
     </div>
   );
 }

@@ -4,34 +4,19 @@ import { useMemo } from "react";
 import { FlaskConical } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { useRunsByProtocol } from "../hooks/use-runs";
 import {
   PLATE_FORMAT_LABELS,
   type PlateFormat,
   type Run,
-  type RunStatus,
 } from "../types";
 
 interface RunListProps {
   protocolId: string;
   onSelect?: (runId: string) => void;
-}
-
-function statusBadgeVariant(
-  status: RunStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "approved":
-      return "default";
-    case "completed":
-    case "in_progress":
-      return "secondary";
-    case "rejected":
-      return "destructive";
-    case "draft":
-      return "outline";
-  }
 }
 
 export function RunList({ protocolId, onSelect }: RunListProps) {
@@ -61,9 +46,7 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
         field: "status",
         width: 110,
         cellRenderer: (params: ICellRendererParams<Run>) => (
-          <Badge variant={statusBadgeVariant(params.value as RunStatus)}>
-            {params.value}
-          </Badge>
+          <StatusBadge status={params.value} />
         ),
       },
       {
@@ -89,13 +72,11 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
       suppressFilters
       onRowClick={onSelect ? (run) => onSelect(run.id) : undefined}
       emptyState={
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <FlaskConical className="h-12 w-12 text-muted-foreground/40" />
-          <h3 className="mt-4 text-lg font-semibold">No runs</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create a run to start collecting screening data.
-          </p>
-        </div>
+        <EmptyState
+          icon={FlaskConical}
+          title="No runs"
+          description="Create a run to start collecting screening data."
+        />
       }
     />
   );

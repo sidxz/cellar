@@ -55,6 +55,8 @@ class SQLAlchemyUserPreferencesRepository:
             )
             self._session.add(model)
 
+        # This repo uses its own dedicated session (not shared with UoW),
+        # so commit() is safe — it only affects this repo's transaction.
         await self._session.commit()
         await self._session.refresh(model)
         return self._to_domain(model)
@@ -68,13 +70,17 @@ class SQLAlchemyUserPreferencesRepository:
             user_id=model.user_id,
             theme=prefs.get("theme", "dark"),
             sidebar_collapsed=prefs.get("sidebar_collapsed", False),
+            default_search_columns=prefs.get("default_search_columns"),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
 
     @staticmethod
     def _to_json(preferences: UserPreferences) -> dict:
-        return {
+        data: dict = {
             "theme": preferences.theme,
             "sidebar_collapsed": preferences.sidebar_collapsed,
         }
+        if preferences.default_search_columns is not None:
+            data["default_search_columns"] = preferences.default_search_columns
+        return data

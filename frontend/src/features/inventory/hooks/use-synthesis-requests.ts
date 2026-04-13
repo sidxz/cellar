@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type {
   CreateSynthesisRequestInput,
   SynthesisRequest,
@@ -11,6 +12,13 @@ import type {
 
 const SYNTHESIS_REQUESTS_KEY = ["synthesis-requests"];
 
+const synthHooks = createCrudHooks<SynthesisRequest, CreateSynthesisRequestInput, Record<string, unknown>>({
+  entityName: "Synthesis request",
+  baseUrl: "/api/v1/synthesis-requests",
+  queryKey: SYNTHESIS_REQUESTS_KEY,
+});
+
+/** Custom list — returns SynthesisRequestSummary[], supports status/molecule_id params. */
 export function useSynthesisRequests(params?: {
   status?: string;
   molecule_id?: string;
@@ -26,33 +34,11 @@ export function useSynthesisRequests(params?: {
   });
 }
 
-export function useSynthesisRequest(id: string | undefined) {
-  return useQuery({
-    queryKey: [...SYNTHESIS_REQUESTS_KEY, id],
-    queryFn: () =>
-      customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
+export const useSynthesisRequest = synthHooks.useGet;
+export const useCreateSynthesisRequest = synthHooks.useCreate;
+export const useDeleteSynthesisRequest = synthHooks.useDelete;
 
-export function useCreateSynthesisRequest() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateSynthesisRequestInput) =>
-      customInstance<SynthesisRequest>({
-        url: "/api/v1/synthesis-requests",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
-      showSuccess("Synthesis request created");
-    },
-  });
-}
+// --- Simple state transitions (callers pass plain id string) ---
 
 export function useSubmitSynthesisRequest() {
   const qc = useQueryClient();
@@ -83,6 +69,23 @@ export function useApproveSynthesisRequest() {
     },
   });
 }
+
+export function useCancelSynthesisRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      customInstance<SynthesisRequest>({
+        url: `/api/v1/synthesis-requests/${id}/cancel`,
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
+      showSuccess("Synthesis request cancelled");
+    },
+  });
+}
+
+// --- Complex state transitions (callers pass { id, ...payload }) ---
 
 export function useRejectSynthesisRequest() {
   const qc = useQueryClient();
@@ -228,21 +231,6 @@ export function useFailSynthesis() {
   });
 }
 
-export function useCancelSynthesisRequest() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/cancel`,
-        method: "POST",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
-      showSuccess("Synthesis request cancelled");
-    },
-  });
-}
-
 export function useUpdateSynthesisRequest() {
   const qc = useQueryClient();
   return useMutation({
@@ -265,21 +253,6 @@ export function useUpdateSynthesisRequest() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
       showSuccess("Synthesis request updated");
-    },
-  });
-}
-
-export function useDeleteSynthesisRequest() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `/api/v1/synthesis-requests/${id}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SYNTHESIS_REQUESTS_KEY });
-      showSuccess("Synthesis request deleted");
     },
   });
 }

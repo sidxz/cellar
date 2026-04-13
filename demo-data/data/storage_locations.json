@@ -1,0 +1,91 @@
+{
+  "loc_site": {
+    "name": "Boston Research Campus",
+    "type": "site",
+    "parent_ref": null
+  },
+  "loc_bldg_a": {
+    "name": "Building A - Chemistry",
+    "type": "building",
+    "parent_ref": "loc_site"
+  },
+  "loc_bldg_b": {
+    "name": "Building B - Biology",
+    "type": "building",
+    "parent_ref": "loc_site"
+  },
+  "loc_room_101": {
+    "name": "Room 101 - Compound Storage",
+    "type": "room",
+    "parent_ref": "loc_bldg_a"
+  },
+  "loc_room_102": {
+    "name": "Room 102 - Sample Prep",
+    "type": "room",
+    "parent_ref": "loc_bldg_a"
+  },
+  "loc_room_201": {
+    "name": "Room 201 - Screening Lab",
+    "type": "room",
+    "parent_ref": "loc_bldg_b"
+  },
+  "loc_freezer_01": {
+    "name": "Freezer F-01 (-20C)",
+    "type": "freezer",
+    "parent_ref": "loc_room_101",
+    "temperature": "-20"
+  },
+  "loc_fridge_01": {
+    "name": "Refrigerator R-01 (4C)",
+    "type": "refrigerator",
+    "parent_ref": "loc_room_101",
+    "temperature": "4"
+  },
+  "loc_shelf_f01_1": {
+    "name": "Shelf 1",
+    "type": "shelf",
+    "parent_ref": "loc_freezer_01"
+  },
+  "loc_shelf_f01_2": {
+    "name": "Shelf 2",
+    "type": "shelf",
+    "parent_ref": "loc_freezer_01"
+  },
+  "loc_shelf_r01_1": {
+    "name": "Shelf 1",
+    "type": "shelf",
+    "parent_ref": "loc_fridge_01"
+  },
+  "loc_box_a001": {
+    "name": "Box A-001",
+    "type": "box",
+    "parent_ref": "loc_shelf_f01_1",
+    "barcode": "BOX-A-001",
+    "rows": 9,
+    "columns": 9
+  },
+  "loc_box_a002": {
+    "name": "Box A-002",
+    "type": "box",
+    "parent_ref": "loc_shelf_f01_1",
+    "barcode": "BOX-A-002",
+    "rows": 9,
+    "columns": 9
+  },
+  "loc_box_b001": {
+    "name": "Box B-001",
+    "type": "box",
+    "parent_ref": "loc_shelf_f01_2",
+    "barcode": "BOX-B-001",
+    "rows": 9,
+    "columns": 9
+  },
+  "loc_box_r001": {
+    "name": "Box R-001",
+    "type": "box",
+    "parent_ref": "loc_shelf_r01_1",
+    "barcode": "BOX-R-001",
+    "rows": 9,
+    "columns": 9
+  }
+}

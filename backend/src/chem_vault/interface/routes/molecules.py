@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from lagom import Container
@@ -25,19 +25,26 @@ from chem_vault.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
 )
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
+from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from chem_vault.interface.routes.batches import BatchResponse
 from chem_vault.application.chemical_registration.search_molecules import SearchMoleculesQuery
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from chem_vault.application.research_organization.manage_molecule_projects import (
+    ListMoleculeProjectsQuery,
+)
 from chem_vault.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
     GetMoleculeByIdentifierDep,
     GetMoleculeDep,
+    ListCollectionsForMoleculeDep,
     ListIdentifiersDep,
+    ListMoleculeProjectsDep,
     ListMoleculesDep,
+    MoleculeActivityServiceDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
     SearchMoleculesDep,
@@ -174,11 +181,77 @@ class MoleculeResponse(BaseModel):
         )
 
 
+class SimilaritySearchResult(BaseModel):
+    molecule: MoleculeResponse
+    similarity: float
+
+    @classmethod
+    def from_domain(cls, molecule: Molecule, similarity: float) -> SimilaritySearchResult:
+        return cls(
+            molecule=MoleculeResponse.from_domain(molecule),
+            similarity=round(similarity, 4),
+        )
+
+
+class ActivityValueResponse(BaseModel):
+    value: float | None = None
+    qualifier: str | None = None
+    unit: str | None = None
+    source: str
+    curve_type: str | None = None
+    r_squared: float | None = None
+    data_point_count: int = 1
+
+
+class ProtocolActivityResponse(BaseModel):
+    protocol_id: uuid.UUID
+    protocol_name: str
+    protocol_type: str
+    readouts: list[ActivityValueResponse] = []
+    best_curves: list[dict[str, Any]] = []
+
+
+class ActivitySummaryResponse(BaseModel):
+    molecule_id: uuid.UUID
+    protocols: list[ProtocolActivityResponse] = []
+
+    @classmethod
+    def from_domain(cls, summary) -> ActivitySummaryResponse:
+        return cls(
+            molecule_id=summary.molecule_id,
+            protocols=[
+                ProtocolActivityResponse(
+                    protocol_id=p.protocol_id,
+                    protocol_name=p.protocol_name,
+                    protocol_type=p.protocol_type,
+                    best_curves=p.best_curves,
+                )
+                for p in summary.protocols
+            ],
+        )
+
+
+class StructureSearchResponse(BaseModel):
+    """Wrapper for structure search results (exact, substructure, or similarity)."""
+
+    search_type: str
+    molecules: list[MoleculeResponse] | None = None
+    similarity_results: list[SimilaritySearchResult] | None = None
+    count: int
+
+
+class DetectedSaltResponse(BaseModel):
+    salt_smiles: str
+    salt_fragment_mw: float
+    stoichiometry: int
+
+
 class RegistrationResponse(BaseModel):
     molecule: MoleculeResponse
     is_new: bool
     qc_warnings: list[str]
     batch: BatchResponse | None = None
+    detected_salt: DetectedSaltResponse | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +270,11 @@ class BatchBody(BaseModel):
     source: str
     amount_value: float
     amount_unit: str
-    salt_form: str | None = None
+    salt_entry_id: uuid.UUID | None = None
+    salt_name: str | None = None
+    salt_smiles: str | None = None
+    salt_stoichiometry: int = 1
+    formula_weight: float | None = None
     purity: float | None = None
     concentration_value: float | None = None
     concentration_unit: str | None = None
@@ -246,12 +323,27 @@ def _get_create_batch(c: Annotated[Container, Depends(get_container)]) -> Create
     return c[CreateBatch]
 
 
+def _get_salt_matcher_uow(
+    c: Annotated[Container, Depends(get_container)],
+) -> tuple[SaltMatcher, Any]:
+    """Return (SaltMatcher, uow) — caller must use ``async with uow:``."""
+    from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
+        SQLAlchemySaltEntryRepository,
+    )
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    uow = AsyncUnitOfWork(c[async_sessionmaker])
+    return SaltMatcher(SQLAlchemySaltEntryRepository(uow)), uow
+
+
 @router.post("", response_model=RegistrationResponse, status_code=201)
 async def register_molecule(
     body: RegisterMoleculeBody,
     auth: AuthDep,
     use_case: RegisterMoleculeDep,
     create_batch_uc: Annotated[CreateBatch, Depends(_get_create_batch)],
+    salt_matcher_uow: Annotated[tuple[SaltMatcher, Any], Depends(_get_salt_matcher_uow)],
 ) -> RegistrationResponse:
     command = RegisterMoleculeCommand(
         workspace_id=auth.workspace_id,
@@ -272,6 +364,35 @@ async def register_molecule(
     batch_response: BatchResponse | None = None
     if body.batch is not None:
         b = body.batch
+
+        # Auto-fill salt from detected_salt if user didn't pick one
+        salt_entry_id = b.salt_entry_id
+        salt_name = b.salt_name
+        salt_smiles = b.salt_smiles
+        salt_stoichiometry = b.salt_stoichiometry
+        formula_weight = b.formula_weight
+
+        if salt_entry_id is None and outcome.detected_salt is not None:
+            _salt_matcher, _salt_uow = salt_matcher_uow
+            async with _salt_uow:
+                matched = await _salt_matcher.match_by_smiles(
+                    auth.workspace_id, outcome.detected_salt.salt_smiles
+                )
+            if matched is not None:
+                salt_entry_id = matched.id
+                salt_name = matched.name
+                salt_smiles = matched.smiles
+                salt_stoichiometry = outcome.detected_salt.stoichiometry
+                mol_mw = (
+                    outcome.molecule.descriptors.molecular_weight
+                    if outcome.molecule.descriptors
+                    else None
+                )
+                if mol_mw is not None:
+                    formula_weight = compute_formula_weight(
+                        mol_mw, matched.molecular_weight, salt_stoichiometry
+                    )
+
         batch_cmd = CreateBatchCommand(
             workspace_id=auth.workspace_id,
             molecule_id=outcome.molecule.id,
@@ -279,7 +400,11 @@ async def register_molecule(
             chemist=auth.user_id,
             amount_value=b.amount_value,
             amount_unit=b.amount_unit,
-            salt_form=b.salt_form,
+            salt_entry_id=salt_entry_id,
+            salt_name=salt_name,
+            salt_smiles=salt_smiles,
+            salt_stoichiometry=salt_stoichiometry,
+            formula_weight=formula_weight,
             purity=b.purity,
             concentration_value=b.concentration_value,
             concentration_unit=b.concentration_unit,
@@ -295,11 +420,20 @@ async def register_molecule(
         batch_outcome = result_to_response(await create_batch_uc(batch_cmd, auth=auth))
         batch_response = BatchResponse.from_domain(batch_outcome)
 
+    detected_salt_resp: DetectedSaltResponse | None = None
+    if outcome.detected_salt is not None:
+        detected_salt_resp = DetectedSaltResponse(
+            salt_smiles=outcome.detected_salt.salt_smiles,
+            salt_fragment_mw=outcome.detected_salt.salt_fragment_mw,
+            stoichiometry=outcome.detected_salt.stoichiometry,
+        )
+
     return RegistrationResponse(
         molecule=MoleculeResponse.from_domain(outcome.molecule),
         is_new=outcome.is_new,
         qc_warnings=outcome.qc_warnings,
         batch=batch_response,
+        detected_salt=detected_salt_resp,
     )
 
 
@@ -333,23 +467,46 @@ async def list_molecules(
     )
 
 
-@router.get("/search", response_model=list[MoleculeResponse])
+@router.get("/search", response_model=StructureSearchResponse)
 async def search_molecules(
     auth: AuthDep,
     use_case: SearchMoleculesDep,
     search_type: str,
     query: str,
     threshold: float = 0.7,
-) -> list[MoleculeResponse]:
-    """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES)."""
+    limit: int = 100,
+) -> StructureSearchResponse:
+    """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES).
+
+    Results are capped at ``limit`` (max 500, default 100).
+    """
+    capped_limit = max(1, min(limit, 500))
     q = SearchMoleculesQuery(
         workspace_id=auth.workspace_id,
         search_type=search_type,
         query=query,
         threshold=threshold,
     )
-    mols = result_to_response(await use_case(q))
-    return [MoleculeResponse.from_domain(m) for m in mols]
+    results = result_to_response(await use_case(q))
+
+    if search_type == "similarity":
+        from chem_vault.application.chemical_registration.search_molecules import SimilarityResult
+
+        items = [
+            SimilaritySearchResult.from_domain(r.molecule, r.similarity)
+            for r in results[:capped_limit]
+        ]
+        return StructureSearchResponse(
+            search_type=search_type,
+            similarity_results=items,
+            count=len(items),
+        )
+    mol_items = [MoleculeResponse.from_domain(m) for m in results[:capped_limit]]
+    return StructureSearchResponse(
+        search_type=search_type,
+        molecules=mol_items,
+        count=len(mol_items),
+    )
 
 
 @router.get("/by-identifier/{identifier}", response_model=MoleculeResponse)
@@ -397,6 +554,56 @@ async def update_molecule(
     )
     mol = result_to_response(await use_case(command, auth=auth))
     return MoleculeResponse.from_domain(mol)
+
+
+@router.get("/{molecule_id}/activity", response_model=ActivitySummaryResponse)
+async def get_molecule_activity(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    activity_service: MoleculeActivityServiceDep,
+) -> ActivitySummaryResponse:
+    """Get activity summary for a molecule across all protocols."""
+    summary = await activity_service.get_activity_summary(
+        auth.workspace_id, molecule_id
+    )
+    return ActivitySummaryResponse.from_domain(summary)
+
+
+@router.get("/{molecule_id}/plates")
+async def list_molecule_plates(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    c: Annotated[Container, Depends(get_container)],
+):
+    """List all registered plates containing batches of this molecule."""
+    from chem_vault.application.inventory.plate_read_model import PlateReadModelService
+    from chem_vault.interface.routes.registered_plates import MoleculePlateResponse
+
+    service: PlateReadModelService = c[PlateReadModelService]
+    entries = await service.find_plates_for_molecule(auth.workspace_id, molecule_id)
+    return [MoleculePlateResponse.from_entry(e) for e in entries]
+
+
+@router.get("/{molecule_id}/collections")
+async def list_molecule_collections(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListCollectionsForMoleculeDep,
+):
+    """List collections containing this molecule."""
+    from chem_vault.application.research_organization.get_collections_for_molecule import (
+        ListCollectionsForMoleculeQuery,
+    )
+    from chem_vault.interface.routes.collections import CollectionResponse
+
+    result = await use_case(
+        ListCollectionsForMoleculeQuery(
+            workspace_id=auth.workspace_id,
+            molecule_id=molecule_id,
+        )
+    )
+    collections = result_to_response(result)
+    return [CollectionResponse.from_domain(c) for c in collections]
 
 
 # ---------------------------------------------------------------------------
@@ -463,3 +670,62 @@ async def remove_identifier(
         identifier_id=identifier_id,
     )
     result_to_response(await use_case(command, auth=auth))
+
+
+@router.get("/{molecule_id}/projects", response_model=list[uuid.UUID])
+async def list_molecule_projects(
+    molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListMoleculeProjectsDep,
+) -> list[uuid.UUID]:
+    result = await use_case(
+        ListMoleculeProjectsQuery(
+            workspace_id=auth.workspace_id,
+            molecule_id=molecule_id,
+        )
+    )
+    return result_to_response(result)
+
+
+# ---------------------------------------------------------------------------
+# Batch structure depiction
+# ---------------------------------------------------------------------------
+
+
+class DepictRequest(BaseModel):
+    smiles_list: list[str]
+    width: int = 150
+    height: int = 100
+
+
+class DepictResponse(BaseModel):
+    """Maps SMILES → base64 PNG. Missing entries failed to parse."""
+    images: dict[str, str]
+
+
+@router.post("/depict", response_model=DepictResponse)
+async def depict_structures(body: DepictRequest) -> DepictResponse:
+    """Render 2D structure depictions for a batch of SMILES strings.
+
+    Returns a dict mapping each valid SMILES to a base64-encoded PNG.
+    Invalid SMILES are silently skipped.
+    """
+    import base64
+    import io
+
+    from rdkit import Chem
+    from rdkit.Chem import Draw
+
+    images: dict[str, str] = {}
+    for smiles in body.smiles_list:
+        if not smiles or smiles in images:
+            continue
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            continue
+        img = Draw.MolToImage(mol, size=(body.width, body.height))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        images[smiles] = base64.b64encode(buf.getvalue()).decode()
+
+    return DepictResponse(images=images)

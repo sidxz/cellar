@@ -61,8 +61,8 @@ class GetAuditOperation:
     async def __call__(
         self, input: GetAuditOperationQuery
     ) -> Result[AuditOperation, DomainError]:
-        operation = await self._repo.find_by_id(input.operation_id)
-        if operation is None or operation.workspace_id != input.workspace_id:
+        operation = await self._repo.find_by_id_in_workspace(input.workspace_id, input.operation_id)
+        if operation is None:
             return Failure(
                 NotFoundError("AuditOperation", str(input.operation_id))
             )

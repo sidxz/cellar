@@ -28,6 +28,7 @@ import type { StorageLocation } from "../types";
 interface CreateStorageLocationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultParentId?: string;
 }
 
 const LOCATION_TYPES = [
@@ -45,12 +46,13 @@ const LOCATION_TYPES = [
 export function CreateStorageLocationDialog({
   open,
   onOpenChange,
+  defaultParentId,
 }: CreateStorageLocationDialogProps) {
   const createMutation = useCreateStorageLocation();
   const { data: locations } = useStorageLocations();
   const [name, setName] = useState("");
-  const [type, setType] = useState("site");
-  const [parentId, setParentId] = useState<string>("");
+  const [type, setType] = useState(defaultParentId ? "shelf" : "site");
+  const [parentId, setParentId] = useState<string>(defaultParentId ?? "");
   const [temperature, setTemperature] = useState("");
   const [barcode, setBarcode] = useState("");
 

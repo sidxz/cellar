@@ -9,10 +9,12 @@ import {
   Refrigerator,
   ChevronRight,
   Pencil,
+  Plus,
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -26,10 +28,11 @@ import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   useDeleteStorageLocation,
-  useStorageLocations,
+  useStorageLocationsWithCounts,
   useUpdateStorageLocation,
 } from "../hooks/use-storage-locations";
-import type { StorageLocation, StorageLocationType } from "../types";
+import { CreateStorageLocationDialog } from "./create-storage-location-dialog";
+import type { StorageLocation, StorageLocationWithCount, StorageLocationType } from "../types";
 
 const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
   site: <MapPin className="h-4 w-4" />,
@@ -39,14 +42,14 @@ const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
   refrigerator: <Refrigerator className="h-4 w-4" />,
 };
 
-function buildTree(locations: StorageLocation[]): StorageLocation[] {
+function buildTree(locations: StorageLocationWithCount[]): StorageLocationWithCount[] {
   return locations.filter((loc) => loc.parent_id === null);
 }
 
 function getChildren(
-  locations: StorageLocation[],
+  locations: StorageLocationWithCount[],
   parentId: string
-): StorageLocation[] {
+): StorageLocationWithCount[] {
   return locations.filter((loc) => loc.parent_id === parentId);
 }
 
@@ -55,12 +58,13 @@ function LocationNode({
   allLocations,
   depth = 0,
 }: {
-  location: StorageLocation;
-  allLocations: StorageLocation[];
+  location: StorageLocationWithCount;
+  allLocations: StorageLocationWithCount[];
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const [editOpen, setEditOpen] = useState(false);
+  const [addChildOpen, setAddChildOpen] = useState(false);
   const deleteMutation = useDeleteStorageLocation();
   const children = getChildren(allLocations, location.id);
   const hasChildren = children.length > 0;
@@ -96,7 +100,27 @@ function LocationNode({
             {location.temperature}
           </span>
         )}
+        {location.rows != null && location.columns != null ? (
+          <span className="text-xs text-muted-foreground">
+            {location.sample_count}/{location.rows * location.columns}
+          </span>
+        ) : (
+          location.sample_count > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {location.sample_count} samples
+            </span>
+          )
+        )}
         <div className="hidden gap-1 group-hover:flex">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title="Add sub-location"
+            onClick={() => setAddChildOpen(true)}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -131,6 +155,11 @@ function LocationNode({
         location={location}
         open={editOpen}
         onOpenChange={setEditOpen}
+      />
+      <CreateStorageLocationDialog
+        open={addChildOpen}
+        onOpenChange={setAddChildOpen}
+        defaultParentId={location.id}
       />
     </div>
   );
@@ -204,7 +233,7 @@ function EditStorageLocationDialog({
 }
 
 export function StorageBrowser() {
-  const { data: locations, isLoading } = useStorageLocations();
+  const { data: locations, isLoading } = useStorageLocationsWithCounts();
 
   if (isLoading) {
     return (
@@ -218,13 +247,11 @@ export function StorageBrowser() {
 
   if (!locations?.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <MapPin className="h-12 w-12 text-muted-foreground/40" />
-        <h3 className="mt-4 text-lg font-semibold">No storage locations</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configure storage locations to track where samples are stored.
-        </p>
-      </div>
+      <EmptyState
+        icon={MapPin}
+        title="No storage locations"
+        description="Configure storage locations to track where samples are stored."
+      />
     );
   }
 

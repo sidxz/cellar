@@ -5,7 +5,9 @@ import { AlertTriangle } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { MoleculeName } from "@/shared/components/entity-name";
 import { useConflictDisclosures } from "../hooks/use-disclosures";
 import type { DisclosureRequest } from "../types/disclosure";
 import { ResolveConflictDialog } from "./resolve-conflict-dialog";
@@ -17,12 +19,12 @@ export function DisclosureConflictList() {
   const columnDefs = useMemo<ColDef<DisclosureRequest>[]>(
     () => [
       {
-        headerName: "Molecule ID",
+        headerName: "Compound",
         field: "molecule_id",
         flex: 1,
-        minWidth: 120,
-        cellClass: "font-mono text-xs",
-        valueFormatter: (p) => p.value?.slice(0, 8) ?? "",
+        minWidth: 160,
+        cellRenderer: (params: ICellRendererParams<DisclosureRequest>) =>
+          params.value ? <MoleculeName id={params.value} /> : "\u2014",
       },
       {
         headerName: "Disclosed SMILES",
@@ -85,13 +87,11 @@ export function DisclosureConflictList() {
         height="400px"
         suppressFilters
         emptyState={
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <AlertTriangle className="h-12 w-12 text-muted-foreground/40" />
-            <h3 className="mt-4 text-lg font-semibold">No conflicts</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              All disclosure requests have been resolved.
-            </p>
-          </div>
+          <EmptyState
+            icon={AlertTriangle}
+            title="No conflicts"
+            description="All disclosure requests have been resolved."
+          />
         }
       />
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from chem_vault.domain.chemical_registration.enums import (
     ComponentRole,
@@ -28,6 +29,7 @@ from chem_vault.domain.shared.value_objects import (
     PredictedProperties,
     RegistrationNumber,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import escape_like
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -35,6 +37,10 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mode
     MixtureComponentModel,
     MoleculeIdentifierModel,
     MoleculeModel,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    ProjectModel,
+    molecule_projects,
 )
 
 
@@ -176,6 +182,7 @@ class SQLAlchemyMoleculeRepository(
         model.registration_status = aggregate.registration_status.value
         model.synthesis_status = aggregate.synthesis_status.value
         model.lifecycle_stage = aggregate.lifecycle_stage.value
+        model.originating_org_id = aggregate.originating_org_id
         self._set_structure_fields(model, aggregate)
         self._set_optional_fields(model, aggregate)
 
@@ -260,6 +267,19 @@ class SQLAlchemyMoleculeRepository(
     # Additional query methods
     # ------------------------------------------------------------------
 
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[Molecule]:
+        """Bulk-fetch molecules by IDs, scoped to workspace."""
+        if not ids:
+            return []
+        stmt = select(MoleculeModel).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
     async def find_by_inchi_key(
         self, workspace_id: uuid.UUID, inchi_key: str
     ) -> Molecule | None:
@@ -337,6 +357,7 @@ class SQLAlchemyMoleculeRepository(
         search_term: str | None = None,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        project_ids: list[uuid.UUID] | None = None,
     ) -> list[Molecule]:
         stmt = select(MoleculeModel).where(
             MoleculeModel.workspace_id == workspace_id,
@@ -354,24 +375,55 @@ class SQLAlchemyMoleculeRepository(
         # Free-text search on name, registration_number, formula, inchi_key,
         # and external identifiers (ChEMBL, CAS, vendor IDs, etc.)
         if search_term:
-            like_pattern = f"%{search_term}%"
+            escaped = escape_like(search_term)
+            like_pattern = f"%{escaped}%"
             # Subquery: molecules that have a matching external identifier
             identifier_subq = (
                 select(MoleculeIdentifierModel.molecule_id)
                 .where(
                     MoleculeIdentifierModel.workspace_id == workspace_id,
-                    MoleculeIdentifierModel.identifier.ilike(like_pattern),
+                    MoleculeIdentifierModel.identifier.ilike(like_pattern, escape="\\"),
                 )
             )
             stmt = stmt.where(
                 sa.or_(
-                    MoleculeModel.name.ilike(like_pattern),
-                    MoleculeModel.registration_number.ilike(like_pattern),
-                    MoleculeModel.molecular_formula.ilike(like_pattern),
-                    MoleculeModel.inchi_key.ilike(like_pattern),
+                    MoleculeModel.name.ilike(like_pattern, escape="\\"),
+                    MoleculeModel.registration_number.ilike(like_pattern, escape="\\"),
+                    MoleculeModel.molecular_formula.ilike(like_pattern, escape="\\"),
+                    MoleculeModel.inchi_key.ilike(like_pattern, escape="\\"),
                     MoleculeModel.id.in_(identifier_subq),
                 )
             )
+
+        # Project scoping: None = no filter (admin), [] = unscoped only, [ids] = unscoped + matching
+        if project_ids is not None:
+            # Molecules in any project within this workspace
+            ws_project_ids = select(ProjectModel.id).where(
+                ProjectModel.workspace_id == workspace_id,
+            )
+            in_ws_projects = select(molecule_projects.c.molecule_id).where(
+                molecule_projects.c.project_id.in_(ws_project_ids),
+            )
+            unscoped_subq = (
+                select(MoleculeModel.id)
+                .where(
+                    MoleculeModel.workspace_id == workspace_id,
+                    ~MoleculeModel.id.in_(in_ws_projects),
+                )
+            )
+            if project_ids:
+                scoped_subq = select(molecule_projects.c.molecule_id).where(
+                    molecule_projects.c.project_id.in_(project_ids),
+                    molecule_projects.c.project_id.in_(ws_project_ids),
+                )
+                stmt = stmt.where(
+                    sa.or_(
+                        MoleculeModel.id.in_(unscoped_subq),
+                        MoleculeModel.id.in_(scoped_subq),
+                    )
+                )
+            else:
+                stmt = stmt.where(MoleculeModel.id.in_(unscoped_subq))
 
         # Deterministic ordering by PK for stable cursor pagination
         stmt = stmt.order_by(MoleculeModel.id)
@@ -383,7 +435,7 @@ class SQLAlchemyMoleculeRepository(
             stmt = stmt.limit(limit)
 
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
 
     async def next_registration_number(
         self, workspace_id: uuid.UUID
@@ -424,29 +476,300 @@ class SQLAlchemyMoleculeRepository(
             .params(smarts=smarts)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [self._to_domain_tracked(m) for m in result.scalars()]
+
+    # ── Sortable field map ──────────────────────────────────────────────────
+    _SORT_FIELDS: dict[str, Any] = {
+        "name": MoleculeModel.name,
+        "registration_number": MoleculeModel.registration_number,
+        "molecular_weight": MoleculeModel.molecular_weight,
+        "logp": MoleculeModel.logp,
+        "tpsa": MoleculeModel.tpsa,
+        "hbd": MoleculeModel.hbd,
+        "hba": MoleculeModel.hba,
+        "created_at": MoleculeModel.created_at,
+    }
+
+    def _build_base_stmt(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        project_ids: list[uuid.UUID] | None = None,
+    ):
+        """Build the base SELECT/WHERE for search_by_query and count_by_query."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+            compose_criteria,
+        )
+
+        where_clause = compose_criteria(query, workspace_id=workspace_id)
+
+        stmt = select(MoleculeModel).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.merged_into_id.is_(None),
+        )
+
+        has_structure = any(
+            c.get("type") == "structure" for c in query.get("criteria", [])
+        )
+        if has_structure:
+            stmt = stmt.where(MoleculeModel.smiles.is_not(None))
+
+        if where_clause is not None:
+            stmt = stmt.where(where_clause)
+
+        if project_ids is not None:
+            from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+                _project_clause,
+            )
+            stmt = stmt.where(_project_clause({"project_ids": list(project_ids)}, workspace_id))
+
+        return stmt
+
+    async def _set_similarity_threshold(self, query: dict[str, Any]) -> None:
+        for criterion in query.get("criteria", []):
+            if (
+                criterion.get("type") == "structure"
+                and criterion.get("search_type") == "similarity"
+            ):
+                safe_threshold = float(criterion.get("threshold", 0.7))
+                if not (0.0 <= safe_threshold <= 1.0):
+                    raise ValueError(f"Tanimoto threshold must be between 0 and 1, got {safe_threshold}")
+                await self._session.execute(
+                    text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
+                )
+                break
+
+    async def search_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+        project_ids: list[uuid.UUID] | None = None,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
+    ) -> list[Molecule]:
+        """Compound search using a structured query dict.
+
+        Supports configurable sorting via ``sort_by`` / ``sort_dir``.
+        Uses keyset pagination: cursor encodes ``(sort_value, id)`` when
+        sorting by a field other than ``id``.
+
+        Special sort: ``sort_by="drc:{protocol_id}:{curve_type}"`` sorts by
+        the best (lowest) ``fitted_value`` from DoseResponseCurve for that
+        protocol and curve type. Compounds with no data sort last (NULLS LAST).
+        """
+        await self._set_similarity_threshold(query)
+
+        stmt = self._build_base_stmt(workspace_id, query, project_ids=project_ids)
+
+        # Sorting
+        descending = sort_dir == "desc"
+        drc_sort = self._parse_drc_sort(sort_by)
+
+        if drc_sort is not None:
+            protocol_id, curve_type = drc_sort
+            stmt = self._apply_drc_sort(stmt, workspace_id, protocol_id, curve_type, descending)
+        else:
+            sort_col = self._SORT_FIELDS.get(sort_by) if sort_by else None
+            if sort_col is not None:
+                if descending:
+                    stmt = stmt.order_by(sort_col.desc().nulls_last(), MoleculeModel.id)
+                else:
+                    stmt = stmt.order_by(sort_col.asc().nulls_last(), MoleculeModel.id)
+            else:
+                stmt = stmt.order_by(MoleculeModel.id)
+
+        if cursor_id is not None:
+            stmt = stmt.where(MoleculeModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars()]
+
+    # ------------------------------------------------------------------
+    # DRC sort helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_drc_sort(sort_by: str | None) -> tuple[uuid.UUID, str] | None:
+        """Parse ``"drc:{protocol_id}:{curve_type}"`` into components.
+
+        Returns ``(protocol_id, curve_type)`` or ``None`` if not a DRC sort.
+        """
+        if not sort_by or not sort_by.startswith("drc:"):
+            return None
+        parts = sort_by.split(":", 2)
+        if len(parts) != 3:
+            return None
+        try:
+            protocol_id = uuid.UUID(parts[1])
+        except ValueError:
+            return None
+        curve_type = parts[2]
+        if not curve_type:
+            return None
+        return protocol_id, curve_type
+
+    def _apply_drc_sort(
+        self,
+        stmt: sa.Select,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        curve_type: str,
+        descending: bool,
+    ) -> sa.Select:
+        """LEFT JOIN a best-value subquery and order by it."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+            DoseResponseCurveModel,
+        )
+
+        # Subquery: best (MIN) fitted_value per molecule for this protocol+curve_type
+        best_value_sq = (
+            select(
+                DoseResponseCurveModel.molecule_id.label("molecule_id"),
+                func.min(DoseResponseCurveModel.fitted_value).label("best_value"),
+            )
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.protocol_id == protocol_id,
+                DoseResponseCurveModel.curve_type == curve_type,
+            )
+            .group_by(DoseResponseCurveModel.molecule_id)
+            .subquery("drc_best")
+        )
+
+        # LEFT JOIN so molecules without data get NULL best_value
+        stmt = stmt.outerjoin(
+            best_value_sq,
+            MoleculeModel.id == best_value_sq.c.molecule_id,
+        )
+
+        best_col = best_value_sq.c.best_value
+        if descending:
+            stmt = stmt.order_by(best_col.desc().nulls_last(), MoleculeModel.id)
+        else:
+            stmt = stmt.order_by(best_col.asc().nulls_last(), MoleculeModel.id)
+
+        return stmt
+
+    async def count_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        project_ids: list[uuid.UUID] | None = None,
+    ) -> int:
+        """Return total count of molecules matching the query (no pagination)."""
+        from sqlalchemy import func as sa_func
+
+        await self._set_similarity_threshold(query)
+        base = self._build_base_stmt(workspace_id, query, project_ids=project_ids)
+        count_stmt = select(sa_func.count()).select_from(base.subquery())
+        result = await self._session.execute(count_stmt)
+        return result.scalar_one()
 
     async def search_similarity(
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
-    ) -> list[Molecule]:
-        """Similarity search using RDKit cartridge Tanimoto similarity.
+    ) -> list[tuple[Molecule, float]]:
+        """Similarity search using pre-computed morgan_bfp with GiST index.
 
-        Uses Morgan fingerprints computed by the cartridge at query time.
+        Uses the RDKit cartridge % operator (Tanimoto) which leverages the
+        GiST index on morgan_bfp for sub-second search at 500K compounds.
         """
+        # Set Tanimoto threshold for the % operator (session-level GUC).
+        # SET does not accept parameterised values in PostgreSQL, so we
+        # validate the float and embed it as a literal.
+        safe_threshold = float(threshold)
+        if not (0.0 <= safe_threshold <= 1.0):
+            raise ValueError(f"Tanimoto threshold must be between 0 and 1, got {safe_threshold}")
+        await self._session.execute(
+            text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
+        )
+
+        # Query using % operator (GiST-indexed) + compute exact score
         stmt = (
-            select(MoleculeModel)
+            select(
+                MoleculeModel,
+                text(
+                    "tanimoto_sml(morgan_bfp, morganbv_fp(mol_from_smiles(:q))) AS similarity"
+                ),
+            )
             .where(
                 MoleculeModel.workspace_id == workspace_id,
                 MoleculeModel.merged_into_id.is_(None),
-                MoleculeModel.smiles.is_not(None),
-                text(
-                    "tanimoto_sml("
-                    "morganbv_fp(mol_from_smiles(smiles)), "
-                    "morganbv_fp(mol_from_smiles(:query_smiles))"
-                    ") > :threshold"
-                ),
+                text("morgan_bfp % morganbv_fp(mol_from_smiles(:q))"),
             )
-            .params(query_smiles=smiles, threshold=threshold)
+            .params(q=smiles)
+            .order_by(text("similarity DESC"))
+            .limit(100)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars()]
+        return [
+            (self._to_domain(row[0]), float(row[1]))
+            for row in result.all()
+        ]
+
+    # ------------------------------------------------------------------
+    # Project association methods
+    # ------------------------------------------------------------------
+
+    async def add_to_project(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Link a molecule to a project (idempotent via ON CONFLICT DO NOTHING).
+
+        Defense-in-depth: only inserts if the molecule belongs to the workspace.
+        """
+        # Verify molecule belongs to workspace before inserting
+        ownership_stmt = select(MoleculeModel.id).where(
+            MoleculeModel.id == molecule_id,
+            MoleculeModel.workspace_id == workspace_id,
+        )
+        ownership_result = await self._session.execute(ownership_stmt)
+        if ownership_result.scalar_one_or_none() is None:
+            return
+        stmt = (
+            pg_insert(molecule_projects)
+            .values(molecule_id=molecule_id, project_id=project_id)
+            .on_conflict_do_nothing()
+        )
+        await self._session.execute(stmt)
+
+    async def remove_from_project(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, project_id: uuid.UUID
+    ) -> None:
+        """Unlink a molecule from a project.
+
+        Defense-in-depth: only deletes if the molecule belongs to the workspace.
+        """
+        stmt = molecule_projects.delete().where(
+            molecule_projects.c.molecule_id == molecule_id,
+            molecule_projects.c.project_id == project_id,
+            molecule_projects.c.molecule_id.in_(
+                select(MoleculeModel.id).where(
+                    MoleculeModel.workspace_id == workspace_id
+                )
+            ),
+        )
+        await self._session.execute(stmt)
+
+    async def find_project_ids(self, workspace_id: uuid.UUID, molecule_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return all project IDs linked to a given molecule, scoped to workspace."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
+            ProjectModel,
+        )
+
+        stmt = (
+            select(molecule_projects.c.project_id)
+            .join(ProjectModel, molecule_projects.c.project_id == ProjectModel.id)
+            .where(
+                molecule_projects.c.molecule_id == molecule_id,
+                ProjectModel.workspace_id == workspace_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

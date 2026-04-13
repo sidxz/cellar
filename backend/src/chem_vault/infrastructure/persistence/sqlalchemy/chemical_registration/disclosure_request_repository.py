@@ -17,9 +17,6 @@ from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models import (
     DisclosureRequestModel,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
-    MoleculeModel,
-)
 
 
 class SQLAlchemyDisclosureRequestRepository(
@@ -34,6 +31,7 @@ class SQLAlchemyDisclosureRequestRepository(
     def _to_domain(self, model: DisclosureRequestModel) -> DisclosureRequest:
         return DisclosureRequest(
             id=model.id,
+            workspace_id=model.workspace_id,
             bulk_disclosure_id=model.bulk_disclosure_id,
             molecule_id=model.molecule_id,
             disclosed_smiles=model.disclosed_smiles,
@@ -64,6 +62,7 @@ class SQLAlchemyDisclosureRequestRepository(
     def _to_model(self, aggregate: DisclosureRequest) -> DisclosureRequestModel:
         return DisclosureRequestModel(
             id=aggregate.id,
+            workspace_id=aggregate.workspace_id,
             bulk_disclosure_id=aggregate.bulk_disclosure_id,
             molecule_id=aggregate.molecule_id,
             disclosed_smiles=aggregate.disclosed_smiles,
@@ -108,10 +107,14 @@ class SQLAlchemyDisclosureRequestRepository(
     # ------------------------------------------------------------------
 
     async def find_by_molecule(
-        self, molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[DisclosureRequest]:
-        stmt = select(DisclosureRequestModel).where(
-            DisclosureRequestModel.molecule_id == molecule_id,
+        stmt = (
+            select(DisclosureRequestModel)
+            .where(
+                DisclosureRequestModel.workspace_id == workspace_id,
+                DisclosureRequestModel.molecule_id == molecule_id,
+            )
         )
         result = await self._session.execute(stmt)
         entities = [self._to_domain(m) for m in result.scalars()]
@@ -120,10 +123,14 @@ class SQLAlchemyDisclosureRequestRepository(
         return entities
 
     async def find_by_bulk_disclosure(
-        self, bulk_disclosure_id: uuid.UUID
+        self, workspace_id: uuid.UUID, bulk_disclosure_id: uuid.UUID
     ) -> list[DisclosureRequest]:
-        stmt = select(DisclosureRequestModel).where(
-            DisclosureRequestModel.bulk_disclosure_id == bulk_disclosure_id,
+        stmt = (
+            select(DisclosureRequestModel)
+            .where(
+                DisclosureRequestModel.workspace_id == workspace_id,
+                DisclosureRequestModel.bulk_disclosure_id == bulk_disclosure_id,
+            )
         )
         result = await self._session.execute(stmt)
         entities = [self._to_domain(m) for m in result.scalars()]
@@ -136,8 +143,7 @@ class SQLAlchemyDisclosureRequestRepository(
     ) -> list[DisclosureRequest]:
         stmt = (
             select(DisclosureRequestModel)
-            .join(MoleculeModel, DisclosureRequestModel.molecule_id == MoleculeModel.id)
-            .where(MoleculeModel.workspace_id == workspace_id)
+            .where(DisclosureRequestModel.workspace_id == workspace_id)
         )
         if status:
             stmt = stmt.where(DisclosureRequestModel.status == status)

@@ -45,6 +45,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with sentinel.lifespan(app):
         yield
 
+    # Cleanup: close httpx client used by vault integration
+    import httpx
+
+    try:
+        vault_http = container[httpx.AsyncClient]
+        await vault_http.aclose()
+    except Exception:
+        pass
+
     # Cleanup: dispose the database engine
     from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -106,7 +115,10 @@ def create_app() -> FastAPI:
     app.include_router(org_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
+    from chem_vault.interface.routes.export import router as export_router
+
     app.include_router(mol_router)
+    app.include_router(export_router)
     app.include_router(disclosure_router)
     app.include_router(merge_router)
     app.include_router(rel_router)
@@ -123,8 +135,67 @@ def create_app() -> FastAPI:
     app.include_router(shipment_router)
     app.include_router(synth_req_router)
 
+    from chem_vault.interface.routes.plate_templates import router as plate_template_router
+    from chem_vault.interface.routes.registered_plates import router as registered_plates_router
+
+    app.include_router(plate_template_router)
+    app.include_router(registered_plates_router)
+
+    from chem_vault.interface.routes.projects import router as project_router
+    from chem_vault.interface.routes.collections import router as collection_router
+    from chem_vault.interface.routes.saved_searches import router as saved_search_router
+
+    app.include_router(project_router)
+    app.include_router(collection_router)
+    app.include_router(saved_search_router)
+
+    from chem_vault.interface.routes.search import router as search_router
+    app.include_router(search_router)
+
+    from chem_vault.interface.routes.molecule_activity import router as molecule_activity_router
+    app.include_router(molecule_activity_router)
+
+    from chem_vault.interface.routes.plate_import import router as plate_import_router
+    app.include_router(plate_import_router)
+
+    from chem_vault.interface.routes.attachments import router as attachment_router
+    app.include_router(attachment_router)
+
     from chem_vault.interface.routes.dashboard import router as dashboard_router
     app.include_router(dashboard_router)
+
+    from chem_vault.interface.routes.custom_fields import router as custom_fields_router
+    app.include_router(custom_fields_router)
+
+    from chem_vault.interface.routes.salt_catalog import router as salt_catalog_router
+    app.include_router(salt_catalog_router)
+
+    from chem_vault.interface.routes.registration_forms import router as registration_forms_router
+    app.include_router(registration_forms_router)
+
+    from chem_vault.interface.routes.api_keys import router as api_keys_router
+    app.include_router(api_keys_router)
+
+    from chem_vault.interface.routes.ontology import router as ontology_router
+    app.include_router(ontology_router)
+
+    from chem_vault.interface.routes.protocol_forms import router as protocol_forms_router
+    app.include_router(protocol_forms_router)
+
+    from chem_vault.interface.routes.cdd_import import router as cdd_import_router
+    app.include_router(cdd_import_router)
+
+    from chem_vault.interface.routes.plate_setup import router as plate_setup_router
+    app.include_router(plate_setup_router)
+
+    from chem_vault.interface.routes.inventory_hub import router as inventory_hub_router
+    app.include_router(inventory_hub_router)
+
+    from chem_vault.interface.routes.protocol_hub import router as protocol_hub_router
+    app.include_router(protocol_hub_router)
+
+    from chem_vault.interface.routes.compound_flags import router as compound_flags_router
+    app.include_router(compound_flags_router)
 
     # Health check (unauthenticated)
     @app.get("/health")

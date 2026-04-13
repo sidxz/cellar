@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -47,11 +48,13 @@ class UpdateStorageLocation:
         require_editor(auth)
 
         async with self._uow:
-            loc = await self._repo.find_by_id(input.location_id)
-            if loc is None or loc.workspace_id != input.workspace_id:
+            loc = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.location_id
+            )
+            if loc is None:
                 return Failure(NotFoundError("StorageLocation", str(input.location_id)))
 
-            fields: dict[str, object] = {}
+            fields: dict[str, Any] = {}
             if input.name is not None:
                 fields["name"] = input.name
             if input.barcode is not UNSET:

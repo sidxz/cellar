@@ -7,9 +7,10 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
+from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.enums import StorageLocationType
 from chem_vault.domain.inventory.repository import StorageLocationRepository
@@ -50,10 +51,11 @@ class CreateStorageLocation:
         async with self._uow:
             parent_type: StorageLocationType | None = None
             if input.parent_id is not None:
-                parent = await self._repo.find_by_id(input.parent_id)
+                parent = await self._repo.find_by_id_in_workspace(
+                    input.workspace_id, input.parent_id
+                )
                 if parent is None:
                     return Failure(NotFoundError("Parent StorageLocation"))
-                require_same_workspace(auth, parent.workspace_id)
                 parent_type = parent.type
 
             loc = StorageLocation.create(
@@ -75,16 +77,27 @@ class CreateStorageLocation:
             return Success(loc)
 
 
+@dataclass(frozen=True, kw_only=True)
+class ListStorageLocationsQuery(Query):
+    workspace_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class GetStorageLocationChildrenQuery(Query):
+    workspace_id: uuid.UUID
+    parent_id: uuid.UUID
+
+
 class ListStorageLocations:
     def __init__(self, uow: UnitOfWork, repo: StorageLocationRepository) -> None:
         self._uow = uow
         self._repo = repo
 
     async def __call__(
-        self, workspace_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
         async with self._uow:
-            locations = await self._repo.find_by_workspace(workspace_id)
+            locations = await self._repo.find_by_workspace(input.workspace_id)
             return Success(locations)
 
 
@@ -94,12 +107,25 @@ class GetStorageLocationChildren:
         self._repo = repo
 
     async def __call__(
-        self, parent_id: uuid.UUID, auth: AuthContext | None = None
+        self, input: GetStorageLocationChildrenQuery, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
-        if auth is None:
-            return Failure(NotFoundError("StorageLocation"))
         async with self._uow:
             children = await self._repo.find_children(
-                auth.workspace_id, parent_id
+                input.workspace_id, input.parent_id
             )
             return Success(children)
+
+
+class ListStorageLocationsWithCounts:
+    """Return all storage locations with available-sample counts."""
+
+    def __init__(self, uow: UnitOfWork, repo: StorageLocationRepository) -> None:
+        self._uow = uow
+        self._repo = repo
+
+    async def __call__(
+        self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
+    ) -> Result[list[dict], DomainError]:
+        async with self._uow:
+            rows = await self._repo.find_by_workspace_with_counts(input.workspace_id)
+            return Success(rows)

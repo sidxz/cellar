@@ -42,13 +42,13 @@ class DeleteRelationship:
         require_editor(auth)
 
         async with self._uow:
-            rel = await self._relationship_repo.find_by_id(input.relationship_id)
-            if rel is None or rel.workspace_id != input.workspace_id:
+            rel = await self._relationship_repo.find_by_id_in_workspace(input.workspace_id, input.relationship_id)
+            if rel is None:
                 return Failure(
                     NotFoundError("MoleculeRelationship", str(input.relationship_id))
                 )
 
-            await self._relationship_repo.delete(input.relationship_id)
+            await self._relationship_repo.delete(input.workspace_id, input.relationship_id)
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
 

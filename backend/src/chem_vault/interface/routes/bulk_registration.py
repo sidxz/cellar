@@ -30,6 +30,9 @@ class BulkRegistrationItemResponse(BaseModel):
     success: bool
     is_new: bool = False
     molecule_id: uuid.UUID | None = None
+    batch_id: uuid.UUID | None = None
+    batch_number: str | None = None
+    salt_matched: bool = False
     error: str | None = None
 
     @classmethod
@@ -39,6 +42,9 @@ class BulkRegistrationItemResponse(BaseModel):
             success=item.success,
             is_new=item.is_new,
             molecule_id=item.molecule_id,
+            batch_id=item.batch_id,
+            batch_number=item.batch_number,
+            salt_matched=item.salt_matched,
             error=item.error,
         )
 
@@ -85,6 +91,13 @@ async def start_bulk_registration(
             molecule_type=p.molecule_type,
             external_ids=p.external_ids,
             error=p.error,
+            amount_value=p.amount_value,
+            amount_unit=p.amount_unit,
+            salt_code=p.salt_code,
+            salt_stoichiometry=p.salt_stoichiometry,
+            purity=p.purity,
+            batch_source=p.batch_source,
+            appearance=p.appearance,
         )
         for p in parsed
     ]
@@ -98,7 +111,7 @@ async def start_bulk_registration(
         originating_org_id=originating_org_id,
     )
 
-    result = await service.execute(cmd, auth=auth)
+    result = await service(cmd, auth=auth)
     outcome = result_to_response(result)
 
     return BulkRegistrationResponse(

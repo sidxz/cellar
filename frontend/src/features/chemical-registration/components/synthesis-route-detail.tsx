@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { X, GitBranch, Plus, FlaskConical, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { MemberName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -50,25 +52,6 @@ import {
   type AddReactionStepInput,
   type RecordStepOutcomeInput,
 } from "../types/synthesis-route";
-
-// ---------------------------------------------------------------------------
-// Badge helpers
-// ---------------------------------------------------------------------------
-
-function routeStatusVariant(
-  s: RouteStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "preferred":
-      return "default";
-    case "validated":
-      return "secondary";
-    case "deprecated":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Deprecate dialog
@@ -723,6 +706,7 @@ export function SynthesisRouteDetail({
   const [deprecateOpen, setDeprecateOpen] = useState(false);
   const [addStepOpen, setAddStepOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // --- Loading ---
   if (isLoading) {
@@ -762,9 +746,10 @@ export function SynthesisRouteDetail({
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-semibold">{route.name}</h2>
-            <Badge variant={routeStatusVariant(status)}>
-              {ROUTE_STATUS_LABELS[status] ?? status}
-            </Badge>
+            <StatusBadge
+              status={status}
+              label={ROUTE_STATUS_LABELS[status] ?? status}
+            />
             <Badge variant="outline">
               {ROUTE_TYPE_LABELS[route.route_type] ?? route.route_type}
             </Badge>
@@ -792,17 +777,11 @@ export function SynthesisRouteDetail({
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => {
-                  if (confirm("Delete this route? This cannot be undone.")) {
-                    deleteMutation.mutate(routeId, {
-                      onSuccess: () => onClose?.(),
-                    });
-                  }
-                }}
+                onClick={() => setDeleteOpen(true)}
                 disabled={deleteMutation.isPending}
               >
                 <Trash2 className="mr-1 h-3.5 w-3.5" />
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                Delete
               </Button>
             </>
           )}
@@ -963,6 +942,19 @@ export function SynthesisRouteDetail({
           nextStepNumber={route.steps.length + 1}
         />
       )}
+
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Route"
+        description="This will permanently delete this synthesis route. This action cannot be undone."
+        onConfirm={() =>
+          deleteMutation.mutate(routeId, {
+            onSuccess: () => onClose?.(),
+          })
+        }
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 }

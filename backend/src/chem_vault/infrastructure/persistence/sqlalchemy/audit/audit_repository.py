@@ -30,10 +30,14 @@ class SQLAlchemyAuditRepository:
         self._session = session
 
     async def save(self, operation: AuditOperation) -> None:
-        """Persist an audit operation with entries and optional signature."""
+        """Persist an audit operation with entries and optional signature.
+
+        This repo uses its own dedicated session (not shared with UoW),
+        so commit() is safe — it only affects this repo's transaction.
+        """
         model = self._to_operation_model(operation)
         self._session.add(model)
-        await self._session.flush()
+        await self._session.commit()
 
     async def find_by_id(self, id: uuid.UUID) -> AuditOperation | None:
         """Retrieve an audit operation by ID (with entries + signature eager-loaded)."""
@@ -51,13 +55,35 @@ class SQLAlchemyAuditRepository:
             return None
         return self._to_domain(model)
 
-    async def find_by_entity(
-        self, entity_type: str, entity_id: uuid.UUID
-    ) -> list[AuditOperation]:
-        """Retrieve all audit operations for a given entity."""
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> AuditOperation | None:
+        """Retrieve an audit operation by ID, scoped to workspace."""
         stmt = (
             select(AuditOperationModel)
             .where(
+                AuditOperationModel.id == id,
+                AuditOperationModel.workspace_id == workspace_id,
+            )
+            .options(
+                selectinload(AuditOperationModel.entries),
+                selectinload(AuditOperationModel.signature),
+            )
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain(model)
+
+    async def find_by_entity(
+        self, workspace_id: uuid.UUID, entity_type: str, entity_id: uuid.UUID
+    ) -> list[AuditOperation]:
+        """Retrieve all audit operations for a given entity within a workspace."""
+        stmt = (
+            select(AuditOperationModel)
+            .where(
+                AuditOperationModel.workspace_id == workspace_id,
                 AuditOperationModel.entity_type == entity_type,
                 AuditOperationModel.entity_id == entity_id,
             )

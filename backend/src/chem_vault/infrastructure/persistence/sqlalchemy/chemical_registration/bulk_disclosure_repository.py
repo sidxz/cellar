@@ -24,6 +24,7 @@ class SQLAlchemyBulkDisclosureRepository(
     def _to_domain(self, model: BulkDisclosureModel) -> BulkDisclosure:
         return BulkDisclosure(
             id=model.id,
+            workspace_id=model.workspace_id,
             source_file=model.source_file,
             partner_org_id=model.partner_org_id,
             submitted_by=model.submitted_by,
@@ -47,6 +48,7 @@ class SQLAlchemyBulkDisclosureRepository(
     def _to_model(self, aggregate: BulkDisclosure) -> BulkDisclosureModel:
         return BulkDisclosureModel(
             id=aggregate.id,
+            workspace_id=aggregate.workspace_id,
             source_file=aggregate.source_file,
             partner_org_id=aggregate.partner_org_id,
             submitted_by=aggregate.submitted_by,

@@ -58,6 +58,14 @@ class FakeMoleculeRepository:
     async def find_by_id(self, id: uuid.UUID) -> Molecule | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Molecule | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
+
 
 class FakeRelationshipRepository:
     def __init__(self) -> None:
@@ -67,14 +75,20 @@ class FakeRelationshipRepository:
         self._store.append(rel)
 
     async def find_by_source(
-        self, source_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID
     ) -> list[MoleculeRelationship]:
-        return [r for r in self._store if r.source_molecule_id == source_molecule_id]
+        return [
+            r for r in self._store
+            if r.workspace_id == workspace_id and r.source_molecule_id == source_molecule_id
+        ]
 
     async def find_by_target(
-        self, target_molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, target_molecule_id: uuid.UUID
     ) -> list[MoleculeRelationship]:
-        return [r for r in self._store if r.target_molecule_id == target_molecule_id]
+        return [
+            r for r in self._store
+            if r.workspace_id == workspace_id and r.target_molecule_id == target_molecule_id
+        ]
 
 
 def _make_mol(name: str = "Test") -> Molecule:

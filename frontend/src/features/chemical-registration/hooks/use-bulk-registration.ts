@@ -11,6 +11,9 @@ export interface BulkRegistrationItemResult {
   success: boolean;
   is_new: boolean;
   molecule_id: string | null;
+  batch_id: string | null;
+  batch_number: string | null;
+  salt_matched: boolean;
   error: string | null;
 }
 

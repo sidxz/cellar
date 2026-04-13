@@ -99,11 +99,8 @@ class DisclosureService:
 
         async with self._uow:
             # --- Load & validate molecule ---
-            molecule = await self._molecule_repo.find_by_id(input.molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
             if molecule is None:
-                return Failure(NotFoundError("Molecule", str(input.molecule_id)))
-
-            if molecule.workspace_id != input.workspace_id:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             if molecule.is_tombstone:
@@ -116,6 +113,7 @@ class DisclosureService:
 
             # --- Create disclosure request ---
             dr = DisclosureRequest.create(
+                workspace_id=input.workspace_id,
                 molecule_id=input.molecule_id,
                 disclosed_smiles=input.disclosed_smiles,
                 requested_by=input.requested_by,
@@ -176,6 +174,7 @@ class DisclosureService:
 
             merge_result = await self._merge_service.merge_in_transaction(
                 MergeCommand(
+                    workspace_id=input.workspace_id,
                     source_molecule_id=input.molecule_id,
                     target_molecule_id=target_molecule_id,
                     reason=MergeReason.DISCLOSURE_RESOLVED,

@@ -21,6 +21,7 @@ class UserPreferences:
     user_id: uuid.UUID = field(default_factory=uuid.uuid4)
     theme: str = "dark"
     sidebar_collapsed: bool = False
+    default_search_columns: list[str] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

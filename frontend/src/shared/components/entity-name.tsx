@@ -4,6 +4,7 @@ import { useMolecule } from "@/features/chemical-registration/hooks/use-molecule
 import { useSynthesisRoute } from "@/features/chemical-registration/hooks/use-synthesis-routes";
 import { useBatch } from "@/features/inventory/hooks/use-batches";
 import { useSample } from "@/features/inventory/hooks/use-samples";
+import { useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 
@@ -16,7 +17,7 @@ export function MoleculeName({ id }: { id: string }) {
   const { data, isLoading } = useMolecule(id);
   if (isLoading) return LOADING;
   if (!data) return <span className="text-muted-foreground">Unknown</span>;
-  return <span>{data.registration_number ?? data.name ?? id.slice(0, 8)}</span>;
+  return <span>{data.registration_number ?? data.name ?? "Unknown compound"}</span>;
 }
 
 /**
@@ -57,6 +58,16 @@ export function SampleName({ id }: { id: string }) {
   if (isLoading) return LOADING;
   if (!data) return <span className="text-muted-foreground">Unknown sample</span>;
   return <span>{data.barcode}</span>;
+}
+
+/**
+ * Renders a protocol name from its ID.
+ */
+export function ProtocolName({ id }: { id: string }) {
+  const { data, isLoading } = useProtocol(id);
+  if (isLoading) return LOADING;
+  if (!data) return <span className="text-muted-foreground">Unknown protocol</span>;
+  return <span>{data.name}</span>;
 }
 
 /**

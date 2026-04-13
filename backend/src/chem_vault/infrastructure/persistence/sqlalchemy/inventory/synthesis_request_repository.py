@@ -86,17 +86,17 @@ class SQLAlchemySynthesisRequestRepository(
 
         # Reconstruct cost VOs
         estimated_cost: Amount | None = None
-        if model.estimated_cost_value is not None:
+        if model.estimated_cost_value is not None and model.estimated_cost_unit is not None:
             estimated_cost = Amount(
                 value=model.estimated_cost_value,
-                unit=AmountUnit(model.estimated_cost_unit),  # type: ignore[arg-type]
+                unit=AmountUnit(model.estimated_cost_unit),
             )
 
         actual_cost: Amount | None = None
-        if model.actual_cost_value is not None:
+        if model.actual_cost_value is not None and model.actual_cost_unit is not None:
             actual_cost = Amount(
                 value=model.actual_cost_value,
-                unit=AmountUnit(model.actual_cost_unit),  # type: ignore[arg-type]
+                unit=AmountUnit(model.actual_cost_unit),
             )
 
         return SynthesisRequest(

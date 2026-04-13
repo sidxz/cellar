@@ -5,9 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
-from lagom import Container
-from pydantic import BaseModel
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
 from chem_vault.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
@@ -22,9 +21,21 @@ from chem_vault.application.screening.create_readout_data import (
     CreateReadoutData,
     CreateReadoutDataCommand,
 )
-from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
-from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
-from chem_vault.interface.dependencies import AuthDep, get_container
+from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun, ListDoseResponseByRunQuery
+from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun, ListReadoutDataByRunQuery
+from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    BulkCreateReadoutDataDep,
+    ClassifyDoseResponseCurveDep,
+    CreateDoseResponseCurveDep,
+    CreateReadoutDataDep,
+    ListDoseResponseByRunDep,
+    ListReadoutDataByRunDep,
+    ReadoutCalculationEngineDep,
+    RefitDoseResponseCurveDep,
+    UoWDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["readout-data"])
@@ -40,28 +51,39 @@ class ReadoutDataResponse(BaseModel):
     workspace_id: uuid.UUID
     run_id: uuid.UUID
     well_id: uuid.UUID | None = None
-    molecule_id: uuid.UUID
-    batch_id: uuid.UUID
+    molecule_id: uuid.UUID | None = None
+    registration_number: str | None = None
+    batch_id: uuid.UUID | None = None
+    batch_number: str | None = None
     readout_definition_id: uuid.UUID
     value_numeric: float | None = None
     value_qualifier: str | None = None
     value_text: str | None = None
     is_outlier: bool
+    is_computed: bool = False
 
     @classmethod
-    def from_domain(cls, rd) -> ReadoutDataResponse:  # type: ignore[no-untyped-def]
+    def from_domain(  # type: ignore[no-untyped-def]
+        cls,
+        rd,
+        registration_number: str | None = None,
+        batch_number: str | None = None,
+    ) -> ReadoutDataResponse:
         return cls(
             id=rd.id,
             workspace_id=rd.workspace_id,
             run_id=rd.run_id,
             well_id=rd.well_id,
             molecule_id=rd.molecule_id,
+            registration_number=registration_number,
             batch_id=rd.batch_id,
+            batch_number=batch_number,
             readout_definition_id=rd.readout_definition_id,
             value_numeric=rd.value.value if rd.value else None,
             value_qualifier=rd.value.qualifier.value if rd.value else None,
             value_text=rd.value_text,
             is_outlier=rd.is_outlier,
+            is_computed=rd.is_computed,
         )
 
 
@@ -69,7 +91,9 @@ class DoseResponseCurveResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
+    molecule_name: str | None = None
     batch_id: uuid.UUID
+    batch_number: str | None = None
     protocol_id: uuid.UUID
     run_id: uuid.UUID
     curve_type: str
@@ -87,12 +111,20 @@ class DoseResponseCurveResponse(BaseModel):
     excluded_points: list[dict[str, Any]] | None = None
 
     @classmethod
-    def from_domain(cls, c) -> DoseResponseCurveResponse:  # type: ignore[no-untyped-def]
+    def from_domain(
+        cls,
+        c,  # type: ignore[no-untyped-def]
+        *,
+        molecule_name: str | None = None,
+        batch_number: str | None = None,
+    ) -> DoseResponseCurveResponse:
         return cls(
             id=c.id,
             workspace_id=c.workspace_id,
             molecule_id=c.molecule_id,
+            molecule_name=molecule_name,
             batch_id=c.batch_id,
+            batch_number=batch_number,
             protocol_id=c.protocol_id,
             run_id=c.run_id,
             curve_type=c.curve_type.value,
@@ -159,7 +191,7 @@ class BulkReadoutDataResponse(BaseModel):
     total_count: int
     success_count: int
     error_count: int
-    errors: list[dict] = []
+    errors: list[dict[str, Any]] = []
 
 
 class CreateDoseResponseCurveRequest(BaseModel):
@@ -182,25 +214,15 @@ class CreateDoseResponseCurveRequest(BaseModel):
     excluded_points: list[dict[str, Any]] | None = None
 
 
-# ---------------------------------------------------------------------------
-# Dependency resolvers
-# ---------------------------------------------------------------------------
+class RefitDoseResponseCurveRequest(BaseModel):
+    excluded_point_indices: list[int] = Field(default_factory=list)
+    hill_slope_constraint: str | None = None
+    top_constraint: float | None = None
+    bottom_constraint: float | None = None
 
 
-def _create_readout(c: Annotated[Container, Depends(get_container)]) -> CreateReadoutData:
-    return c[CreateReadoutData]
-
-def _bulk_create_readout(c: Annotated[Container, Depends(get_container)]) -> BulkCreateReadoutData:
-    return c[BulkCreateReadoutData]
-
-def _list_readout(c: Annotated[Container, Depends(get_container)]) -> ListReadoutDataByRun:
-    return c[ListReadoutDataByRun]
-
-def _create_dose_response(c: Annotated[Container, Depends(get_container)]) -> CreateDoseResponseCurve:
-    return c[CreateDoseResponseCurve]
-
-def _list_dose_response(c: Annotated[Container, Depends(get_container)]) -> ListDoseResponseByRun:
-    return c[ListDoseResponseByRun]
+class ClassifyDoseResponseCurveRequest(BaseModel):
+    curve_class: str
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +234,7 @@ def _list_dose_response(c: Annotated[Container, Depends(get_container)]) -> List
 async def create_readout_data(
     auth: AuthDep,
     body: CreateReadoutDataRequest,
-    uc: Annotated[CreateReadoutData, Depends(_create_readout)],
+    uc: CreateReadoutDataDep,
 ) -> ReadoutDataResponse:
     cmd = CreateReadoutDataCommand(
         workspace_id=auth.workspace_id,
@@ -234,7 +256,8 @@ async def create_readout_data(
 async def bulk_create_readout_data(
     auth: AuthDep,
     body: BulkReadoutDataRequest,
-    uc: Annotated[BulkCreateReadoutData, Depends(_bulk_create_readout)],
+    uc: BulkCreateReadoutDataDep,
+    engine: ReadoutCalculationEngineDep,
 ) -> BulkReadoutDataResponse:
     cmd = BulkCreateReadoutDataCommand(
         workspace_id=auth.workspace_id,
@@ -258,6 +281,12 @@ async def bulk_create_readout_data(
     )
     result = await uc(cmd, auth=auth)
     data = result_to_response(result)
+
+    # Trigger computation pipeline for each affected run
+    run_ids = {item.run_id for item in body.items}
+    for run_id in run_ids:
+        await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+
     return BulkReadoutDataResponse(
         total_count=data.total_count,
         success_count=data.success_count,
@@ -270,18 +299,56 @@ async def bulk_create_readout_data(
 async def list_readout_data(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
-    uc: Annotated[ListReadoutDataByRun, Depends(_list_readout)],
+    uc: ListReadoutDataByRunDep,
+    uow: UoWDep,
 ) -> list[ReadoutDataResponse]:
-    result = await uc(run_id, auth=auth)
+    query = ListReadoutDataByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
+    result = await uc(query, auth=auth)
     data = result_to_response(result)
-    return [ReadoutDataResponse.from_domain(rd) for rd in data]
+
+    # Batch-resolve molecule registration_numbers and batch_numbers
+    from sqlalchemy import select as sa_select
+    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
+        MoleculeModel,
+    )
+    from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
+        BatchModel,
+    )
+
+    mol_ids = list({rd.molecule_id for rd in data if rd.molecule_id})
+    batch_ids = list({rd.batch_id for rd in data if rd.batch_id})
+    mol_map: dict[uuid.UUID, str] = {}
+    batch_map: dict[uuid.UUID, str] = {}
+
+    async with uow as u:
+        if mol_ids:
+            rows = (await u.session.execute(
+                sa_select(MoleculeModel.id, MoleculeModel.registration_number)
+                .where(MoleculeModel.id.in_(mol_ids))
+            )).all()
+            mol_map = {r.id: r.registration_number for r in rows}
+        if batch_ids:
+            rows = (await u.session.execute(
+                sa_select(BatchModel.id, BatchModel.batch_number)
+                .where(BatchModel.id.in_(batch_ids))
+            )).all()
+            batch_map = {r.id: r.batch_number for r in rows}
+
+    return [
+        ReadoutDataResponse.from_domain(
+            rd,
+            registration_number=mol_map.get(rd.molecule_id) if rd.molecule_id else None,
+            batch_number=batch_map.get(rd.batch_id) if rd.batch_id else None,
+        )
+        for rd in data
+    ]
 
 
 @router.post("/dose-response-curves", response_model=DoseResponseCurveResponse, status_code=201)
 async def create_dose_response_curve(
     auth: AuthDep,
     body: CreateDoseResponseCurveRequest,
-    uc: Annotated[CreateDoseResponseCurve, Depends(_create_dose_response)],
+    uc: CreateDoseResponseCurveDep,
 ) -> DoseResponseCurveResponse:
     cmd = CreateDoseResponseCurveCommand(
         workspace_id=auth.workspace_id,
@@ -311,8 +378,81 @@ async def create_dose_response_curve(
 async def list_dose_response_curves(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
-    uc: Annotated[ListDoseResponseByRun, Depends(_list_dose_response)],
+    uc: ListDoseResponseByRunDep,
+    uow: UoWDep,
 ) -> list[DoseResponseCurveResponse]:
-    result = await uc(run_id, auth=auth)
+    query = ListDoseResponseByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
+    result = await uc(query, auth=auth)
     curves = result_to_response(result)
-    return [DoseResponseCurveResponse.from_domain(c) for c in curves]
+
+    # Batch-resolve molecule names and batch numbers for display
+    mol_ids = list({c.molecule_id for c in curves})
+    batch_ids = list({c.batch_id for c in curves})
+    mol_names: dict[uuid.UUID, str] = {}
+    batch_numbers: dict[uuid.UUID, str] = {}
+
+    if mol_ids:
+        from sqlalchemy import select
+        from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
+        from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+
+        async with uow:
+            stmt = select(MoleculeModel.id, MoleculeModel.name).where(MoleculeModel.id.in_(mol_ids))
+            rows = await uow.session.execute(stmt)
+            mol_names = {row[0]: row[1] for row in rows}
+
+            stmt = select(BatchModel.id, BatchModel.batch_number).where(BatchModel.id.in_(batch_ids))
+            rows = await uow.session.execute(stmt)
+            batch_numbers = {row[0]: row[1] for row in rows}
+
+    return [
+        DoseResponseCurveResponse.from_domain(
+            c,
+            molecule_name=mol_names.get(c.molecule_id),
+            batch_number=batch_numbers.get(c.batch_id),
+        )
+        for c in curves
+    ]
+
+
+@router.post("/dose-response-curves/{curve_id}/refit", response_model=DoseResponseCurveResponse)
+async def refit_dose_response_curve(
+    curve_id: uuid.UUID,
+    body: RefitDoseResponseCurveRequest,
+    auth: AuthDep,
+    uc: RefitDoseResponseCurveDep,
+) -> DoseResponseCurveResponse:
+    from chem_vault.application.screening.refit_dose_response import RefitDoseResponseCurveCommand
+
+    result = await uc(
+        RefitDoseResponseCurveCommand(
+            workspace_id=auth.workspace_id,
+            curve_id=curve_id,
+            excluded_point_indices=body.excluded_point_indices,
+            hill_slope_constraint=body.hill_slope_constraint,
+            top_constraint=body.top_constraint,
+            bottom_constraint=body.bottom_constraint,
+        ),
+        auth=auth,
+    )
+    return DoseResponseCurveResponse.from_domain(result_to_response(result))
+
+
+@router.patch("/dose-response-curves/{curve_id}/classify", response_model=DoseResponseCurveResponse)
+async def classify_dose_response_curve(
+    curve_id: uuid.UUID,
+    body: ClassifyDoseResponseCurveRequest,
+    auth: AuthDep,
+    uc: ClassifyDoseResponseCurveDep,
+) -> DoseResponseCurveResponse:
+    from chem_vault.application.screening.classify_dose_response import ClassifyDoseResponseCurveCommand
+
+    result = await uc(
+        ClassifyDoseResponseCurveCommand(
+            workspace_id=auth.workspace_id,
+            curve_id=curve_id,
+            curve_class=body.curve_class,
+        ),
+        auth=auth,
+    )
+    return DoseResponseCurveResponse.from_domain(result_to_response(result))

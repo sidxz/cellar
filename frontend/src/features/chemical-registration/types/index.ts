@@ -98,7 +98,11 @@ export interface BatchInput {
   source: string;
   amount_value: number;
   amount_unit: string;
-  salt_form?: string | null;
+  salt_entry_id?: string | null;
+  salt_name?: string | null;
+  salt_smiles?: string | null;
+  salt_stoichiometry?: number;
+  formula_weight?: number | null;
   purity?: number | null;
   supplier_org_id?: string | null;
   appearance?: string | null;

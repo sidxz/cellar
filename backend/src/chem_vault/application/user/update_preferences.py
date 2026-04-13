@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.shared.user_preferences import (
     UserPreferences,
@@ -21,6 +22,8 @@ class UpdatePreferencesCommand(Command):
     user_id: uuid.UUID
     theme: str | None = None
     sidebar_collapsed: bool | None = None
+    # Use UNSET sentinel so that explicit None means "clear", while omission means "don't change"
+    default_search_columns: list[str] | None | object = UNSET
 
 
 class UpdatePreferences:
@@ -44,5 +47,7 @@ class UpdatePreferences:
             prefs.theme = input.theme
         if input.sidebar_collapsed is not None:
             prefs.sidebar_collapsed = input.sidebar_collapsed
+        if input.default_search_columns is not UNSET:
+            prefs.default_search_columns = input.default_search_columns  # type: ignore[assignment]
 
         return Success(await self._repo.save(prefs))

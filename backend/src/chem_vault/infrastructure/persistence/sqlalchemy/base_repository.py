@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.errors import ConcurrencyConflictError
+from chem_vault.domain.shared.errors import AuthorizationError, ConcurrencyConflictError
 from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -52,14 +52,40 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
     # Repository protocol implementation
     # ------------------------------------------------------------------
 
+    def _to_domain_tracked(self, model: ModelType) -> T:
+        """Map an SA model to a domain aggregate and register it with the UoW."""
+        domain_entity = self._to_domain(model)
+        self._uow.track(domain_entity)
+        return domain_entity
+
     async def find_by_id(self, id: uuid.UUID) -> T | None:
         """Load an aggregate by primary key, or return ``None``."""
         model = await self._session.get(self.model_class, id)
         if model is None:
             return None
-        domain_entity = self._to_domain(model)
-        self._uow.track(domain_entity)
-        return domain_entity
+        return self._to_domain_tracked(model)
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> T | None:
+        """Load an aggregate by PK scoped to a workspace.
+
+        Returns ``None`` if the entity does not exist **or** belongs to a
+        different workspace.  Prefer this over ``find_by_id`` followed by a
+        manual workspace check — it pushes the filter into the SQL query.
+        """
+        stmt = (
+            select(self.model_class)
+            .where(
+                self.model_class.id == id,  # type: ignore[attr-defined]
+                self.model_class.workspace_id == workspace_id,  # type: ignore[attr-defined]
+            )
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_domain_tracked(model)
 
     async def save(self, aggregate: T) -> None:
         """Persist an aggregate (INSERT or UPDATE with version check)."""
@@ -71,6 +97,17 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
             model = self._to_model(aggregate)
             self._session.add(model)
         else:
+            # Defence-in-depth: verify the existing row belongs to the
+            # same workspace as the aggregate being saved.
+            if (
+                hasattr(existing, "workspace_id")
+                and hasattr(aggregate, "workspace_id")
+                and existing.workspace_id != aggregate.workspace_id
+            ):
+                raise AuthorizationError(
+                    f"Cannot update {type(aggregate).__name__} from a different workspace"
+                )
+
             # UPDATE — optimistic concurrency check against the version
             # the aggregate was loaded with, not the current DB version.
             loaded_version: int = aggregate.version

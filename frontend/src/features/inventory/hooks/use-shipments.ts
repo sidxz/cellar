@@ -3,16 +3,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type {
   CreateShipmentInput,
   ImportPreviewResponse,
   Shipment,
-  ShipmentItem,
   ShipmentSummary,
 } from "../types/shipment";
 
 const SHIPMENTS_KEY = ["shipments"];
 
+const shipmentHooks = createCrudHooks<Shipment, CreateShipmentInput, Record<string, unknown>>({
+  entityName: "Shipment",
+  baseUrl: "/api/v1/shipments",
+  queryKey: SHIPMENTS_KEY,
+});
+
+/** Custom list — returns ShipmentSummary[], supports optional status filter. */
 export function useShipments(status?: string) {
   return useQuery({
     queryKey: [...SHIPMENTS_KEY, { status }],
@@ -25,33 +32,11 @@ export function useShipments(status?: string) {
   });
 }
 
-export function useShipment(id: string | undefined) {
-  return useQuery({
-    queryKey: [...SHIPMENTS_KEY, id],
-    queryFn: () =>
-      customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}`,
-        method: "GET",
-      }),
-    enabled: !!id,
-  });
-}
+export const useShipment = shipmentHooks.useGet;
+export const useCreateShipment = shipmentHooks.useCreate;
+export const useDeleteShipment = shipmentHooks.useDelete;
 
-export function useCreateShipment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateShipmentInput) =>
-      customInstance<Shipment>({
-        url: "/api/v1/shipments",
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
-      showSuccess("Shipment created");
-    },
-  });
-}
+// --- State transitions (callers pass { id, ...payload }) ---
 
 export function useShipShipment() {
   const qc = useQueryClient();
@@ -176,21 +161,6 @@ export function useUpdateShipment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
       showSuccess("Shipment updated");
-    },
-  });
-}
-
-export function useDeleteShipment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `/api/v1/shipments/${id}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
-      showSuccess("Shipment deleted");
     },
   });
 }

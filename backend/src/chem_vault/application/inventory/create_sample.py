@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -56,13 +56,16 @@ class CreateSample:
         require_editor(auth)
 
         async with self._uow:
-            batch = await self._batch_repo.find_by_id(input.batch_id)
+            batch = await self._batch_repo.find_by_id_in_workspace(
+                input.workspace_id, input.batch_id
+            )
             if batch is None:
-                return Failure(NotFoundError("Batch"))
-            require_same_workspace(auth, batch.workspace_id)
+                return Failure(NotFoundError("Batch", str(input.batch_id)))
 
             # Guard: parent molecule must not be tombstoned
-            molecule = await self._molecule_repo.find_by_id(batch.molecule_id)
+            molecule = await self._molecule_repo.find_by_id_in_workspace(
+                input.workspace_id, batch.molecule_id
+            )
             if molecule is not None and molecule.is_tombstone:
                 return Failure(
                     ConflictError("Cannot create sample — parent molecule has been merged")

@@ -19,8 +19,12 @@ interface ReadoutDataTableProps {
 interface PivotRow {
   key: string;
   label: string;
+  registrationNumber: string;
+  moleculeName: string;
+  batchNumber: string;
   moleculeId: string;
   batchId: string;
+  wellId: string | null;
   values: Map<string, ReadoutData>;
 }
 
@@ -57,17 +61,25 @@ export function ReadoutDataTable({
   const pivotRows = useMemo<PivotRow[]>(() => {
     if (!data) return [];
 
+    // Group by (molecule, batch, well) — one row per data point so
+    // dose-response data (multiple concentrations per compound) is not
+    // collapsed into a single row.
     const groups = new Map<string, PivotRow>();
     for (const row of data) {
-      const key = `${row.molecule_id}::${row.batch_id}`;
+      if (!row.molecule_id) continue;
+      const key = `${row.molecule_id}::${row.batch_id}::${row.well_id ?? "no-well"}`;
       let group = groups.get(key);
       if (!group) {
         const mol = molMap.get(row.molecule_id);
         group = {
           key,
-          label: mol ? `${mol.reg} \u2014 ${mol.name}` : row.molecule_id.slice(0, 8),
+          label: row.registration_number ?? mol?.reg ?? "Unknown",
+          registrationNumber: row.registration_number ?? mol?.reg ?? "",
+          moleculeName: mol?.name ?? "",
+          batchNumber: row.batch_number ?? "",
           moleculeId: row.molecule_id,
-          batchId: row.batch_id,
+          batchId: row.batch_id ?? "",
+          wellId: row.well_id,
           values: new Map(),
         };
         groups.set(key, group);
@@ -82,10 +94,9 @@ export function ReadoutDataTable({
     const cols: ColDef<PivotRow>[] = [
       {
         headerName: "Compound",
-        field: "label",
+        field: "registrationNumber",
         pinned: "left",
-        minWidth: 180,
-        flex: 1,
+        width: 120,
         cellRenderer: (params: ICellRendererParams<PivotRow>) => {
           const row = params.data;
           if (!row) return null;
@@ -93,21 +104,38 @@ export function ReadoutDataTable({
             <EntityLink
               type="compound"
               id={row.moleculeId}
-              label={row.label}
+              label={row.registrationNumber}
               className="text-xs"
             />
           );
         },
       },
+      {
+        headerName: "Name",
+        field: "moleculeName",
+        width: 130,
+      },
+      {
+        headerName: "Batch",
+        field: "batchNumber",
+        width: 100,
+      },
     ];
 
     for (const rd of readoutDefs) {
+      const baseName = rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
+      const headerName = rd.is_calculated ? `${baseName} [calc]` : baseName;
       cols.push({
-        headerName: rd.unit ? `${rd.name} (${rd.unit})` : rd.name,
+        headerName,
+        headerTooltip: rd.is_calculated && rd.calculation_formula
+          ? `Calculated: ${rd.calculation_formula}`
+          : undefined,
         colId: rd.id,
         width: 130,
         cellClass: "text-right tabular-nums",
-        headerClass: "ag-right-aligned-header",
+        headerClass: rd.is_calculated
+          ? "ag-right-aligned-header italic"
+          : "ag-right-aligned-header",
         valueGetter: (p) => {
           const row = p.data?.values.get(rd.id);
           if (!row) return null;
@@ -141,6 +169,7 @@ export function ReadoutDataTable({
         loading={isLoading}
         height="500px"
         suppressFilters
+        exportFilename={`readout-data-${runId}`}
         getRowId={(params) => params.data.key}
         emptyState={
           <p className="py-8 text-center text-sm text-muted-foreground">

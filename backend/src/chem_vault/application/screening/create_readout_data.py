@@ -13,9 +13,9 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.screening_assay.repository import ReadoutDataRepository
+from chem_vault.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
 from chem_vault.domain.shared.enums import Qualifier
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.shared.errors import DomainError, NotFoundError
 from chem_vault.domain.shared.value_objects import QualifiedValue
 
 
@@ -40,11 +40,13 @@ class CreateReadoutData:
         repo: ReadoutDataRepository,
         guard: DataLockGuard,
         dispatcher: EventDispatcherProtocol,
+        run_repo: RunRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._guard = guard
         self._dispatcher = dispatcher
+        self._run_repo = run_repo
 
     async def __call__(
         self, input: CreateReadoutDataCommand, auth: AuthContext | None = None
@@ -52,10 +54,19 @@ class CreateReadoutData:
         require_editor(auth)
 
         async with self._uow:
+            # Verify run belongs to this workspace
+            if self._run_repo is not None:
+                run = await self._run_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.run_id
+                )
+                if run is None:
+                    return Failure(NotFoundError("Run", str(input.run_id)))
+
             # Guard against locked runs
-            guard_result = await self._guard.guard_write(input.run_id)
-            if isinstance(guard_result, Failure):
-                return guard_result
+            try:
+                await self._guard.guard_write(input.workspace_id, input.run_id)
+            except DomainError as exc:
+                return Failure(exc)
 
             value = None
             if input.value_numeric is not None:

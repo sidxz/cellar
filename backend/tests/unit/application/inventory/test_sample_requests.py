@@ -53,6 +53,14 @@ class FakeSampleRequestRepo:
     async def find_by_id(self, id: uuid.UUID) -> SampleRequest | None:
         return self._store.get(id)
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> SampleRequest | None:
+        item = self._store.get(id)
+        if item is not None and item.workspace_id == workspace_id:
+            return item
+        return None
+
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, status: str | None = None
     ) -> list[SampleRequest]:
@@ -239,7 +247,7 @@ class TestGetSampleRequest:
         uc = GetSampleRequest(FakeUoW(), repo)
         auth = _make_auth()
 
-        result = await uc(GetSampleRequestQuery(request_id=req.id), auth)
+        result = await uc(GetSampleRequestQuery(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().id == req.id
@@ -250,20 +258,20 @@ class TestGetSampleRequest:
         uc = GetSampleRequest(FakeUoW(), repo)
         auth = _make_auth()
 
-        result = await uc(GetSampleRequestQuery(request_id=uuid.uuid4()), auth)
+        result = await uc(GetSampleRequestQuery(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
 
     @pytest.mark.asyncio
-    async def test_cross_workspace_raises(self) -> None:
+    async def test_cross_workspace_returns_failure(self) -> None:
         req = _make_request(workspace_id=OTHER_WS_ID)
         repo = FakeSampleRequestRepo([req])
         uc = GetSampleRequest(FakeUoW(), repo)
         auth = _make_auth(workspace_id=WS_ID)
 
-        with pytest.raises(NotFoundError):
-            await uc(GetSampleRequestQuery(request_id=req.id), auth)
+        result = await uc(GetSampleRequestQuery(workspace_id=WS_ID, request_id=req.id), auth)
+        assert isinstance(result, Failure)
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +339,7 @@ class TestApproveSampleRequest:
         uc = ApproveSampleRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(ApproveSampleRequestCommand(request_id=req.id), auth)
+        result = await uc(ApproveSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SampleRequestStatus.APPROVED
@@ -345,7 +353,7 @@ class TestApproveSampleRequest:
         assignee = uuid.uuid4()
 
         result = await uc(
-            ApproveSampleRequestCommand(request_id=req.id, assigned_to=assignee), auth
+            ApproveSampleRequestCommand(workspace_id=WS_ID, request_id=req.id, assigned_to=assignee), auth
         )
 
         assert isinstance(result, Success)
@@ -359,7 +367,7 @@ class TestApproveSampleRequest:
         auth = _make_auth()
 
         result = await uc(
-            ApproveSampleRequestCommand(request_id=uuid.uuid4()), auth
+            ApproveSampleRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth
         )
 
         assert isinstance(result, Failure)
@@ -373,7 +381,7 @@ class TestApproveSampleRequest:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(ApproveSampleRequestCommand(request_id=req.id), auth)
+            await uc(ApproveSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +398,7 @@ class TestRejectSampleRequest:
         auth = _make_auth()
 
         result = await uc(
-            RejectSampleRequestCommand(request_id=req.id, reason="Insufficient stock"),
+            RejectSampleRequestCommand(workspace_id=WS_ID, request_id=req.id, reason="Insufficient stock"),
             auth,
         )
 
@@ -406,7 +414,7 @@ class TestRejectSampleRequest:
         auth = _make_auth()
 
         result = await uc(
-            RejectSampleRequestCommand(request_id=uuid.uuid4(), reason="No stock"),
+            RejectSampleRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4(), reason="No stock"),
             auth,
         )
 
@@ -422,7 +430,7 @@ class TestRejectSampleRequest:
 
         with pytest.raises(ValidationError):
             await uc(
-                RejectSampleRequestCommand(request_id=req.id, reason="   "),
+                RejectSampleRequestCommand(workspace_id=WS_ID, request_id=req.id, reason="   "),
                 auth,
             )
 
@@ -442,7 +450,7 @@ class TestFulfillSampleRequest:
         sample_id = uuid.uuid4()
 
         result = await uc(
-            FulfillSampleRequestCommand(request_id=req.id, sample_id=sample_id), auth
+            FulfillSampleRequestCommand(workspace_id=WS_ID, request_id=req.id, sample_id=sample_id), auth
         )
 
         assert isinstance(result, Success)
@@ -458,7 +466,7 @@ class TestFulfillSampleRequest:
         auth = _make_auth()
 
         result = await uc(
-            FulfillSampleRequestCommand(request_id=uuid.uuid4(), sample_id=uuid.uuid4()),
+            FulfillSampleRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4(), sample_id=uuid.uuid4()),
             auth,
         )
 
@@ -474,7 +482,7 @@ class TestFulfillSampleRequest:
 
         with pytest.raises(ValidationError):
             await uc(
-                FulfillSampleRequestCommand(request_id=req.id, sample_id=uuid.uuid4()),
+                FulfillSampleRequestCommand(workspace_id=WS_ID, request_id=req.id, sample_id=uuid.uuid4()),
                 auth,
             )
 
@@ -492,7 +500,7 @@ class TestCancelSampleRequest:
         uc = CancelSampleRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSampleRequestCommand(request_id=req.id), auth)
+        result = await uc(CancelSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SampleRequestStatus.CANCELLED
@@ -504,7 +512,7 @@ class TestCancelSampleRequest:
         uc = CancelSampleRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSampleRequestCommand(request_id=req.id), auth)
+        result = await uc(CancelSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SampleRequestStatus.CANCELLED
@@ -516,7 +524,7 @@ class TestCancelSampleRequest:
         uc = CancelSampleRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSampleRequestCommand(request_id=req.id), auth)
+        result = await uc(CancelSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SampleRequestStatus.CANCELLED
@@ -527,7 +535,7 @@ class TestCancelSampleRequest:
         uc = CancelSampleRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(CancelSampleRequestCommand(request_id=uuid.uuid4()), auth)
+        result = await uc(CancelSampleRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
@@ -540,7 +548,7 @@ class TestCancelSampleRequest:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(CancelSampleRequestCommand(request_id=req.id), auth)
+            await uc(CancelSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
 
 # ---------------------------------------------------------------------------
@@ -556,7 +564,7 @@ class TestStartPreparingSampleRequest:
         uc = StartPreparingSampleRequest(FakeUoW(), repo, FakeDispatcher())
         auth = _make_auth()
 
-        result = await uc(StartPreparingSampleRequestCommand(request_id=req.id), auth)
+        result = await uc(StartPreparingSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         assert isinstance(result, Success)
         assert result.unwrap().status == SampleRequestStatus.PREPARING
@@ -568,7 +576,7 @@ class TestStartPreparingSampleRequest:
         auth = _make_auth()
 
         result = await uc(
-            StartPreparingSampleRequestCommand(request_id=uuid.uuid4()), auth
+            StartPreparingSampleRequestCommand(workspace_id=WS_ID, request_id=uuid.uuid4()), auth
         )
 
         assert isinstance(result, Failure)
@@ -582,7 +590,7 @@ class TestStartPreparingSampleRequest:
         auth = _make_auth()
 
         with pytest.raises(ValidationError):
-            await uc(StartPreparingSampleRequestCommand(request_id=req.id), auth)
+            await uc(StartPreparingSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
     @pytest.mark.asyncio
     async def test_dispatcher_receives_events(self) -> None:
@@ -592,7 +600,7 @@ class TestStartPreparingSampleRequest:
         approve_uc = ApproveSampleRequest(FakeUoW(), repo, dispatcher)
         auth = _make_auth()
 
-        await approve_uc(ApproveSampleRequestCommand(request_id=req.id), auth)
+        await approve_uc(ApproveSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
 
         # Dispatcher called with events (SampleRequestApproved event registered)
         # Events list could be empty since FakeUoW.commit() returns [] but domain

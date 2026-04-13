@@ -69,7 +69,15 @@ class FakeRelationshipRepository:
     async def find_by_id(self, id: uuid.UUID) -> MoleculeRelationship | None:
         return self._store.get(id)
 
-    async def delete(self, id: uuid.UUID) -> None:
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> MoleculeRelationship | None:
+        entity = self._store.get(id)
+        if entity is not None and entity.workspace_id != workspace_id:
+            return None
+        return entity
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         self._store.pop(id, None)
         self.deleted_ids.append(id)
 
