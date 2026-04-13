@@ -42,6 +42,7 @@ import {
   useUnlockRun,
   useFitCurves,
 } from "../hooks/use-runs";
+import { useProtocol } from "../hooks/use-protocols";
 import {
   PLATE_FORMAT_LABELS,
   type PlateFormat,
@@ -55,6 +56,7 @@ interface RunDetailProps {
 
 export function RunDetail({ runId }: RunDetailProps) {
   const query = useRun(runId);
+  const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
   const approveMutation = useApproveRun();
@@ -110,9 +112,13 @@ export function RunDetail({ runId }: RunDetailProps) {
     <>
       <DetailShell
         query={query}
-        backHref="/assays"
-        backLabel="Back to Protocols"
+        backHref={protocol ? `/assays/protocols/${protocol.id}` : "/assays"}
+        backLabel={protocol ? `Back to ${protocol.name}` : "Back to Protocols"}
         title={(r) => `Run ${r.run_date}`}
+        breadcrumbTrail={(r) => [
+          { label: "Protocols", href: "/assays" },
+          { label: protocol?.name ?? "...", href: `/assays/protocols/${r.protocol_id}` },
+        ]}
         badge={(r) => ({ status: r.status })}
         notFoundMessage="Run not found."
         actions={(r) => {

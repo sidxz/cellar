@@ -91,6 +91,9 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
+        breadcrumbTrail={() => [
+          { label: "Protocols", href: "/assays" },
+        ]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
         actions={(p) => {

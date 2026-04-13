@@ -4,7 +4,11 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, AlertCircle } from "lucide-react";
-import { useBreadcrumbOverride } from "@/shared/components/layout/breadcrumb-context";
+import {
+  useBreadcrumbOverride,
+  useBreadcrumbTrail,
+  type BreadcrumbCrumb,
+} from "@/shared/components/layout/breadcrumb-context";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { StatusBadge } from "@/shared/components/status-badge";
@@ -14,6 +18,9 @@ interface DetailShellProps<T> {
   backHref: string;
   backLabel?: string;
   title: (entity: T) => string;
+  /** Explicit breadcrumb trail. When provided, overrides URL-based breadcrumbs.
+   *  The entity title is automatically appended as the last crumb. */
+  breadcrumbTrail?: (entity: T) => BreadcrumbCrumb[];
   badge?: (entity: T) => { status: string; label?: string };
   actions?: (entity: T) => ReactNode;
   notFoundMessage?: string;
@@ -25,6 +32,7 @@ export function DetailShell<T>({
   backHref,
   backLabel = "Back",
   title,
+  breadcrumbTrail,
   badge,
   actions,
   notFoundMessage = "Not found.",
@@ -34,7 +42,18 @@ export function DetailShell<T>({
   const segments = pathname.split("/").filter(Boolean);
   const lastSegment = segments[segments.length - 1] ?? "";
   const entityTitle = query.data ? title(query.data) : "";
-  useBreadcrumbOverride(lastSegment, entityTitle);
+
+  // Build the full trail if the page provided a trail builder,
+  // otherwise fall back to the single-segment override.
+  const fullTrail: BreadcrumbCrumb[] =
+    query.data && breadcrumbTrail
+      ? [...breadcrumbTrail(query.data), { label: entityTitle }]
+      : [];
+  useBreadcrumbTrail(fullTrail);
+  useBreadcrumbOverride(
+    !breadcrumbTrail ? lastSegment : "",
+    !breadcrumbTrail ? entityTitle : "",
+  );
 
   if (query.isLoading) {
     return (
