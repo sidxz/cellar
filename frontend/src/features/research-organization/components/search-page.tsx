@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Filter, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
@@ -12,10 +12,9 @@ import { useExecuteSearch, type EnrichedSearchResponse } from "../hooks/use-sear
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { useReportConfig } from "../hooks/use-report-config";
 import { SearchForm } from "./search/search-form";
-import { ProjectSidebar } from "./search/project-sidebar";
 import { ResultsToolbar } from "./search/results-toolbar";
 import { ResultsGrid } from "./search/results-grid";
-import { CompoundDetailPanel } from "./search/compound-detail-panel";
+import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
 import { SaveSearchDialog } from "./search/save-search-dialog";
 import { CollectionPickerDialog } from "./collection-picker-dialog";
@@ -40,7 +39,6 @@ function SearchPageInner() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [showForm, setShowForm] = useState(true);
 
   // ── Detail panel ───────────────────────────────────────────────────────
   const [selectedMolecule, setSelectedMolecule] = useState<EnrichedMolecule | null>(null);
@@ -91,7 +89,6 @@ function SearchPageInner() {
     (query: SearchQuery, columns: string[]) => {
       setCurrentQuery(query);
       setProtocolColumns(columns);
-      setShowForm(false);
       setHasSearched(true);
       setSelectedMolecule(null);
       setGridSelectedIds(new Set());
@@ -210,38 +207,16 @@ function SearchPageInner() {
   // ─── Layout ────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-64px)]">
-      {/* ── Left: Project Sidebar ── */}
-      <ProjectSidebar selectedIds={projectIds} onChange={setProjectIds} />
-
-      {/* ── Center: Search form + results ── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Search form (collapsible) */}
-        {showForm && (
-          <div className="shrink-0 overflow-auto border-b p-4">
-            <SearchForm
-              initialQuery={currentQuery ?? undefined}
-              projectIds={projectIds}
-              onProjectsChange={setProjectIds}
-              onSearch={handleSearch}
-              isLoading={searchMutation.isPending}
-            />
-          </div>
-        )}
-
-        {/* "Refine Search" button when form is collapsed */}
-        {!showForm && hasSearched && (
-          <div className="shrink-0 border-b px-4 py-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowForm(true)}
-            >
-              <Filter className="mr-2 h-4 w-4" />
-              Refine Search
-            </Button>
-          </div>
-        )}
+    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        {/* Search form — always visible */}
+        <SearchForm
+          initialQuery={currentQuery ?? undefined}
+          projectIds={projectIds}
+          onProjectsChange={setProjectIds}
+          onSearch={handleSearch}
+          isLoading={searchMutation.isPending}
+        />
 
         {/* Results area */}
         {hasSearched && (
@@ -256,66 +231,44 @@ function SearchPageInner() {
               onCustomizeReport={() => setReportOpen(true)}
               onSaveSearch={() => setSaveOpen(true)}
             />
-
-            {/* Grid area */}
-            <div className="flex-1 overflow-hidden">
-              <ResultsGrid
-                results={results}
-                protocolColumns={protocolColumns}
-                protocols={protocols ?? []}
-                reportConfig={reportConfig}
-                loading={searchMutation.isPending && results.length === 0}
-                onRowClick={handleRowClick}
-                selectedIds={gridSelectedIds}
-                onSelectionChange={setGridSelectedIds}
-              />
-            </div>
-
-            {/* Load more */}
+            <ResultsGrid
+              results={results}
+              protocolColumns={protocolColumns}
+              protocols={protocols ?? []}
+              reportConfig={reportConfig}
+              loading={searchMutation.isPending && results.length === 0}
+              onRowClick={handleRowClick}
+              selectedIds={gridSelectedIds}
+              onSelectionChange={setGridSelectedIds}
+            />
             {nextCursor && (
-              <div className="shrink-0 border-t py-3 text-center">
-                <Button
-                  variant="outline"
-                  onClick={handleLoadMore}
-                  disabled={searchMutation.isPending}
-                >
-                  {searchMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    "Load More"
-                  )}
+              <div className="flex justify-center py-3">
+                <Button variant="outline" size="sm" onClick={handleLoadMore} disabled={searchMutation.isPending}>
+                  {searchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Load More
                 </Button>
               </div>
             )}
           </>
         )}
 
-        {/* Empty state before first search */}
-        {!hasSearched && !showForm && (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Build a query to search compounds.
+        {!hasSearched && (
+          <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+            Build a query above and click Search to find compounds.
           </div>
         )}
       </div>
 
-      {/* ── Right: Compound Detail Panel (conditional) ── */}
-      {selectedMolecule && (
-        <div className="w-[420px] shrink-0">
-          <CompoundDetailPanel
-            molecule={selectedMolecule}
-            visibleProtocolIds={visibleProtocolIds}
-            currentIndex={selectedIndex}
-            totalCount={results.length}
-            onNavigate={handleDetailNavigate}
-            onClose={() => setSelectedMolecule(null)}
-          />
-        </div>
-      )}
+      {/* Overlays */}
+      <CompoundDetailSheet
+        molecule={selectedMolecule}
+        visibleProtocolIds={visibleProtocolIds}
+        currentIndex={selectedIndex}
+        totalCount={results.length}
+        onNavigate={handleDetailNavigate}
+        onClose={() => setSelectedMolecule(null)}
+      />
 
-      {/* ── Dialogs ── */}
       <ReportCustomizer
         open={reportOpen}
         onClose={() => setReportOpen(false)}
