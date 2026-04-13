@@ -105,7 +105,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
         title={`Copy ${label}`}
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5 text-emerald-400" />
+          <Check className="h-3.5 w-3.5 text-success" />
         ) : (
           <Copy className="h-3.5 w-3.5 text-muted-foreground" />
         )}

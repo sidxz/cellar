@@ -140,7 +140,7 @@ function PreviewCell({
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
     case "valid":
-      return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+      return <CheckCircle2 className="h-4 w-4 text-success" />;
     case "corrected":
       return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
     case "error":
@@ -697,7 +697,7 @@ export function CreateShipmentDialog({
                       <span className="font-medium">
                         {previewSummary.total} items:
                       </span>
-                      <span className="text-emerald-500">
+                      <span className="text-success">
                         {previewSummary.valid} valid
                       </span>
                       <span className="text-yellow-500">

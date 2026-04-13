@@ -50,7 +50,7 @@ import {
 
 function structureStatusBadgeClass(status: StructureStatus): string {
   return status === "disclosed"
-    ? "border-emerald-500/40 text-emerald-400"
+    ? "border-success/40 text-success"
     : "border-yellow-500/40 text-yellow-400";
 }
 

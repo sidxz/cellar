@@ -258,7 +258,7 @@ export function BulkRegistrationDialog({
                         {item.success ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
-                          <XCircle className="h-4 w-4 text-red-500" />
+                          <XCircle className="h-4 w-4 text-destructive" />
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-muted-foreground font-mono">

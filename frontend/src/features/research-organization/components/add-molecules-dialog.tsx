@@ -65,7 +65,7 @@ function MembershipResultDisplay({ result }: { result: MembershipResult }) {
   return (
     <div className="space-y-2 rounded-md border p-3 text-sm">
       <div className="flex items-center gap-4">
-        <span className="text-emerald-500 font-medium">
+        <span className="text-success font-medium">
           Added {result.added_count}
         </span>
         {result.already_present > 0 && (

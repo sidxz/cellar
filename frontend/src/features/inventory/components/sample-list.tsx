@@ -269,7 +269,7 @@ export function GlobalSampleList({ params }: GlobalSampleListProps) {
             d.low_stock_threshold != null &&
             d.amount_value < d.low_stock_threshold
           ) {
-            return "text-amber-500";
+            return "text-warning";
           }
           return "";
         },

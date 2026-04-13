@@ -8,16 +8,16 @@ import { WELL_DESIGNATION_LABELS } from "../types";
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const WELL_COLORS: Record<WellDesignation, string> = {
-  compound: "bg-blue-500",
+  compound: "bg-primary",
   positive_control: "bg-green-500",
-  negative_control: "bg-red-500",
+  negative_control: "bg-destructive",
   empty: "bg-gray-300 dark:bg-gray-700",
 };
 
 const WELL_DOT_COLORS: Record<WellDesignation, string> = {
-  compound: "bg-blue-500",
+  compound: "bg-primary",
   positive_control: "bg-green-500",
-  negative_control: "bg-red-500",
+  negative_control: "bg-destructive",
   empty: "bg-gray-400",
 };
 

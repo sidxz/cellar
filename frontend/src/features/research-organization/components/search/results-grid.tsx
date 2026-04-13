@@ -53,11 +53,11 @@ function CurveClassBadge({ curveClass }: { curveClass: string | null }) {
   const upper = curveClass.toUpperCase();
   let colorClass = "";
   if (upper === "F" || upper === "FULL")
-    colorClass = "bg-emerald-500/12 text-emerald-400";
+    colorClass = "bg-success/12 text-success";
   else if (upper === "P" || upper === "PARTIAL")
     colorClass = "bg-yellow-500/12 text-yellow-400";
   else if (upper === "I" || upper === "INACTIVE")
-    colorClass = "bg-red-500/12 text-red-400";
+    colorClass = "bg-destructive/12 text-destructive";
 
   return (
     <Badge

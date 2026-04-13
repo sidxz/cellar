@@ -56,7 +56,7 @@ function EntryRow({ fieldName, oldValue, newValue }: {
       <span className="text-muted-foreground">:</span>
       <div className="flex items-center gap-1.5 min-w-0">
         {oldValue !== null && (
-          <span className="text-red-400 line-through truncate max-w-[140px]" title={oldValue}>
+          <span className="text-destructive line-through truncate max-w-[140px]" title={oldValue}>
             {oldValue}
           </span>
         )}

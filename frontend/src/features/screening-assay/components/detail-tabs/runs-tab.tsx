@@ -36,7 +36,7 @@ function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
   if (zp == null) return <span className="text-muted-foreground">&mdash;</span>;
   if (zp >= 0.5)
     return (
-      <Badge variant="outline" className="border-emerald-500/40 text-emerald-400">
+      <Badge variant="outline" className="border-success/40 text-success">
         {zp.toFixed(2)}
       </Badge>
     );
@@ -47,7 +47,7 @@ function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
       </Badge>
     );
   return (
-    <Badge variant="outline" className="border-red-500/40 text-red-400">
+    <Badge variant="outline" className="border-destructive/40 text-destructive">
       {zp.toFixed(2)}
     </Badge>
   );

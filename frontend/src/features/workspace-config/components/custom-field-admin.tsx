@@ -450,7 +450,7 @@ function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
                 <span
                   className={
                     field.is_active
-                      ? "text-sm font-medium text-emerald-500"
+                      ? "text-sm font-medium text-success"
                       : "text-sm text-muted-foreground"
                   }
                 >

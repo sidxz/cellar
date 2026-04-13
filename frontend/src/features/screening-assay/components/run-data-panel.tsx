@@ -44,7 +44,7 @@ function ZPrimeBadge({ value }: { value: number }) {
       ? { label: "Excellent", className: "bg-green-500/20 text-green-400 border-green-500/30" }
       : value >= 0
       ? { label: "Marginal", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" }
-      : { label: "Poor", className: "bg-red-500/20 text-red-400 border-red-500/30" };
+      : { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" };
 
   return (
     <Badge variant="outline" className={cn("text-xs font-medium", className)}>
@@ -141,7 +141,7 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                 </div>
               )}
               {negMean !== null && (
-                <div className="rounded-md bg-red-500/10 px-3 py-2">
+                <div className="rounded-md bg-destructive/10 px-3 py-2">
                   <p className="text-xs text-muted-foreground mb-0.5">Neg Control</p>
                   <p className="font-medium tabular-nums">
                     {negMean.toFixed(3)}

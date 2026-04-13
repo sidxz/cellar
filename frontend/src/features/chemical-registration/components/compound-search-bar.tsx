@@ -204,7 +204,7 @@ export function CompoundSearchBar() {
                       </Badge>
                       {showSimilarity && r.similarity != null && (
                         <span className={
-                          r.similarity > 0.8 ? "text-emerald-400 font-medium text-sm" :
+                          r.similarity > 0.8 ? "text-success font-medium text-sm" :
                           r.similarity > 0.6 ? "text-yellow-400 text-sm" : "text-muted-foreground text-sm"
                         }>
                           {(r.similarity * 100).toFixed(1)}%

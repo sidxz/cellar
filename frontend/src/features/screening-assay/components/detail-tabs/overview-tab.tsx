@@ -28,7 +28,7 @@ function zPrimeBadge(zPrime: number | null) {
   if (zPrime == null) return null;
   if (zPrime >= 0.5) {
     return (
-      <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
+      <Badge className="border-success/40 bg-success/10 text-success">
         Z&apos; {zPrime.toFixed(2)} — Excellent
       </Badge>
     );
@@ -41,7 +41,7 @@ function zPrimeBadge(zPrime: number | null) {
     );
   }
   return (
-    <Badge className="border-red-500/40 bg-red-500/10 text-red-400">
+    <Badge className="border-destructive/40 bg-destructive/10 text-destructive">
       Z&apos; {zPrime.toFixed(2)} — Poor
     </Badge>
   );

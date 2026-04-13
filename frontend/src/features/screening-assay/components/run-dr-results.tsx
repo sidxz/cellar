@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { Eye, Filter, FlaskConical, Settings2, RotateCcw } from "lucide-react";
+import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import type {
   ColDef,
   ICellRendererParams,
@@ -77,9 +78,9 @@ function curveClassBadge(cc: CurveClass | null) {
     );
   }
   const styles: Record<CurveClass, string> = {
-    full: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
+    full: "border-success/40 bg-success/10 text-success",
     partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
-    bell_shaped: "border-blue-500/40 bg-blue-500/10 text-blue-400",
+    bell_shaped: "border-primary/40 bg-primary/10 text-primary",
     inactive: "border-muted text-muted-foreground",
   };
   return <Badge className={styles[cc]}>{CURVE_CLASS_LABELS[cc]}</Badge>;
@@ -518,7 +519,7 @@ export function RunDoseResponseResults({
           {allRows.length} compound{allRows.length !== 1 ? "s" : ""}
         </Badge>
         {hasCriteria && (
-          <Badge variant="outline" className="border-emerald-500/40 text-emerald-400">
+          <Badge variant="outline" className="border-success/40 text-success">
             {filteredRows.length} hit{filteredRows.length !== 1 ? "s" : ""}
           </Badge>
         )}
@@ -526,10 +527,10 @@ export function RunDoseResponseResults({
           const zp = run.qc_metrics!.z_prime as number;
           const label = zp >= 0.5 ? "Excellent" : zp >= 0 ? "Marginal" : "Poor";
           const cls = zp >= 0.5
-            ? "border-emerald-500/40 text-emerald-400"
+            ? "border-success/40 text-success"
             : zp >= 0
             ? "border-yellow-500/40 text-yellow-400"
-            : "border-red-500/40 text-red-400";
+            : "border-destructive/40 text-destructive";
           return (
             <Badge variant="outline" className={cls}>
               Z&prime; = {zp.toFixed(2)} &mdash; {label}
@@ -681,7 +682,7 @@ export function RunDoseResponseResults({
               rows={selectedRows.map((row, i) => ({
                 label: row.registration_number,
                 batch: row.batch_number,
-                color: ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#a855f7"][i % 5],
+                color: GROUP_PALETTE[i % GROUP_PALETTE.length],
                 curve_type: row.curve_type,
                 fitted_value: row.fitted_value,
                 fitted_unit: row.fitted_unit,

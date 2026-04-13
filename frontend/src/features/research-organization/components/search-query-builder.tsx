@@ -1092,7 +1092,7 @@ function GroupCriterionRow({
   onRemove: () => void;
   depth: number;
 }) {
-  const borderColors = ["border-blue-500/40", "border-amber-500/40", "border-emerald-500/40", "border-purple-500/40"];
+  const borderColors = ["border-primary/40", "border-warning/40", "border-success/40", "border-info/40"];
   const borderColor = borderColors[depth % borderColors.length];
 
   function addSubCriterion(c: SearchCriterion) {

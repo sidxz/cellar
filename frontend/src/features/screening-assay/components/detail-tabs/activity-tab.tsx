@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { GROUP_PALETTE, CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Eye, Filter, FlaskConical, FolderPlus, RotateCcw, Settings2, Star } from "lucide-react";
 import type {
   ColDef,
@@ -81,9 +82,9 @@ function curveClassBadge(cc: CurveClass | null) {
     );
   }
   const styles: Record<CurveClass, string> = {
-    full: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
+    full: "border-success/40 bg-success/10 text-success",
     partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
-    bell_shaped: "border-blue-500/40 bg-blue-500/10 text-blue-400",
+    bell_shaped: "border-primary/40 bg-primary/10 text-primary",
     inactive: "border-muted text-muted-foreground",
   };
   return <Badge className={styles[cc]}>{CURVE_CLASS_LABELS[cc]}</Badge>;
@@ -449,9 +450,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   // Build Plotly curve overlay traces
   const overlayTraces = useMemo(() => {
     if (!multiCurves || multiCurves.length === 0) return null;
-    const TRACE_COLORS = [
-      "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#a855f7",
-    ];
+    const TRACE_COLORS = GROUP_PALETTE.slice(0, 5);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const traces: any[] = [];
 
@@ -562,7 +561,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         y: selectedRows.map(
           (r) => r.readouts?.[firstReadout.name]?.best ?? 0
         ),
-        marker: { color: "#3b82f6" },
+        marker: { color: CHART_COLORS.primary },
         hoverinfo: "x+y",
       },
     ];
@@ -577,11 +576,11 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       autosize: true,
       paper_bgcolor: "transparent",
       plot_bgcolor: "transparent",
-      font: { color: "#a1a1aa" },
+      font: { color: CHART_AXIS.label },
       xaxis: {
         title: { text: isDR ? "Concentration" : "Compound" },
         type: isDR ? ("log" as const) : undefined,
-        gridcolor: "#27272a",
+        gridcolor: CHART_AXIS.grid,
         ...(isDR ? {} : { tickangle: -45 }),
       },
       yaxis: {
@@ -590,12 +589,12 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
             ? "Response (%)"
             : `Best ${firstReadout?.name ?? "Value"}${unitSuffix}`,
         },
-        gridcolor: "#27272a",
+        gridcolor: CHART_AXIS.grid,
       },
       legend: {
         orientation: "h" as const,
         y: -0.25,
-        font: { color: "#a1a1aa" },
+        font: { color: CHART_AXIS.label },
       },
       margin: { l: 60, r: 20, t: 20, b: 80 },
       bargap: 0.3,
