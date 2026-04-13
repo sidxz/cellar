@@ -12,7 +12,7 @@ import type {
   PropertyCriterion,
   StructureCriterion,
 } from "../../types";
-import { ProtocolSection } from "./protocol-section";
+import { ProtocolSection, type ProtocolConjunction } from "./protocol-section";
 import { StructureSection } from "./structure-section";
 import { PropertySection } from "./property-section";
 import {
@@ -126,6 +126,9 @@ export function SearchForm({
   const initial = decomposeQuery(initialQuery);
 
   const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(initial.activityCriteria);
+  const [protocolConjunctions, setProtocolConjunctions] = useState<ProtocolConjunction[]>(
+    () => initial.activityCriteria.map(() => "or" as ProtocolConjunction)
+  );
   const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(initial.structureCriterion);
   const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(initial.propertyCriteria);
   const [collectionTerms, setCollectionTerms] = useState<CollectionTermValue[]>(
@@ -138,6 +141,7 @@ export function SearchForm({
   useEffect(() => {
     const parsed = decomposeQuery(initialQuery);
     setActivityCriteria(parsed.activityCriteria);
+    setProtocolConjunctions(parsed.activityCriteria.map(() => "or" as ProtocolConjunction));
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);
     setCollectionTerms(collectionCriteriaToTerms(parsed.collectionCriteria));
@@ -149,9 +153,23 @@ export function SearchForm({
   const composeCriteria = useCallback((): SearchCriterion[] => {
     const criteria: SearchCriterion[] = [];
 
-    // Activity
-    for (const c of activityCriteria) {
-      if (c.protocol_id) criteria.push(c);
+    // Activity — respect per-row conjunctions
+    const validActivity = activityCriteria.filter((c) => c.protocol_id);
+    if (validActivity.length > 0) {
+      const hasOr = protocolConjunctions.some((c) => c === "or");
+      if (hasOr && validActivity.length > 1) {
+        // Wrap in a GroupCriterion with "or" logic
+        criteria.push({
+          type: "group",
+          logic: "or",
+          criteria: validActivity,
+        });
+      } else {
+        // All "and" — push individually (they get ANDed at the top level)
+        for (const c of validActivity) {
+          criteria.push(c);
+        }
+      }
     }
 
     // Structure
@@ -204,7 +222,7 @@ export function SearchForm({
     }
 
     return criteria;
-  }, [activityCriteria, structureCriterion, propertyCriteria, collectionTerms, textCriteria, advanced]);
+  }, [activityCriteria, protocolConjunctions, structureCriterion, propertyCriteria, collectionTerms, textCriteria, advanced]);
 
   function handleSearch() {
     const criteria = composeCriteria();
@@ -215,6 +233,7 @@ export function SearchForm({
 
   function handleReset() {
     setActivityCriteria([]);
+    setProtocolConjunctions([]);
     setStructureCriterion(null);
     setPropertyCriteria([]);
     setCollectionTerms([]);
@@ -252,7 +271,14 @@ export function SearchForm({
       </div>
 
       {/* Protocols — full width */}
-      <ProtocolSection criteria={activityCriteria} onChange={setActivityCriteria} />
+      <ProtocolSection
+        criteria={activityCriteria}
+        conjunctions={protocolConjunctions}
+        onChange={(criteria, conjs) => {
+          setActivityCriteria(criteria);
+          setProtocolConjunctions(conjs);
+        }}
+      />
 
       <Separator className="my-3" />
 

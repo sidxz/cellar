@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { Minus, Plus } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import {
@@ -31,7 +31,7 @@ const CURVE_TYPE_OPTIONS = [
   { value: "kd", label: "Kd" },
 ] as const;
 
-type Conjunction = "and" | "or";
+export type ProtocolConjunction = "and" | "or";
 
 function defaultActivityCriterion(): ActivityCriterion {
   return { type: "activity", protocol_id: "", operator: "lt", value: 0 };
@@ -42,10 +42,10 @@ function defaultActivityCriterion(): ActivityCriterion {
 interface ActivityRowProps {
   index: number;
   criterion: ActivityCriterion;
-  conjunction: Conjunction;
+  conjunction: ProtocolConjunction;
   protocols: Protocol[];
   isFirst: boolean;
-  onConjunctionChange: (conj: Conjunction) => void;
+  onConjunctionChange: (conj: ProtocolConjunction) => void;
   onChange: (c: ActivityCriterion) => void;
   onRemove: () => void;
 }
@@ -86,9 +86,9 @@ function ActivityRow({
         {!isFirst ? (
           <Select
             value={conjunction}
-            onValueChange={(v) => onConjunctionChange(v as Conjunction)}
+            onValueChange={(v) => onConjunctionChange(v as ProtocolConjunction)}
           >
-            <SelectTrigger className="h-7 w-16 text-xs shrink-0">
+            <SelectTrigger className="h-7 w-[4.5rem] text-xs shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -97,7 +97,7 @@ function ActivityRow({
             </SelectContent>
           </Select>
         ) : (
-          <span className="w-16 shrink-0" />
+          <span className="w-[4.5rem] shrink-0" />
         )}
 
         {/* "In" label */}
@@ -213,58 +213,44 @@ function ActivityRow({
 
 // ─── Section ────────────────────────────────────────────────────────────────
 
-interface ProtocolSectionProps {
+export interface ProtocolSectionProps {
   criteria: ActivityCriterion[];
-  onChange: (criteria: ActivityCriterion[]) => void;
+  conjunctions: ProtocolConjunction[];
+  onChange: (criteria: ActivityCriterion[], conjunctions: ProtocolConjunction[]) => void;
 }
 
-export function ProtocolSection({ criteria, onChange }: ProtocolSectionProps) {
+export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSectionProps) {
   const { data: protocols } = useProtocols();
 
-  // Local UI state — conjunction per row (index 0 is unused but kept for alignment)
-  const [conjunctions, setConjunctions] = useState<Conjunction[]>(() =>
-    criteria.map(() => "and")
-  );
-
-  const syncedConjunctions = (newLength: number): Conjunction[] => {
-    const copy = [...conjunctions];
-    while (copy.length < newLength) copy.push("and");
-    return copy.slice(0, newLength);
-  };
-
   const addTerm = useCallback(() => {
-    const newCriteria = [...criteria, defaultActivityCriterion()];
-    setConjunctions(syncedConjunctions(newCriteria.length));
-    onChange(newCriteria);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    onChange(
+      [...criteria, defaultActivityCriterion()],
+      [...conjunctions, "or"],
+    );
   }, [criteria, conjunctions, onChange]);
 
   const updateTerm = useCallback(
     (index: number, updated: ActivityCriterion) => {
-      onChange(criteria.map((c, i) => (i === index ? updated : c)));
+      onChange(criteria.map((c, i) => (i === index ? updated : c)), conjunctions);
     },
-    [criteria, onChange]
+    [criteria, conjunctions, onChange]
   );
 
   const removeTerm = useCallback(
     (index: number) => {
-      const newCriteria = criteria.filter((_, i) => i !== index);
-      const newConj = conjunctions.filter((_, i) => i !== index);
-      setConjunctions(newConj);
-      onChange(newCriteria);
+      onChange(
+        criteria.filter((_, i) => i !== index),
+        conjunctions.filter((_, i) => i !== index),
+      );
     },
     [criteria, conjunctions, onChange]
   );
 
   const updateConjunction = useCallback(
-    (index: number, conj: Conjunction) => {
-      setConjunctions((prev) => {
-        const copy = [...prev];
-        copy[index] = conj;
-        return copy;
-      });
+    (index: number, conj: ProtocolConjunction) => {
+      onChange(criteria, conjunctions.map((c, i) => (i === index ? conj : c)));
     },
-    []
+    [criteria, conjunctions, onChange]
   );
 
   return (
@@ -298,7 +284,7 @@ export function ProtocolSection({ criteria, onChange }: ProtocolSectionProps) {
             key={`activity-${i}`}
             index={i}
             criterion={c}
-            conjunction={conjunctions[i] ?? "and"}
+            conjunction={conjunctions[i] ?? "or"}
             protocols={protocols ?? []}
             isFirst={i === 0}
             onConjunctionChange={(conj) => updateConjunction(i, conj)}
