@@ -3,29 +3,17 @@
 import { Fragment, useState } from "react";
 import { cn } from "@/shared/lib/utils";
 import type { PlateMapResponse, PlateMapWell } from "../types";
+import { GROUP_PALETTE, WELL_TYPE_COLORS, CHART_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TRACE_COLORS = [
-  "#3b82f6",
-  "#22c55e",
-  "#f59e0b",
-  "#ef4444",
-  "#a855f7",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
-  "#f97316",
-  "#14b8a6",
-  "#8b5cf6",
-  "#d946ef",
-];
+const TRACE_COLORS = GROUP_PALETTE;
 
 const CONTROL_COLORS: Record<string, string> = {
-  positive_control: "#22c55e",
-  negative_control: "#ef4444",
-  blank: "#6b7280",
-  reference: "#f59e0b",
+  positive_control: WELL_TYPE_COLORS.positive_control,
+  negative_control: WELL_TYPE_COLORS.negative_control,
+  blank: WELL_TYPE_COLORS.blank,
+  reference: CHART_COLORS.warning,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -127,12 +115,12 @@ export function PlateMapViewer({ plateMap, className }: PlateMapViewerProps) {
     border?: string;
     opacity?: number;
   } {
-    if (!well) return { background: "#27272a" };
+    if (!well) return { background: WELL_EMPTY_COLOR };
 
     if (well.well_type === "sample") {
       const color = well.molecule_id
-        ? (compoundColorMap.get(well.molecule_id) ?? "#3b82f6")
-        : "#3b82f6";
+        ? (compoundColorMap.get(well.molecule_id) ?? CHART_COLORS.primary)
+        : CHART_COLORS.primary;
       return { background: color };
     }
 
@@ -144,7 +132,7 @@ export function PlateMapViewer({ plateMap, className }: PlateMapViewerProps) {
       };
     }
 
-    return { background: "#27272a" };
+    return { background: WELL_EMPTY_COLOR };
   }
 
   const labelSize =
@@ -185,7 +173,7 @@ export function PlateMapViewer({ plateMap, className }: PlateMapViewerProps) {
         <div className="flex flex-wrap gap-2">
           {compoundIds.map((id) => {
             const well = plateMap.wells.find((w) => w.molecule_id === id);
-            const color = compoundColorMap.get(id) ?? "#3b82f6";
+            const color = compoundColorMap.get(id) ?? CHART_COLORS.primary;
             return (
               <div key={id} className="flex items-center gap-1.5 text-xs">
                 <span

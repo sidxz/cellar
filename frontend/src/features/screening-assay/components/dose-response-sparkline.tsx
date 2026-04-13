@@ -1,6 +1,7 @@
 "use client";
 
 import type { CurveClass, CurveParams } from "../types";
+import { CURVE_QUALITY_COLORS, CURVE_DEFAULT_COLOR, CHART_AXIS } from "@/shared/lib/chart-colors";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -18,15 +19,11 @@ interface DoseResponseSparklineProps {
 // Constants
 // ---------------------------------------------------------------------------
 
-const CURVE_COLORS: Record<string, string> = {
-  full: "#34d399",
-  partial: "#fbbf24",
-  bell_shaped: "#60a5fa",
-};
-const DEFAULT_COLOR = "#71717a";
-const AXIS_COLOR = "#3f3f46";
-const TICK_COLOR = "#52525b";
-const LABEL_COLOR = "#71717a";
+const CURVE_COLORS = CURVE_QUALITY_COLORS;
+const DEFAULT_COLOR = CURVE_DEFAULT_COLOR;
+const AXIS_COLOR = CHART_AXIS.border;
+const TICK_COLOR = CHART_AXIS.tick;
+const LABEL_COLOR = CHART_AXIS.label;
 
 // ---------------------------------------------------------------------------
 // Helpers

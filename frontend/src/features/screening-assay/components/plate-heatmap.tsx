@@ -2,6 +2,7 @@
 
 import { cn } from "@/shared/lib/utils";
 import { type PlateFormat, type WellType, WELL_TYPE_LABELS } from "../types";
+import { WELL_TYPE_COLORS as VF_WELL_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,13 +32,7 @@ const PLATE_DIMENSIONS: Record<PlateFormat, { rows: number; cols: number }> = {
   "1536": { rows: 32, cols: 48 },
 };
 
-const WELL_TYPE_COLORS: Record<WellType, string> = {
-  sample: "#3b82f6",
-  positive_control: "#22c55e",
-  negative_control: "#ef4444",
-  blank: "#6b7280",
-  reference: "#a855f7",
-};
+const WELL_TYPE_COLORS: Record<WellType, string> = VF_WELL_COLORS as Record<WellType, string>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,7 +144,7 @@ export function PlateHeatmap({
                 const wellData = wellMap.get(wellKey);
                 const hasData = !!wellData;
 
-                let fillColor = "#374151"; // default empty (dark gray)
+                let fillColor = WELL_EMPTY_COLOR;
                 let opacity = 0.2;
                 let titleText = `${rowLabel}${ci + 1}`;
 

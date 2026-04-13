@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import {
   X,
   ChevronUp,
@@ -87,7 +88,7 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
       y: rawY,
       mode: "markers",
       type: "scatter" as const,
-      marker: { color: "#a5b4fc", size: 6 },
+      marker: { color: CHART_COLORS.purple, size: 6 },
       name: "Data",
       hovertemplate: "Conc: %{x:.3e}<br>Response: %{y:.1f}<extra></extra>",
     },
@@ -115,7 +116,7 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
         y: fitted.y,
         mode: "lines",
         type: "scatter" as const,
-        line: { color: "#818cf8", width: 2 },
+        line: { color: CHART_COLORS.primaryLight, width: 2 },
         name: "Fit",
         hoverinfo: "skip" as const,
       });
@@ -129,17 +130,17 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
     // Horizontal dotted line at midpoint
     shapes.push({
       type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
-      line: { color: "#71717a", width: 1, dash: "dot" }, opacity: 0.4,
+      line: { color: CHART_COLORS.neutral, width: 1, dash: "dot" }, opacity: 0.4,
     });
     // Vertical dotted line at IC50
     shapes.push({
       type: "line", xref: "x", x0: ec50, x1: ec50, yref: "paper", y0: 0, y1: 1,
-      line: { color: "#71717a", width: 1, dash: "dot" }, opacity: 0.4,
+      line: { color: CHART_COLORS.neutral, width: 1, dash: "dot" }, opacity: 0.4,
     });
     // Orange marker at intersection
     traces.push({
       type: "scatter", mode: "markers", x: [ec50], y: [midY],
-      marker: { color: "#fbbf24", size: 9, line: { color: "#ef4444", width: 2 }, symbol: "circle" },
+      marker: { color: CHART_COLORS.warning, size: 9, line: { color: CHART_COLORS.error, width: 2 }, symbol: "circle" },
       showlegend: false,
       hovertemplate: `${curve.curve_type.toUpperCase()} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
     });
@@ -147,8 +148,8 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
     annotations.push({
       x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
       text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-      showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: "#ef4444",
-      ax: 0, ay: -30, font: { color: "#ef4444", size: 11 },
+      showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: CHART_COLORS.error,
+      ax: 0, ay: -30, font: { color: CHART_COLORS.error, size: 11 },
     });
   }
 
@@ -162,21 +163,21 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
           type: "log",
           title: {
             text: `Concentration (${curve.fitted_unit})`,
-            font: { size: 10, color: "#a1a1aa" },
+            font: { size: 10, color: CHART_AXIS.label },
           },
           showgrid: true,
-          gridcolor: "#1e1e22",
-          tickfont: { size: 9, color: "#71717a" },
+          gridcolor: CHART_AXIS.grid,
+          tickfont: { size: 9, color: CHART_AXIS.tick },
           zeroline: false,
         },
         yaxis: {
           title: {
             text: "Response (%)",
-            font: { size: 10, color: "#a1a1aa" },
+            font: { size: 10, color: CHART_AXIS.label },
           },
           showgrid: true,
-          gridcolor: "#1e1e22",
-          tickfont: { size: 9, color: "#71717a" },
+          gridcolor: CHART_AXIS.grid,
+          tickfont: { size: 9, color: CHART_AXIS.tick },
           zeroline: false,
         },
         paper_bgcolor: "transparent",
@@ -195,9 +196,9 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
 // ─── CurveParamGrid ───────────────────────────────────────────────────────
 
 const CURVE_CLASS_COLORS: Record<string, string> = {
-  F: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  F: "bg-success/20 text-success border-success/30",
   P: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  I: "bg-red-500/20 text-red-400 border-red-500/30",
+  I: "bg-destructive/20 text-destructive border-destructive/30",
 };
 
 function CurveParamGrid({ curve }: { curve: CurveDetail }) {

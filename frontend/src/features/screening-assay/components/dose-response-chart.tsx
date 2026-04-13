@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import React, { useState, useRef, useCallback } from "react";
+import { GROUP_PALETTE, CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
@@ -168,19 +169,10 @@ function computeReplicateStats(
 function rSquaredColor(r2: number): string {
   if (r2 >= 0.9) return "text-green-400";
   if (r2 >= 0.8) return "text-yellow-400";
-  return "text-red-400";
+  return "text-destructive";
 }
 
-const TRACE_COLORS = [
-  "#3b82f6",
-  "#22c55e",
-  "#f59e0b",
-  "#ef4444",
-  "#a855f7",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
-];
+const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
 
 const CURVE_CLASS_OPTIONS: CurveClass[] = ["full", "partial", "bell_shaped", "inactive"];
 
@@ -226,7 +218,7 @@ function CurveControls({
           <span>{open ? "▾" : "▸"}</span>
           {curve.molecule_name ?? "Curve"} — Fit Constraints
           {isPending && (
-            <span className="ml-1 h-2 w-2 rounded-full bg-blue-400 animate-pulse inline-block" />
+            <span className="ml-1 h-2 w-2 rounded-full bg-primary animate-pulse inline-block" />
           )}
         </button>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -843,15 +835,15 @@ export function DoseResponseChart({
       });
       traces.push({
         type: "scatter", mode: "markers", x: [ec50], y: [midY],
-        marker: { color: "#fbbf24", size: 10, line: { color: "#ef4444", width: 2 }, symbol: "circle" },
+        marker: { color: CHART_COLORS.warning, size: 10, line: { color: CHART_COLORS.error, width: 2 }, symbol: "circle" },
         showlegend: false,
         hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
       });
       annotations.push({
         x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
         text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-        showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: "#ef4444",
-        ax: 0, ay: -35, font: { color: "#ef4444", size: 11 },
+        showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: CHART_COLORS.error,
+        ax: 0, ay: -35, font: { color: CHART_COLORS.error, size: 11 },
       });
     }
 
@@ -883,7 +875,7 @@ export function DoseResponseChart({
     autosize: true,
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
-    font: { color: "#71717a" },
+    font: { color: CHART_AXIS.tick },
     xaxis: {
       title: { text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration" },
       type: "log" as const,
@@ -898,7 +890,7 @@ export function DoseResponseChart({
     legend: {
       orientation: "h" as const,
       y: -0.2,
-      font: { color: "#71717a" },
+      font: { color: CHART_AXIS.tick },
     },
     shapes,
     annotations,

@@ -2,6 +2,7 @@
  * Render a dose-response curve to a canvas and return as base64 PNG.
  * Used for embedding sparkline images in Excel exports.
  */
+import { CHART_COLORS, CHART_CANVAS } from "@/shared/lib/chart-colors";
 
 interface CurveImageParams {
   hill_slope: number;
@@ -26,7 +27,7 @@ const PAD = 12;
 export function renderCurveToBase64(
   params: CurveImageParams,
   dataPoints?: DataPoint[] | null,
-  color = "#3b82f6"
+  color = CHART_COLORS.primary
 ): string | null {
   if (typeof document === "undefined") return null; // SSR guard
 
@@ -52,11 +53,11 @@ export function renderCurveToBase64(
   const toY = (yVal: number) => PAD + (1 - (yVal - yMin) / yRange) * plotH;
 
   // Background (light for Excel)
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = CHART_CANVAS.background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
   // Axes
-  ctx.strokeStyle = "#d4d4d8";
+  ctx.strokeStyle = CHART_CANVAS.grid;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(PAD, PAD);
@@ -65,7 +66,7 @@ export function renderCurveToBase64(
   ctx.stroke();
 
   // 50% gridline
-  ctx.strokeStyle = "#e4e4e7";
+  ctx.strokeStyle = CHART_CANVAS.gridLight;
   ctx.setLineDash([2, 2]);
   ctx.beginPath();
   ctx.moveTo(PAD, toY(50));
@@ -118,7 +119,7 @@ export function renderCurveToBase64(
   }
 
   // Y-axis labels
-  ctx.fillStyle = "#52525b";
+  ctx.fillStyle = CHART_CANVAS.label;
   ctx.font = "9px sans-serif";
   ctx.textAlign = "right";
   ctx.fillText("0", PAD - 2, toY(0) + 3);

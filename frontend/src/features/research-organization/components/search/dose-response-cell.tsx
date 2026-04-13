@@ -4,6 +4,7 @@ import { memo } from "react";
 import dynamic from "next/dynamic";
 import type { ActivityValue } from "../../types";
 import { generate4PLPoints } from "../../lib/curve-math";
+import { CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Plot = dynamic<any>(
@@ -43,7 +44,7 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
       y: rawY,
       mode: "markers",
       type: "scatter",
-      marker: { color: "#a78bfa", size: 4 },
+      marker: { color: CHART_COLORS.purple, size: 4 },
       hoverinfo: "skip",
     },
   ];
@@ -64,7 +65,7 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
         y: fitted.y,
         mode: "lines",
         type: "scatter",
-        line: { color: "#60a5fa", width: 1.5 },
+        line: { color: CHART_COLORS.primaryLight, width: 1.5 },
         hoverinfo: "skip",
       });
     }
@@ -81,13 +82,13 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
           type: "log",
           showgrid: true,
           gridcolor: "rgba(63,63,70,0.3)",
-          tickfont: { size: 8, color: "#71717a" },
+          tickfont: { size: 8, color: CHART_AXIS.tick },
           zeroline: false,
         },
         yaxis: {
           showgrid: true,
           gridcolor: "rgba(63,63,70,0.3)",
-          tickfont: { size: 8, color: "#71717a" },
+          tickfont: { size: 8, color: CHART_AXIS.tick },
           zeroline: false,
         },
         paper_bgcolor: "transparent",

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { cn } from "@/shared/lib/utils";
+import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { Badge } from "@/shared/components/ui/badge";
 import {
   CURVE_CLASS_LABELS,
@@ -11,7 +12,7 @@ import {
   type DoseResponseCurve,
 } from "../types";
 
-const TRACE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#a855f7"];
+const TRACE_COLORS = GROUP_PALETTE.slice(0, 5);
 
 interface ComparisonRow {
   label: string;
@@ -99,11 +100,11 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
                 </span>
               </td>
               <td className="px-3 py-2 text-xs text-muted-foreground">{row.batch ?? "--"}</td>
-              <td className={cn("px-3 py-2 font-mono", row.fitted_value === bestIC50 && "text-emerald-400 font-semibold")}>
+              <td className={cn("px-3 py-2 font-mono", row.fitted_value === bestIC50 && "text-success font-semibold")}>
                 {row.fitted_value.toPrecision(4)}
               </td>
               <td className="px-3 py-2 font-mono">{row.hill_slope.toFixed(2)}</td>
-              <td className={cn("px-3 py-2 font-mono", row.r_squared === bestR2 && "text-emerald-400 font-semibold")}>
+              <td className={cn("px-3 py-2 font-mono", row.r_squared === bestR2 && "text-success font-semibold")}>
                 {row.r_squared.toFixed(3)}
               </td>
               <td className="px-3 py-2">
