@@ -10,6 +10,8 @@ import {
   type GridReadyEvent,
   type SelectionChangedEvent,
 } from "ag-grid-community";
+import { Search } from "lucide-react";
+import { Input } from "@/shared/components/ui/input";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useGridPreferences } from "@/shared/hooks/use-grid-preferences";
 import { chemVaultTheme } from "./ag-grid-theme";
@@ -39,6 +41,8 @@ export interface DataGridProps<TData = unknown>
   /** Render prop for selection toolbar. Shown above grid when rows are selected.
    *  Automatically enables rowSelection="multiple" on the grid. */
   selectionToolbar?: (selectedRows: TData[]) => ReactNode;
+  /** Placeholder for the quick-filter search bar. Set to false to hide. */
+  searchPlaceholder?: string | false;
 }
 
 export function DataGrid<TData = unknown>({
@@ -53,9 +57,11 @@ export function DataGrid<TData = unknown>({
   excelEnhancer,
   preferencesKey,
   selectionToolbar,
+  searchPlaceholder = "Filter...",
   ...rest
 }: DataGridProps<TData>) {
   const gridRef = useRef<AgGridReact<TData>>(null);
+  const [quickFilter, setQuickFilter] = useState("");
   const [selectedRows, setSelectedRows] = useState<TData[]>([]);
   const prefs = useGridPreferences(preferencesKey ?? "__unused__");
   const hasPrefs = !!preferencesKey;
@@ -115,9 +121,24 @@ export function DataGrid<TData = unknown>({
 
   return (
     <div>
-      {exportFilename && rowData?.length ? (
-        <div className="mb-2 flex justify-end">
-          <ExportToolbar gridRef={gridRef} filename={exportFilename} excelEnhancer={excelEnhancer} />
+      {(searchPlaceholder !== false || (exportFilename && rowData?.length)) ? (
+        <div className="mb-2 flex items-center gap-2">
+          {searchPlaceholder !== false && (
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={searchPlaceholder}
+                value={quickFilter}
+                onChange={(e) => setQuickFilter(e.target.value)}
+                className="h-9 pl-8"
+              />
+            </div>
+          )}
+          <div className="ml-auto">
+            {exportFilename && rowData?.length ? (
+              <ExportToolbar gridRef={gridRef} filename={exportFilename} excelEnhancer={excelEnhancer} />
+            ) : null}
+          </div>
         </div>
       ) : null}
       {selectionToolbar && selectedRows.length > 0 ? (
@@ -140,6 +161,7 @@ export function DataGrid<TData = unknown>({
           onColumnMoved={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           onColumnVisible={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           rowClass={onRowClick ? "cursor-pointer" : undefined}
+          quickFilterText={quickFilter || undefined}
           suppressCellFocus
           animateRows={false}
           {...rest}
