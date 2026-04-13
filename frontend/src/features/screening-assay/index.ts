@@ -1,5 +1,6 @@
 // Public API for screening-assay feature
 export { ScreeningDashboard } from "./components/screening-dashboard";
+export { ProtocolList } from "./components/protocol-list";
 export { ProtocolDetail } from "./components/protocol-detail";
 export { RunDetail } from "./components/run-detail";
 export { PlateHeatmap } from "./components/plate-heatmap";

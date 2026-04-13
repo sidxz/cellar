@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { SearchableSelect } from "@/shared/components/searchable-select";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useProjects } from "../hooks/use-projects";
 import {
@@ -154,38 +155,24 @@ export function CreateCollectionDialog({
 
           <div className="grid gap-2">
             <Label>Project (optional)</Label>
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger>
-                <SelectValue placeholder="No project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SELECTION}>No project</SelectItem>
-                {projects
-                  ?.filter((p) => p.status === "active")
-                  .map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={projects?.filter((p) => p.status === "active").map((p) => ({ value: p.id, label: p.name })) ?? []}
+              value={projectId === NO_SELECTION ? null : projectId}
+              onValueChange={(v) => setProjectId(v ?? NO_SELECTION)}
+              placeholder="No project"
+              searchPlaceholder="Search projects..."
+            />
           </div>
 
           <div className="grid gap-2">
             <Label>Organization (optional)</Label>
-            <Select value={orgId} onValueChange={setOrgId}>
-              <SelectTrigger>
-                <SelectValue placeholder="No organization" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SELECTION}>No organization</SelectItem>
-                {orgs?.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={orgs?.map((o) => ({ value: o.id, label: o.name })) ?? []}
+              value={orgId === NO_SELECTION ? null : orgId}
+              onValueChange={(v) => setOrgId(v ?? NO_SELECTION)}
+              placeholder="No organization"
+              searchPlaceholder="Search organizations..."
+            />
           </div>
         </div>
 

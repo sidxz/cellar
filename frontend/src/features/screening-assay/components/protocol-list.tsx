@@ -24,17 +24,18 @@ import {
 
 interface ProtocolListProps {
   onSelect?: (protocolId: string) => void;
+  /** When provided, locks the list to this project (hides the project filter). */
+  projectId?: string;
 }
 
 const ALL_PROJECTS = "__all__";
 
-export function ProtocolList({ onSelect }: ProtocolListProps) {
+export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>(ALL_PROJECTS);
   const { data: projects } = useProjects();
-  const { data: protocols, isLoading, error } = useProtocols(
-    projectFilter !== ALL_PROJECTS ? projectFilter : undefined
-  );
+  const effectiveProjectId = projectId ?? (projectFilter !== ALL_PROJECTS ? projectFilter : undefined);
+  const { data: protocols, isLoading, error } = useProtocols(effectiveProjectId);
 
   const columnDefs = useMemo<ColDef<Protocol>[]>(
     () => [
@@ -89,7 +90,7 @@ export function ProtocolList({ onSelect }: ProtocolListProps) {
             className="pl-9"
           />
         </div>
-        {projects && projects.length > 0 && (
+        {!projectId && projects && projects.length > 0 && (
           <>
           <span className="shrink-0 text-sm text-muted-foreground">
             Project:

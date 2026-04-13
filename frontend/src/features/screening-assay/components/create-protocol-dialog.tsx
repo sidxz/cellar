@@ -34,6 +34,9 @@ import {
   OntologySearchInput,
   type OntologyTerm,
 } from "@/shared/components/ontology-search-input";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
+import { SearchableSelect } from "@/shared/components/searchable-select";
+import { customInstance } from "@/shared/lib/api/custom-instance";
 import { useCreateProtocol } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
 import {
@@ -51,6 +54,8 @@ import {
 interface CreateProtocolDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Pre-select a project (e.g., when creating from project detail). */
+  defaultProjectId?: string;
 }
 
 interface ReadoutDefState {
@@ -105,9 +110,11 @@ function emptyConditionDef(): ConditionDefState {
 export function CreateProtocolDialog({
   open,
   onOpenChange,
+  defaultProjectId,
 }: CreateProtocolDialogProps) {
   const createMutation = useCreateProtocol();
   const { data: targets } = useTargets();
+  const { data: projects } = useProjects();
   const { data: vocabularies } = useVocabularies();
   const { data: protocolForms } = useProtocolForms();
   const { data: ontologySlots } = useOntologySlots();
@@ -123,6 +130,7 @@ export function CreateProtocolDialog({
   const [readoutDefs, setReadoutDefs] = useState<ReadoutDefState[]>([
     emptyReadoutDef(1),
   ]);
+  const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
   const [conditionDefs, setConditionDefs] = useState<ConditionDefState[]>([]);
   const [ontologyAnnotations, setOntologyAnnotations] = useState<
     Record<string, OntologyTerm[]>
@@ -135,6 +143,7 @@ export function CreateProtocolDialog({
     setTargetId("");
     setCategory("");
     setDescription("");
+    setProjectId(defaultProjectId ?? null);
     setReadoutDefs([emptyReadoutDef(1)]);
     setConditionDefs([]);
     setOntologyAnnotations({});
@@ -262,7 +271,18 @@ export function CreateProtocolDialog({
         condition_definitions: condition_definitions.length > 0 ? condition_definitions : undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: async (protocol) => {
+          // Assign to project if selected (many-to-many)
+          if (projectId && protocol?.id) {
+            try {
+              await customInstance({
+                url: `/api/v1/protocols/${protocol.id}/projects/${projectId}`,
+                method: "POST",
+              });
+            } catch {
+              // Protocol created but project assignment failed — non-blocking
+            }
+          }
           onOpenChange(false);
           resetForm();
         },
@@ -346,43 +366,46 @@ export function CreateProtocolDialog({
 
             <div className="grid gap-2">
               <Label>Target (optional)</Label>
-              <Select value={targetId} onValueChange={setTargetId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select target..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {targets?.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={targets?.map((t) => ({ value: t.id, label: t.name })) ?? []}
+                value={targetId || null}
+                onValueChange={(v) => setTargetId(v ?? "")}
+                placeholder="Select target..."
+                searchPlaceholder="Search targets..."
+              />
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Category (optional)</Label>
-            {categoryTerms.length > 0 ? (
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoryTerms.map((term) => (
-                    <SelectItem key={term} value={term}>
-                      {term}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                placeholder="e.g., Primary Screen, Counter Screen"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Project (optional)</Label>
+              <SearchableSelect
+                options={projects?.map((p) => ({ value: p.id, label: p.name })) ?? []}
+                value={projectId}
+                onValueChange={setProjectId}
+                placeholder="No project"
+                searchPlaceholder="Search projects..."
+                emptyMessage="No projects found."
               />
-            )}
+            </div>
+            <div className="grid gap-2">
+              <Label>Category (optional)</Label>
+              {categoryTerms.length > 0 ? (
+                <SearchableSelect
+                  options={categoryTerms.map((t) => ({ value: t, label: t }))}
+                  value={category || null}
+                  onValueChange={(v) => setCategory(v ?? "")}
+                  placeholder="Select category..."
+                  searchPlaceholder="Search categories..."
+                />
+              ) : (
+                <Input
+                  placeholder="e.g., Primary Screen, Counter Screen"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+              )}
+            </div>
           </div>
 
           <div className="grid gap-2">
