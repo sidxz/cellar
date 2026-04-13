@@ -15,6 +15,7 @@ export function generate4PLPoints(
   options?: { numPoints?: number; rangeExtension?: number },
 ): { x: number[]; y: number[] } {
   if (ic50 === 0 || !isFinite(ic50)) return { x: [], y: [] };
+  if (!isFinite(hillSlope) || hillSlope === 0) return { x: [], y: [] };
 
   const xValues = rawData.map((p) => p.x).filter((v) => v > 0);
   if (xValues.length < 2) return { x: [], y: [] };

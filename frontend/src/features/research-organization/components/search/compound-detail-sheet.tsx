@@ -74,8 +74,16 @@ interface CurveChartProps {
 }
 
 const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
-  const rawX = curve.raw_data.map((pt) => pt.x);
-  const rawY = curve.raw_data.map((pt) => pt.y);
+  const rawData = curve.raw_data ?? [];
+  if (rawData.length === 0) {
+    return (
+      <div className="flex h-[260px] items-center justify-center text-xs text-muted-foreground">
+        No data points available
+      </div>
+    );
+  }
+  const rawX = rawData.map((pt) => pt.x);
+  const rawY = rawData.map((pt) => pt.y);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const traces: any[] = [
