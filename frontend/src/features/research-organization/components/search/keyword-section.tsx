@@ -1,9 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -16,10 +14,10 @@ import type { TextCriterion, TextOperator } from "../../types";
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const TEXT_FIELDS = [
-  { value: "any", label: "Any Field" },
+  { value: "any", label: "Any" },
   { value: "name", label: "Name" },
-  { value: "registration_number", label: "Registration Number" },
-  { value: "molecular_formula", label: "Molecular Formula" },
+  { value: "registration_number", label: "Reg Number" },
+  { value: "molecular_formula", label: "Formula" },
   { value: "inchi_key", label: "InChI Key" },
 ] as const;
 
@@ -45,14 +43,13 @@ function KeywordTerm({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex items-end gap-2">
-      <div className="w-44">
-        <Label className="text-xs text-muted-foreground">Field</Label>
+    <div className="flex items-center gap-2 mb-1.5">
+      <div className="w-28">
         <Select
           value={criterion.field}
           onValueChange={(v) => onChange({ ...criterion, field: v })}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-7 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -65,13 +62,12 @@ function KeywordTerm({
         </Select>
       </div>
 
-      <div className="w-32">
-        <Label className="text-xs text-muted-foreground">Operator</Label>
+      <div className="w-28">
         <Select
           value={criterion.operator}
           onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator })}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-7 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -85,18 +81,21 @@ function KeywordTerm({
       </div>
 
       <div className="flex-1">
-        <Label className="text-xs text-muted-foreground">Value</Label>
         <Input
-          className="h-9"
+          className="h-7 text-xs"
           placeholder="Search text..."
           value={criterion.value}
           onChange={(e) => onChange({ ...criterion, value: e.target.value })}
         />
       </div>
 
-      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
-        <Trash2 className="h-4 w-4 text-muted-foreground" />
-      </Button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-muted-foreground/40 hover:text-red-400"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -122,28 +121,27 @@ export function KeywordSection({ criteria, onChange }: KeywordSectionProps) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Keywords</Label>
-        <Button
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Keywords
+        </span>
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
           onClick={addTerm}
+          className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
         >
-          <Plus className="mr-1 h-3 w-3" />
-          Add a term
-        </Button>
+          <Plus className="h-3 w-3" /> Add a term
+        </button>
       </div>
 
       {criteria.length === 0 && (
-        <p className="text-xs text-muted-foreground py-1">
-          No keyword filters. Click "Add a term" to search by name, registration number, or formula.
+        <p className="text-xs italic text-muted-foreground/50">
+          No keyword filters.
         </p>
       )}
 
-      <div className="space-y-2">
+      <div>
         {criteria.map((c, i) => (
           <KeywordTerm
             key={`keyword-${i}`}

@@ -1,8 +1,6 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
-import { Label } from "@/shared/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,14 +37,13 @@ function CollectionTerm({
   const { data: collections } = useCollections();
 
   return (
-    <div className="flex items-end gap-2">
-      <div className="w-24">
-        <Label className="text-xs text-muted-foreground">Mode</Label>
+    <div className="flex items-center gap-2 mb-1.5">
+      <div className="w-20">
         <Select
           value={term.negate ? "not_in" : "in"}
           onValueChange={(v) => onChange({ ...term, negate: v === "not_in" })}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-7 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -56,13 +53,12 @@ function CollectionTerm({
         </Select>
       </div>
 
-      <div className="w-64">
-        <Label className="text-xs text-muted-foreground">Collection</Label>
+      <div className="flex-1">
         <Select
           value={term.collection_id || undefined}
           onValueChange={(v) => onChange({ ...term, collection_id: v })}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-7 text-xs">
             <SelectValue placeholder="Select collection..." />
           </SelectTrigger>
           <SelectContent>
@@ -75,10 +71,13 @@ function CollectionTerm({
         </Select>
       </div>
 
-      <div className="flex-1" />
-      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
-        <Trash2 className="h-4 w-4 text-muted-foreground" />
-      </Button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-muted-foreground/40 hover:text-red-400"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -105,28 +104,27 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Collections</Label>
-        <Button
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Collections
+        </span>
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
           onClick={addTerm}
+          className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
         >
-          <Plus className="mr-1 h-3 w-3" />
-          Add a term
-        </Button>
+          <Plus className="h-3 w-3" /> Add a term
+        </button>
       </div>
 
       {terms.length === 0 && (
-        <p className="text-xs text-muted-foreground py-1">
-          No collection filters. Click "Add a term" to filter by collection membership.
+        <p className="text-xs italic text-muted-foreground/50">
+          No collection filters.
         </p>
       )}
 
-      <div className="space-y-2">
+      <div>
         {terms.map((t, i) => (
           <CollectionTerm
             key={`collection-${i}`}
