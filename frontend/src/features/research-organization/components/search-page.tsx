@@ -207,8 +207,8 @@ function SearchPageInner() {
   // ─── Layout ────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+    <div>
+      <div className="px-6 py-4 space-y-3">
         {/* Search form — always visible */}
         <SearchForm
           initialQuery={currentQuery ?? undefined}

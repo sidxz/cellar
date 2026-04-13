@@ -312,7 +312,7 @@ export function ResultsGrid({
   }
 
   return (
-    <div style={{ height: "100%", width: "100%" }}>
+    <div style={{ width: "100%" }}>
       <style>{`
         .ag-protocol-group-header .ag-header-group-cell-label {
           color: hsl(var(--primary)) !important;
@@ -331,6 +331,7 @@ export function ResultsGrid({
         rowHeight={rowHeight}
         headerHeight={36}
         groupHeaderHeight={32}
+        domLayout="autoHeight"
         onRowClicked={handleRowClicked}
         onGridReady={handleGridReady}
         onSelectionChanged={handleSelectionChanged}

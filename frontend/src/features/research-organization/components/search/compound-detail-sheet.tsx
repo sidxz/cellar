@@ -48,13 +48,8 @@ const Plot = dynamic<any>(
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
-type SheetTab = "activity" | "inventory" | "history";
-
-const TABS: { key: SheetTab; label: string }[] = [
-  { key: "activity", label: "Activity" },
-  { key: "inventory", label: "Inventory" },
-  { key: "history", label: "History" },
-];
+// Tabs removed — only Activity content shown for now.
+// Inventory and History tabs will be added when those APIs are ready.
 
 // ─── Props ────────────────────────────────────────────────────────────────
 
@@ -303,16 +298,14 @@ export function CompoundDetailSheet({
   onNavigate,
   onClose,
 }: CompoundDetailSheetProps) {
-  const [activeTab, setActiveTab] = useState<SheetTab>("activity");
   const [othersExpanded, setOthersExpanded] = useState(false);
 
   const { data: activityDetail, isLoading } = useMoleculeActivityDetail(
     molecule?.id ?? null,
   );
 
-  // Reset tab and others-expanded when molecule changes
+  // Reset expanded state when molecule changes
   useEffect(() => {
-    setActiveTab("activity");
     setOthersExpanded(false);
   }, [molecule?.id]);
 
@@ -470,114 +463,80 @@ export function CompoundDetailSheet({
               </div>
             )}
 
-            {/* ── Tab bar ── */}
-            <div className="flex border-b border-border">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={`relative px-5 py-2.5 text-sm font-medium transition-colors ${
-                    activeTab === tab.key
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setActiveTab(tab.key)}
-                >
-                  {tab.label}
-                  {activeTab === tab.key && (
-                    <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
-                  )}
-                </button>
-              ))}
-            </div>
-
             {/* ── Scrollable content ── */}
             <ScrollArea className="flex-1">
-              {activeTab === "activity" && (
-                <div className="space-y-5 px-5 py-4">
-                  {/* Loading state */}
-                  {isLoading && (
-                    <div className="space-y-4">
-                      <Skeleton className="h-[260px] w-full rounded-lg" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                    </div>
+              <div className="space-y-5 px-5 py-4">
+                {/* Loading state */}
+                {isLoading && (
+                  <div className="space-y-4">
+                    <Skeleton className="h-[260px] w-full rounded-lg" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                )}
+
+                {/* No activity data */}
+                {!isLoading &&
+                  (!activityDetail ||
+                    activityDetail.protocols.length === 0) && (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      No dose-response data available for this compound.
+                    </p>
                   )}
 
-                  {/* No activity data */}
-                  {!isLoading &&
-                    (!activityDetail ||
-                      activityDetail.protocols.length === 0) && (
-                      <p className="py-8 text-center text-sm text-muted-foreground">
-                        No dose-response data available for this compound.
-                      </p>
-                    )}
+                {/* Selected protocol curves */}
+                {!isLoading && selected.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Selected Protocols
+                    </h4>
+                    {selected.map((group) => (
+                      <ProtocolCard
+                        key={group.protocol_id}
+                        group={group}
+                        defaultExpanded
+                      />
+                    ))}
+                  </div>
+                )}
 
-                  {/* Selected protocol curves */}
-                  {!isLoading && selected.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Selected Protocols
-                      </h4>
-                      {selected.map((group) => (
+                {/* Other protocols (collapsible) */}
+                {!isLoading && others.length > 0 && (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
+                      onClick={() => setOthersExpanded((v) => !v)}
+                    >
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Also tested in {others.length} other protocol
+                        {others.length > 1 ? "s" : ""}
+                      </span>
+                      {othersExpanded ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </button>
+
+                    {othersExpanded &&
+                      others.map((group) => (
                         <ProtocolCard
                           key={group.protocol_id}
                           group={group}
-                          defaultExpanded
+                          defaultExpanded={false}
                         />
                       ))}
-                    </div>
-                  )}
-
-                  {/* Other protocols (collapsible) */}
-                  {!isLoading && others.length > 0 && (
-                    <div className="space-y-3">
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
-                        onClick={() => setOthersExpanded((v) => !v)}
-                      >
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Also tested in {others.length} other protocol
-                          {others.length > 1 ? "s" : ""}
-                        </span>
-                        {othersExpanded ? (
-                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </button>
-
-                      {othersExpanded &&
-                        others.map((group) => (
-                          <ProtocolCard
-                            key={group.protocol_id}
-                            group={group}
-                            defaultExpanded={false}
-                          />
-                        ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTab === "inventory" && (
-                <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                  Inventory data coming soon.
-                </div>
-              )}
-
-              {activeTab === "history" && (
-                <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                  History data coming soon.
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </ScrollArea>
 
             {/* ── Footer ── */}
             <div className="border-t border-border px-5 py-3">
               <Link
                 href={`/compounds/${molecule.id}`}
+                target="_blank"
                 className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
               >
                 Open full detail
