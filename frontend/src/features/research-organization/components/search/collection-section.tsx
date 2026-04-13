@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useCollections } from "../../hooks/use-collections";
-import type { CollectionCriterion } from "../../types";
+import type { CollectionCriterion, SearchCriterion } from "../../types";
 
 // ─── Extended type with negate support ──────────────────────────────────────
 
@@ -142,19 +142,21 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
 
 // ─── Helpers: convert between internal term format and SearchCriterion ─────
 
-export function termsToCollectionCriteria(terms: CollectionTermValue[]): CollectionCriterion[] {
+export function termsToCollectionCriteria(terms: CollectionTermValue[]): SearchCriterion[] {
   return terms
     .filter((t) => t.collection_id)
-    .map((t) => ({
+    .map((t): SearchCriterion => ({
       type: "collection" as const,
       collection_id: t.collection_id,
       negate: t.negate || undefined,
     }));
 }
 
-export function collectionCriteriaToTerms(criteria: CollectionCriterion[]): CollectionTermValue[] {
-  return criteria.map((c) => ({
-    collection_id: c.collection_id,
-    negate: !!(c as CollectionCriterion & { negate?: boolean }).negate,
-  }));
+export function collectionCriteriaToTerms(criteria: SearchCriterion[]): CollectionTermValue[] {
+  return criteria
+    .filter((c): c is CollectionCriterion & { negate?: boolean } => c.type === "collection")
+    .map((c) => ({
+      collection_id: c.collection_id,
+      negate: !!c.negate,
+    }));
 }

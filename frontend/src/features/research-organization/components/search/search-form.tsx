@@ -19,12 +19,6 @@ import type {
   TextCriterion,
   PropertyCriterion,
   StructureCriterion,
-  CollectionCriterion,
-  SelectivityCriterion,
-  BatchCriterion,
-  RunDateCriterion,
-  CustomFieldCriterion,
-  KeywordListCriterion,
 } from "../../types";
 import { ProtocolSection } from "./protocol-section";
 import { StructureSection } from "./structure-section";
@@ -57,7 +51,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
   const textCriteria: TextCriterion[] = [];
   const propertyCriteria: PropertyCriterion[] = [];
   let structureCriterion: StructureCriterion | null = null;
-  const collectionCriteria: CollectionCriterion[] = [];
+  const collectionCriteria: SearchCriterion[] = [];
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
 
   if (!query) {
