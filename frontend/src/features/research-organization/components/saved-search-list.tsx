@@ -1,19 +1,27 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Plus, Play, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName } from "@/shared/components/entity-name";
-import { useSavedSearches } from "../hooks/use-saved-searches";
+import { useSavedSearches, useDeleteSavedSearch } from "../hooks/use-saved-searches";
 import { useProjects } from "../hooks/use-projects";
 import { CreateSavedSearchDialog } from "./create-saved-search-dialog";
+import { QuerySummary } from "./search/query-summary";
 import type { SavedSearch, SearchVisibility } from "../types";
 
 function visibilityBadgeVariant(
@@ -22,18 +30,76 @@ function visibilityBadgeVariant(
   return visibility === "project" ? "default" : "outline";
 }
 
+function formatRelativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  const diffHours = Math.floor(diffMs / 3_600_000);
+  const diffDays = Math.floor(diffMs / 86_400_000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+// ─── Row Actions Cell ────────────────────────────────────────────────────────
+
+interface RowActionsProps {
+  search: SavedSearch;
+  onRun: (search: SavedSearch) => void;
+  onEdit: (search: SavedSearch) => void;
+  onDelete: (search: SavedSearch) => void;
+}
+
+function RowActions({ search, onRun, onEdit, onDelete }: RowActionsProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-7 w-7">
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">Actions</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => onRun(search)}>
+          <Play className="mr-2 h-4 w-4" />
+          Run
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onEdit(search)}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => onDelete(search)}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ─── SavedSearchList ─────────────────────────────────────────────────────────
+
 interface SavedSearchListProps {
   /** Filter saved searches to a specific project */
   projectId?: string;
 }
 
 export function SavedSearchList({ projectId }: SavedSearchListProps) {
+  const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editSearch, setEditSearch] = useState<SavedSearch | undefined>();
   const [mine, setMine] = useState(false);
 
   const { data: savedSearches, isLoading, error } = useSavedSearches(projectId, mine);
   const { data: projects } = useProjects();
+  const deleteMutation = useDeleteSavedSearch();
 
   const projectLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -41,9 +107,28 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
     return map;
   }, [projects]);
 
+  const handleRun = (search: SavedSearch) => {
+    router.push(`/search?saved=${search.id}`);
+  };
+
+  const handleEdit = (search: SavedSearch) => {
+    setEditSearch(search);
+    setCreateOpen(true);
+  };
+
+  const handleDelete = (search: SavedSearch) => {
+    deleteMutation.mutate(search.id);
+  };
+
   const columnDefs = useMemo<ColDef<SavedSearch>[]>(
     () => [
       { headerName: "Name", field: "name", flex: 1, minWidth: 180 },
+      {
+        headerName: "Query",
+        width: 250,
+        cellRenderer: (params: ICellRendererParams<SavedSearch>) =>
+          params.data ? <QuerySummary query={params.data.query} /> : null,
+      },
       {
         headerName: "Visibility",
         field: "visibility",
@@ -64,11 +149,41 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
         },
       },
       {
+        headerName: "Last Run",
+        field: "last_run_at",
+        width: 130,
+        valueFormatter: (params) =>
+          params.value ? formatRelativeDate(params.value as string) : "\u2014",
+      },
+      {
+        headerName: "Results",
+        field: "result_count",
+        width: 90,
+        valueFormatter: (params) =>
+          params.value != null ? String(params.value) : "\u2014",
+      },
+      {
         headerName: "Created By",
         field: "created_by",
         width: 160,
         cellRenderer: (params: ICellRendererParams<SavedSearch>) =>
           params.value ? <MemberName id={params.value} /> : "\u2014",
+      },
+      {
+        headerName: "",
+        width: 56,
+        sortable: false,
+        resizable: false,
+        suppressHeaderMenuButton: true,
+        cellRenderer: (params: ICellRendererParams<SavedSearch>) =>
+          params.data ? (
+            <RowActions
+              search={params.data}
+              onRun={handleRun}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ) : null,
       },
     ],
     [projectLookup]
@@ -109,10 +224,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
         loading={isLoading}
         height="400px"
         suppressFilters
-        onRowClick={(search) => {
-          setEditSearch(search);
-          setCreateOpen(true);
-        }}
+        onRowClick={handleRun}
         emptyState={
           <EmptyState
             icon={Search}
