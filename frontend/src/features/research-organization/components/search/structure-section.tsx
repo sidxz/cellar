@@ -1,33 +1,64 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
 import { StructureRenderer, StructureEditorDialog } from "@/shared/components/chemistry";
 import type { StructureCriterion, StructureSearchType } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const STRUCTURE_TYPES: { value: StructureSearchType; label: string }[] = [
-  { value: "substructure", label: "Substructure (SMARTS)" },
-  { value: "similarity", label: "Similarity (SMILES)" },
-  { value: "exact", label: "Exact (InChIKey)" },
+const SEARCH_TYPES: { value: StructureSearchType; label: string }[] = [
+  { value: "substructure", label: "substructure" },
+  { value: "exact", label: "exact" },
+  { value: "similarity", label: "similarity" },
 ];
 
+const PLACEHOLDERS: Record<StructureSearchType, string> = {
+  substructure: "e.g. c1ccccc1",
+  exact: "InChI Key, e.g. BSYNRYMUTXBXSQ-UHFFFAOYSA-N",
+  similarity: "e.g. CCO",
+};
+
 function defaultStructureCriterion(): StructureCriterion {
-  return { type: "structure", search_type: "substructure", smarts: "", smiles: undefined, threshold: 0.7, inchi_key: undefined };
+  return {
+    type: "structure",
+    search_type: "substructure",
+    smarts: "",
+    smiles: undefined,
+    threshold: 0.7,
+    inchi_key: undefined,
+  };
 }
 
-// ─── Section ────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getInputValue(c: StructureCriterion): string {
+  if (c.search_type === "substructure") return c.smarts ?? "";
+  if (c.search_type === "similarity") return c.smiles ?? "";
+  return c.inchi_key ?? "";
+}
+
+function setInputValue(c: StructureCriterion, value: string): StructureCriterion {
+  if (c.search_type === "substructure") return { ...c, smarts: value };
+  if (c.search_type === "similarity") return { ...c, smiles: value };
+  return { ...c, inchi_key: value };
+}
+
+function getPreviewSmiles(c: StructureCriterion): string | undefined {
+  if (c.search_type === "substructure") return c.smarts || undefined;
+  if (c.search_type === "similarity") return c.smiles || undefined;
+  return undefined;
+}
+
+function hasValue(c: StructureCriterion): boolean {
+  if (c.search_type === "substructure") return (c.smarts?.length ?? 0) > 0;
+  if (c.search_type === "similarity") return (c.smiles?.length ?? 0) > 0;
+  return (c.inchi_key?.length ?? 0) > 0;
+}
+
+// ─── Section ─────────────────────────────────────────────────────────────────
 
 interface StructureSectionProps {
   criterion: StructureCriterion | null;
@@ -37,164 +68,124 @@ interface StructureSectionProps {
 export function StructureSection({ criterion, onChange }: StructureSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false);
 
-  // Initialize if user starts interacting and there's no criterion
   const c = criterion ?? defaultStructureCriterion();
+  const previewSmiles = getPreviewSmiles(c);
+  const inputValue = getInputValue(c);
+  const isStructureMode = c.search_type !== "exact";
+  const editorOutputFormat = c.search_type === "substructure" ? "smarts" : "smiles";
+  const filled = hasValue(c);
 
-  const previewSmiles =
-    c.search_type === "substructure"
-      ? c.smarts
-      : c.search_type === "similarity"
-        ? c.smiles
-        : undefined;
+  function handleTypeChange(type: StructureSearchType) {
+    onChange({ ...defaultStructureCriterion(), search_type: type });
+  }
 
-  const isStructureMode =
-    c.search_type === "substructure" || c.search_type === "similarity";
-
-  const editorOutputFormat =
-    c.search_type === "substructure" ? "smarts" : "smiles";
+  function handleInputChange(value: string) {
+    onChange(setInputValue(c, value));
+  }
 
   function handleEditorApply(structure: string) {
-    if (c.search_type === "substructure") {
-      onChange({ ...c, smarts: structure });
-    } else {
-      onChange({ ...c, smiles: structure });
-    }
+    onChange(setInputValue(c, structure));
+  }
+
+  function handleThresholdChange(value: string) {
+    const pct = Math.min(100, Math.max(0, parseInt(value, 10) || 0));
+    onChange({ ...c, threshold: pct / 100 });
   }
 
   function handleClear() {
     onChange(null);
   }
 
-  function handleTypeChange(v: string) {
-    onChange({ ...defaultStructureCriterion(), search_type: v as StructureSearchType });
-  }
-
-  const hasValue =
-    (c.search_type === "substructure" && c.smarts && c.smarts.length > 0) ||
-    (c.search_type === "similarity" && c.smiles && c.smiles.length > 0) ||
-    (c.search_type === "exact" && c.inchi_key && c.inchi_key.length > 0);
-
   return (
     <div className="space-y-2">
+      {/* Header row */}
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Structure Search</Label>
-        {hasValue && (
-          <Button
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Structure
+        </span>
+        {filled && (
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
+            className="text-xs text-muted-foreground/40 hover:text-red-400 transition-colors"
             onClick={handleClear}
           >
-            <X className="mr-1 h-3 w-3" />
             Clear
+          </button>
+        )}
+      </div>
+
+      {/* Radio row: type selectors + inline threshold */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {SEARCH_TYPES.map((st) => {
+          const active = c.search_type === st.value;
+          return (
+            <label
+              key={st.value}
+              className={`flex cursor-pointer items-center gap-1 text-xs select-none ${
+                active ? "text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <input
+                type="radio"
+                name="structure-search-type"
+                value={st.value}
+                checked={active}
+                onChange={() => handleTypeChange(st.value)}
+                className="accent-indigo-500"
+              />
+              {st.label}
+              {/* Inline threshold for similarity */}
+              {st.value === "similarity" && active && (
+                <span className="flex items-center gap-0.5 ml-1">
+                  <span className="text-muted-foreground">≥</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round((c.threshold ?? 0.7) * 100)}
+                    onChange={(e) => handleThresholdChange(e.target.value)}
+                    className="h-6 w-14 text-xs text-center"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="text-muted-foreground">%</span>
+                </span>
+              )}
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Structure preview */}
+      {previewSmiles && previewSmiles.length >= 2 && (
+        <div className="flex justify-center rounded border border-border bg-muted/30 p-2">
+          <StructureRenderer smiles={previewSmiles} width={120} height={90} />
+        </div>
+      )}
+
+      {/* Input row */}
+      <div className="flex items-center gap-1">
+        <Input
+          className="h-7 flex-1 text-xs font-mono"
+          placeholder={PLACEHOLDERS[c.search_type]}
+          value={inputValue}
+          onChange={(e) => handleInputChange(e.target.value)}
+        />
+        {isStructureMode && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setEditorOpen(true)}
+            title="Draw structure"
+          >
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>
 
-      <div className="flex items-start gap-3">
-        {/* Structure preview */}
-        {previewSmiles && previewSmiles.length >= 2 && (
-          <div className="shrink-0 rounded border border-border bg-muted/30 p-1">
-            <StructureRenderer smiles={previewSmiles} width={100} height={80} />
-          </div>
-        )}
-
-        <div className="flex flex-1 flex-wrap items-end gap-2">
-          <div className="w-48">
-            <Label className="text-xs text-muted-foreground">Search Type</Label>
-            <Select value={c.search_type} onValueChange={handleTypeChange}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STRUCTURE_TYPES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {c.search_type === "substructure" && (
-            <div className="flex-1 min-w-[200px]">
-              <Label className="text-xs text-muted-foreground">SMARTS</Label>
-              <div className="flex gap-1">
-                <Input
-                  className="h-9 font-mono text-xs"
-                  placeholder="e.g. c1ccccc1"
-                  value={c.smarts ?? ""}
-                  onChange={(e) => onChange({ ...c, smarts: e.target.value })}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => setEditorOpen(true)}
-                  title="Draw structure"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {c.search_type === "similarity" && (
-            <>
-              <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs text-muted-foreground">SMILES</Label>
-                <div className="flex gap-1">
-                  <Input
-                    className="h-9 font-mono text-xs"
-                    placeholder="e.g. CCO"
-                    value={c.smiles ?? ""}
-                    onChange={(e) => onChange({ ...c, smiles: e.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => setEditorOpen(true)}
-                    title="Draw structure"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <div className="w-32">
-                <Label className="text-xs text-muted-foreground">
-                  Threshold ({c.threshold?.toFixed(2) ?? "0.70"})
-                </Label>
-                <Input
-                  className="h-9"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={c.threshold ?? 0.7}
-                  onChange={(e) => onChange({ ...c, threshold: Number(e.target.value) })}
-                />
-              </div>
-            </>
-          )}
-
-          {c.search_type === "exact" && (
-            <div className="flex-1 min-w-[200px]">
-              <Label className="text-xs text-muted-foreground">InChI Key</Label>
-              <Input
-                className="h-9 font-mono text-xs"
-                placeholder="e.g. BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
-                value={c.inchi_key ?? ""}
-                onChange={(e) => onChange({ ...c, inchi_key: e.target.value })}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
+      {/* Structure editor dialog */}
       {isStructureMode && (
         <StructureEditorDialog
           open={editorOpen}
