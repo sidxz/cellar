@@ -8,6 +8,7 @@ import type {
   SearchQuery,
   SearchCriterion,
   ActivityCriterion,
+  GroupCriterion,
   TextCriterion,
   PropertyCriterion,
   StructureCriterion,
@@ -43,6 +44,7 @@ interface SearchFormProps {
 
 function decomposeQuery(query: SearchQuery | undefined) {
   const activityCriteria: ActivityCriterion[] = [];
+  const protocolConjunctions: ProtocolConjunction[] = [];
   const textCriteria: TextCriterion[] = [];
   const propertyCriteria: PropertyCriterion[] = [];
   let structureCriterion: StructureCriterion | null = null;
@@ -50,14 +52,30 @@ function decomposeQuery(query: SearchQuery | undefined) {
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
 
   if (!query) {
-    return { activityCriteria, textCriteria, propertyCriteria, structureCriterion, collectionCriteria, advanced };
+    return { activityCriteria, protocolConjunctions, textCriteria, propertyCriteria, structureCriterion, collectionCriteria, advanced };
   }
 
   for (const c of query.criteria) {
     switch (c.type) {
       case "activity":
+        // Top-level activity criteria were ANDed
+        protocolConjunctions.push(activityCriteria.length === 0 ? "and" : "and");
         activityCriteria.push(c);
         break;
+      case "group": {
+        // GroupCriterion with activity criteria — extract with the group's logic
+        const group = c as GroupCriterion;
+        for (const gc of group.criteria) {
+          if (gc.type === "activity") {
+            // First item in group gets conjunction from context; rest get group logic
+            protocolConjunctions.push(
+              activityCriteria.length === 0 ? group.logic : group.logic,
+            );
+            activityCriteria.push(gc as ActivityCriterion);
+          }
+        }
+        break;
+      }
       case "text":
         textCriteria.push(c);
         break;
@@ -85,7 +103,6 @@ function decomposeQuery(query: SearchQuery | undefined) {
       case "keyword_list":
         advanced.keywordLists.push(c);
         break;
-      // group and project criteria are not decomposed into sections
       default:
         break;
     }
@@ -93,6 +110,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
 
   return {
     activityCriteria,
+    protocolConjunctions,
     textCriteria,
     propertyCriteria,
     structureCriterion,
@@ -127,7 +145,9 @@ export function SearchForm({
 
   const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(initial.activityCriteria);
   const [protocolConjunctions, setProtocolConjunctions] = useState<ProtocolConjunction[]>(
-    () => initial.activityCriteria.map(() => "or" as ProtocolConjunction)
+    initial.protocolConjunctions.length > 0
+      ? initial.protocolConjunctions
+      : initial.activityCriteria.map(() => "or" as ProtocolConjunction)
   );
   const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(initial.structureCriterion);
   const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(initial.propertyCriteria);
@@ -141,7 +161,11 @@ export function SearchForm({
   useEffect(() => {
     const parsed = decomposeQuery(initialQuery);
     setActivityCriteria(parsed.activityCriteria);
-    setProtocolConjunctions(parsed.activityCriteria.map(() => "or" as ProtocolConjunction));
+    setProtocolConjunctions(
+      parsed.protocolConjunctions.length > 0
+        ? parsed.protocolConjunctions
+        : parsed.activityCriteria.map(() => "or" as ProtocolConjunction)
+    );
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);
     setCollectionTerms(collectionCriteriaToTerms(parsed.collectionCriteria));
@@ -154,20 +178,46 @@ export function SearchForm({
     const criteria: SearchCriterion[] = [];
 
     // Activity — respect per-row conjunctions
-    const validActivity = activityCriteria.filter((c) => c.protocol_id);
-    if (validActivity.length > 0) {
-      const hasOr = protocolConjunctions.some((c) => c === "or");
-      if (hasOr && validActivity.length > 1) {
-        // Wrap in a GroupCriterion with "or" logic
-        criteria.push({
-          type: "group",
-          logic: "or",
-          criteria: validActivity,
-        });
+    // Filter to valid criteria and their matching conjunctions
+    const validIndices = activityCriteria
+      .map((c, i) => (c.protocol_id ? i : -1))
+      .filter((i) => i >= 0);
+    const validActivity = validIndices.map((i) => activityCriteria[i]);
+    const validConjs = validIndices.map((i) => protocolConjunctions[i] ?? "or");
+
+    if (validActivity.length === 1) {
+      criteria.push(validActivity[0]);
+    } else if (validActivity.length > 1) {
+      const allAnd = validConjs.every((c) => c === "and");
+      const allOr = validConjs.slice(1).every((c) => c === "or"); // first row has no conjunction
+      if (allAnd) {
+        // All "and" — push individually (top-level AND)
+        for (const c of validActivity) criteria.push(c);
+      } else if (allOr) {
+        // All "or" — single group
+        criteria.push({ type: "group", logic: "or", criteria: validActivity });
       } else {
-        // All "and" — push individually (they get ANDed at the top level)
-        for (const c of validActivity) {
-          criteria.push(c);
+        // Mixed — group consecutive "or" runs, AND between groups
+        // e.g. A and B or C → [A] AND [group(or, B, C)]
+        let currentGroup: typeof validActivity = [validActivity[0]];
+        for (let i = 1; i < validActivity.length; i++) {
+          if (validConjs[i] === "or") {
+            currentGroup.push(validActivity[i]);
+          } else {
+            // Flush current group
+            if (currentGroup.length === 1) {
+              criteria.push(currentGroup[0]);
+            } else {
+              criteria.push({ type: "group", logic: "or", criteria: currentGroup });
+            }
+            currentGroup = [validActivity[i]];
+          }
+        }
+        // Flush last group
+        if (currentGroup.length === 1) {
+          criteria.push(currentGroup[0]);
+        } else {
+          criteria.push({ type: "group", logic: "or", criteria: currentGroup });
         }
       }
     }
