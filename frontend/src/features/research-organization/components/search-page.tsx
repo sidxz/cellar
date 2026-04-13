@@ -125,6 +125,10 @@ function SearchPageInner() {
             setNextCursor(data.next_cursor);
             setTotalCount(data.total_count);
           },
+          onError: (err) => {
+            console.error("[Search] mutation failed:", err);
+            setResults([]);
+          },
         },
       );
     },

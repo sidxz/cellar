@@ -17,6 +17,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
+import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -30,7 +32,7 @@ import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compo
 import { DoseResponseChart } from "../dose-response-chart";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
 import { CurveNavigator } from "../curve-navigator";
-import { StructureRenderer } from "@/shared/components/chemistry";
+import { StructureThumbnail } from "@/shared/components/chemistry";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import { CollectionPickerDialog } from "../collection-picker-dialog";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
@@ -184,11 +186,15 @@ function buildColumnDefs(
   cols.push({
     headerName: "Structure",
     colId: "structure",
-    width: 100,
+    width: 130,
     sortable: false,
     cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
       if (!params.data?.smiles) return <span className="text-muted-foreground">--</span>;
-      return <StructureRenderer smiles={params.data.smiles} width={80} height={55} />;
+      return (
+        <div className="flex h-full items-center justify-center py-1">
+          <StructureThumbnail smiles={params.data.smiles} size={104} />
+        </div>
+      );
     },
   });
 
@@ -841,9 +847,10 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       <DataGrid<CompoundActivity>
         rowData={filteredItems}
         columnDefs={columnDefs}
-        height="500px"
+        height="auto"
+        domLayout="autoHeight"
         rowSelection="multiple"
-        rowHeight={70}
+        rowHeight={115}
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`${protocol.name}-activity`}
@@ -857,76 +864,82 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         }
       />
 
-      {/* Compound detail panel — single select */}
-      {selectedRows.length === 1 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              {selectedRows[0].registration_number}
-              {selectedRows[0].molecule_name && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  {selectedRows[0].molecule_name}
-                </span>
-              )}
-            </CardTitle>
-            <CurveNavigator
-              currentIndex={selectedIndex}
-              total={filteredItems.length}
-              onPrev={handlePrev}
-              onNext={handleNext}
-            />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {curvesLoading ? (
-              <Skeleton className="h-[350px] w-full" />
-            ) : compoundCurves && compoundCurves.length > 0 ? (
-              <>
-                <DoseResponseChart
-                  curves={compoundCurves}
-                  isInteractive={false}
-                />
-                {/* Per-run breakdown table */}
-                <div className="rounded-lg border">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Run</th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Batch</th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Fitted Value</th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">R²</th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Hill Slope</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {compoundCurves.map((curve) => (
-                        <tr key={curve.id} className="border-b last:border-0">
-                          <td className="px-3 py-2 font-mono text-xs">{curve.run_id.slice(0, 8)}</td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {curve.batch_number ?? curve.batch_id.slice(0, 8)}
-                          </td>
-                          <td className="px-3 py-2 font-mono">
-                            {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
-                          </td>
-                          <td className="px-3 py-2 font-mono">{curve.r_squared.toFixed(3)}</td>
-                          <td className="px-3 py-2">
-                            {curve.curve_class ? curveClassBadge(curve.curve_class) : "--"}
-                          </td>
-                          <td className="px-3 py-2 font-mono">{curve.hill_slope.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+      {/* Compound detail sheet — single select */}
+      <Sheet
+        open={selectedRows.length === 1}
+        onOpenChange={(open) => { if (!open) handleSelectionChanged({ api: { getSelectedRows: () => [] } } as never); }}
+      >
+        <SheetContent side="right" className="w-[55vw] sm:max-w-[55vw] p-0 flex flex-col" showCloseButton>
+          {selectedRows.length === 1 && (
+            <>
+              <SheetHeader className="px-4 pt-4 pb-2 pr-12 shrink-0 flex flex-row items-center justify-between">
+                <div>
+                  <SheetTitle>{selectedRows[0].registration_number}</SheetTitle>
+                  {selectedRows[0].molecule_name && (
+                    <p className="text-sm text-muted-foreground">{selectedRows[0].molecule_name}</p>
+                  )}
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No dose-response curves available for this compound.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                <CurveNavigator
+                  currentIndex={selectedIndex}
+                  total={filteredItems.length}
+                  onPrev={handlePrev}
+                  onNext={handleNext}
+                />
+              </SheetHeader>
+              <ScrollArea className="flex-1 min-h-0 px-4 pb-6">
+                <div className="space-y-4">
+                  {curvesLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : compoundCurves && compoundCurves.length > 0 ? (
+                    <>
+                      <DoseResponseChart
+                        curves={compoundCurves}
+                        isInteractive={false}
+                      />
+                      <div className="rounded-lg border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Run</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Batch</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Fitted Value</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">R²</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Hill Slope</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {compoundCurves.map((curve) => (
+                              <tr key={curve.id} className="border-b last:border-0">
+                                <td className="px-3 py-2 font-mono text-xs">{curve.run_id.slice(0, 8)}</td>
+                                <td className="px-3 py-2 text-xs text-muted-foreground">
+                                  {curve.batch_number ?? curve.batch_id.slice(0, 8)}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
+                                  {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
+                                </td>
+                                <td className="px-3 py-2 font-mono">{curve.r_squared.toFixed(3)}</td>
+                                <td className="px-3 py-2">
+                                  {curve.curve_class ? curveClassBadge(curve.curve_class) : "--"}
+                                </td>
+                                <td className="px-3 py-2 font-mono">{curve.hill_slope.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No dose-response curves available for this compound.
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Curve overlay — 2-5 selected with DR data */}
       {overlayTraces && selectedRows.length >= 2 && selectedRows.length <= 5 && (

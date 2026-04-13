@@ -16,6 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
+import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -25,7 +27,7 @@ import { fetchStructureImages } from "@/shared/lib/export/structure-image";
 import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
 import { CurveNavigator } from "./curve-navigator";
-import { StructureRenderer } from "@/shared/components/chemistry";
+import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
 import { ComparisonTable } from "./comparison-table";
@@ -213,11 +215,15 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
     {
       headerName: "Structure",
       colId: "structure",
-      width: 100,
+      width: 130,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data?.smiles) return <span className="text-muted-foreground">--</span>;
-        return <StructureRenderer smiles={params.data.smiles} width={80} height={55} />;
+        return (
+          <div className="flex h-full items-center justify-center py-1">
+            <StructureThumbnail smiles={params.data.smiles} size={104} />
+          </div>
+        );
       },
     },
     {
@@ -625,9 +631,10 @@ export function RunDoseResponseResults({
       <DataGrid<CompoundCurveRow>
         rowData={filteredRows}
         columnDefs={columnDefs}
-        height="500px"
+        height="auto"
+        domLayout="autoHeight"
         rowSelection="multiple"
-        rowHeight={70}
+        rowHeight={115}
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`run-${run.id.slice(0, 8)}-dose-response`}
@@ -641,33 +648,43 @@ export function RunDoseResponseResults({
         }
       />
 
-      {/* Detail panel — single compound selected */}
-      {selectedCurves && selectedRows.length === 1 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              {selectedRows[0].molecule_name}
-              {selectedRows[0].batch_number && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  Batch: {selectedRows[0].batch_number}
-                </span>
-              )}
-            </CardTitle>
-            <CurveNavigator
-              currentIndex={selectedIndex}
-              total={filteredRows.length}
-              onPrev={handlePrev}
-              onNext={handleNext}
-            />
-          </CardHeader>
-          <CardContent>
-            <DoseResponseChart
-              curves={selectedCurves}
-              isInteractive={!run.is_locked}
-            />
-          </CardContent>
-        </Card>
-      )}
+      {/* Detail sheet — single compound selected */}
+      <Sheet
+        open={selectedRows.length === 1 && !!selectedCurves}
+        onOpenChange={(open) => { if (!open) handleSelectionChanged({ api: { getSelectedRows: () => [] } } as never); }}
+      >
+        <SheetContent side="right" className="w-[55vw] sm:max-w-[55vw] p-0 flex flex-col">
+          {selectedRows.length === 1 && (
+            <>
+              <SheetHeader className="px-4 pt-4 pb-2 pr-12 shrink-0 flex flex-row items-center justify-between">
+                <div>
+                  <SheetTitle>{selectedRows[0].registration_number}</SheetTitle>
+                  {selectedRows[0].molecule_name && (
+                    <p className="text-sm text-muted-foreground">{selectedRows[0].molecule_name}</p>
+                  )}
+                  {selectedRows[0].batch_number && (
+                    <p className="text-xs text-muted-foreground">Batch: {selectedRows[0].batch_number}</p>
+                  )}
+                </div>
+                <CurveNavigator
+                  currentIndex={selectedIndex}
+                  total={filteredRows.length}
+                  onPrev={handlePrev}
+                  onNext={handleNext}
+                />
+              </SheetHeader>
+              <ScrollArea className="flex-1 min-h-0 px-4 pb-6">
+                {selectedCurves && (
+                  <DoseResponseChart
+                    curves={selectedCurves}
+                    isInteractive={!run.is_locked}
+                  />
+                )}
+              </ScrollArea>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Multi-select comparison — 2-5 compounds */}
       {selectedRows.length >= 2 && selectedRows.length <= 5 && (

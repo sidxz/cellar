@@ -900,7 +900,7 @@ export function DoseResponseChart({
   };
 
   const config = {
-    displayModeBar: true,
+    displayModeBar: false,
     responsive: true,
     modeBarButtonsToRemove: ["lasso2d", "select2d"] as string[],
   };
