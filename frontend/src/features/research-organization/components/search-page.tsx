@@ -134,6 +134,8 @@ function SearchPageInner() {
 
   // ── Load saved search from URL ─────────────────────────────────────────
   const savedSearchLoadedRef = useRef<string | null>(null);
+  const handleSearchRef = useRef(handleSearch);
+  handleSearchRef.current = handleSearch;
 
   useEffect(() => {
     if (!savedSearchId || !savedSearches) return;
@@ -150,12 +152,12 @@ function SearchPageInner() {
     const cols = saved.columns as { protocolColumns?: string[] } | null;
     const restoredColumns = cols?.protocolColumns ?? [];
 
-    // Execute the search
+    // Execute the search — use ref to avoid handleSearch in deps
     const query = saved.query as unknown as SearchQuery;
     if (query?.criteria) {
-      handleSearch(query, restoredColumns);
+      handleSearchRef.current(query, restoredColumns);
     }
-  }, [savedSearchId, savedSearches, loadFromSavedSearch, handleSearch]);
+  }, [savedSearchId, savedSearches, loadFromSavedSearch]);
 
   // ── SDF export ─────────────────────────────────────────────────────────
   const handleExportSdf = useCallback(() => {
