@@ -93,10 +93,16 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
     },
   ];
 
-  // Fitted sigmoid
-  if (isFinite(curve.fitted_value) && curve.fitted_value !== 0) {
+  // Fitted sigmoid + IC50 crosshair
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shapes: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const annotations: any[] = [];
+
+  const hasFit = isFinite(curve.fitted_value) && curve.fitted_value !== 0;
+  if (hasFit) {
     const fitted = generate4PLPoints(
-      curve.raw_data,
+      rawData,
       curve.fitted_value,
       curve.hill_slope,
       curve.top,
@@ -114,6 +120,36 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
         hoverinfo: "skip" as const,
       });
     }
+
+    // IC50 crosshair: dotted lines + orange marker + value label
+    const midY = (curve.top + curve.bottom) / 2;
+    const ec50 = curve.fitted_value;
+    const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
+
+    // Horizontal dotted line at midpoint
+    shapes.push({
+      type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
+      line: { color: "#71717a", width: 1, dash: "dot" }, opacity: 0.4,
+    });
+    // Vertical dotted line at IC50
+    shapes.push({
+      type: "line", xref: "x", x0: ec50, x1: ec50, yref: "paper", y0: 0, y1: 1,
+      line: { color: "#71717a", width: 1, dash: "dot" }, opacity: 0.4,
+    });
+    // Orange marker at intersection
+    traces.push({
+      type: "scatter", mode: "markers", x: [ec50], y: [midY],
+      marker: { color: "#fbbf24", size: 9, line: { color: "#ef4444", width: 2 }, symbol: "circle" },
+      showlegend: false,
+      hovertemplate: `${curve.curve_type.toUpperCase()} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
+    });
+    // Value annotation
+    annotations.push({
+      x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
+      text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
+      showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: "#ef4444",
+      ax: 0, ay: -30, font: { color: "#ef4444", size: 11 },
+    });
   }
 
   return (
@@ -146,6 +182,8 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
         paper_bgcolor: "transparent",
         plot_bgcolor: "transparent",
         showlegend: false,
+        shapes,
+        annotations,
       }}
       config={{ displayModeBar: false }}
       useResizeHandler
