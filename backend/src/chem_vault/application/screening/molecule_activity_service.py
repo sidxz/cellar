@@ -14,6 +14,7 @@ from chem_vault.application.screening import _condense_raw_data
 from chem_vault.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
+    CurveParams,
     ProtocolActivitySummary,
 )
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -176,6 +177,11 @@ class MoleculeActivityService:
                 col_key = f"drc:{proto_id}:{curve_type}"
                 curve = mol_curves.get(proto_id)
                 if curve and curve.curve_type.value == curve_type:
+                    # Condense raw_data to [{x, y}] for inline sparkline
+                    condensed = None
+                    if curve.raw_data and isinstance(curve.raw_data, list):
+                        condensed = _condense_raw_data(curve.raw_data)
+
                     mol_activity[col_key] = ActivityValue(
                         value=curve.fitted_value,
                         qualifier=None,
@@ -184,6 +190,16 @@ class MoleculeActivityService:
                         curve_type=curve.curve_type.value,
                         r_squared=curve.r_squared,
                         data_point_count=curve.num_points,
+                        raw_data=condensed,
+                        curve_params=CurveParams(
+                            hill_slope=curve.hill_slope,
+                            top=curve.top,
+                            bottom=curve.bottom,
+                            num_points=curve.num_points,
+                            curve_class=curve.curve_class.value if curve.curve_class else None,
+                            confidence_interval_low=curve.confidence_interval_low,
+                            confidence_interval_high=curve.confidence_interval_high,
+                        ),
                     )
 
             if mol_activity:

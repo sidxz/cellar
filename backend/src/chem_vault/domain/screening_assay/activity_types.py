@@ -26,6 +26,19 @@ class AggregatedReadout:
 
 
 @dataclass(frozen=True)
+class CurveParams:
+    """Curve fit parameters for dose-response display."""
+
+    hill_slope: float
+    top: float
+    bottom: float
+    num_points: int
+    curve_class: str | None
+    confidence_interval_low: float | None
+    confidence_interval_high: float | None
+
+
+@dataclass(frozen=True)
 class ActivityValue:
     """Single activity value for display in search results or molecule detail."""
 
@@ -36,6 +49,8 @@ class ActivityValue:
     curve_type: str | None = None  # ic50, ec50 etc — only for dose_response
     r_squared: float | None = None  # only for dose_response
     data_point_count: int = 1
+    raw_data: list[dict[str, float]] | None = None  # X/Y points for inline chart
+    curve_params: CurveParams | None = None  # curve fit parameters
 
 
 @dataclass(frozen=True)
