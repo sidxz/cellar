@@ -116,7 +116,7 @@ function ActivityRow({
             value={conjunction}
             onValueChange={(v) => onConjunctionChange(v as ProtocolConjunction)}
           >
-            <SelectTrigger className="h-7 w-[4.5rem] text-xs shrink-0">
+            <SelectTrigger className="h-8 w-[4.5rem] text-sm shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -129,7 +129,7 @@ function ActivityRow({
         )}
 
         {/* "In" label */}
-        <span className="text-xs text-muted-foreground shrink-0">Protocol</span>
+        <span className="text-sm text-muted-foreground shrink-0">Protocol</span>
 
         {/* Protocol picker (searchable) */}
         <Popover open={protocolOpen} onOpenChange={setProtocolOpen}>
@@ -137,7 +137,7 @@ function ActivityRow({
             <button
               type="button"
               className={cn(
-                "flex h-7 min-w-[160px] flex-1 items-center justify-between rounded-md border border-input bg-transparent px-2 text-xs shadow-xs",
+                "flex h-8 min-w-[160px] flex-1 items-center justify-between rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
                 !criterion.protocol_id && "text-muted-foreground",
               )}
             >
@@ -151,7 +151,7 @@ function ActivityRow({
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="start">
             <Command>
-              <CommandInput placeholder="Search protocols…" className="h-8 text-xs" />
+              <CommandInput placeholder="Search protocols…" className="h-8 text-sm" />
               <CommandList>
                 <CommandEmpty>No protocols found.</CommandEmpty>
                 <CommandGroup>
@@ -170,7 +170,7 @@ function ActivityRow({
                           });
                           setProtocolOpen(false);
                         }}
-                        className="text-xs"
+                        className="text-sm"
                       >
                         <Check
                           className={cn(
@@ -191,7 +191,7 @@ function ActivityRow({
       {/* Sub-row: activity filter — curve type + operator + value, or readout definition */}
       {hasProtocol && (
         <div className="ml-[70px] flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground shrink-0">where</span>
+          <span className="text-sm text-muted-foreground shrink-0">where</span>
 
           {/* Curve type / readout — derived from protocol's readout definitions */}
           <Select
@@ -206,7 +206,7 @@ function ActivityRow({
               }
             }}
           >
-            <SelectTrigger className="h-7 w-28 text-xs shrink-0">
+            <SelectTrigger className="h-8 w-28 text-sm shrink-0">
               <SelectValue placeholder="Select…" />
             </SelectTrigger>
             <SelectContent>
@@ -231,7 +231,7 @@ function ActivityRow({
                 </>
               )}
               {curveTypeOptions.length === 0 && numericReadouts.length === 0 && (
-                <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                <div className="px-2 py-3 text-sm text-muted-foreground text-center">
                   No curve types or readouts configured
                 </div>
               )}
@@ -245,7 +245,7 @@ function ActivityRow({
               onChange({ ...criterion, operator: v as PropertyOperator })
             }
           >
-            <SelectTrigger className="h-7 w-14 text-xs shrink-0">
+            <SelectTrigger className="h-8 w-14 text-sm shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -260,7 +260,7 @@ function ActivityRow({
           {/* Value */}
           <Input
             type="number"
-            className="h-7 w-20 text-xs"
+            className="h-8 w-20 text-sm"
             placeholder="value"
             value={criterion.value ?? ""}
             onChange={(e) =>
@@ -322,7 +322,7 @@ export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSe
     <div className="space-y-2">
       {/* Section header */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Protocols
         </span>
         <button
@@ -337,7 +337,7 @@ export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSe
 
       {/* Empty state */}
       {criteria.length === 0 && (
-        <p className="text-xs italic text-muted-foreground/50 py-1">
+        <p className="text-sm italic text-muted-foreground/50 py-1">
           No protocol filters. Click &ldquo;+ Add a term&rdquo; to filter by assay activity.
         </p>
       )}

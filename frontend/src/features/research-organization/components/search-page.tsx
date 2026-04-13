@@ -250,7 +250,7 @@ function SearchPageInner() {
 
   return (
     <div>
-      <div className="px-6 py-4 space-y-3">
+      <div className="space-y-2">
         {/* Search form — always visible */}
         <SearchForm
           initialQuery={currentQuery ?? undefined}

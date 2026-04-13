@@ -55,12 +55,12 @@ function PropertyRow({
         value={criterion.field}
         onValueChange={(v) => onChange({ ...criterion, field: v })}
       >
-        <SelectTrigger className="h-7 w-20 text-xs">
+        <SelectTrigger className="h-8 w-20 text-sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {PROPERTY_FIELDS.map((f) => (
-            <SelectItem key={f.value} value={f.value} className="text-xs">
+            <SelectItem key={f.value} value={f.value} className="text-sm">
               {f.label}
             </SelectItem>
           ))}
@@ -69,7 +69,7 @@ function PropertyRow({
 
       {/* Min input */}
       <Input
-        className="h-7 w-20 text-center text-xs"
+        className="h-8 w-20 text-center text-sm"
         type="number"
         placeholder="Min"
         value={criterion.min ?? ""}
@@ -83,11 +83,11 @@ function PropertyRow({
       />
 
       {/* Dash separator */}
-      <span className="text-xs text-muted-foreground select-none">–</span>
+      <span className="text-sm text-muted-foreground select-none">–</span>
 
       {/* Max input */}
       <Input
-        className="h-7 w-20 text-center text-xs"
+        className="h-8 w-20 text-center text-sm"
         type="number"
         placeholder="Max"
         value={criterion.max ?? ""}
@@ -137,7 +137,7 @@ export function PropertySection({ criteria, onChange }: PropertySectionProps) {
     <div className="space-y-2">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Properties
         </span>
         <button
@@ -152,7 +152,7 @@ export function PropertySection({ criteria, onChange }: PropertySectionProps) {
 
       {/* Empty state */}
       {criteria.length === 0 && (
-        <p className="text-xs italic text-muted-foreground py-1">
+        <p className="text-sm italic text-muted-foreground py-1">
           No property filters added.
         </p>
       )}

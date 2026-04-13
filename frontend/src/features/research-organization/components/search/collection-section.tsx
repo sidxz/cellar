@@ -61,7 +61,7 @@ function CollectionTerm({
           value={term.negate ? "not_in" : "in"}
           onValueChange={(v) => onChange({ ...term, negate: v === "not_in" })}
         >
-          <SelectTrigger className="h-7 text-xs">
+          <SelectTrigger className="h-8 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -77,7 +77,7 @@ function CollectionTerm({
             <button
               type="button"
               className={cn(
-                "flex h-7 w-full items-center justify-between rounded-md border border-input bg-transparent px-2 text-xs shadow-xs",
+                "flex h-8 w-full items-center justify-between rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
                 !term.collection_id && "text-muted-foreground",
               )}
             >
@@ -91,7 +91,7 @@ function CollectionTerm({
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="start">
             <Command>
-              <CommandInput placeholder="Search collections…" className="h-8 text-xs" />
+              <CommandInput placeholder="Search collections…" className="h-8 text-sm" />
               <CommandList>
                 <CommandEmpty>No collections found.</CommandEmpty>
                 <CommandGroup>
@@ -103,7 +103,7 @@ function CollectionTerm({
                         onChange({ ...term, collection_id: c.id });
                         setOpen(false);
                       }}
-                      className="text-xs"
+                      className="text-sm"
                     >
                       <Check
                         className={cn(
@@ -156,7 +156,7 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Collections
         </span>
         <button
@@ -169,7 +169,7 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
       </div>
 
       {terms.length === 0 && (
-        <p className="text-xs italic text-muted-foreground/50">
+        <p className="text-sm italic text-muted-foreground/50">
           No collection filters.
         </p>
       )}

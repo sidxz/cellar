@@ -49,7 +49,7 @@ function KeywordTerm({
           value={criterion.field}
           onValueChange={(v) => onChange({ ...criterion, field: v })}
         >
-          <SelectTrigger className="h-7 text-xs">
+          <SelectTrigger className="h-8 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -67,7 +67,7 @@ function KeywordTerm({
           value={criterion.operator}
           onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator })}
         >
-          <SelectTrigger className="h-7 text-xs">
+          <SelectTrigger className="h-8 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -82,7 +82,7 @@ function KeywordTerm({
 
       <div className="flex-1">
         <Input
-          className="h-7 text-xs"
+          className="h-8 text-sm"
           placeholder="Search text..."
           value={criterion.value}
           onChange={(e) => onChange({ ...criterion, value: e.target.value })}
@@ -123,7 +123,7 @@ export function KeywordSection({ criteria, onChange }: KeywordSectionProps) {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Keywords
         </span>
         <button
@@ -136,7 +136,7 @@ export function KeywordSection({ criteria, onChange }: KeywordSectionProps) {
       </div>
 
       {criteria.length === 0 && (
-        <p className="text-xs italic text-muted-foreground/50">
+        <p className="text-sm italic text-muted-foreground/50">
           No keyword filters.
         </p>
       )}

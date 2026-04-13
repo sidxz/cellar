@@ -57,7 +57,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
       {selectedProjects.map((project) => (
         <span
           key={project.id}
-          className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs text-primary"
+          className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-sm text-primary"
         >
           {project.name}
           <button
@@ -89,7 +89,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <Command>
-            <CommandInput placeholder="Search projects…" className="h-8 text-xs" />
+            <CommandInput placeholder="Search projects…" className="h-8 text-sm" />
             <CommandList>
               <CommandEmpty>No projects found.</CommandEmpty>
               <CommandGroup>
@@ -100,7 +100,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
                       key={project.id}
                       value={project.name}
                       onSelect={() => toggleProject(project.id)}
-                      className="text-xs"
+                      className="text-sm"
                     >
                       <Checkbox
                         checked={checked}

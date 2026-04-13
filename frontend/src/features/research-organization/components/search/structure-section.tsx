@@ -100,7 +100,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
     <div className="space-y-2">
       {/* Header row */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Structure
         </span>
         {filled && (
@@ -121,7 +121,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
           return (
             <label
               key={st.value}
-              className={`flex cursor-pointer items-center gap-1 text-xs select-none ${
+              className={`flex cursor-pointer items-center gap-1 text-sm select-none ${
                 active ? "text-foreground" : "text-muted-foreground"
               }`}
             >
@@ -145,7 +145,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
                     step={5}
                     value={Math.round((c.threshold ?? 0.7) * 100)}
                     onChange={(e) => handleThresholdChange(e.target.value)}
-                    className="h-6 w-14 text-xs text-center"
+                    className="h-6 w-14 text-sm text-center"
                     onClick={(e) => e.stopPropagation()}
                   />
                   <span className="text-muted-foreground">%</span>
@@ -166,7 +166,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
       {/* Input row */}
       <div className="flex items-center gap-1">
         <Input
-          className="h-7 flex-1 text-xs font-mono"
+          className="h-8 flex-1 text-sm font-mono"
           placeholder={PLACEHOLDERS[c.search_type]}
           value={inputValue}
           onChange={(e) => handleInputChange(e.target.value)}
@@ -176,7 +176,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 w-7 p-0"
+            className="h-8 w-7 p-0"
             onClick={() => setEditorOpen(true)}
             title="Draw structure"
           >
