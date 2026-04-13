@@ -125,7 +125,7 @@ export function SearchForm({ initialQuery, onSearch, isLoading }: SearchFormProp
   // Parse initial query into section states
   const initial = decomposeQuery(initialQuery);
 
-  const [logic, setLogic] = useState<"and" | "or">(initial.logic);
+  const [logic, setLogic] = useState<"and" | "or">(initial.logic ?? "and");
   const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(initial.activityCriteria);
   const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(initial.structureCriterion);
   const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(initial.propertyCriteria);
@@ -138,7 +138,7 @@ export function SearchForm({ initialQuery, onSearch, isLoading }: SearchFormProp
   // Re-parse when initialQuery changes externally (e.g., loading a saved search)
   useEffect(() => {
     const parsed = decomposeQuery(initialQuery);
-    setLogic(parsed.logic);
+    setLogic(parsed.logic ?? "and");
     setActivityCriteria(parsed.activityCriteria);
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);

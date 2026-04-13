@@ -77,11 +77,14 @@ export interface SavedSearch {
   id: string;
   workspace_id: string;
   name: string;
+  description: string | null;
   project_id: string | null;
   query: Record<string, unknown>;
   columns: Record<string, unknown> | null;
   visibility: SearchVisibility;
   created_by: string;
+  last_run_at: string | null;
+  result_count: number | null;
   version: number;
 }
 
@@ -140,6 +143,7 @@ export interface UpdateCollectionInput {
 
 export interface CreateSavedSearchInput {
   name: string;
+  description?: string | null;
   query: Record<string, unknown>;
   columns?: Record<string, unknown> | null;
   visibility?: SearchVisibility;
@@ -148,6 +152,7 @@ export interface CreateSavedSearchInput {
 
 export interface UpdateSavedSearchInput {
   name?: string;
+  description?: string | null;
   query?: Record<string, unknown>;
   columns?: Record<string, unknown> | null;
   visibility?: SearchVisibility;
@@ -276,7 +281,7 @@ export type SearchCriterion = SearchCriterionBase & { negate?: boolean };
 
 export interface SearchQuery {
   criteria: SearchCriterion[];
-  logic: "and" | "or";
+  logic?: "and" | "or";
 }
 
 export type SortField = "name" | "registration_number" | "molecular_weight" | "logp" | "tpsa" | "hbd" | "hba" | "created_at";
@@ -296,4 +301,75 @@ export interface ActivityValue {
   curve_type: string | null;
   r_squared: number | null;
   data_point_count: number;
+  raw_data: Array<{ x: number; y: number }> | null;
+  curve_params: CurveParams | null;
+}
+
+// ─── Report Configuration ───────────────────────────────────────────────────
+
+export type DetailLevel = "summary" | "run_batch" | "details";
+export type PlotScale = "protocol" | "min_max" | "per_molecule";
+export type ImageSize = "small" | "medium" | "large";
+
+export interface ReportConfig {
+  detailLevel: DetailLevel;
+  plotScale: PlotScale;
+  showPlotLegend: boolean;
+  imageSize: ImageSize;
+  columnWidth: number;
+  visibleFields: VisibleFields;
+}
+
+export interface VisibleFields {
+  structure: string[];
+  properties: string[];
+  collections: boolean;
+  molecule: string[];
+  batch: string[];
+  protocols: Record<string, string[]>;
+}
+
+// ─── Curve Parameters ───────────────────────────────────────────────────────
+
+export interface CurveParams {
+  hill_slope: number;
+  top: number;
+  bottom: number;
+  num_points: number;
+  curve_class: string | null;
+  confidence_interval_low: number | null;
+  confidence_interval_high: number | null;
+}
+
+// ─── Molecule Activity Detail (side panel) ──────────────────────────────────
+
+export interface CurveDetail {
+  curve_id: string;
+  run_id: string;
+  batch_id: string;
+  curve_type: string;
+  fitted_value: number;
+  fitted_unit: string;
+  hill_slope: number;
+  r_squared: number;
+  curve_class: string | null;
+  top: number;
+  bottom: number;
+  num_points: number;
+  confidence_interval_low: number | null;
+  confidence_interval_high: number | null;
+  raw_data: Array<{ x: number; y: number }>;
+}
+
+export interface ProtocolCurveGroup {
+  protocol_id: string;
+  protocol_name: string;
+  protocol_type: string;
+  target_id: string | null;
+  curves: CurveDetail[];
+}
+
+export interface MoleculeActivityDetail {
+  molecule_id: string;
+  protocols: ProtocolCurveGroup[];
 }
