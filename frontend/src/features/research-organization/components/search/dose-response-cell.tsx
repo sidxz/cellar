@@ -3,6 +3,7 @@
 import { memo } from "react";
 import dynamic from "next/dynamic";
 import type { ActivityValue } from "../../types";
+import { generate4PLPoints } from "../../lib/curve-math";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Plot = dynamic<any>(
@@ -20,30 +21,6 @@ const Plot = dynamic<any>(
 
 interface DoseResponseCellProps {
   value?: ActivityValue;
-}
-
-/** Generate fitted 4PL sigmoid curve points on log scale */
-function generate4PLPoints(
-  ic50: number,
-  hillSlope: number,
-  top: number,
-  bottom: number,
-  xMin: number,
-  xMax: number,
-): { x: number[]; y: number[] } {
-  const logMin = Math.log10(xMin);
-  const logMax = Math.log10(xMax);
-  const xs: number[] = [];
-  const ys: number[] = [];
-
-  for (let i = 0; i <= 80; i++) {
-    const logX = logMin + (logMax - logMin) * (i / 80);
-    const x = Math.pow(10, logX);
-    const y = bottom + (top - bottom) / (1 + Math.pow(x / ic50, hillSlope));
-    xs.push(x);
-    ys.push(y);
-  }
-  return { x: xs, y: ys };
 }
 
 function DoseResponseCellInner({ value }: DoseResponseCellProps) {
@@ -73,17 +50,15 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
 
   // Add fitted curve if curve_params available
   if (value.curve_params && value.value != null) {
-    const xMin = Math.min(...rawX);
-    const xMax = Math.max(...rawX);
-    if (xMin > 0 && xMax > xMin) {
-      const fitted = generate4PLPoints(
-        value.value,
-        value.curve_params.hill_slope,
-        value.curve_params.top,
-        value.curve_params.bottom,
-        xMin * 0.5,
-        xMax * 2,
-      );
+    const fitted = generate4PLPoints(
+      value.raw_data!,
+      value.value,
+      value.curve_params.hill_slope,
+      value.curve_params.top,
+      value.curve_params.bottom,
+      { numPoints: 80, rangeExtension: 0.3 },
+    );
+    if (fitted.x.length > 0) {
       traces.push({
         x: fitted.x,
         y: fitted.y,

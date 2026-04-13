@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Collapsible } from "radix-ui";
 import { Button } from "@/shared/components/ui/button";
@@ -560,10 +560,19 @@ function KeywordListTerm({
   onChange: (c: KeywordListCriterion) => void;
   onRemove: () => void;
 }) {
-  const rawText = criterion.values.join("\n");
+  // Local state prevents cursor jumps from round-tripping through
+  // criterion.values on every keystroke. Sync to parent only on blur.
+  const [rawText, setRawText] = useState(criterion.values.join("\n"));
 
-  function handleTextChange(text: string) {
-    const parsed = text
+  // Re-sync local text when criterion changes externally (e.g. loading saved search)
+  const canonicalValues = criterion.values.join(",");
+  useEffect(() => {
+    setRawText(criterion.values.join("\n"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canonicalValues]);
+
+  function handleBlur() {
+    const parsed = rawText
       .split(/[,\n]+/)
       .map((s) => s.trim())
       .filter(Boolean);
@@ -594,7 +603,8 @@ function KeywordListTerm({
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-20 font-mono text-xs resize-y"
           placeholder="One per line, or comma-separated..."
           value={rawText}
-          onChange={(e) => handleTextChange(e.target.value)}
+          onChange={(e) => setRawText(e.target.value)}
+          onBlur={handleBlur}
         />
       </div>
       <Button variant="ghost" size="icon" className="mt-5 h-9 w-9 shrink-0" onClick={onRemove}>

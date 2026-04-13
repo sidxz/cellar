@@ -109,13 +109,12 @@ function decomposeQuery(query: SearchQuery | undefined) {
 
 /** Derive protocol column IDs from activity criteria for cross-protocol display. */
 function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] {
-  const seen = new Set<string>();
   const columns: string[] = [];
   for (const c of activityCriteria) {
-    if (c.protocol_id && !seen.has(c.protocol_id)) {
-      seen.add(c.protocol_id);
-      columns.push(c.protocol_id);
-    }
+    if (!c.protocol_id) continue;
+    const curveType = c.curve_type ?? "ic50";
+    const colId = `drc:${c.protocol_id}:${curveType}`;
+    if (!columns.includes(colId)) columns.push(colId);
   }
   return columns;
 }

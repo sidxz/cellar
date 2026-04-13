@@ -22,6 +22,7 @@ import {
   type LifecycleStage,
 } from "@/features/chemical-registration/types";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
+import { generate4PLPoints } from "../../lib/curve-math";
 import type { ProtocolCurveGroup, CurveDetail } from "../../types";
 
 // ─── Dynamic Plotly import (must NOT be SSR'd) ────────────────────────────
@@ -52,31 +53,6 @@ interface CompoundDetailPanelProps {
   onClose: () => void;
 }
 
-// ─── 4PL sigmoid curve generator ───────────────────────────────────────────
-
-function generate4PLPoints(
-  ic50: number,
-  hillSlope: number,
-  top: number,
-  bottom: number,
-  xMin: number,
-  xMax: number,
-): { x: number[]; y: number[] } {
-  const logMin = Math.log10(xMin);
-  const logMax = Math.log10(xMax);
-  const xs: number[] = [];
-  const ys: number[] = [];
-
-  for (let i = 0; i <= 100; i++) {
-    const logX = logMin + (logMax - logMin) * (i / 100);
-    const x = Math.pow(10, logX);
-    const y = bottom + (top - bottom) / (1 + Math.pow(x / ic50, hillSlope));
-    xs.push(x);
-    ys.push(y);
-  }
-  return { x: xs, y: ys };
-}
-
 // ─── CurveChart (single interactive Plotly chart) ──────────────────────────
 
 interface CurveChartProps {
@@ -101,18 +77,16 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
   ];
 
   // Fitted sigmoid
-  if (curve.fitted_value > 0) {
-    const xMin = Math.min(...rawX);
-    const xMax = Math.max(...rawX);
-    if (xMin > 0 && xMax > xMin) {
-      const fitted = generate4PLPoints(
-        curve.fitted_value,
-        curve.hill_slope,
-        curve.top,
-        curve.bottom,
-        xMin * 0.3,
-        xMax * 3,
-      );
+  if (isFinite(curve.fitted_value) && curve.fitted_value !== 0) {
+    const fitted = generate4PLPoints(
+      curve.raw_data,
+      curve.fitted_value,
+      curve.hill_slope,
+      curve.top,
+      curve.bottom,
+      { numPoints: 100, rangeExtension: 0.5 },
+    );
+    if (fitted.x.length > 0) {
       traces.push({
         x: fitted.x,
         y: fitted.y,
