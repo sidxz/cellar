@@ -556,22 +556,31 @@ class SQLAlchemyMoleculeRepository(
         Supports configurable sorting via ``sort_by`` / ``sort_dir``.
         Uses keyset pagination: cursor encodes ``(sort_value, id)`` when
         sorting by a field other than ``id``.
+
+        Special sort: ``sort_by="drc:{protocol_id}:{curve_type}"`` sorts by
+        the best (lowest) ``fitted_value`` from DoseResponseCurve for that
+        protocol and curve type. Compounds with no data sort last (NULLS LAST).
         """
         await self._set_similarity_threshold(query)
 
         stmt = self._build_base_stmt(workspace_id, query, project_ids=project_ids)
 
         # Sorting
-        sort_col = self._SORT_FIELDS.get(sort_by) if sort_by else None
         descending = sort_dir == "desc"
+        drc_sort = self._parse_drc_sort(sort_by)
 
-        if sort_col is not None:
-            if descending:
-                stmt = stmt.order_by(sort_col.desc().nulls_last(), MoleculeModel.id)
-            else:
-                stmt = stmt.order_by(sort_col.asc().nulls_last(), MoleculeModel.id)
+        if drc_sort is not None:
+            protocol_id, curve_type = drc_sort
+            stmt = self._apply_drc_sort(stmt, workspace_id, protocol_id, curve_type, descending)
         else:
-            stmt = stmt.order_by(MoleculeModel.id)
+            sort_col = self._SORT_FIELDS.get(sort_by) if sort_by else None
+            if sort_col is not None:
+                if descending:
+                    stmt = stmt.order_by(sort_col.desc().nulls_last(), MoleculeModel.id)
+                else:
+                    stmt = stmt.order_by(sort_col.asc().nulls_last(), MoleculeModel.id)
+            else:
+                stmt = stmt.order_by(MoleculeModel.id)
 
         if cursor_id is not None:
             stmt = stmt.where(MoleculeModel.id > cursor_id)
@@ -580,6 +589,72 @@ class SQLAlchemyMoleculeRepository(
 
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
+
+    # ------------------------------------------------------------------
+    # DRC sort helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_drc_sort(sort_by: str | None) -> tuple[uuid.UUID, str] | None:
+        """Parse ``"drc:{protocol_id}:{curve_type}"`` into components.
+
+        Returns ``(protocol_id, curve_type)`` or ``None`` if not a DRC sort.
+        """
+        if not sort_by or not sort_by.startswith("drc:"):
+            return None
+        parts = sort_by.split(":", 2)
+        if len(parts) != 3:
+            return None
+        try:
+            protocol_id = uuid.UUID(parts[1])
+        except ValueError:
+            return None
+        curve_type = parts[2]
+        if not curve_type:
+            return None
+        return protocol_id, curve_type
+
+    def _apply_drc_sort(
+        self,
+        stmt: sa.Select,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        curve_type: str,
+        descending: bool,
+    ) -> sa.Select:
+        """LEFT JOIN a best-value subquery and order by it."""
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+            DoseResponseCurveModel,
+        )
+
+        # Subquery: best (MIN) fitted_value per molecule for this protocol+curve_type
+        best_value_sq = (
+            select(
+                DoseResponseCurveModel.molecule_id.label("molecule_id"),
+                func.min(DoseResponseCurveModel.fitted_value).label("best_value"),
+            )
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.protocol_id == protocol_id,
+                DoseResponseCurveModel.curve_type == curve_type,
+            )
+            .group_by(DoseResponseCurveModel.molecule_id)
+            .subquery("drc_best")
+        )
+
+        # LEFT JOIN so molecules without data get NULL best_value
+        stmt = stmt.outerjoin(
+            best_value_sq,
+            MoleculeModel.id == best_value_sq.c.molecule_id,
+        )
+
+        best_col = best_value_sq.c.best_value
+        if descending:
+            stmt = stmt.order_by(best_col.desc().nulls_last(), MoleculeModel.id)
+        else:
+            stmt = stmt.order_by(best_col.asc().nulls_last(), MoleculeModel.id)
+
+        return stmt
 
     async def count_by_query(
         self,
