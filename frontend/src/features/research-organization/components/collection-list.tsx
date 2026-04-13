@@ -65,12 +65,10 @@ export function CollectionList({ projectId }: CollectionListProps) {
       {
         headerName: "Project",
         width: 140,
-        rowGroup: true,
-        hide: true,
         valueGetter: (params) => {
           const pid = params.data?.project_id;
-          if (!pid) return "No Project";
-          return projectLookup.get(pid) ?? "No Project";
+          if (!pid) return "\u2014";
+          return projectLookup.get(pid) ?? "\u2014";
         },
       },
       {
@@ -128,7 +126,6 @@ export function CollectionList({ projectId }: CollectionListProps) {
         loading={isLoading}
         height="500px"
         suppressFilters
-        groupDisplayType="groupRows"
         searchPlaceholder="Filter collections..."
         onRowClick={(collection) =>
           router.push(`/collections/${collection.id}`)
