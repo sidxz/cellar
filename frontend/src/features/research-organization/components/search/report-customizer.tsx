@@ -105,15 +105,15 @@ export function ReportCustomizer({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-[420px] sm:max-w-[420px] p-0">
-        <SheetHeader className="px-4 pt-4 pb-2">
+      <SheetContent side="right" className="w-[420px] sm:max-w-[420px] p-0 flex flex-col">
+        <SheetHeader className="px-4 pt-4 pb-2 shrink-0">
           <SheetTitle>Customize Report</SheetTitle>
           <SheetDescription>
             Configure which fields and display options appear in search results.
           </SheetDescription>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-8rem)] px-4 pb-6">
+        <ScrollArea className="flex-1 min-h-0 px-4 pb-6">
           <div className="space-y-6 pb-8">
             {/* ── Display Options ── */}
             <section className="space-y-4">
@@ -315,7 +315,7 @@ export function ReportCustomizer({
           </div>
         </ScrollArea>
 
-        <div className="border-t border-border px-4 py-3">
+        <div className="shrink-0 border-t border-border px-4 py-3">
           <Button className="w-full" onClick={onUpdate}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Update Report

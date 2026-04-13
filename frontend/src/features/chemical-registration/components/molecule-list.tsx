@@ -47,7 +47,7 @@ export function MoleculeList() {
       {
         headerName: "Structure",
         field: "structure",
-        width: 120,
+        width: 140,
         sortable: false,
         filter: false,
         resizable: false,
@@ -58,12 +58,12 @@ export function MoleculeList() {
           if (mol.structure_status === "disclosed" && mol.structure?.smiles) {
             return (
               <div className="py-1">
-                <StructureThumbnail smiles={mol.structure.smiles} size={80} />
+                <StructureThumbnail smiles={mol.structure.smiles} size={104} />
               </div>
             );
           }
           return (
-            <div className="flex h-[80px] w-[80px] items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+            <div className="flex h-[104px] w-[104px] items-center justify-center rounded bg-muted text-xs text-muted-foreground">
               N/A
             </div>
           );

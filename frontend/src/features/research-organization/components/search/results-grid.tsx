@@ -41,9 +41,9 @@ interface ResultsGridProps {
 // ─── Row height by image size ───────────────────────────────────────────────
 
 const ROW_HEIGHTS: Record<string, number> = {
-  small: 80,
-  medium: 150,
-  large: 250,
+  small: 120,
+  medium: 220,
+  large: 330,
 };
 
 // ─── Curve class badge colors ───────────────────────────────────────────────
@@ -73,7 +73,7 @@ function CurveClassBadge({ curveClass }: { curveClass: string | null }) {
 function buildFixedColumns(
   imageSize: string,
 ): ColDef<EnrichedMolecule>[] {
-  const thumbSize = imageSize === "large" ? 200 : imageSize === "medium" ? 120 : 56;
+  const thumbSize = imageSize === "large" ? 260 : imageSize === "medium" ? 156 : 72;
 
   return [
     {
@@ -88,16 +88,17 @@ function buildFixedColumns(
     },
     {
       headerName: "Molecule",
-      width: imageSize === "large" ? 280 : imageSize === "medium" ? 220 : 180,
+      width: imageSize === "large" ? 290 : imageSize === "medium" ? 200 : 130,
       pinned: "left",
       sortable: false,
       filter: false,
+      cellStyle: { display: "flex", justifyContent: "center" },
       cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
         const mol = params.data;
         if (!mol) return null;
         const smiles = mol.structure?.smiles;
         return (
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex h-full flex-col items-center justify-center py-2">
             {smiles ? (
               <StructureThumbnail smiles={smiles} size={thumbSize} />
             ) : (
@@ -106,11 +107,11 @@ function buildFixedColumns(
                 style={{ width: thumbSize, height: thumbSize }}
               />
             )}
-            <div className="min-w-0">
+            <div className="mt-1 text-center min-w-0 w-full">
               <p className="truncate font-mono text-xs text-muted-foreground">
                 {mol.registration_number ?? "\u2014"}
               </p>
-              <p className="truncate text-sm font-medium">
+              <p className="truncate text-sm">
                 {mol.name || "Unnamed"}
               </p>
             </div>
@@ -347,7 +348,7 @@ export function ResultsGrid({
   }
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%", height: "calc(100vh - 80px)" }}>
       <style>{`
         .ag-protocol-group-header .ag-header-group-cell-label {
           color: hsl(var(--primary)) !important;
@@ -366,7 +367,6 @@ export function ResultsGrid({
         rowHeight={rowHeight}
         headerHeight={36}
         groupHeaderHeight={32}
-        domLayout="autoHeight"
         onRowClicked={handleRowClicked}
         onGridReady={handleGridReady}
         onSelectionChanged={handleSelectionChanged}
