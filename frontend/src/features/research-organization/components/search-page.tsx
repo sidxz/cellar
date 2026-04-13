@@ -1,810 +1,362 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownUp, BookmarkPlus, ChevronDown, Download, Filter, Grid3X3, ListPlus, Search, Star, Table } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Filter, Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
-import { PageHeader } from "@/shared/components/page-header";
-import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { StructureThumbnail } from "@/shared/components/chemistry";
-import { showSuccess } from "@/shared/lib/toast";
-import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
-import type {
-  Molecule,
-  LifecycleStage,
-} from "@/features/chemical-registration/types";
-import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
+import type { Molecule } from "@/features/chemical-registration/types";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
-import type { Protocol } from "@/features/screening-assay/types";
-import { usePreferencesStore } from "@/shared/lib/stores/preferences-store";
-import type { ActivityValue, SortField, SortDir } from "../types";
-import { useExecuteSearch } from "../hooks/use-search";
-import {
-  useSavedSearches,
-  useCreateSavedSearch,
-} from "../hooks/use-saved-searches";
-import { SearchQueryBuilder } from "./search-query-builder";
+import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
+import type { SearchQuery, ActivityValue, SortField, SortDir, SavedSearch } from "../types";
+import { useExecuteSearch, type EnrichedSearchResponse } from "../hooks/use-search";
+import { useSavedSearches } from "../hooks/use-saved-searches";
+import { useReportConfig } from "../hooks/use-report-config";
+import { SearchForm } from "./search/search-form";
+import { ProjectSidebar } from "./search/project-sidebar";
+import { ResultsToolbar } from "./search/results-toolbar";
+import { ResultsGrid } from "./search/results-grid";
+import { CompoundDetailPanel } from "./search/compound-detail-panel";
+import { ReportCustomizer } from "./search/report-customizer";
+import { SaveSearchDialog } from "./search/save-search-dialog";
 import { CollectionPickerDialog } from "./collection-picker-dialog";
-import type { SearchQuery, SavedSearch } from "../types";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type EnrichedMolecule = Molecule & { activity?: Record<string, ActivityValue> };
 
-// ─── Results grid columns ───────────────────────────────────────────────────
+// ─── Inner component (uses useSearchParams, needs Suspense boundary) ───────
 
-function buildColumnDefs(): ColDef<EnrichedMolecule>[] {
-  return [
-    {
-      headerName: "Structure",
-      width: 72,
-      sortable: false,
-      filter: false,
-      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-        const smiles = params.data?.structure?.smiles;
-        if (!smiles) return <div className="h-10 w-10 rounded bg-muted" />;
-        return <StructureThumbnail smiles={smiles} size={48} />;
-      },
-    },
-    {
-      headerName: "Reg #",
-      field: "registration_number",
-      width: 120,
-      cellClass: "font-mono text-xs",
-    },
-    {
-      headerName: "Name",
-      field: "name",
-      flex: 1,
-      minWidth: 150,
-    },
-    {
-      headerName: "MW",
-      width: 90,
-      valueGetter: (p) => p.data?.descriptors?.molecular_weight ?? null,
-      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "\u2014"),
-    },
-    {
-      headerName: "LogP",
-      width: 80,
-      valueGetter: (p) => p.data?.descriptors?.logp ?? null,
-      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : "\u2014"),
-    },
-    {
-      headerName: "Stage",
-      field: "lifecycle_stage",
-      width: 120,
-      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-        const stage = params.value as LifecycleStage | undefined;
-        if (!stage) return "\u2014";
-        return (
-          <Badge variant="outline" className="text-xs">
-            {LIFECYCLE_LABELS[stage] ?? stage}
-          </Badge>
-        );
-      },
-    },
-  ];
-}
+function SearchPageInner() {
+  const searchParams = useSearchParams();
+  const savedSearchId = searchParams.get("saved");
 
-// ─── Protocol column selector ──────────────────────────────────────────────
+  // ── Project scoping ────────────────────────────────────────────────────
+  const [projectIds, setProjectIds] = useState<string[]>([]);
 
-const CURVE_TYPES = ["ic50", "ec50", "ki", "kd"] as const;
-
-function ProtocolColumnSelector({
-  protocols,
-  selected,
-  onChange,
-}: {
-  protocols: Protocol[];
-  selected: string[];
-  onChange: (cols: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const activeProtocols = protocols.filter((p) => p.status === "active");
-
-  function toggle(colId: string) {
-    onChange(
-      selected.includes(colId)
-        ? selected.filter((c) => c !== colId)
-        : [...selected, colId]
-    );
-  }
-
-  if (activeProtocols.length === 0) return null;
-
-  return (
-    <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between text-sm"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="font-medium">
-          Protocol Columns{" "}
-          <span className="text-muted-foreground font-normal">
-            ({selected.length} selected)
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <div className="mt-3 space-y-3 max-h-64 overflow-y-auto">
-          {activeProtocols.map((p) => {
-            const numericRds = p.readout_definitions.filter(
-              (rd) => rd.data_type === "numeric"
-            );
-            return (
-              <div key={p.id} className="border-b border-border/50 pb-2 last:border-0">
-                <span className="text-xs font-semibold text-foreground">{p.name}</span>
-                <div className="mt-1 ml-2 flex flex-wrap gap-x-4 gap-y-1">
-                  {numericRds.length > 0 && (
-                    <div className="flex flex-wrap gap-x-3 gap-y-1">
-                      {numericRds.map((rd) => {
-                        const colId = `rd:${rd.id}`;
-                        return (
-                          <label key={rd.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                            <input
-                              type="checkbox"
-                              className="rounded"
-                              checked={selected.includes(colId)}
-                              onChange={() => toggle(colId)}
-                            />
-                            {rd.name}
-                            {rd.unit ? ` (${rd.unit})` : ""}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {CURVE_TYPES.map((ct) => {
-                      const colId = `drc:${p.id}:${ct}`;
-                      return (
-                        <label key={ct} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="rounded"
-                            checked={selected.includes(colId)}
-                            onChange={() => toggle(colId)}
-                          />
-                          <span className="italic text-muted-foreground">{ct.toUpperCase()} (curve)</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Structure card grid view ──────────────────────────────────────────────
-
-type ResultsView = "table" | "grid";
-
-function StructureCard({
-  molecule,
-  protocolColumns,
-  protocols,
-  selected,
-  onSelect,
-}: {
-  molecule: EnrichedMolecule;
-  protocolColumns: string[];
-  protocols: Protocol[] | undefined;
-  selected: boolean;
-  onSelect: (mol: EnrichedMolecule) => void;
-}) {
-  const smiles = molecule.structure?.smiles;
-  const mw = molecule.descriptors?.molecular_weight;
-  const logp = molecule.descriptors?.logp;
-  const tpsa = molecule.descriptors?.tpsa;
-  const stage = molecule.lifecycle_stage;
-
-  function resolveColumnLabel(colId: string): string {
-    const parts = colId.split(":");
-    if (parts[0] === "drc" && protocols) {
-      const proto = protocols.find((p) => p.id === parts[1]);
-      return `${proto?.name ?? "?"} ${parts[2]?.toUpperCase()}`;
-    }
-    if (parts[0] === "rd" && protocols) {
-      for (const proto of protocols) {
-        const rd = proto.readout_definitions.find((r) => r.id === parts[1]);
-        if (rd) return `${rd.name}${rd.unit ? ` (${rd.unit})` : ""}`;
-      }
-    }
-    return colId;
-  }
-
-  function formatActivity(av: ActivityValue): string {
-    const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
-    return `${q}${av.value?.toPrecision(4) ?? "—"}${av.unit ? ` ${av.unit}` : ""}`;
-  }
-
-  return (
-    <div
-      className={`group relative rounded-lg border bg-card p-3 transition-colors hover:border-primary/40 cursor-pointer ${
-        selected ? "ring-2 ring-primary border-primary" : ""
-      }`}
-      onClick={() => onSelect(molecule)}
-    >
-      {/* Structure image */}
-      <div className="flex justify-center rounded bg-muted/30 p-2 mb-3">
-        {smiles ? (
-          <StructureThumbnail smiles={smiles} size={160} />
-        ) : (
-          <div className="h-40 w-40 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
-            No structure
-          </div>
-        )}
-      </div>
-
-      {/* Reg # + name */}
-      <div className="space-y-1 mb-2">
-        <p className="font-mono text-xs text-muted-foreground">
-          {molecule.registration_number ?? "—"}
-        </p>
-        <p className="text-sm font-medium leading-tight truncate" title={molecule.name ?? undefined}>
-          {molecule.name || "Unnamed"}
-        </p>
-      </div>
-
-      {/* Properties row */}
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mb-2">
-        {mw != null && <span>MW {mw.toFixed(1)}</span>}
-        {logp != null && <span>LogP {logp.toFixed(2)}</span>}
-        {tpsa != null && <span>TPSA {tpsa.toFixed(1)}</span>}
-      </div>
-
-      {/* Stage badge */}
-      {stage && (
-        <Badge variant="outline" className="text-xs mb-2">
-          {LIFECYCLE_LABELS[stage] ?? stage}
-        </Badge>
-      )}
-
-      {/* Activity values */}
-      {protocolColumns.length > 0 && molecule.activity && (
-        <div className="space-y-0.5 border-t pt-2 mt-1">
-          {protocolColumns.map((colId) => {
-            const av = molecule.activity?.[colId];
-            if (!av?.value) return null;
-            return (
-              <div key={colId} className="flex justify-between text-xs">
-                <span className="text-muted-foreground truncate mr-2">
-                  {resolveColumnLabel(colId)}
-                </span>
-                <span className="font-mono shrink-0">{formatActivity(av)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ResultsGridView({
-  molecules,
-  protocolColumns,
-  protocols,
-  selectedIds,
-  onToggleSelect,
-}: {
-  molecules: EnrichedMolecule[];
-  protocolColumns: string[];
-  protocols: Protocol[] | undefined;
-  selectedIds: Set<string>;
-  onToggleSelect: (mol: EnrichedMolecule) => void;
-}) {
-  if (molecules.length === 0) {
-    return (
-      <EmptyState
-        icon={Search}
-        title="No results"
-        description="Try adjusting your search criteria."
-      />
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-      {molecules.map((mol) => (
-        <StructureCard
-          key={mol.id}
-          molecule={mol}
-          protocolColumns={protocolColumns}
-          protocols={protocols}
-          selected={selectedIds.has(mol.id)}
-          onSelect={onToggleSelect}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Main component ─────────────────────────────────────────────────────────
-
-export function SearchPage() {
+  // ── Search state ───────────────────────────────────────────────────────
+  const [currentQuery, setCurrentQuery] = useState<SearchQuery | null>(null);
+  const [protocolColumns, setProtocolColumns] = useState<string[]>([]);
   const [results, setResults] = useState<EnrichedMolecule[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [currentQuery, setCurrentQuery] = useState<SearchQuery | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [protocolColumns, setProtocolColumns] = useState<string[]>([]);
-  const [resultsView, setResultsView] = useState<ResultsView>("table");
-  const [gridSelectedIds, setGridSelectedIds] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<SortField | undefined>(undefined);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [showQueryBuilder, setShowQueryBuilder] = useState(true);
+  const [showForm, setShowForm] = useState(true);
 
-  // Load default columns from preferences on mount
-  const { defaultSearchColumns, setDefaultSearchColumns } = usePreferencesStore();
-  const defaultsLoadedRef = useRef(false);
-  useEffect(() => {
-    if (!defaultsLoadedRef.current && defaultSearchColumns?.length) {
-      setProtocolColumns(defaultSearchColumns);
-      defaultsLoadedRef.current = true;
-    }
-  }, [defaultSearchColumns]);
+  // ── Detail panel ───────────────────────────────────────────────────────
+  const [selectedMolecule, setSelectedMolecule] = useState<EnrichedMolecule | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Save search dialog state
+  // ── Dialogs ────────────────────────────────────────────────────────────
+  const [reportOpen, setReportOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
-  const [saveName, setSaveName] = useState("");
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
+  // ── Sorting ────────────────────────────────────────────────────────────
+  const [sortBy, setSortBy] = useState<SortField | undefined>();
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  // ── Selection ──────────────────────────────────────────────────────────
+  const [gridSelectedIds, setGridSelectedIds] = useState<Set<string>>(new Set());
+
+  // ── Hooks ──────────────────────────────────────────────────────────────
   const searchMutation = useExecuteSearch();
-  const { data: savedSearches } = useSavedSearches();
-  const createSavedSearch = useCreateSavedSearch();
   const { data: protocols } = useProtocols();
+  const { data: savedSearches } = useSavedSearches();
+  const { config: reportConfig, loadFromSavedSearch } = useReportConfig();
+  const { exportSdf } = useSdfExport();
 
-  const columnDefs = useMemo(buildColumnDefs, []);
+  // ── Derived: visible protocol IDs for detail panel ─────────────────────
+  const visibleProtocolIds = useMemo(() => {
+    return [
+      ...new Set(
+        protocolColumns
+          .filter((c) => c.startsWith("drc:"))
+          .map((c) => c.split(":")[1]),
+      ),
+    ];
+  }, [protocolColumns]);
 
-  const dynamicColumnDefs = useMemo(() => {
-    return protocolColumns.map((colId) => {
-      const parts = colId.split(":");
-      let headerName = colId;
-      if (parts[0] === "drc" && protocols) {
-        const proto = protocols.find((p) => p.id === parts[1]);
-        headerName = `${proto?.name ?? "?"} ${parts[2]?.toUpperCase()}`;
-      } else if (parts[0] === "rd" && protocols) {
-        // Find the readout definition across all protocols
-        for (const proto of protocols) {
-          const rd = proto.readout_definitions.find((r) => r.id === parts[1]);
-          if (rd) {
-            headerName = `${proto.name} — ${rd.name}${rd.unit ? ` (${rd.unit})` : ""}`;
-            break;
-          }
-        }
-      }
-      return {
-        headerName,
-        valueGetter: (params: { data?: EnrichedMolecule }) => {
-          return params.data?.activity?.[colId]?.value ?? null;
-        },
-        valueFormatter: (params: { value: number | null; data?: EnrichedMolecule }) => {
-          const av = params.data?.activity?.[colId];
-          if (!av?.value) return "";
-          const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
-          return `${q}${av.value.toPrecision(4)}${av.unit ? ` ${av.unit}` : ""}`;
-        },
-        width: 140,
-        sortable: true,
-      };
-    });
-  }, [protocolColumns, protocols]);
-
-  const allColumnDefs = useMemo(
-    () => [...columnDefs, ...dynamicColumnDefs],
-    [columnDefs, dynamicColumnDefs]
+  // ── Enrichment helper ──────────────────────────────────────────────────
+  const enrichItems = useCallback(
+    (data: EnrichedSearchResponse): EnrichedMolecule[] =>
+      data.items.map((mol) => ({
+        ...mol,
+        activity: data.activity_data?.[mol.id] ?? undefined,
+      })),
+    [],
   );
 
+  // ── handleSearch ───────────────────────────────────────────────────────
   const handleSearch = useCallback(
-    (query: SearchQuery) => {
+    (query: SearchQuery, columns: string[]) => {
       setCurrentQuery(query);
+      setProtocolColumns(columns);
+      setShowForm(false);
       setHasSearched(true);
-      setShowQueryBuilder(false);
+      setSelectedMolecule(null);
+      setGridSelectedIds(new Set());
+
       const input = {
         query,
-        ...(protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : {}),
+        ...(columns.length > 0 ? { protocol_columns: columns } : {}),
       };
+
       searchMutation.mutate(
         { input, limit: 100, sort_by: sortBy, sort_dir: sortDir },
         {
           onSuccess: (data) => {
-            const enrichedItems: EnrichedMolecule[] = data.items.map((mol) => ({
-              ...mol,
-              activity: data.activity_data?.[mol.id] ?? undefined,
-            }));
-            setResults(enrichedItems);
+            setResults(enrichItems(data));
             setNextCursor(data.next_cursor);
             setTotalCount(data.total_count);
           },
-        }
+        },
       );
     },
-    [searchMutation, protocolColumns, sortBy, sortDir]
+    [searchMutation, sortBy, sortDir, enrichItems],
   );
 
+  // ── handleLoadMore ─────────────────────────────────────────────────────
   const handleLoadMore = useCallback(() => {
     if (!currentQuery || !nextCursor) return;
     const input = {
       query: currentQuery,
       ...(protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : {}),
     };
+
     searchMutation.mutate(
       { input, cursor: nextCursor, limit: 100, sort_by: sortBy, sort_dir: sortDir },
       {
         onSuccess: (data) => {
-          const enrichedItems: EnrichedMolecule[] = data.items.map((mol) => ({
-            ...mol,
-            activity: data.activity_data?.[mol.id] ?? undefined,
-          }));
-          setResults((prev) => [...prev, ...enrichedItems]);
+          setResults((prev) => [...prev, ...enrichItems(data)]);
           setNextCursor(data.next_cursor);
           setTotalCount(data.total_count);
         },
-      }
+      },
     );
-  }, [currentQuery, nextCursor, searchMutation, protocolColumns, sortBy, sortDir]);
+  }, [currentQuery, nextCursor, searchMutation, protocolColumns, sortBy, sortDir, enrichItems]);
 
-  const handleLoadSavedSearch = useCallback(
-    (searchId: string) => {
-      const saved = savedSearches?.find((s: SavedSearch) => s.id === searchId);
-      if (!saved) return;
-      // Restore protocol columns from saved search
-      const cols = saved.columns as { protocol_columns?: string[] } | null;
-      if (cols?.protocol_columns) {
-        setProtocolColumns(cols.protocol_columns);
-      }
-      const query = saved.query as unknown as SearchQuery;
-      if (query?.criteria) {
-        handleSearch(query);
-      }
+  // ── Load saved search from URL ─────────────────────────────────────────
+  const savedSearchLoadedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!savedSearchId || !savedSearches) return;
+    if (savedSearchLoadedRef.current === savedSearchId) return;
+    savedSearchLoadedRef.current = savedSearchId;
+
+    const saved = savedSearches.find((s: SavedSearch) => s.id === savedSearchId);
+    if (!saved) return;
+
+    // Restore report config
+    loadFromSavedSearch(saved.columns);
+
+    // Restore protocol columns from saved search
+    const cols = saved.columns as { protocolColumns?: string[] } | null;
+    const restoredColumns = cols?.protocolColumns ?? [];
+
+    // Execute the search
+    const query = saved.query as unknown as SearchQuery;
+    if (query?.criteria) {
+      handleSearch(query, restoredColumns);
+    }
+  }, [savedSearchId, savedSearches, loadFromSavedSearch, handleSearch]);
+
+  // ── SDF export ─────────────────────────────────────────────────────────
+  const handleExportSdf = useCallback(() => {
+    if (!results.length) return;
+    const ids = gridSelectedIds.size > 0
+      ? Array.from(gridSelectedIds)
+      : results.map((m) => m.id);
+    exportSdf(ids, "search-results.sdf");
+  }, [results, gridSelectedIds, exportSdf]);
+
+  // ── Add to collection ──────────────────────────────────────────────────
+  const handleAddToCollection = useCallback(() => {
+    if (gridSelectedIds.size === 0) return;
+    setPickerMolIds(Array.from(gridSelectedIds));
+  }, [gridSelectedIds]);
+
+  // ── Select all / none ──────────────────────────────────────────────────
+  const handleSelectAll = useCallback(() => {
+    setGridSelectedIds(new Set(results.map((m) => m.id)));
+  }, [results]);
+
+  const handleSelectNone = useCallback(() => {
+    setGridSelectedIds(new Set());
+  }, []);
+
+  // ── Row click -> detail panel ──────────────────────────────────────────
+  const handleRowClick = useCallback(
+    (molecule: EnrichedMolecule) => {
+      const idx = results.findIndex((m) => m.id === molecule.id);
+      setSelectedMolecule(molecule);
+      setSelectedIndex(idx >= 0 ? idx : 0);
     },
-    [savedSearches, handleSearch]
+    [results],
   );
 
-  const { exportSdf } = useSdfExport();
-  const handleExportSdf = useCallback(() => {
-    if (!currentQuery || !results.length) return;
-    exportSdf(results.map((m) => m.id), "search-results.sdf");
-  }, [currentQuery, results, exportSdf]);
+  // ── Detail panel navigation ────────────────────────────────────────────
+  const handleDetailNavigate = useCallback(
+    (direction: "prev" | "next") => {
+      const nextIdx =
+        direction === "prev"
+          ? Math.max(0, selectedIndex - 1)
+          : Math.min(results.length - 1, selectedIndex + 1);
+      setSelectedIndex(nextIdx);
+      setSelectedMolecule(results[nextIdx] ?? null);
+    },
+    [selectedIndex, results],
+  );
 
-  const handleSaveSearch = useCallback(() => {
-    if (!saveName.trim() || !currentQuery) return;
-    createSavedSearch.mutate(
-      {
-        name: saveName.trim(),
-        query: currentQuery as unknown as Record<string, unknown>,
-        columns: protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : null,
-      },
-      {
-        onSuccess: () => {
-          setSaveOpen(false);
-          setSaveName("");
-          showSuccess("Search saved successfully");
-        },
-      }
-    );
-  }, [saveName, currentQuery, createSavedSearch]);
+  // ─── Layout ────────────────────────────────────────────────────────────
 
   return (
-    <div>
-      <PageHeader
-        title="Compound Search"
-        subtitle="Build compound queries with text, property, and structure criteria."
+    <div className="flex h-[calc(100vh-64px)]">
+      {/* ── Left: Project Sidebar ── */}
+      <ProjectSidebar selectedIds={projectIds} onChange={setProjectIds} />
+
+      {/* ── Center: Search form + results ── */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Search form (collapsible) */}
+        {showForm && (
+          <div className="shrink-0 overflow-auto border-b p-4">
+            <SearchForm
+              initialQuery={currentQuery ?? undefined}
+              projectIds={projectIds}
+              onProjectsChange={setProjectIds}
+              onSearch={handleSearch}
+              isLoading={searchMutation.isPending}
+            />
+          </div>
+        )}
+
+        {/* "Refine Search" button when form is collapsed */}
+        {!showForm && hasSearched && (
+          <div className="shrink-0 border-b px-4 py-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowForm(true)}
+            >
+              <Filter className="mr-2 h-4 w-4" />
+              Refine Search
+            </Button>
+          </div>
+        )}
+
+        {/* Results area */}
+        {hasSearched && (
+          <>
+            <ResultsToolbar
+              resultCount={totalCount}
+              selectedCount={gridSelectedIds.size}
+              onSelectAll={handleSelectAll}
+              onSelectNone={handleSelectNone}
+              onExport={handleExportSdf}
+              onAddToCollection={handleAddToCollection}
+              onCustomizeReport={() => setReportOpen(true)}
+              onSaveSearch={() => setSaveOpen(true)}
+            />
+
+            {/* Grid area */}
+            <div className="flex-1 overflow-hidden">
+              <ResultsGrid
+                results={results}
+                protocolColumns={protocolColumns}
+                protocols={protocols ?? []}
+                reportConfig={reportConfig}
+                loading={searchMutation.isPending && results.length === 0}
+                onRowClick={handleRowClick}
+                selectedIds={gridSelectedIds}
+                onSelectionChange={setGridSelectedIds}
+              />
+            </div>
+
+            {/* Load more */}
+            {nextCursor && (
+              <div className="shrink-0 border-t py-3 text-center">
+                <Button
+                  variant="outline"
+                  onClick={handleLoadMore}
+                  disabled={searchMutation.isPending}
+                >
+                  {searchMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load More"
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Empty state before first search */}
+        {!hasSearched && !showForm && (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            Build a query to search compounds.
+          </div>
+        )}
+      </div>
+
+      {/* ── Right: Compound Detail Panel (conditional) ── */}
+      {selectedMolecule && (
+        <div className="w-[420px] shrink-0">
+          <CompoundDetailPanel
+            molecule={selectedMolecule}
+            visibleProtocolIds={visibleProtocolIds}
+            currentIndex={selectedIndex}
+            totalCount={results.length}
+            onNavigate={handleDetailNavigate}
+            onClose={() => setSelectedMolecule(null)}
+          />
+        </div>
+      )}
+
+      {/* ── Dialogs ── */}
+      <ReportCustomizer
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        protocols={protocols ?? []}
+        activeProtocolIds={visibleProtocolIds}
       />
 
-      {/* Saved search selector */}
-      {savedSearches && savedSearches.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Load saved search:</Label>
-          <Select onValueChange={handleLoadSavedSearch}>
-            <SelectTrigger className="h-9 w-64">
-              <SelectValue placeholder="Select a saved search..." />
-            </SelectTrigger>
-            <SelectContent>
-              {savedSearches.map((s: SavedSearch) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Query builder — collapsible after first search */}
-      {showQueryBuilder && (
-        <SearchQueryBuilder
-          initialQuery={currentQuery ?? undefined}
-          onSearch={handleSearch}
-          isLoading={searchMutation.isPending}
+      {currentQuery && (
+        <SaveSearchDialog
+          open={saveOpen}
+          onClose={() => setSaveOpen(false)}
+          query={currentQuery}
+          protocolColumns={protocolColumns}
+          reportConfig={reportConfig}
         />
       )}
-      {!showQueryBuilder && hasSearched && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mb-2"
-          onClick={() => setShowQueryBuilder(true)}
-        >
-          <Filter className="mr-2 h-4 w-4" />
-          Refine Search
-        </Button>
-      )}
 
-      {/* Results */}
-      {hasSearched && (
-        <div className="mt-6">
-          {/* Results toolbar */}
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <p className="text-sm text-muted-foreground">
-                {totalCount != null
-                  ? `${totalCount.toLocaleString()} result${totalCount === 1 ? "" : "s"} found`
-                  : `${results.length} result${results.length === 1 ? "" : "s"} loaded`}
-              </p>
-              {/* View toggle */}
-              <div className="flex rounded-md border">
-                <Button
-                  variant={resultsView === "table" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-7 rounded-r-none border-0 px-2"
-                  onClick={() => setResultsView("table")}
-                  title="Table view"
-                >
-                  <Table className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={resultsView === "grid" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-7 rounded-l-none border-0 px-2"
-                  onClick={() => setResultsView("grid")}
-                  title="Structure grid view"
-                >
-                  <Grid3X3 className="h-4 w-4" />
-                </Button>
-              </div>
-              {/* Sort controls */}
-              <div className="flex items-center gap-1">
-                <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
-                <Select
-                  value={sortBy ?? "__none__"}
-                  onValueChange={(v) => {
-                    const field = v === "__none__" ? undefined : (v as SortField);
-                    setSortBy(field);
-                    if (currentQuery) handleSearch(currentQuery);
-                  }}
-                >
-                  <SelectTrigger className="h-7 w-32 text-xs">
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Default</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="registration_number">Reg #</SelectItem>
-                    <SelectItem value="molecular_weight">MW</SelectItem>
-                    <SelectItem value="logp">LogP</SelectItem>
-                    <SelectItem value="tpsa">TPSA</SelectItem>
-                    <SelectItem value="created_at">Created</SelectItem>
-                  </SelectContent>
-                </Select>
-                {sortBy && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-1.5"
-                    onClick={() => {
-                      const next = sortDir === "asc" ? "desc" : "asc";
-                      setSortDir(next);
-                      if (currentQuery) handleSearch(currentQuery);
-                    }}
-                    title={sortDir === "asc" ? "Ascending" : "Descending"}
-                  >
-                    <span className="text-xs font-mono">
-                      {sortDir === "asc" ? "A-Z" : "Z-A"}
-                    </span>
-                  </Button>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Grid selection actions */}
-              {resultsView === "grid" && gridSelectedIds.size > 0 && (
-                <>
-                  <span className="text-sm text-muted-foreground">
-                    {gridSelectedIds.size} selected
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPickerMolIds(Array.from(gridSelectedIds))}
-                  >
-                    <ListPlus className="mr-1 h-4 w-4" />
-                    Add to Collection
-                  </Button>
-                </>
-              )}
-              {currentQuery && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSaveOpen(true)}
-                >
-                  <BookmarkPlus className="mr-2 h-4 w-4" />
-                  Save Search
-                </Button>
-              )}
-              {results.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExportSdf}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Export SDF
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {protocols?.length ? (
-            <div className="mb-3 flex items-start gap-2">
-              <div className="flex-1">
-                <ProtocolColumnSelector
-                  protocols={protocols}
-                  selected={protocolColumns}
-                  onChange={setProtocolColumns}
-                />
-              </div>
-              {protocolColumns.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-1 shrink-0"
-                  onClick={() => {
-                    setDefaultSearchColumns(protocolColumns);
-                    showSuccess("Default columns saved");
-                  }}
-                  title="Save current protocol columns as default"
-                >
-                  <Star className="mr-1 h-3.5 w-3.5" />
-                  Set Default
-                </Button>
-              )}
-            </div>
-          ) : null}
-
-          {resultsView === "table" ? (
-            <DataGrid<EnrichedMolecule>
-              rowData={results}
-              columnDefs={allColumnDefs}
-              loading={searchMutation.isPending && results.length === 0}
-              height="500px"
-              exportFilename="search-results"
-              selectionToolbar={(selected) => (
-                <>
-                  <span className="text-sm text-muted-foreground">
-                    {selected.length} selected
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPickerMolIds(selected.map((m) => m.id))}
-                  >
-                    <ListPlus className="mr-1 h-4 w-4" />
-                    Add to Collection
-                  </Button>
-                </>
-              )}
-              emptyState={
-                <EmptyState
-                  icon={Search}
-                  title="No results"
-                  description="Try adjusting your search criteria."
-                />
-              }
-            />
-          ) : (
-            <ResultsGridView
-              molecules={results}
-              protocolColumns={protocolColumns}
-              protocols={protocols}
-              selectedIds={gridSelectedIds}
-              onToggleSelect={(mol) =>
-                setGridSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(mol.id)) next.delete(mol.id);
-                  else next.add(mol.id);
-                  return next;
-                })
-              }
-            />
-          )}
-
-          <CollectionPickerDialog
-            open={pickerMolIds.length > 0}
-            onOpenChange={(open) => {
-              if (!open) setPickerMolIds([]);
-            }}
-            moleculeIds={pickerMolIds}
-            onComplete={() => setPickerMolIds([])}
-          />
-
-          {/* Load more */}
-          {nextCursor && (
-            <div className="mt-4 flex justify-center">
-              <Button
-                variant="outline"
-                onClick={handleLoadMore}
-                disabled={searchMutation.isPending}
-              >
-                {searchMutation.isPending ? "Loading..." : "Load More"}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Save search dialog */}
-      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save Search</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="search-name">Name</Label>
-            <Input
-              id="search-name"
-              className="mt-2"
-              placeholder="My search..."
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSaveSearch();
-              }}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveSearch}
-              disabled={!saveName.trim() || createSavedSearch.isPending}
-            >
-              {createSavedSearch.isPending ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CollectionPickerDialog
+        open={pickerMolIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setPickerMolIds([]);
+        }}
+        moleculeIds={pickerMolIds}
+        onComplete={() => setPickerMolIds([])}
+      />
     </div>
+  );
+}
+
+// ─── Exported wrapper with Suspense (required for useSearchParams) ─────────
+
+export function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[calc(100vh-64px)] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <SearchPageInner />
+    </Suspense>
   );
 }
