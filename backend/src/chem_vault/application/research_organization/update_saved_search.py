@@ -23,6 +23,7 @@ class UpdateSavedSearchCommand(Command):
     workspace_id: uuid.UUID
     saved_search_id: uuid.UUID
     name: str | None = None
+    description: str | None | object = UNSET
     query: dict[str, Any] | None = None
     columns: dict[str, Any] | None | object = UNSET
     visibility: str | None = None
@@ -56,6 +57,8 @@ class UpdateSavedSearch:
             fields: dict[str, Any] = {}
             if input.name is not None:
                 fields["name"] = input.name
+            if input.description is not UNSET:
+                fields["description"] = input.description
             if input.query is not None:
                 fields["query"] = input.query
             if input.columns is not UNSET:

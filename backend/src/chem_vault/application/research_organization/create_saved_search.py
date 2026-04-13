@@ -21,6 +21,7 @@ from chem_vault.domain.shared.errors import DomainError
 class CreateSavedSearchCommand(Command):
     workspace_id: uuid.UUID
     name: str
+    description: str | None = None
     query: dict[str, Any]
     columns: dict[str, Any] | None = None
     visibility: str = "private"
@@ -50,6 +51,7 @@ class CreateSavedSearch:
             search = SavedSearch.create(
                 workspace_id=input.workspace_id,
                 name=input.name,
+                description=input.description,
                 query=input.query,
                 columns=input.columns,
                 visibility=visibility,

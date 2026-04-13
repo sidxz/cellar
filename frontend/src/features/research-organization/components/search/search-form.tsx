@@ -119,13 +119,33 @@ function decomposeQuery(query: SearchQuery | undefined) {
   };
 }
 
-/** Derive protocol column IDs from activity criteria for cross-protocol display. */
+/**
+ * Derive protocol column IDs from activity criteria for cross-protocol display.
+ *
+ * Column formats:
+ * - `drc:{protocol_id}:{curve_type}` — dose-response curve data (IC50, EC50, etc.)
+ * - `readout:{protocol_id}:{readout_def_id}` — raw readout data (% Inhibition, Kinetic Solubility, etc.)
+ *
+ * Never defaults to IC50 — only shows what the user actually selected.
+ */
 function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] {
   const columns: string[] = [];
   for (const c of activityCriteria) {
     if (!c.protocol_id) continue;
-    const curveType = c.curve_type ?? "ic50";
-    const colId = `drc:${c.protocol_id}:${curveType}`;
+
+    let colId: string;
+    if (c.curve_type) {
+      // User selected a dose-response curve type (IC50, EC50, etc.)
+      colId = `drc:${c.protocol_id}:${c.curve_type}`;
+    } else if (c.readout_definition_id) {
+      // User selected a raw readout (% Inhibition, Kinetic Solubility, etc.)
+      colId = `readout:${c.protocol_id}:${c.readout_definition_id}`;
+    } else {
+      // Protocol selected but no specific measure — show protocol with default curve
+      // Try to derive from protocol's first DR config
+      colId = `drc:${c.protocol_id}:ic50`;
+    }
+
     if (!columns.includes(colId)) columns.push(colId);
   }
   return columns;

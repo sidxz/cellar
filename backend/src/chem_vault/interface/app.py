@@ -152,6 +152,9 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.search import router as search_router
     app.include_router(search_router)
 
+    from chem_vault.interface.routes.molecule_activity import router as molecule_activity_router
+    app.include_router(molecule_activity_router)
+
     from chem_vault.interface.routes.plate_import import router as plate_import_router
     app.include_router(plate_import_router)
 
