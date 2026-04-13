@@ -188,6 +188,7 @@ from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
+from chem_vault.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from chem_vault.application.screening.plate_setup import ParsePlateMapFile, SetUpRunPlate
 from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
 from chem_vault.application.screening.get_compound_curves import GetCompoundCurves
@@ -464,6 +465,7 @@ ListDoseResponseByRunDep = Annotated[ListDoseResponseByRun, Depends(_get_use_cas
 RefitDoseResponseCurveDep = Annotated[RefitDoseResponseCurve, Depends(_get_use_case(RefitDoseResponseCurve))]
 ClassifyDoseResponseCurveDep = Annotated[ClassifyDoseResponseCurve, Depends(_get_use_case(ClassifyDoseResponseCurve))]
 MoleculeActivityServiceDep = Annotated[MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))]
+GetMoleculeActivityDetailDep = Annotated[GetMoleculeActivityDetail, Depends(_get_use_case(GetMoleculeActivityDetail))]
 ReadoutCalculationEngineDep = Annotated[ReadoutCalculationEngine, Depends(_get_use_case(ReadoutCalculationEngine))]
 from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 FitDoseResponseCurvesDep = Annotated[FitDoseResponseCurves, Depends(_get_use_case(FitDoseResponseCurves))]

@@ -148,6 +148,7 @@ from chem_vault.application.screening.manage_readout_definitions import AddReado
 from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun, RejectRun, StartRun
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
+from chem_vault.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.identifiers import (
@@ -1509,6 +1510,17 @@ def create_container(
         )
 
     container.define(MoleculeActivityService, _molecule_activity_service)
+
+    # --- Molecule Activity Detail ---
+    def _get_molecule_activity_detail(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetMoleculeActivityDetail(
+            uow=uow,
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
+
+    container.define(GetMoleculeActivityDetail, _get_molecule_activity_detail)
 
     # --- Execute Search ---
     def _execute_search(c):  # type: ignore[no-untyped-def]
