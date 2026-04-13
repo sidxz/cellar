@@ -60,6 +60,7 @@ backend/alembic/versions/*.pyc
 
 # Docs (local only)
 docs/
+CLAUDE.md
 
 # Superpowers brainstorm sessions
 .superpowers/
