@@ -7,7 +7,6 @@ import {
   ThumbsUp,
   ThumbsDown,
   Lock,
-  Paperclip,
   Unlock,
   FlaskConical,
 } from "lucide-react";
@@ -31,7 +30,6 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { MemberName, ProtocolName } from "@/shared/components/entity-name";
-import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import {
   useRun,
   useStartRun,
@@ -256,23 +254,8 @@ export function RunDetail({ runId }: RunDetailProps) {
               </CardContent>
             </Card>
 
-            {/* Data visualizations */}
+            {/* Data visualizations + files */}
             <RunDataPanel run={run} />
-
-            {/* Files */}
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold">
-                <Paperclip className="h-4 w-4" />
-                Files
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Attachments associated with this run.
-              </p>
-              <div className="mt-4 space-y-6">
-                <FileUploadZone entityType="run" entityId={runId} />
-                <AttachmentList entityType="run" entityId={runId} />
-              </div>
-            </div>
           </>
         )}
       </DetailShell>

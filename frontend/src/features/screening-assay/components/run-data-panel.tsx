@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Plus, Upload } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Paperclip, Pencil, Plus, Upload } from "lucide-react";
+import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -202,14 +203,37 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
   const hasPlateMap = !!plateMap?.wells && plateMap.wells.length > 0;
 
+  const validTabs = ["readout", "plate-map", "dose-response", "qc", "files"];
+  const [activeTab, setActiveTab] = useState("readout");
+
+  // Sync from URL hash on mount + hash changes
+  useEffect(() => {
+    const syncHash = () => {
+      const tab = window.location.hash.replace("#", "");
+      if (validTabs.includes(tab)) setActiveTab(tab);
+    };
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    window.history.replaceState(null, "", `#${value}`);
+  }, []);
+
   return (
     <>
-      <Tabs defaultValue="readout">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
           <TabsTrigger value="plate-map">Plate Map</TabsTrigger>
           <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
           <TabsTrigger value="qc">QC Metrics</TabsTrigger>
+          <TabsTrigger value="files">
+            <Paperclip className="mr-1.5 size-4" />
+            Files
+          </TabsTrigger>
         </TabsList>
 
         {/* Readout Data */}
@@ -316,6 +340,13 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               </Button>
             </div>
             <QcMetricsPanel qcMetrics={run.qc_metrics} />
+          </div>
+        </TabsContent>
+        {/* Files */}
+        <TabsContent value="files">
+          <div className="mt-4 space-y-6">
+            <FileUploadZone entityType="run" entityId={run.id} />
+            <AttachmentList entityType="run" entityId={run.id} />
           </div>
         </TabsContent>
       </Tabs>
