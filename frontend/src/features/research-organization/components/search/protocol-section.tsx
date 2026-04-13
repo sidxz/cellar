@@ -1,9 +1,8 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
+import { useState, useCallback } from "react";
+import { Minus, Plus } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -20,9 +19,9 @@ import type { ActivityCriterion, PropertyOperator } from "../../types";
 const PROPERTY_OPERATORS: { value: PropertyOperator; label: string }[] = [
   { value: "eq", label: "=" },
   { value: "lt", label: "<" },
-  { value: "lte", label: "<=" },
+  { value: "lte", label: "≤" },
   { value: "gt", label: ">" },
-  { value: "gte", label: ">=" },
+  { value: "gte", label: "≥" },
 ];
 
 const CURVE_TYPE_OPTIONS = [
@@ -32,41 +31,106 @@ const CURVE_TYPE_OPTIONS = [
   { value: "kd", label: "Kd" },
 ] as const;
 
+type Conjunction = "and" | "or";
+
 function defaultActivityCriterion(): ActivityCriterion {
   return { type: "activity", protocol_id: "", operator: "lt", value: 0 };
 }
 
-// ─── Single activity term ───────────────────────────────────────────────────
+// ─── Single Activity Row ──────────────────────────────────────────────────────
 
-function ActivityTerm({
-  criterion,
-  protocols,
-  onChange,
-  onRemove,
-}: {
+interface ActivityRowProps {
+  index: number;
   criterion: ActivityCriterion;
+  conjunction: Conjunction;
   protocols: Protocol[];
+  isFirst: boolean;
+  onConjunctionChange: (conj: Conjunction) => void;
   onChange: (c: ActivityCriterion) => void;
   onRemove: () => void;
-}) {
+}
+
+function ActivityRow({
+  index,
+  criterion,
+  conjunction,
+  protocols,
+  isFirst,
+  onConjunctionChange,
+  onChange,
+  onRemove,
+}: ActivityRowProps) {
   const { data: protocol } = useProtocol(criterion.protocol_id || undefined);
 
+  const numericReadouts = protocol?.readout_definitions?.filter(
+    (rd) => rd.data_type === "numeric"
+  ) ?? [];
+
+  const hasProtocol = Boolean(criterion.protocol_id);
+
   return (
-    <div className="flex items-end gap-2 flex-wrap">
-      <div className="w-44">
-        <Label className="text-xs text-muted-foreground">Protocol</Label>
+    <div className="space-y-1">
+      {/* Main row: [remove] [and/or] In [Specific Protocol] [protocol select] */}
+      <div className="flex items-center gap-1.5">
+        {/* Remove button */}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+          aria-label="Remove criterion"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+
+        {/* Conjunction (hidden for first row) */}
+        {!isFirst ? (
+          <Select
+            value={conjunction}
+            onValueChange={(v) => onConjunctionChange(v as Conjunction)}
+          >
+            <SelectTrigger className="h-7 w-16 text-xs shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="and">and</SelectItem>
+              <SelectItem value="or">or</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="w-16 shrink-0" />
+        )}
+
+        {/* "In" label */}
+        <span className="text-xs text-muted-foreground shrink-0">In</span>
+
+        {/* Scope select — always "Specific Protocol" for now */}
+        <Select defaultValue="specific" disabled>
+          <SelectTrigger className="h-7 w-36 text-xs shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="specific">Specific Protocol</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Protocol picker */}
         <Select
           value={criterion.protocol_id || undefined}
           onValueChange={(v) =>
-            onChange({ ...criterion, protocol_id: v, readout_definition_id: undefined, curve_type: undefined })
+            onChange({
+              ...criterion,
+              protocol_id: v,
+              readout_definition_id: undefined,
+              curve_type: undefined,
+            })
           }
         >
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Select protocol..." />
+          <SelectTrigger className="h-7 min-w-[160px] flex-1 text-xs">
+            <SelectValue placeholder="Choose protocol…" />
           </SelectTrigger>
           <SelectContent>
             {protocols
-              ?.filter((p) => p.status === "active")
+              .filter((p) => p.status === "active")
               .map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
@@ -76,74 +140,103 @@ function ActivityTerm({
         </Select>
       </div>
 
-      <div className="w-44">
-        <Label className="text-xs text-muted-foreground">Readout / Curve</Label>
+      {/* Sub-row 1: (any run) (any readout definition) — indented */}
+      <div className="ml-[70px] flex items-center gap-1.5">
+        {/* Run selector — placeholder only */}
+        <Select defaultValue="any_run" disabled>
+          <SelectTrigger className="h-7 w-28 text-xs shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any_run">(any run)</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Readout definition selector */}
         <Select
-          value={criterion.readout_definition_id ?? criterion.curve_type ?? undefined}
+          value={criterion.readout_definition_id ?? ""}
           onValueChange={(v) => {
-            const isCurve = CURVE_TYPE_OPTIONS.some((ct) => ct.value === v);
-            if (isCurve) {
-              onChange({ ...criterion, curve_type: v, readout_definition_id: undefined });
+            if (!v) {
+              onChange({ ...criterion, readout_definition_id: undefined });
             } else {
               onChange({ ...criterion, readout_definition_id: v, curve_type: undefined });
             }
           }}
         >
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Select..." />
+          <SelectTrigger className="h-7 min-w-[160px] flex-1 text-xs">
+            <SelectValue placeholder="(any readout definition)" />
           </SelectTrigger>
           <SelectContent>
-            {protocol?.readout_definitions
-              ?.filter((rd) => rd.data_type === "numeric")
-              .map((rd) => (
-                <SelectItem key={rd.id} value={rd.id}>
-                  {rd.name}{rd.unit ? ` (${rd.unit})` : ""}
+            {numericReadouts.map((rd) => (
+              <SelectItem key={rd.id} value={rd.id}>
+                {rd.name}
+                {rd.unit ? ` (${rd.unit})` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Sub-row 2: curve_type + operator + value — only visible when a protocol is selected */}
+      {hasProtocol && (
+        <div className="ml-[70px] flex items-center gap-1.5">
+          {/* Curve type */}
+          <Select
+            value={criterion.curve_type ?? ""}
+            onValueChange={(v) => {
+              if (!v) {
+                onChange({ ...criterion, curve_type: undefined });
+              } else {
+                onChange({ ...criterion, curve_type: v, readout_definition_id: undefined });
+              }
+            }}
+          >
+            <SelectTrigger className="h-7 w-24 text-xs shrink-0">
+              <SelectValue placeholder="curve type" />
+            </SelectTrigger>
+            <SelectContent>
+              {CURVE_TYPE_OPTIONS.map((ct) => (
+                <SelectItem key={ct.value} value={ct.value}>
+                  {ct.label}
                 </SelectItem>
               ))}
-            {CURVE_TYPE_OPTIONS.map((ct) => (
-              <SelectItem key={ct.value} value={ct.value}>
-                {ct.label} (curve)
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+            </SelectContent>
+          </Select>
 
-      <div className="w-24">
-        <Label className="text-xs text-muted-foreground">Operator</Label>
-        <Select
-          value={criterion.operator}
-          onValueChange={(v) => onChange({ ...criterion, operator: v as PropertyOperator })}
-        >
-          <SelectTrigger className="h-9">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PROPERTY_OPERATORS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+          {/* Operator */}
+          <Select
+            value={criterion.operator}
+            onValueChange={(v) =>
+              onChange({ ...criterion, operator: v as PropertyOperator })
+            }
+          >
+            <SelectTrigger className="h-7 w-16 text-xs shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROPERTY_OPERATORS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-      <div className="w-28">
-        <Label className="text-xs text-muted-foreground">Value</Label>
-        <Input
-          className="h-9"
-          type="number"
-          placeholder="Value"
-          value={criterion.value ?? ""}
-          onChange={(e) =>
-            onChange({ ...criterion, value: e.target.value ? Number(e.target.value) : 0 })
-          }
-        />
-      </div>
-
-      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove}>
-        <Trash2 className="h-4 w-4 text-muted-foreground" />
-      </Button>
+          {/* Value */}
+          <Input
+            type="number"
+            className="h-7 w-24 text-xs"
+            placeholder="value"
+            value={criterion.value ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...criterion,
+                value: e.target.value ? Number(e.target.value) : 0,
+              })
+            }
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -158,46 +251,87 @@ interface ProtocolSectionProps {
 export function ProtocolSection({ criteria, onChange }: ProtocolSectionProps) {
   const { data: protocols } = useProtocols();
 
-  function addTerm() {
-    onChange([...criteria, defaultActivityCriterion()]);
-  }
+  // Local UI state — conjunction per row (index 0 is unused but kept for alignment)
+  const [conjunctions, setConjunctions] = useState<Conjunction[]>(() =>
+    criteria.map(() => "and")
+  );
 
-  function updateTerm(index: number, updated: ActivityCriterion) {
-    onChange(criteria.map((c, i) => (i === index ? updated : c)));
-  }
+  const syncedConjunctions = (newLength: number): Conjunction[] => {
+    const copy = [...conjunctions];
+    while (copy.length < newLength) copy.push("and");
+    return copy.slice(0, newLength);
+  };
 
-  function removeTerm(index: number) {
-    onChange(criteria.filter((_, i) => i !== index));
-  }
+  const addTerm = useCallback(() => {
+    const newCriteria = [...criteria, defaultActivityCriterion()];
+    setConjunctions(syncedConjunctions(newCriteria.length));
+    onChange(newCriteria);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [criteria, conjunctions, onChange]);
+
+  const updateTerm = useCallback(
+    (index: number, updated: ActivityCriterion) => {
+      onChange(criteria.map((c, i) => (i === index ? updated : c)));
+    },
+    [criteria, onChange]
+  );
+
+  const removeTerm = useCallback(
+    (index: number) => {
+      const newCriteria = criteria.filter((_, i) => i !== index);
+      const newConj = conjunctions.filter((_, i) => i !== index);
+      setConjunctions(newConj);
+      onChange(newCriteria);
+    },
+    [criteria, conjunctions, onChange]
+  );
+
+  const updateConjunction = useCallback(
+    (index: number, conj: Conjunction) => {
+      setConjunctions((prev) => {
+        const copy = [...prev];
+        copy[index] = conj;
+        return copy;
+      });
+    },
+    []
+  );
 
   return (
     <div className="space-y-2">
+      {/* Section header */}
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Protocol Activity</Label>
-        <Button
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Protocols
+        </span>
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
           onClick={addTerm}
+          className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
         >
-          <Plus className="mr-1 h-3 w-3" />
+          <Plus className="h-3 w-3" />
           Add a term
-        </Button>
+        </button>
       </div>
 
+      {/* Empty state */}
       {criteria.length === 0 && (
-        <p className="text-xs text-muted-foreground py-1">
-          No protocol filters. Click "Add a term" to filter by assay activity.
+        <p className="text-xs italic text-muted-foreground/50 py-1">
+          No protocol filters. Click &ldquo;+ Add a term&rdquo; to filter by assay activity.
         </p>
       )}
 
-      <div className="space-y-2">
+      {/* Criteria rows */}
+      <div className="space-y-3">
         {criteria.map((c, i) => (
-          <ActivityTerm
+          <ActivityRow
             key={`activity-${i}`}
+            index={i}
             criterion={c}
+            conjunction={conjunctions[i] ?? "and"}
             protocols={protocols ?? []}
+            isFirst={i === 0}
+            onConjunctionChange={(conj) => updateConjunction(i, conj)}
             onChange={(updated) => updateTerm(i, updated)}
             onRemove={() => removeTerm(i)}
           />
