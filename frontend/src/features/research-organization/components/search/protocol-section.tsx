@@ -12,6 +12,7 @@ import {
 } from "@/shared/components/ui/select";
 import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import type { Protocol } from "@/features/screening-assay/types";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import type { ActivityCriterion, PropertyOperator } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -24,12 +25,23 @@ const PROPERTY_OPERATORS: { value: PropertyOperator; label: string }[] = [
   { value: "gte", label: "≥" },
 ];
 
-const CURVE_TYPE_OPTIONS = [
-  { value: "ic50", label: "IC50" },
-  { value: "ec50", label: "EC50" },
-  { value: "ki", label: "Ki" },
-  { value: "kd", label: "Kd" },
-] as const;
+/** Extract available curve types from a protocol's readout definitions. */
+function getProtocolCurveTypes(protocol: Protocol | undefined): { value: string; label: string }[] {
+  if (!protocol?.readout_definitions) return [];
+  const seen = new Set<string>();
+  const options: { value: string; label: string }[] = [];
+  for (const rd of protocol.readout_definitions) {
+    const ct = rd.dose_response_config?.curve_type;
+    if (ct && !seen.has(ct)) {
+      seen.add(ct);
+      options.push({
+        value: ct,
+        label: CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase(),
+      });
+    }
+  }
+  return options;
+}
 
 export type ProtocolConjunction = "and" | "or";
 
@@ -63,9 +75,10 @@ function ActivityRow({
   const { data: protocol } = useProtocol(criterion.protocol_id || undefined);
 
   const numericReadouts = protocol?.readout_definitions?.filter(
-    (rd) => rd.data_type === "numeric"
+    (rd) => rd.data_type === "numeric" && !rd.dose_response_config
   ) ?? [];
 
+  const curveTypeOptions = getProtocolCurveTypes(protocol);
   const hasProtocol = Boolean(criterion.protocol_id);
 
   return (
@@ -135,7 +148,7 @@ function ActivityRow({
         <div className="ml-[70px] flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-muted-foreground shrink-0">where</span>
 
-          {/* Curve type (IC50/EC50/Ki/Kd) — mutually exclusive with readout definition */}
+          {/* Curve type / readout — derived from protocol's readout definitions */}
           <Select
             value={criterion.readout_definition_id ? `readout:${criterion.readout_definition_id}` : (criterion.curve_type ?? "")}
             onValueChange={(v) => {
@@ -148,20 +161,22 @@ function ActivityRow({
               }
             }}
           >
-            <SelectTrigger className="h-7 w-24 text-xs shrink-0">
-              <SelectValue placeholder="IC50" />
+            <SelectTrigger className="h-7 w-28 text-xs shrink-0">
+              <SelectValue placeholder="Select…" />
             </SelectTrigger>
             <SelectContent>
-              {CURVE_TYPE_OPTIONS.map((ct) => (
+              {curveTypeOptions.length > 0 && curveTypeOptions.map((ct) => (
                 <SelectItem key={ct.value} value={ct.value}>
                   {ct.label}
                 </SelectItem>
               ))}
               {numericReadouts.length > 0 && (
                 <>
-                  <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                    Readouts
-                  </div>
+                  {curveTypeOptions.length > 0 && (
+                    <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                      Readouts
+                    </div>
+                  )}
                   {numericReadouts.map((rd) => (
                     <SelectItem key={rd.id} value={`readout:${rd.id}`}>
                       {rd.name}
@@ -169,6 +184,11 @@ function ActivityRow({
                     </SelectItem>
                   ))}
                 </>
+              )}
+              {curveTypeOptions.length === 0 && numericReadouts.length === 0 && (
+                <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                  No curve types or readouts configured
+                </div>
               )}
             </SelectContent>
           </Select>
