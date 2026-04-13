@@ -3,15 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Search, RotateCcw } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import { Label } from "@/shared/components/ui/label";
 import { Separator } from "@/shared/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
 import type {
   SearchQuery,
   SearchCriterion,
@@ -35,11 +27,14 @@ import {
   emptyAdvancedFilters,
   type AdvancedFiltersState,
 } from "./advanced-filters";
+import { ProjectFilter } from "./project-filter";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface SearchFormProps {
   initialQuery?: SearchQuery;
+  projectIds: string[];
+  onProjectsChange: (ids: string[]) => void;
   onSearch: (query: SearchQuery, protocolColumns: string[]) => void;
   isLoading?: boolean;
 }
@@ -55,7 +50,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
 
   if (!query) {
-    return { activityCriteria, textCriteria, propertyCriteria, structureCriterion, collectionCriteria, advanced, logic: "and" as const };
+    return { activityCriteria, textCriteria, propertyCriteria, structureCriterion, collectionCriteria, advanced };
   }
 
   for (const c of query.criteria) {
@@ -103,7 +98,6 @@ function decomposeQuery(query: SearchQuery | undefined) {
     structureCriterion,
     collectionCriteria,
     advanced,
-    logic: query.logic,
   };
 }
 
@@ -121,11 +115,16 @@ function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] 
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function SearchForm({ initialQuery, onSearch, isLoading }: SearchFormProps) {
+export function SearchForm({
+  initialQuery,
+  projectIds,
+  onProjectsChange,
+  onSearch,
+  isLoading,
+}: SearchFormProps) {
   // Parse initial query into section states
   const initial = decomposeQuery(initialQuery);
 
-  const [logic, setLogic] = useState<"and" | "or">(initial.logic ?? "and");
   const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(initial.activityCriteria);
   const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(initial.structureCriterion);
   const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(initial.propertyCriteria);
@@ -138,7 +137,6 @@ export function SearchForm({ initialQuery, onSearch, isLoading }: SearchFormProp
   // Re-parse when initialQuery changes externally (e.g., loading a saved search)
   useEffect(() => {
     const parsed = decomposeQuery(initialQuery);
-    setLogic(parsed.logic ?? "and");
     setActivityCriteria(parsed.activityCriteria);
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);
@@ -210,85 +208,72 @@ export function SearchForm({ initialQuery, onSearch, isLoading }: SearchFormProp
 
   function handleSearch() {
     const criteria = composeCriteria();
-    const query: SearchQuery = { criteria, logic };
+    const query: SearchQuery = { criteria, logic: "and" };
     const protocolColumns = deriveProtocolColumns(activityCriteria);
     onSearch(query, protocolColumns);
   }
 
   function handleReset() {
-    setLogic("and");
     setActivityCriteria([]);
     setStructureCriterion(null);
     setPropertyCriteria([]);
     setCollectionTerms([]);
     setTextCriteria([]);
     setAdvanced(emptyAdvancedFilters());
+    onProjectsChange([]);
   }
 
-  const totalCriteria = composeCriteria().length;
+  const criteriaCount = composeCriteria().length;
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
-      {/* Header: logic toggle + search button */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Match</Label>
-          <Select value={logic} onValueChange={(v) => setLogic(v as "and" | "or")}>
-            <SelectTrigger className="h-8 w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="and">AND</SelectItem>
-              <SelectItem value="or">OR</SelectItem>
-            </SelectContent>
-          </Select>
-          <Label className="text-sm text-muted-foreground">of the following criteria</Label>
+    <div className="rounded-lg border border-border bg-card p-4">
+      {/* Header: projects + actions */}
+      <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-shrink-0">
+            Projects
+          </span>
+          <ProjectFilter selectedIds={projectIds} onChange={onProjectsChange} />
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            disabled={isLoading}
-          >
-            <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Reset
+        <div className="flex gap-2 flex-shrink-0 ml-4">
+          <Button variant="ghost" size="sm" onClick={handleReset}>
+            <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSearch}
-            disabled={isLoading}
-          >
-            <Search className="mr-1 h-3.5 w-3.5" />
-            {isLoading ? "Searching..." : `Search${totalCriteria > 0 ? ` (${totalCriteria})` : ""}`}
+          <Button size="sm" onClick={handleSearch} disabled={isLoading}>
+            <Search className="h-3.5 w-3.5 mr-1.5" />
+            Search
+            {criteriaCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 text-[10px]">
+                {criteriaCount}
+              </span>
+            )}
           </Button>
         </div>
       </div>
 
-      {/* 2-column grid for main sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Left column: Protocol + Properties */}
-        <div className="space-y-4">
-          <ProtocolSection criteria={activityCriteria} onChange={setActivityCriteria} />
-          <Separator />
-          <PropertySection criteria={propertyCriteria} onChange={setPropertyCriteria} />
-        </div>
+      {/* Protocols — full width */}
+      <ProtocolSection criteria={activityCriteria} onChange={setActivityCriteria} />
 
-        {/* Right column: Structure + Collections + Keywords */}
-        <div className="space-y-4">
-          <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
-          <Separator />
-          <CollectionSection terms={collectionTerms} onChange={setCollectionTerms} />
-          <Separator />
-          <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
-        </div>
+      <Separator className="my-3" />
+
+      {/* Structure | Properties — two columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+        <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
+        <PropertySection criteria={propertyCriteria} onChange={setPropertyCriteria} />
       </div>
 
-      {/* Expandable advanced section */}
-      <Separator />
-      <AdvancedFilters state={advanced} onChange={setAdvanced} />
+      <Separator className="my-3" />
+
+      {/* Collections | Keywords — two columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+        <CollectionSection terms={collectionTerms} onChange={setCollectionTerms} />
+        <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
+      </div>
+
+      {/* More Filters */}
+      <div className="mt-3 pt-3 border-t border-border">
+        <AdvancedFilters state={advanced} onChange={setAdvanced} />
+      </div>
     </div>
   );
 }
