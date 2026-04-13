@@ -308,11 +308,11 @@ export function SearchForm({
           <Button variant="ghost" size="sm" onClick={handleReset}>
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
           </Button>
-          <Button size="sm" onClick={handleSearch} disabled={isLoading}>
-            <Search className="h-3.5 w-3.5 mr-1.5" />
+          <Button onClick={handleSearch} disabled={isLoading} className="px-5">
+            <Search className="h-4 w-4 mr-2" />
             Search
             {criteriaCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 text-[10px]">
+              <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
                 {criteriaCount}
               </span>
             )}

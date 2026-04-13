@@ -69,7 +69,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 focus:outline-none"
+            className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors"
           >
             <Plus className="size-3" />
             Add

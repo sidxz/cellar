@@ -122,16 +122,16 @@ export function KeywordSection({ criteria, onChange }: KeywordSectionProps) {
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Keywords
         </span>
         <button
           type="button"
           onClick={addTerm}
-          className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80"
+          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors"
         >
-          <Plus className="h-3 w-3" /> Add a term
+          <Plus className="h-3 w-3" /> Add
         </button>
       </div>
 

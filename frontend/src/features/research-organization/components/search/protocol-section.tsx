@@ -276,17 +276,17 @@ export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSe
   return (
     <div className="space-y-2">
       {/* Section header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Protocols
         </span>
         <button
           type="button"
           onClick={addTerm}
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors"
         >
           <Plus className="h-3 w-3" />
-          Add a term
+          Add
         </button>
       </div>
 

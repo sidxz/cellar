@@ -99,14 +99,14 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
   return (
     <div className="space-y-2">
       {/* Header row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Structure
         </span>
         {filled && (
           <button
             type="button"
-            className="text-xs text-muted-foreground/40 hover:text-destructive transition-colors"
+            className="inline-flex items-center gap-1 rounded-full border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/20 transition-colors"
             onClick={handleClear}
           >
             Clear
