@@ -101,17 +101,7 @@ function ActivityRow({
         )}
 
         {/* "In" label */}
-        <span className="text-xs text-muted-foreground shrink-0">In</span>
-
-        {/* Scope select — always "Specific Protocol" for now */}
-        <Select defaultValue="specific" disabled>
-          <SelectTrigger className="h-7 w-36 text-xs shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="specific">Specific Protocol</SelectItem>
-          </SelectContent>
-        </Select>
+        <span className="text-xs text-muted-foreground shrink-0">Protocol</span>
 
         {/* Protocol picker */}
         <Select
@@ -140,59 +130,26 @@ function ActivityRow({
         </Select>
       </div>
 
-      {/* Sub-row 1: (any run) (any readout definition) — indented */}
-      <div className="ml-[70px] flex items-center gap-1.5">
-        {/* Run selector — placeholder only */}
-        <Select defaultValue="any_run" disabled>
-          <SelectTrigger className="h-7 w-28 text-xs shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any_run">(any run)</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Readout definition selector */}
-        <Select
-          value={criterion.readout_definition_id ?? ""}
-          onValueChange={(v) => {
-            if (!v) {
-              onChange({ ...criterion, readout_definition_id: undefined });
-            } else {
-              onChange({ ...criterion, readout_definition_id: v, curve_type: undefined });
-            }
-          }}
-        >
-          <SelectTrigger className="h-7 min-w-[160px] flex-1 text-xs">
-            <SelectValue placeholder="(any readout definition)" />
-          </SelectTrigger>
-          <SelectContent>
-            {numericReadouts.map((rd) => (
-              <SelectItem key={rd.id} value={rd.id}>
-                {rd.name}
-                {rd.unit ? ` (${rd.unit})` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Sub-row 2: curve_type + operator + value — only visible when a protocol is selected */}
+      {/* Sub-row: activity filter — curve type + operator + value, or readout definition */}
       {hasProtocol && (
-        <div className="ml-[70px] flex items-center gap-1.5">
-          {/* Curve type */}
+        <div className="ml-[70px] flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground shrink-0">where</span>
+
+          {/* Curve type (IC50/EC50/Ki/Kd) — mutually exclusive with readout definition */}
           <Select
-            value={criterion.curve_type ?? ""}
+            value={criterion.readout_definition_id ? `readout:${criterion.readout_definition_id}` : (criterion.curve_type ?? "")}
             onValueChange={(v) => {
               if (!v) {
-                onChange({ ...criterion, curve_type: undefined });
+                onChange({ ...criterion, curve_type: undefined, readout_definition_id: undefined });
+              } else if (v.startsWith("readout:")) {
+                onChange({ ...criterion, readout_definition_id: v.slice(8), curve_type: undefined });
               } else {
                 onChange({ ...criterion, curve_type: v, readout_definition_id: undefined });
               }
             }}
           >
             <SelectTrigger className="h-7 w-24 text-xs shrink-0">
-              <SelectValue placeholder="curve type" />
+              <SelectValue placeholder="IC50" />
             </SelectTrigger>
             <SelectContent>
               {CURVE_TYPE_OPTIONS.map((ct) => (
@@ -200,6 +157,19 @@ function ActivityRow({
                   {ct.label}
                 </SelectItem>
               ))}
+              {numericReadouts.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                    Readouts
+                  </div>
+                  {numericReadouts.map((rd) => (
+                    <SelectItem key={rd.id} value={`readout:${rd.id}`}>
+                      {rd.name}
+                      {rd.unit ? ` (${rd.unit})` : ""}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
             </SelectContent>
           </Select>
 
@@ -210,7 +180,7 @@ function ActivityRow({
               onChange({ ...criterion, operator: v as PropertyOperator })
             }
           >
-            <SelectTrigger className="h-7 w-16 text-xs shrink-0">
+            <SelectTrigger className="h-7 w-14 text-xs shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -225,7 +195,7 @@ function ActivityRow({
           {/* Value */}
           <Input
             type="number"
-            className="h-7 w-24 text-xs"
+            className="h-7 w-20 text-xs"
             placeholder="value"
             value={criterion.value ?? ""}
             onChange={(e) =>
