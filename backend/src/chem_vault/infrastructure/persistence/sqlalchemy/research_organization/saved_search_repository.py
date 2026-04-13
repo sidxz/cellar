@@ -28,11 +28,14 @@ class SQLAlchemySavedSearchRepository(
             id=model.id,
             workspace_id=model.workspace_id,
             name=model.name,
+            description=model.description,
             query=dict(model.query),
             columns=dict(model.columns) if model.columns else None,
             visibility=SearchVisibility(model.visibility),
             project_id=model.project_id,
             created_by=model.created_by,
+            last_run_at=model.last_run_at,
+            result_count=model.result_count,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -43,20 +46,27 @@ class SQLAlchemySavedSearchRepository(
             id=aggregate.id,
             workspace_id=aggregate.workspace_id,
             name=aggregate.name,
+            description=aggregate.description,
             query=aggregate.query,
             columns=aggregate.columns,
             visibility=aggregate.visibility.value,
             project_id=aggregate.project_id,
             created_by=aggregate.created_by,
+            last_run_at=aggregate.last_run_at,
+            result_count=aggregate.result_count,
             version=aggregate.version,
         )
 
     def _update_model(self, model: SavedSearchModel, aggregate: SavedSearch) -> None:
         model.name = aggregate.name
+        model.description = aggregate.description
         model.query = aggregate.query
         model.columns = aggregate.columns
         model.visibility = aggregate.visibility.value
         model.project_id = aggregate.project_id
+        model.last_run_at = aggregate.last_run_at
+        model.result_count = aggregate.result_count
+        model.updated_at = aggregate.updated_at
 
     async def find_by_workspace(
         self, workspace_id: uuid.UUID

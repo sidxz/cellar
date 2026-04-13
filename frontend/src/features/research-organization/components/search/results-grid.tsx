@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type {
   ColDef,
@@ -281,8 +281,12 @@ export function ResultsGrid({
     [onSelectionChange],
   );
 
-  // NOTE: isRowSelectable removed — all rows are selectable.
-  // Selection state is managed externally via selectedIds + onSelectionChange.
+  // Sync grid selection when parent clears selectedIds (e.g. after search reset)
+  useEffect(() => {
+    if (selectedIds.size === 0) {
+      gridRef.current?.api?.deselectAll();
+    }
+  }, [selectedIds.size]);
 
   if (loading) {
     return (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -34,11 +35,14 @@ class SavedSearchResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     name: str
+    description: str | None = None
     project_id: uuid.UUID | None = None
     query: dict[str, Any]
     columns: dict[str, Any] | None = None
     visibility: SearchVisibility
     created_by: uuid.UUID
+    last_run_at: datetime | None = None
+    result_count: int | None = None
     version: int
 
     @classmethod
@@ -47,17 +51,21 @@ class SavedSearchResponse(BaseModel):
             id=search.id,
             workspace_id=search.workspace_id,
             name=search.name,
+            description=search.description,
             project_id=search.project_id,
             query=search.query,
             columns=search.columns,
             visibility=search.visibility,
             created_by=search.created_by,
+            last_run_at=search.last_run_at,
+            result_count=search.result_count,
             version=search.version,
         )
 
 
 class CreateSavedSearchBody(BaseModel):
     name: str
+    description: str | None = None
     query: dict[str, Any]
     columns: dict[str, Any] | None = None
     visibility: str = "private"
@@ -66,6 +74,7 @@ class CreateSavedSearchBody(BaseModel):
 
 class UpdateSavedSearchBody(BaseModel):
     name: str | None = None
+    description: str | None = None
     query: dict[str, Any] | None = None
     columns: dict[str, Any] | None = None
     visibility: str | None = None
@@ -112,6 +121,7 @@ async def create_saved_search(
     command = CreateSavedSearchCommand(
         workspace_id=auth.workspace_id,
         name=body.name,
+        description=body.description,
         query=body.query,
         columns=body.columns,
         visibility=body.visibility,
@@ -130,13 +140,15 @@ async def update_saved_search(
     use_case: UpdateSavedSearchDep,
 ) -> SavedSearchResponse:
     provided = body.model_fields_set
+    visibility = body.visibility if "visibility" in provided and body.visibility is not None else None
     command = UpdateSavedSearchCommand(
         workspace_id=auth.workspace_id,
         saved_search_id=search_id,
         name=body.name if "name" in provided else None,
+        description=body.description if "description" in provided else UNSET,
         query=body.query if "query" in provided else None,
         columns=body.columns if "columns" in provided else UNSET,
-        visibility=body.visibility if "visibility" in provided else None,
+        visibility=visibility,
         project_id=body.project_id if "project_id" in provided else UNSET,
     )
     search = result_to_response(await use_case(command, auth=auth))

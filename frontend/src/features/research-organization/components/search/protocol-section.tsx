@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
+import type { Protocol } from "@/features/screening-assay/types";
 import type { ActivityCriterion, PropertyOperator } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -39,14 +40,15 @@ function defaultActivityCriterion(): ActivityCriterion {
 
 function ActivityTerm({
   criterion,
+  protocols,
   onChange,
   onRemove,
 }: {
   criterion: ActivityCriterion;
+  protocols: Protocol[];
   onChange: (c: ActivityCriterion) => void;
   onRemove: () => void;
 }) {
-  const { data: protocols } = useProtocols();
   const { data: protocol } = useProtocol(criterion.protocol_id || undefined);
 
   return (
@@ -154,6 +156,8 @@ interface ProtocolSectionProps {
 }
 
 export function ProtocolSection({ criteria, onChange }: ProtocolSectionProps) {
+  const { data: protocols } = useProtocols();
+
   function addTerm() {
     onChange([...criteria, defaultActivityCriterion()]);
   }
@@ -193,6 +197,7 @@ export function ProtocolSection({ criteria, onChange }: ProtocolSectionProps) {
           <ActivityTerm
             key={`activity-${i}`}
             criterion={c}
+            protocols={protocols ?? []}
             onChange={(updated) => updateTerm(i, updated)}
             onRemove={() => removeTerm(i)}
           />
