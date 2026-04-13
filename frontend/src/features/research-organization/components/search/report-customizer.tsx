@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -84,6 +85,7 @@ const PROTOCOL_FIELDS = [
 interface ReportCustomizerProps {
   open: boolean;
   onClose: () => void;
+  onUpdate: () => void;
   protocols: Protocol[];
   activeProtocolIds: string[];
 }
@@ -93,10 +95,11 @@ interface ReportCustomizerProps {
 export function ReportCustomizer({
   open,
   onClose,
+  onUpdate,
   protocols,
   activeProtocolIds,
 }: ReportCustomizerProps) {
-  const { config, updateConfig, setVisibleFields, setProtocolFields } =
+  const { config, updateConfig, setVisibleFields, setProtocolFields, setReadoutColumns } =
     useReportConfig();
   const { visibleFields } = config;
 
@@ -110,7 +113,7 @@ export function ReportCustomizer({
           </SheetDescription>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-5rem)] px-4 pb-6">
+        <ScrollArea className="h-[calc(100vh-8rem)] px-4 pb-6">
           <div className="space-y-6 pb-8">
             {/* ── Display Options ── */}
             <section className="space-y-4">
@@ -279,21 +282,45 @@ export function ReportCustomizer({
               {activeProtocolIds.map((protocolId) => {
                 const protocol = protocols.find((p) => p.id === protocolId);
                 const protocolName = protocol?.name ?? "Unknown Protocol";
+                const readoutDefs = (protocol?.readout_definitions ?? []).map(
+                  (rd) => ({
+                    key: rd.id,
+                    label: rd.name + (rd.unit ? ` (${rd.unit})` : ""),
+                  }),
+                );
                 return (
-                  <FieldGroup
-                    key={protocolId}
-                    title={protocolName}
-                    fields={PROTOCOL_FIELDS}
-                    selected={visibleFields.protocols[protocolId] ?? []}
-                    onChange={(fields) =>
-                      setProtocolFields(protocolId, fields)
-                    }
-                  />
+                  <div key={protocolId} className="space-y-0">
+                    <FieldGroup
+                      title={protocolName}
+                      fields={PROTOCOL_FIELDS}
+                      selected={visibleFields.protocols[protocolId] ?? []}
+                      onChange={(fields) =>
+                        setProtocolFields(protocolId, fields)
+                      }
+                    />
+                    {readoutDefs.length > 0 && (
+                      <FieldGroup
+                        title={`${protocolName} — Readouts`}
+                        fields={readoutDefs}
+                        selected={visibleFields.readoutColumns[protocolId] ?? []}
+                        onChange={(rdIds) =>
+                          setReadoutColumns(protocolId, rdIds)
+                        }
+                      />
+                    )}
+                  </div>
                 );
               })}
             </section>
           </div>
         </ScrollArea>
+
+        <div className="border-t border-border px-4 py-3">
+          <Button className="w-full" onClick={onUpdate}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Update Report
+          </Button>
+        </div>
       </SheetContent>
     </Sheet>
   );

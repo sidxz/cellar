@@ -10,6 +10,7 @@ const DEFAULT_VISIBLE_FIELDS: VisibleFields = {
   molecule: ["name", "lifecycle_stage"],
   batch: [],
   protocols: {},
+  readoutColumns: {},
 };
 
 const DEFAULT_CONFIG: ReportConfig = {
@@ -27,6 +28,7 @@ interface ReportConfigState {
   updateConfig: (partial: Partial<ReportConfig>) => void;
   setVisibleFields: (fields: Partial<VisibleFields>) => void;
   setProtocolFields: (protocolId: string, fields: string[]) => void;
+  setReadoutColumns: (protocolId: string, rdDefIds: string[]) => void;
   resetToDefaults: () => void;
   loadFromSavedSearch: (columns: Record<string, unknown> | null) => void;
   toSavedSearchColumns: () => Record<string, unknown>;
@@ -57,6 +59,19 @@ export const useReportConfig = create<ReportConfigState>((set, get) => ({
         },
       },
     })),
+  setReadoutColumns: (protocolId, rdDefIds) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        visibleFields: {
+          ...state.config.visibleFields,
+          readoutColumns: {
+            ...state.config.visibleFields.readoutColumns,
+            [protocolId]: rdDefIds,
+          },
+        },
+      },
+    })),
   resetToDefaults: () => set({ config: DEFAULT_CONFIG }),
   loadFromSavedSearch: (columns) => {
     if (!columns || !columns.reportConfig || typeof columns.reportConfig !== "object") {
@@ -73,6 +88,9 @@ export const useReportConfig = create<ReportConfigState>((set, get) => ({
           ...(partial.visibleFields ?? {}),
           protocols: {
             ...((partial.visibleFields as Partial<VisibleFields> | undefined)?.protocols ?? {}),
+          },
+          readoutColumns: {
+            ...((partial.visibleFields as Partial<VisibleFields> | undefined)?.readoutColumns ?? {}),
           },
         },
       },

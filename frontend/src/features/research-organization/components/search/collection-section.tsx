@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -8,6 +9,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/shared/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
+import { cn } from "@/shared/lib/utils";
 import { useCollections } from "../../hooks/use-collections";
 import type { CollectionCriterion, SearchCriterion } from "../../types";
 
@@ -35,6 +50,9 @@ function CollectionTerm({
   onRemove: () => void;
 }) {
   const { data: collections } = useCollections();
+  const [open, setOpen] = useState(false);
+
+  const selected = collections?.find((c) => c.id === term.collection_id);
 
   return (
     <div className="flex items-center gap-2 mb-1.5">
@@ -54,21 +72,53 @@ function CollectionTerm({
       </div>
 
       <div className="flex-1">
-        <Select
-          value={term.collection_id || undefined}
-          onValueChange={(v) => onChange({ ...term, collection_id: v })}
-        >
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder="Select collection..." />
-          </SelectTrigger>
-          <SelectContent>
-            {collections?.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name} ({c.molecule_count})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "flex h-7 w-full items-center justify-between rounded-md border border-input bg-transparent px-2 text-xs shadow-xs",
+                !term.collection_id && "text-muted-foreground",
+              )}
+            >
+              <span className="truncate">
+                {selected
+                  ? `${selected.name} (${selected.molecule_count})`
+                  : "Select collection…"}
+              </span>
+              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search collections…" className="h-8 text-xs" />
+              <CommandList>
+                <CommandEmpty>No collections found.</CommandEmpty>
+                <CommandGroup>
+                  {collections?.map((c) => (
+                    <CommandItem
+                      key={c.id}
+                      value={c.name}
+                      onSelect={() => {
+                        onChange({ ...term, collection_id: c.id });
+                        setOpen(false);
+                      }}
+                      className="text-xs"
+                    >
+                      <Check
+                        className={cn(
+                          "mr-1.5 h-3 w-3",
+                          term.collection_id === c.id ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      {c.name} ({c.molecule_count})
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <button

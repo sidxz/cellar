@@ -4,7 +4,14 @@ import * as React from "react";
 import { X, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
 import { useProjects } from "../../hooks/use-projects";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -78,33 +85,36 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
 
         <PopoverContent
           align="start"
-          className="w-56 p-2"
+          className="w-56 p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          {activeProjects.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">No active projects.</p>
-          ) : (
-            <ScrollArea className="max-h-60">
-              <div className="space-y-0.5">
+          <Command>
+            <CommandInput placeholder="Search projects…" className="h-8 text-xs" />
+            <CommandList>
+              <CommandEmpty>No projects found.</CommandEmpty>
+              <CommandGroup>
                 {activeProjects.map((project) => {
                   const checked = selectedSet.has(project.id);
                   return (
-                    <label
+                    <CommandItem
                       key={project.id}
-                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                      value={project.name}
+                      onSelect={() => toggleProject(project.id)}
+                      className="text-xs"
                     >
                       <Checkbox
                         checked={checked}
-                        onCheckedChange={() => toggleProject(project.id)}
+                        className="mr-1.5"
+                        tabIndex={-1}
                         aria-label={project.name}
                       />
                       <span className="truncate">{project.name}</span>
-                    </label>
+                    </CommandItem>
                   );
                 })}
-              </div>
-            </ScrollArea>
-          )}
+              </CommandGroup>
+            </CommandList>
+          </Command>
         </PopoverContent>
       </Popover>
     </div>

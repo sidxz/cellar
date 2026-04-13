@@ -327,6 +327,8 @@ export interface VisibleFields {
   molecule: string[];
   batch: string[];
   protocols: Record<string, string[]>;
+  /** Per-protocol readout definition IDs to show as columns (protocol_id → rd def ids) */
+  readoutColumns: Record<string, string[]>;
 }
 
 // ─── Curve Parameters ───────────────────────────────────────────────────────

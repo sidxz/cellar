@@ -63,16 +63,33 @@ function SearchPageInner() {
   const { config: reportConfig, loadFromSavedSearch } = useReportConfig();
   const { exportSdf } = useSdfExport();
 
+  // ── Derive extra rd: columns from report config readout selections ────
+  const readoutExtraColumns = useMemo(() => {
+    const cols: string[] = [];
+    for (const [protoId, rdIds] of Object.entries(reportConfig.visibleFields.readoutColumns)) {
+      for (const rdId of rdIds) {
+        cols.push(`rd:${protoId}:${rdId}`);
+      }
+    }
+    return cols;
+  }, [reportConfig.visibleFields.readoutColumns]);
+
+  // ── Merged protocol columns (search-derived + report config readouts) ──
+  const mergedProtocolColumns = useMemo(() => {
+    const set = new Set([...protocolColumns, ...readoutExtraColumns]);
+    return [...set];
+  }, [protocolColumns, readoutExtraColumns]);
+
   // ── Derived: visible protocol IDs for detail panel ─────────────────────
   const visibleProtocolIds = useMemo(() => {
     return [
       ...new Set(
-        protocolColumns
-          .filter((c) => c.startsWith("drc:"))
+        mergedProtocolColumns
+          .filter((c) => c.startsWith("drc:") || c.startsWith("rd:"))
           .map((c) => c.split(":")[1]),
       ),
     ];
-  }, [protocolColumns]);
+  }, [mergedProtocolColumns]);
 
   // ── Enrichment helper ──────────────────────────────────────────────────
   const enrichItems = useCallback(
@@ -93,9 +110,11 @@ function SearchPageInner() {
       setSelectedMolecule(null);
       setGridSelectedIds(new Set());
 
+      // Merge search-derived columns with report config readout selections
+      const allColumns = [...new Set([...columns, ...readoutExtraColumns])];
       const input = {
         query,
-        ...(columns.length > 0 ? { protocol_columns: columns } : {}),
+        ...(allColumns.length > 0 ? { protocol_columns: allColumns } : {}),
       };
 
       searchMutation.mutate(
@@ -109,7 +128,7 @@ function SearchPageInner() {
         },
       );
     },
-    [searchMutation, sortBy, sortDir, enrichItems],
+    [searchMutation, sortBy, sortDir, enrichItems, readoutExtraColumns],
   );
 
   // ── handleLoadMore ─────────────────────────────────────────────────────
@@ -117,7 +136,7 @@ function SearchPageInner() {
     if (!currentQuery || !nextCursor) return;
     const input = {
       query: currentQuery,
-      ...(protocolColumns.length > 0 ? { protocol_columns: protocolColumns } : {}),
+      ...(mergedProtocolColumns.length > 0 ? { protocol_columns: mergedProtocolColumns } : {}),
     };
 
     searchMutation.mutate(
@@ -130,7 +149,28 @@ function SearchPageInner() {
         },
       },
     );
-  }, [currentQuery, nextCursor, searchMutation, protocolColumns, sortBy, sortDir, enrichItems]);
+  }, [currentQuery, nextCursor, searchMutation, mergedProtocolColumns, sortBy, sortDir, enrichItems]);
+
+  // ── Re-fetch with current merged columns (called from report customizer) ─
+  const handleUpdateReport = useCallback(() => {
+    if (!currentQuery || !hasSearched) return;
+    const allColumns = [...new Set([...protocolColumns, ...readoutExtraColumns])];
+    const input = {
+      query: currentQuery,
+      ...(allColumns.length > 0 ? { protocol_columns: allColumns } : {}),
+    };
+    searchMutation.mutate(
+      { input, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+      {
+        onSuccess: (data) => {
+          setResults(enrichItems(data));
+          setNextCursor(data.next_cursor);
+          setTotalCount(data.total_count);
+        },
+      },
+    );
+    setReportOpen(false);
+  }, [currentQuery, hasSearched, protocolColumns, readoutExtraColumns, searchMutation, sortBy, sortDir, enrichItems]);
 
   // ── Load saved search from URL ─────────────────────────────────────────
   const savedSearchLoadedRef = useRef<string | null>(null);
@@ -235,7 +275,7 @@ function SearchPageInner() {
             />
             <ResultsGrid
               results={results}
-              protocolColumns={protocolColumns}
+              protocolColumns={mergedProtocolColumns}
               protocols={protocols ?? []}
               reportConfig={reportConfig}
               loading={searchMutation.isPending && results.length === 0}
@@ -274,6 +314,7 @@ function SearchPageInner() {
       <ReportCustomizer
         open={reportOpen}
         onClose={() => setReportOpen(false)}
+        onUpdate={handleUpdateReport}
         protocols={protocols ?? []}
         activeProtocolIds={visibleProtocolIds}
       />
@@ -283,7 +324,7 @@ function SearchPageInner() {
           open={saveOpen}
           onClose={() => setSaveOpen(false)}
           query={currentQuery}
-          protocolColumns={protocolColumns}
+          protocolColumns={mergedProtocolColumns}
           reportConfig={reportConfig}
         />
       )}

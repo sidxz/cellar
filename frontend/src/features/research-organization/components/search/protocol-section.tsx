@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback } from "react";
-import { Minus, Plus } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import {
   Select,
@@ -10,6 +10,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/shared/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
+import { cn } from "@/shared/lib/utils";
 import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import type { Protocol } from "@/features/screening-assay/types";
 import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
@@ -72,6 +86,7 @@ function ActivityRow({
   onChange,
   onRemove,
 }: ActivityRowProps) {
+  const [protocolOpen, setProtocolOpen] = useState(false);
   const { data: protocol } = useProtocol(criterion.protocol_id || undefined);
 
   const numericReadouts = protocol?.readout_definitions?.filter(
@@ -116,31 +131,61 @@ function ActivityRow({
         {/* "In" label */}
         <span className="text-xs text-muted-foreground shrink-0">Protocol</span>
 
-        {/* Protocol picker */}
-        <Select
-          value={criterion.protocol_id || undefined}
-          onValueChange={(v) =>
-            onChange({
-              ...criterion,
-              protocol_id: v,
-              readout_definition_id: undefined,
-              curve_type: undefined,
-            })
-          }
-        >
-          <SelectTrigger className="h-7 min-w-[160px] flex-1 text-xs">
-            <SelectValue placeholder="Choose protocol…" />
-          </SelectTrigger>
-          <SelectContent>
-            {protocols
-              .filter((p) => p.status === "active")
-              .map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
+        {/* Protocol picker (searchable) */}
+        <Popover open={protocolOpen} onOpenChange={setProtocolOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "flex h-7 min-w-[160px] flex-1 items-center justify-between rounded-md border border-input bg-transparent px-2 text-xs shadow-xs",
+                !criterion.protocol_id && "text-muted-foreground",
+              )}
+            >
+              <span className="truncate">
+                {criterion.protocol_id
+                  ? protocols.find((p) => p.id === criterion.protocol_id)?.name ?? "Unknown"
+                  : "Choose protocol…"}
+              </span>
+              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search protocols…" className="h-8 text-xs" />
+              <CommandList>
+                <CommandEmpty>No protocols found.</CommandEmpty>
+                <CommandGroup>
+                  {protocols
+                    .filter((p) => p.status === "active")
+                    .map((p) => (
+                      <CommandItem
+                        key={p.id}
+                        value={p.name}
+                        onSelect={() => {
+                          onChange({
+                            ...criterion,
+                            protocol_id: p.id,
+                            readout_definition_id: undefined,
+                            curve_type: undefined,
+                          });
+                          setProtocolOpen(false);
+                        }}
+                        className="text-xs"
+                      >
+                        <Check
+                          className={cn(
+                            "mr-1.5 h-3 w-3",
+                            criterion.protocol_id === p.id ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                        {p.name}
+                      </CommandItem>
+                    ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Sub-row: activity filter — curve type + operator + value, or readout definition */}

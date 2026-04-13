@@ -2,14 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type {
-  ColDef,
-  ColGroupDef,
-  ICellRendererParams,
-  RowClickedEvent,
-  GridReadyEvent,
-  SelectionChangedEvent,
+import {
+  AllCommunityModule,
+  ModuleRegistry,
+  type ColDef,
+  type ColGroupDef,
+  type ICellRendererParams,
+  type RowClickedEvent,
+  type GridReadyEvent,
+  type SelectionChangedEvent,
 } from "ag-grid-community";
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Badge } from "@/shared/components/ui/badge";
 import { StructureThumbnail } from "@/shared/components/chemistry";
