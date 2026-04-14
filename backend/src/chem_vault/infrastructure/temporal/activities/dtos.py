@@ -236,3 +236,28 @@ class CddPollExportOutput:
     finished: bool
     count: int = 0
     storage_path: str | None = None  # path to JSON file on disk (not inline)
+
+
+# ---------------------------------------------------------------------------
+# CDD export chunk loading
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LoadExportChunkInput:
+    """Input for loading a chunk from a saved CDD export."""
+
+    storage_path: str
+    offset: int
+    limit: int
+    max_molecules: int | None = None
+
+
+@dataclass
+class LoadExportChunkOutput:
+    """Output of loading an export chunk — mapped to ChunkItems."""
+
+    items: list[dict]  # serialized ChunkItem dicts
+    skipped: int = 0
+    has_more: bool = False
+    molecule_count: int = 0  # distinct molecules (before batch expansion)

@@ -16,10 +16,7 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from chem_vault.infrastructure.temporal.activities.bulk_tracking import BulkTrackingActivities
-    from chem_vault.infrastructure.temporal.activities.cdd_fetch import (
-        CddFetchActivities,
-        LoadExportChunkInput,
-    )
+    from chem_vault.infrastructure.temporal.activities.cdd_fetch import CddFetchActivities
     from chem_vault.infrastructure.temporal.activities.dtos import (
         CddPollExportInput,
         CddStartExportInput,
@@ -30,6 +27,7 @@ with workflow.unsafe.imports_passed_through():
         CompleteCddImportInput,
         CreateCddImportInput,
         FailCddImportInput,
+        LoadExportChunkInput,
         RecordSyncMappingsInput,
         UpdateCddImportProgressInput,
     )

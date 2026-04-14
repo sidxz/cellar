@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
 from lagom import Container
@@ -36,30 +35,12 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
     CddStartExportOutput,
     CddSyncWatermarkInput,
     CddSyncWatermarkOutput,
+    LoadExportChunkInput,
+    LoadExportChunkOutput,
 )
 from chem_vault.infrastructure.temporal.task_queues import CHUNK_SIZE
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class LoadExportChunkInput:
-    """Input for loading a chunk of molecules from the saved export file."""
-
-    storage_path: str
-    offset: int
-    limit: int
-    max_molecules: int | None = None
-
-
-@dataclass
-class LoadExportChunkOutput:
-    """Output of loading an export chunk — mapped to ChunkItems."""
-
-    items: list[dict]  # serialized ChunkItem dicts
-    skipped: int = 0
-    has_more: bool = False
-    molecule_count: int = 0  # distinct molecules (before batch expansion)
 
 
 class CddFetchActivities:
