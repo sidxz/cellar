@@ -33,6 +33,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
     from chem_vault.infrastructure.temporal.task_queues import CHUNK_SIZE
+    from chem_vault.domain.chemical_registration.enums import CddImportMode
 
 
 @dataclass
@@ -94,7 +95,7 @@ class CddVaultImportWorkflow:
         # --- Phase 1b: Sync watermark lookup ---
         modified_after: str | None = None
 
-        if input.import_mode == "sync":
+        if input.import_mode == CddImportMode.SYNC:
             watermark = await workflow.execute_activity(
                 CddFetchActivities.get_sync_watermark,
                 CddSyncWatermarkInput(
