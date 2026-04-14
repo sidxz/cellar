@@ -1780,7 +1780,12 @@ def create_container(
     container.define(ImportCddProtocol, _cdd_import_cmd)
 
     # --- CDD Molecule Import ---
+    from chem_vault.application.cdd_import.force_fail_cdd_molecule_import import ForceFailCddMoleculeImport
+    from chem_vault.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
     from chem_vault.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
+    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (
+        SQLAlchemyCddMoleculeImportRepository,
+    )
 
     def _start_cdd_mol_import(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -1791,6 +1796,23 @@ def create_container(
             api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
         )
 
+    def _list_cdd_mol_imports(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListCddMoleculeImports(
+            uow=uow,
+            repo=SQLAlchemyCddMoleculeImportRepository(uow),
+        )
+
+    def _force_fail_cdd_mol_import(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ForceFailCddMoleculeImport(
+            uow=uow,
+            repo=SQLAlchemyCddMoleculeImportRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     container.define(StartCddMoleculeImport, _start_cdd_mol_import)
+    container.define(ListCddMoleculeImports, _list_cdd_mol_imports)
+    container.define(ForceFailCddMoleculeImport, _force_fail_cdd_mol_import)
 
     return container
