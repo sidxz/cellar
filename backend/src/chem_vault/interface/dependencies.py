@@ -196,6 +196,7 @@ from chem_vault.application.screening.get_protocol_activity import GetProtocolAc
 from chem_vault.application.screening.get_protocol_stats import GetProtocolStats
 from chem_vault.application.cdd_import.import_cdd_protocol import ImportCddProtocol
 from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocols
+from chem_vault.application.cdd_import.force_fail_cdd_molecule_import import ForceFailCddMoleculeImport
 from chem_vault.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
 from chem_vault.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
@@ -529,6 +530,7 @@ PreviewCddProtocolImportDep = Annotated[PreviewCddProtocolImport, Depends(_get_u
 ImportCddProtocolDep = Annotated[ImportCddProtocol, Depends(_get_use_case(ImportCddProtocol))]
 StartCddMoleculeImportDep = Annotated[StartCddMoleculeImport, Depends(_get_use_case(StartCddMoleculeImport))]
 ListCddMoleculeImportsDep = Annotated[ListCddMoleculeImports, Depends(_get_use_case(ListCddMoleculeImports))]
+ForceFailCddMoleculeImportDep = Annotated[ForceFailCddMoleculeImport, Depends(_get_use_case(ForceFailCddMoleculeImport))]
 
 # --- Dashboard dependencies ---
 GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]

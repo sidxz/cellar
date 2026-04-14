@@ -22,7 +22,12 @@ from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import (
     CddVaultImportWorkflow,
     CddVaultImportWorkflowInput,
 )
-from chem_vault.interface.dependencies import AuthDep, ListCddMoleculeImportsDep, StartCddMoleculeImportDep
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    ForceFailCddMoleculeImportDep,
+    ListCddMoleculeImportsDep,
+    StartCddMoleculeImportDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/cdd-import/molecules", tags=["cdd-molecule-import"])
@@ -252,25 +257,23 @@ async def cancel_cdd_molecule_import(
 
 @router.post("/{import_id}/force-fail", status_code=204)
 async def force_fail_cdd_molecule_import(
-    request: Request,
     auth: AuthDep,
+    use_case: ForceFailCddMoleculeImportDep,
     import_id: str,
 ) -> None:
     """Force a stuck import to FAILED status. Admin action for cleanup."""
-    require_editor(auth)
-    container = request.app.state.container
-    session_factory = container[async_sessionmaker]
-    uow = AsyncUnitOfWork(session_factory)
-    repo = SQLAlchemyCddMoleculeImportRepository(uow)
-    async with uow:
-        imp = await repo.find_by_id_in_workspace(auth.workspace_id, uuid.UUID(import_id))
-        if imp is None:
-            raise HTTPException(status_code=404, detail="Import not found")
-        if imp.status.value in ("completed", "completed_with_errors", "failed"):
-            return  # Already terminal, no-op
-        imp.fail("Force-failed by admin")
-        await repo.save(imp)
-        await uow.commit()
+    from chem_vault.application.cdd_import.force_fail_cdd_molecule_import import (
+        ForceFailCddMoleculeImportCommand,
+    )
+
+    result = await use_case(
+        ForceFailCddMoleculeImportCommand(
+            workspace_id=auth.workspace_id,
+            import_id=uuid.UUID(import_id),
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
 
 
 def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
