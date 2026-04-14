@@ -46,6 +46,16 @@ class CddVaultImportWorkflowInput:
     secret_ref: str
     filter_criteria: dict | None = None
     max_molecules: int | None = None
+    # Resume fields — populated by continue-as-new to carry state across executions
+    import_id: str | None = None
+    storage_path: str | None = None
+    resume_offset: int = 0
+    resume_chunk_index: int = 0
+    total_count: int = 0
+    cumulative_registered: int = 0
+    cumulative_duplicate: int = 0
+    cumulative_error: int = 0
+    cumulative_skipped: int = 0
 
 
 @dataclass
@@ -63,6 +73,10 @@ class CddVaultImportProgress:
 
 _RETRY = RetryPolicy(maximum_attempts=10, backoff_coefficient=2, initial_interval=timedelta(seconds=5))
 
+# Continue-as-new every N chunks to keep workflow history small.
+# 50 chunks × ~4 activities × 3 events = ~600 events per execution (limit: 50,000).
+_CHUNKS_PER_EXECUTION = 50
+
 
 @workflow.defn
 class CddVaultImportWorkflow:
@@ -73,52 +87,69 @@ class CddVaultImportWorkflow:
 
     @workflow.run
     async def run(self, input: CddVaultImportWorkflowInput) -> CddVaultImportProgress:
+        is_resume = input.import_id is not None
 
-        # --- Phase 1: Create tracking aggregate ---
-        import_id = await workflow.execute_activity(
-            BulkTrackingActivities.create_cdd_import,
-            CreateCddImportInput(
-                workspace_id=input.workspace_id,
-                cdd_vault_id=input.cdd_vault_id,
-                import_mode=input.import_mode,
-                originating_org_id=input.originating_org_id,
-                submitted_by=input.submitted_by,
-                workflow_id=workflow.info().workflow_id,
-                filter_criteria=input.filter_criteria,
-            ),
-            start_to_close_timeout=timedelta(seconds=30),
-            retry_policy=_RETRY,
-        )
-        self._progress.import_id = import_id
-        self._progress.status = "discovering"
-
-        # --- Phase 1b: Sync watermark lookup ---
-        modified_after: str | None = None
-
-        if input.import_mode == CddImportMode.SYNC:
-            watermark = await workflow.execute_activity(
-                CddFetchActivities.get_sync_watermark,
-                CddSyncWatermarkInput(
+        if is_resume:
+            # Resumed after continue-as-new — skip export/discovery phases
+            import_id = input.import_id
+            storage_path = input.storage_path
+            self._progress = CddVaultImportProgress(
+                import_id=import_id,
+                status="processing",
+                total_count=input.total_count,
+                registered_count=input.cumulative_registered,
+                duplicate_count=input.cumulative_duplicate,
+                error_count=input.cumulative_error,
+                skipped_count=input.cumulative_skipped,
+                current_offset=input.resume_offset,
+                pages_processed=input.resume_chunk_index,
+            )
+        else:
+            # --- Phase 1: Create tracking aggregate ---
+            import_id = await workflow.execute_activity(
+                BulkTrackingActivities.create_cdd_import,
+                CreateCddImportInput(
                     workspace_id=input.workspace_id,
-                    vault_id=input.cdd_vault_id,
+                    cdd_vault_id=input.cdd_vault_id,
+                    import_mode=input.import_mode,
+                    originating_org_id=input.originating_org_id,
+                    submitted_by=input.submitted_by,
+                    workflow_id=workflow.info().workflow_id,
+                    filter_criteria=input.filter_criteria,
                 ),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_RETRY,
             )
-            modified_after = watermark.modified_after
-            # If no watermark exists (first sync), this becomes a full export
-            # which is correct — first sync should import everything.
+            self._progress.import_id = import_id
+            self._progress.status = "discovering"
 
-        # --- Phase 2+3: Export and poll ---
-        storage_path = await self._export_and_poll(input, import_id, modified_after)
-        if storage_path is None:
-            return self._progress  # cancelled or failed
+            # --- Phase 1b: Sync watermark lookup ---
+            modified_after: str | None = None
 
-        self._progress.status = "processing"
+            if input.import_mode == CddImportMode.SYNC:
+                watermark = await workflow.execute_activity(
+                    CddFetchActivities.get_sync_watermark,
+                    CddSyncWatermarkInput(
+                        workspace_id=input.workspace_id,
+                        vault_id=input.cdd_vault_id,
+                    ),
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=_RETRY,
+                )
+                modified_after = watermark.modified_after
+
+            # --- Phase 2+3: Export and poll ---
+            storage_path = await self._export_and_poll(input, import_id, modified_after)
+            if storage_path is None:
+                return self._progress  # cancelled or failed
+
+            self._progress.status = "processing"
 
         # --- Phase 4: Load chunks from disk and process ---
-        chunk_index = 0
-        offset = 0
+        chunk_index = input.resume_chunk_index if is_resume else 0
+        offset = input.resume_offset if is_resume else 0
+        chunks_this_execution = 0
+
         while True:
             if self._cancel_requested:
                 break
@@ -200,13 +231,38 @@ class CddVaultImportWorkflow:
                 )
 
             self._progress.skipped_count += chunk_result.skipped
-            self._progress.current_offset += CHUNK_SIZE
+            self._progress.current_offset = offset + CHUNK_SIZE
             self._progress.pages_processed = chunk_index + 1
             offset += CHUNK_SIZE
             chunk_index += 1
+            chunks_this_execution += 1
 
             if not chunk_result.has_more:
                 break
+
+            # Continue-as-new to prevent history size limit crash
+            if chunks_this_execution >= _CHUNKS_PER_EXECUTION:
+                workflow.continue_as_new(
+                    CddVaultImportWorkflowInput(
+                        workspace_id=input.workspace_id,
+                        cdd_vault_id=input.cdd_vault_id,
+                        import_mode=input.import_mode,
+                        submitted_by=input.submitted_by,
+                        originating_org_id=input.originating_org_id,
+                        secret_ref=input.secret_ref,
+                        filter_criteria=input.filter_criteria,
+                        max_molecules=input.max_molecules,
+                        import_id=import_id,
+                        storage_path=storage_path,
+                        resume_offset=offset,
+                        resume_chunk_index=chunk_index,
+                        total_count=self._progress.total_count,
+                        cumulative_registered=self._progress.registered_count,
+                        cumulative_duplicate=self._progress.duplicate_count,
+                        cumulative_error=self._progress.error_count,
+                        cumulative_skipped=self._progress.skipped_count,
+                    ),
+                )
 
         # --- Phase 5: Complete or cancel ---
         if self._cancel_requested:
