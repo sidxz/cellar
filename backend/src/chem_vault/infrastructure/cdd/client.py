@@ -113,6 +113,33 @@ class CddVaultClient:
         )
 
     # ------------------------------------------------------------------
+    # Generic async export (reusable across molecules, protocols, plates)
+    # ------------------------------------------------------------------
+
+    async def start_export(
+        self,
+        vault_id: str,
+        api_key: str,
+        entity_path: str,
+        *,
+        body: dict[str, Any] | None = None,
+    ) -> int:
+        """Trigger an async export via POST /vaults/{vault_id}/{entity_path}/query.
+
+        Args:
+            entity_path: CDD entity type path segment — "molecules", "protocols", etc.
+            body: Additional query parameters (merged with {"async": true}).
+
+        Returns the export job ID.
+        """
+        url = f"{BASE_URL}/vaults/{vault_id}/{entity_path}/query"
+        payload: dict[str, Any] = {"async": True}
+        if body:
+            payload.update(body)
+        data = await self._post_query(url, api_key, payload)
+        return data["id"]
+
+    # ------------------------------------------------------------------
     # Molecule async export
     # ------------------------------------------------------------------
 
@@ -141,24 +168,20 @@ class CddVaultClient:
         if molecule_ids is not None and modified_after is not None:
             raise ValueError("molecule_ids and modified_after are mutually exclusive")
 
-        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
-        body: dict[str, Any] = {"async": True}
+        body: dict[str, Any] = {}
 
         if molecule_ids is not None:
-            # CDD wants comma-separated string, not a JSON array
             body["molecules"] = ",".join(str(i) for i in molecule_ids)
         elif modified_after is not None:
             body["modified_after"] = modified_after
         elif max_molecules is not None:
-            # Testing cap: fetch N IDs first, then export those
             all_ids, _ = await self.list_molecule_ids(
                 vault_id, api_key, page_size=max_molecules,
             )
             ids_to_export = all_ids[:max_molecules]
             body["molecules"] = ",".join(str(i) for i in ids_to_export)
 
-        data = await self._post_query(url, api_key, body)
-        return data["id"]
+        return await self.start_export(vault_id, api_key, "molecules", body=body)
 
     async def list_molecule_ids(
         self,
