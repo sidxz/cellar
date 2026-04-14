@@ -14,20 +14,28 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from lagom import Container
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
 from chem_vault.application.cdd_import.molecule_mapper import map_cdd_molecules
 from chem_vault.domain.shared.secret_provider import SecretProvider
 from chem_vault.infrastructure.cdd.client import CddVaultClient
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
+    CddMoleculeSyncRepository,
+)
+from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.activities.dtos import (
     CddPollExportInput,
     CddPollExportOutput,
     CddStartExportInput,
     CddStartExportOutput,
+    CddSyncWatermarkInput,
+    CddSyncWatermarkOutput,
 )
 from chem_vault.infrastructure.temporal.task_queues import CHUNK_SIZE
 
@@ -69,36 +77,36 @@ class CddFetchActivities:
 
     @activity.defn
     async def start_molecule_export(self, input: CddStartExportInput) -> CddStartExportOutput:
-        """Trigger an async molecule export on CDD and return the export ID.
+        """Trigger an async molecule export on CDD via POST /molecules/query.
 
-        If max_molecules is set, fetches that many IDs first (sync, fast)
-        and passes them to the export to avoid downloading the full vault.
+        The client handles all parameter combinations (molecule_ids,
+        modified_after, max_molecules) in the JSON body — no URL limits.
         """
         api_key = await self._resolve_api_key(input.secret_ref)
         client = self._container[CddVaultClient]
 
         total_count = await client.get_molecule_count(input.vault_id, api_key)
 
-        molecule_ids: list[int] | None = None
-        effective_count = total_count
-
-        if input.max_molecules is not None and input.max_molecules < total_count:
-            # Fetch IDs (CDD returns all IDs regardless of page_size), then slice
-            all_ids, _ = await client.list_molecule_ids(
-                input.vault_id, api_key, offset=0, page_size=input.max_molecules,
-            )
-            molecule_ids = all_ids[: input.max_molecules]
-            effective_count = len(molecule_ids)
-            logger.info("Limiting export to %d molecule IDs", effective_count)
-
         export_id = await client.start_molecule_export(
-            input.vault_id, api_key,
-            molecule_ids=molecule_ids,
+            input.vault_id,
+            api_key,
+            molecule_ids=input.molecule_ids,
+            modified_after=input.modified_after,
+            max_molecules=input.max_molecules,
         )
 
+        # For modified_after/full exports, we don't know the exact count
+        # until the export finishes. Use vault total as estimate.
+        effective_count = total_count
+        if input.molecule_ids is not None:
+            effective_count = len(input.molecule_ids)
+        elif input.max_molecules is not None:
+            effective_count = min(input.max_molecules, total_count)
+
         logger.info(
-            "CDD export started: vault=%s export_id=%d total=%d effective=%d",
+            "CDD export started: vault=%s export_id=%d total=%d effective=%d mode=%s",
             input.vault_id, export_id, total_count, effective_count,
+            "modified_after" if input.modified_after else "full",
         )
         return CddStartExportOutput(export_id=export_id, total_count=effective_count)
 
@@ -202,6 +210,8 @@ class CddFetchActivities:
                         "batch_source": batch.batch_source,
                         "appearance": batch.appearance,
                         "vendor_catalog_number": batch.batch_name,
+                        "cdd_molecule_id": mol.cdd_molecule_id,
+                        "cdd_modified_at": mol.cdd_modified_at,
                     })
             else:
                 items.append({
@@ -210,7 +220,42 @@ class CddFetchActivities:
                     "smiles": mol.smiles,
                     "molecule_type": mol.molecule_type,
                     "external_ids": mol.external_ids,
+                    "cdd_molecule_id": mol.cdd_molecule_id,
+                    "cdd_modified_at": mol.cdd_modified_at,
                 })
 
         activity.heartbeat(f"loaded chunk offset={input.offset} items={len(items)} skipped={skipped}")
         return LoadExportChunkOutput(items=items, skipped=skipped, has_more=has_more, molecule_count=molecule_count)
+
+    @activity.defn
+    async def get_sync_watermark(self, input: CddSyncWatermarkInput) -> CddSyncWatermarkOutput:
+        """Look up the latest cdd_modified_at for this vault — the sync high-water-mark.
+
+        Returns the ISO 8601 timestamp to pass as modified_after, or None
+        if no prior sync exists (meaning: first sync = full export).
+        """
+        session_factory = self._container[async_sessionmaker]
+        uow = AsyncUnitOfWork(session_factory)
+        sync_repo = CddMoleculeSyncRepository(uow)
+
+        async with uow:
+            last_modified = await sync_repo.get_last_modified_at(
+                uuid.UUID(input.workspace_id), input.vault_id
+            )
+            known_count = len(
+                await sync_repo.get_known_cdd_ids(
+                    uuid.UUID(input.workspace_id), input.vault_id
+                )
+            )
+
+        modified_after_iso = last_modified.isoformat() if last_modified else None
+
+        logger.info(
+            "Sync watermark: vault=%s last_modified=%s synced=%d",
+            input.vault_id, modified_after_iso, known_count,
+        )
+
+        return CddSyncWatermarkOutput(
+            modified_after=modified_after_iso,
+            synced_count=known_count,
+        )
