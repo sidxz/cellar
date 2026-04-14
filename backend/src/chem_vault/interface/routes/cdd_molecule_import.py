@@ -6,18 +6,23 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio.service import RPCError, RPCStatusCode
 
 from chem_vault.application.auth import require_editor
 from chem_vault.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImportCommand,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (
+    SQLAlchemyCddMoleculeImportRepository,
+)
+from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
 from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import (
     CddVaultImportWorkflow,
     CddVaultImportWorkflowInput,
 )
-from chem_vault.interface.dependencies import AuthDep, StartCddMoleculeImportDep
+from chem_vault.interface.dependencies import AuthDep, ListCddMoleculeImportsDep, StartCddMoleculeImportDep
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/cdd-import/molecules", tags=["cdd-molecule-import"])
@@ -53,6 +58,21 @@ class CddMoleculeImportStatusResponse(BaseModel):
     pages_processed: int
 
 
+class CddMoleculeImportSummary(BaseModel):
+    id: str
+    cdd_vault_id: str
+    import_mode: str
+    status: str
+    workflow_id: str | None
+    total_count: int
+    registered_count: int
+    duplicate_count: int
+    error_count: int
+    skipped_count: int
+    submitted_at: str
+    completed_at: str | None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -72,6 +92,40 @@ def _get_temporal_client(request: Request):
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@router.get("", response_model=list[CddMoleculeImportSummary])
+async def list_cdd_molecule_imports(
+    auth: AuthDep,
+    use_case: ListCddMoleculeImportsDep,
+) -> list[CddMoleculeImportSummary]:
+    """List all CDD molecule imports for this workspace, newest first."""
+    from chem_vault.application.cdd_import.list_cdd_molecule_imports import (
+        ListCddMoleculeImportsQuery,
+    )
+
+    result = await use_case(
+        ListCddMoleculeImportsQuery(workspace_id=auth.workspace_id),
+        auth=auth,
+    )
+    imports = result_to_response(result)
+    return [
+        CddMoleculeImportSummary(
+            id=str(imp.id),
+            cdd_vault_id=imp.cdd_vault_id,
+            import_mode=imp.import_mode.value,
+            status=imp.status.value,
+            workflow_id=imp.workflow_id,
+            total_count=imp.total_count,
+            registered_count=imp.registered_count,
+            duplicate_count=imp.duplicate_count,
+            error_count=imp.error_count,
+            skipped_count=imp.skipped_count,
+            submitted_at=imp.submitted_at.isoformat(),
+            completed_at=imp.completed_at.isoformat() if imp.completed_at else None,
+        )
+        for imp in imports
+    ]
 
 
 @router.post("", response_model=CddMoleculeImportAcceptedResponse, status_code=202)
@@ -136,21 +190,43 @@ async def get_cdd_molecule_import_status(
     try:
         handle = temporal_client.get_workflow_handle(workflow_id)
         progress = await handle.query(CddVaultImportWorkflow.get_progress)
+        return CddMoleculeImportStatusResponse(
+            import_id=progress.import_id,
+            status=progress.status,
+            total_count=progress.total_count,
+            registered_count=progress.registered_count,
+            duplicate_count=progress.duplicate_count,
+            error_count=progress.error_count,
+            skipped_count=progress.skipped_count,
+            current_offset=progress.current_offset,
+            pages_processed=progress.pages_processed,
+        )
     except RPCError as exc:
         if exc.status == RPCStatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
-        raise
+        # Fall through to DB lookup for nondeterminism errors, etc.
+    except Exception:
+        pass  # Fall through to DB lookup
 
+    # Fallback: read from DB (handles completed/failed workflows and code-change replays)
+    container = request.app.state.container
+    session_factory = container[async_sessionmaker]
+    uow = AsyncUnitOfWork(session_factory)
+    repo = SQLAlchemyCddMoleculeImportRepository(uow)
+    async with uow:
+        imp = await repo.find_by_workflow_id_in_workspace(auth.workspace_id, workflow_id)
+    if imp is None:
+        raise HTTPException(status_code=404, detail=f"Import not found: {workflow_id}")
     return CddMoleculeImportStatusResponse(
-        import_id=progress.import_id,
-        status=progress.status,
-        total_count=progress.total_count,
-        registered_count=progress.registered_count,
-        duplicate_count=progress.duplicate_count,
-        error_count=progress.error_count,
-        skipped_count=progress.skipped_count,
-        current_offset=progress.current_offset,
-        pages_processed=progress.pages_processed,
+        import_id=str(imp.id),
+        status=imp.status.value,
+        total_count=imp.total_count,
+        registered_count=imp.registered_count,
+        duplicate_count=imp.duplicate_count,
+        error_count=imp.error_count,
+        skipped_count=imp.skipped_count,
+        current_offset=imp.last_processed_offset,
+        pages_processed=0,
     )
 
 
@@ -172,6 +248,29 @@ async def cancel_cdd_molecule_import(
         if exc.status == RPCStatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
         raise
+
+
+@router.post("/{import_id}/force-fail", status_code=204)
+async def force_fail_cdd_molecule_import(
+    request: Request,
+    auth: AuthDep,
+    import_id: str,
+) -> None:
+    """Force a stuck import to FAILED status. Admin action for cleanup."""
+    require_editor(auth)
+    container = request.app.state.container
+    session_factory = container[async_sessionmaker]
+    uow = AsyncUnitOfWork(session_factory)
+    repo = SQLAlchemyCddMoleculeImportRepository(uow)
+    async with uow:
+        imp = await repo.find_by_id_in_workspace(auth.workspace_id, uuid.UUID(import_id))
+        if imp is None:
+            raise HTTPException(status_code=404, detail="Import not found")
+        if imp.status.value in ("completed", "completed_with_errors", "failed"):
+            return  # Already terminal, no-op
+        imp.fail("Force-failed by admin")
+        await repo.save(imp)
+        await uow.commit()
 
 
 def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
