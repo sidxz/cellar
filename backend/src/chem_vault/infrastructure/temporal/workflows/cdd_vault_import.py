@@ -23,11 +23,14 @@ with workflow.unsafe.imports_passed_through():
     from chem_vault.infrastructure.temporal.activities.dtos import (
         CddPollExportInput,
         CddStartExportInput,
+        CddSyncWatermarkInput,
+        CompleteDiscoveryInput,
         ChunkInput,
         ChunkItem,
         CompleteCddImportInput,
         CreateCddImportInput,
         FailCddImportInput,
+        RecordSyncMappingsInput,
         UpdateCddImportProgressInput,
     )
     from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
@@ -90,74 +93,37 @@ class CddVaultImportWorkflow:
         self._progress.import_id = import_id
         self._progress.status = "discovering"
 
-        # --- Phase 2: Start async export ---
-        try:
-            export_result = await workflow.execute_activity(
-                CddFetchActivities.start_molecule_export,
-                CddStartExportInput(
+        # --- Phase 1b: Sync watermark lookup ---
+        modified_after: str | None = None
+
+        if input.import_mode == "sync":
+            watermark = await workflow.execute_activity(
+                CddFetchActivities.get_sync_watermark,
+                CddSyncWatermarkInput(
                     workspace_id=input.workspace_id,
-                    secret_ref=input.secret_ref,
                     vault_id=input.cdd_vault_id,
-                    max_molecules=input.max_molecules,
                 ),
-                start_to_close_timeout=timedelta(minutes=2),
+                start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_RETRY,
             )
-        except Exception as exc:
-            await self._fail(import_id, str(exc), input.workspace_id)
-            return self._progress
+            modified_after = watermark.modified_after
+            # If no watermark exists (first sync), this becomes a full export
+            # which is correct — first sync should import everything.
 
-        export_id = export_result.export_id
-        effective_total = export_result.total_count
-
-        await workflow.execute_activity(
-            BulkTrackingActivities.complete_discovery,
-            args=[import_id, effective_total, input.workspace_id],
-            start_to_close_timeout=timedelta(seconds=30),
-        )
-        self._progress.total_count = effective_total
-        self._progress.status = "exporting"
-
-        # --- Phase 3: Poll export until finished (saved to disk) ---
-        storage_path = None
-        while True:
-            if self._cancel_requested:
-                await self._fail(import_id, "Cancelled by user", input.workspace_id)
-                return self._progress
-
-            await workflow.sleep(timedelta(seconds=30))
-
-            try:
-                poll_result = await workflow.execute_activity(
-                    CddFetchActivities.poll_molecule_export,
-                    CddPollExportInput(
-                        workspace_id=input.workspace_id,
-                        secret_ref=input.secret_ref,
-                        vault_id=input.cdd_vault_id,
-                        export_id=export_id,
-                    ),
-                    start_to_close_timeout=timedelta(minutes=10),
-                    retry_policy=_RETRY,
-                )
-            except Exception as exc:
-                await self._fail(import_id, f"Export poll failed: {exc}", input.workspace_id)
-                return self._progress
-
-            if poll_result.finished:
-                storage_path = poll_result.storage_path
-                break
+        # --- Phase 2+3: Export and poll ---
+        storage_path = await self._export_and_poll(input, import_id, modified_after)
+        if storage_path is None:
+            return self._progress  # cancelled or failed
 
         self._progress.status = "processing"
 
         # --- Phase 4: Load chunks from disk and process ---
-        offset = 0
         chunk_index = 0
-
+        offset = 0
         while True:
             if self._cancel_requested:
                 break
 
-            # Load a chunk of molecules from the saved export file
             chunk_result = await workflow.execute_activity(
                 CddFetchActivities.load_export_chunk,
                 LoadExportChunkInput(
@@ -170,7 +136,6 @@ class CddVaultImportWorkflow:
                 retry_policy=_RETRY,
             )
 
-            # Process through registration pipeline
             if chunk_result.items:
                 items = [ChunkItem(**d) for d in chunk_result.items]
 
@@ -188,7 +153,6 @@ class CddVaultImportWorkflow:
                     retry_policy=RetryPolicy(maximum_attempts=3),
                 )
 
-                # Update tracking — use molecule-level counts (not batch-row counts)
                 await workflow.execute_activity(
                     BulkTrackingActivities.update_cdd_import_progress,
                     UpdateCddImportProgressInput(
@@ -202,6 +166,24 @@ class CddVaultImportWorkflow:
                     ),
                     start_to_close_timeout=timedelta(seconds=30),
                 )
+
+                # Record sync mappings (for both full and sync modes)
+                sync_pairs = [
+                    {"cdd_molecule_id": r.cdd_molecule_id, "molecule_id": r.molecule_id, "cdd_modified_at": r.cdd_modified_at}
+                    for r in reg_result.results
+                    if r.success and r.molecule_id and r.cdd_molecule_id
+                ]
+                if sync_pairs:
+                    await workflow.execute_activity(
+                        BulkTrackingActivities.record_sync_mappings,
+                        RecordSyncMappingsInput(
+                            workspace_id=input.workspace_id,
+                            cdd_vault_id=input.cdd_vault_id,
+                            mappings=sync_pairs,
+                        ),
+                        start_to_close_timeout=timedelta(seconds=60),
+                        retry_policy=_RETRY,
+                    )
 
                 self._progress.registered_count += reg_result.mol_registered
                 self._progress.duplicate_count += reg_result.mol_duplicate
@@ -219,7 +201,7 @@ class CddVaultImportWorkflow:
                 )
 
             self._progress.skipped_count += chunk_result.skipped
-            self._progress.current_offset = offset + CHUNK_SIZE
+            self._progress.current_offset += CHUNK_SIZE
             self._progress.pages_processed = chunk_index + 1
             offset += CHUNK_SIZE
             chunk_index += 1
@@ -239,6 +221,83 @@ class CddVaultImportWorkflow:
             self._progress.status = "completed"
 
         return self._progress
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    async def _export_and_poll(
+        self,
+        input: CddVaultImportWorkflowInput,
+        import_id: str,
+        modified_after: str | None,
+    ) -> str | None:
+        """Start a single CDD export, poll until finished, return storage path.
+
+        Uses POST /molecules/query — no URL length limits, no batching needed.
+        Returns None if cancelled or failed.
+        """
+        if self._cancel_requested:
+            await self._fail(import_id, "Cancelled by user", input.workspace_id)
+            return None
+
+        # Start export
+        try:
+            export_result = await workflow.execute_activity(
+                CddFetchActivities.start_molecule_export,
+                CddStartExportInput(
+                    workspace_id=input.workspace_id,
+                    secret_ref=input.secret_ref,
+                    vault_id=input.cdd_vault_id,
+                    max_molecules=input.max_molecules,
+                    modified_after=modified_after,
+                ),
+                start_to_close_timeout=timedelta(minutes=2),
+                retry_policy=_RETRY,
+            )
+        except Exception as exc:
+            await self._fail(import_id, str(exc), input.workspace_id)
+            return None
+
+        # Transition to exporting
+        await workflow.execute_activity(
+            BulkTrackingActivities.complete_discovery,
+            CompleteDiscoveryInput(
+                workspace_id=input.workspace_id,
+                import_id=import_id,
+                total_count=export_result.total_count,
+            ),
+            start_to_close_timeout=timedelta(seconds=30),
+        )
+        self._progress.total_count = export_result.total_count
+        self._progress.status = "exporting"
+
+        # Poll until finished
+        while True:
+            if self._cancel_requested:
+                await self._fail(import_id, "Cancelled by user", input.workspace_id)
+                return None
+
+            await workflow.sleep(timedelta(seconds=30))
+
+            try:
+                poll_result = await workflow.execute_activity(
+                    CddFetchActivities.poll_molecule_export,
+                    CddPollExportInput(
+                        workspace_id=input.workspace_id,
+                        secret_ref=input.secret_ref,
+                        vault_id=input.cdd_vault_id,
+                        export_id=export_result.export_id,
+                    ),
+                    start_to_close_timeout=timedelta(minutes=10),
+                    retry_policy=_RETRY,
+                )
+            except Exception as exc:
+                await self._fail(import_id, f"Export poll failed: {exc}", input.workspace_id)
+                return None
+
+            if poll_result.finished:
+                return poll_result.storage_path
 
     async def _fail(self, import_id: str, reason: str, workspace_id: str = "") -> None:
         await workflow.execute_activity(
