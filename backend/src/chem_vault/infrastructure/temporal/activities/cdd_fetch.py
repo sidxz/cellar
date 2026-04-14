@@ -93,33 +93,64 @@ class CddFetchActivities:
 
     @activity.defn
     async def poll_molecule_export(self, input: CddPollExportInput) -> CddPollExportOutput:
-        """Poll a CDD export. When finished, saves objects to disk and returns the path.
+        """Poll a CDD export. When finished, streams result to disk and splits into chunks.
 
-        The export result can be hundreds of MB — far too large for Temporal
-        payloads (4MB gRPC limit). We save to STORAGE_ROOT and return the path.
+        The export result can be hundreds of MB — streamed directly to disk,
+        never held fully in memory. Too large for Temporal payloads (4MB gRPC limit).
         """
         api_key = await self._resolve_api_key(input.secret_ref)
         client = self._container[CddVaultClient]
 
-        data = await client.get_export_status(input.vault_id, api_key, input.export_id)
-
-        status = data.get("status")
+        # Lightweight status check (no data download)
+        status = await client.check_export_progress(
+            input.vault_id, api_key, input.export_id,
+        )
         if status in ("new", "started"):
             activity.heartbeat(f"export {input.export_id}: {status}")
             return CddPollExportOutput(finished=False)
 
-        objects = data.get("objects", [])
-        count = data.get("count", len(objects))
+        if status == "canceled":
+            raise RuntimeError(f"CDD export {input.export_id} was canceled")
 
-        logger.info("CDD export %d finished: %d molecules", input.export_id, count)
-
-        # Save to disk as per-chunk files so load_export_chunk doesn't re-parse
-        # the entire export on every invocation.
+        # Export finished — set up storage directory
         storage_root = os.getenv("STORAGE_ROOT", "./data/storage")
         export_dir = Path(storage_root) / "cdd-exports" / str(input.export_id)
         export_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write a manifest with total count
+        raw_path = export_dir / "raw_export.json"
+        tmp_path = export_dir / "raw_export.json.tmp"
+
+        # Clean up any partial download from a previous crashed attempt
+        if tmp_path.exists():
+            tmp_path.unlink()
+            logger.info("Removed partial download %s", tmp_path)
+
+        # If raw file already exists (retry after chunk-splitting failed),
+        # skip the download — reuse what we already have.
+        if not raw_path.exists():
+            logger.info("Streaming CDD export %d to disk...", input.export_id)
+            activity.heartbeat(f"export {input.export_id}: downloading")
+            await client.stream_export_to_file(
+                input.vault_id, api_key, input.export_id, str(tmp_path),
+            )
+            # Atomic rename — only complete downloads get the final name
+            tmp_path.rename(raw_path)
+            raw_size = raw_path.stat().st_size
+            logger.info("CDD export %d downloaded: %d bytes", input.export_id, raw_size)
+        else:
+            raw_size = raw_path.stat().st_size
+            logger.info("CDD export %d already on disk (%d bytes), reusing", input.export_id, raw_size)
+
+        # Parse from disk (file-based, avoids double-memory of response.json())
+        activity.heartbeat(f"export {input.export_id}: parsing")
+        with open(raw_path) as f:
+            data = json.load(f)
+
+        objects = data.get("objects", [])
+        count = data.get("count", len(objects))
+        logger.info("CDD export %d: %d objects", input.export_id, count)
+
+        # Write manifest
         (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
 
         # Split into chunk files

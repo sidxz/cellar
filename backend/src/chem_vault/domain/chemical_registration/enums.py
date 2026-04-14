@@ -162,6 +162,7 @@ class CddImportMode(StrEnum):
 
     FULL_VAULT = "full_vault"
     FILTERED = "filtered"
+    SYNC = "sync"
 
 
 # ---------------------------------------------------------------------------

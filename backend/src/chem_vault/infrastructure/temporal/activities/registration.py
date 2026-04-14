@@ -103,6 +103,8 @@ class RegistrationActivities:
                         row_index=item.row_index,
                         success=False,
                         error=str(result.failure()),
+                        cdd_molecule_id=item.cdd_molecule_id,
+                        cdd_modified_at=item.cdd_modified_at,
                     )
                 )
                 continue
@@ -132,6 +134,8 @@ class RegistrationActivities:
                     batch_id=str(batch_id) if batch_id else None,
                     batch_number=batch_number,
                     salt_matched=salt_matched,
+                    cdd_molecule_id=item.cdd_molecule_id,
+                    cdd_modified_at=item.cdd_modified_at,
                 )
             )
 

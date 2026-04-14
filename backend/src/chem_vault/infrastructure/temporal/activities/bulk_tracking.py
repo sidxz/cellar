@@ -25,13 +25,18 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (
     SQLAlchemyCddMoleculeImportRepository,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
+    CddMoleculeSyncRepository,
+)
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.activities.dtos import (
     CompleteBulkRegInput,
     CompleteCddImportInput,
+    CompleteDiscoveryInput,
     CreateBulkRegInput,
     CreateCddImportInput,
     FailCddImportInput,
+    RecordSyncMappingsInput,
     UpdateBulkRegProgressInput,
     UpdateCddImportProgressInput,
 )
@@ -83,8 +88,9 @@ class BulkTrackingActivities:
     async def update_bulk_reg_progress(self, input: UpdateBulkRegProgressInput) -> None:
         """Update BulkRegistration counters after a chunk."""
         uow, repo, _ = self._make_bulk_reg_deps()
+        ws_id = uuid.UUID(input.workspace_id)
         async with uow:
-            bulk_reg = await repo.find_by_id(uuid.UUID(input.bulk_reg_id))
+            bulk_reg = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.bulk_reg_id))
             if bulk_reg is None:
                 raise ValueError(f"BulkRegistration {input.bulk_reg_id} not found")
             for _ in range(input.registered):
@@ -100,8 +106,9 @@ class BulkTrackingActivities:
     async def complete_bulk_registration(self, input: CompleteBulkRegInput) -> None:
         """Complete the BulkRegistration."""
         uow, repo, dispatcher = self._make_bulk_reg_deps()
+        ws_id = uuid.UUID(input.workspace_id)
         async with uow:
-            bulk_reg = await repo.find_by_id(uuid.UUID(input.bulk_reg_id))
+            bulk_reg = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.bulk_reg_id))
             if bulk_reg is None:
                 raise ValueError(f"BulkRegistration {input.bulk_reg_id} not found")
             bulk_reg.complete()
@@ -134,17 +141,15 @@ class BulkTrackingActivities:
         return str(imp.id)
 
     @activity.defn
-    async def complete_discovery(self, import_id: str, total_count: int, workspace_id: str = "") -> None:
+    async def complete_discovery(self, input: CompleteDiscoveryInput) -> None:
         """Transition DISCOVERING -> PROCESSING with total_count."""
         uow, repo, dispatcher = self._make_cdd_deps()
+        ws_id = uuid.UUID(input.workspace_id)
         async with uow:
-            if workspace_id:
-                imp = await repo.find_by_id_in_workspace(uuid.UUID(workspace_id), uuid.UUID(import_id))
-            else:
-                imp = await repo.find_by_id(uuid.UUID(import_id))
+            imp = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.import_id))
             if imp is None:
-                raise ValueError(f"CddMoleculeImport {import_id} not found")
-            imp.complete_discovery(total_count)
+                raise ValueError(f"CddMoleculeImport {input.import_id} not found")
+            imp.complete_discovery(input.total_count)
             await repo.save(imp)
             events = await uow.commit()
             await dispatcher.dispatch_all(events)
@@ -197,3 +202,25 @@ class BulkTrackingActivities:
             await repo.save(imp)
             events = await uow.commit()
             await dispatcher.dispatch_all(events)
+
+    # ------------------------------------------------------------------
+    # CDD sync mapping recording
+    # ------------------------------------------------------------------
+
+    @activity.defn
+    async def record_sync_mappings(self, input: RecordSyncMappingsInput) -> None:
+        """Record CDD→internal molecule mappings after successful registration."""
+        session_factory = self._container[async_sessionmaker]
+        uow = AsyncUnitOfWork(session_factory)
+        sync_repo = CddMoleculeSyncRepository(uow)
+        async with uow:
+            mappings = [
+                (m["cdd_molecule_id"], uuid.UUID(m["molecule_id"]), m.get("cdd_modified_at"))
+                for m in input.mappings
+                if m.get("cdd_molecule_id") and m.get("molecule_id")
+            ]
+            if mappings:
+                await sync_repo.bulk_upsert(
+                    uuid.UUID(input.workspace_id), input.cdd_vault_id, mappings
+                )
+            await uow.commit()

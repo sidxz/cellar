@@ -3,6 +3,7 @@ import {
   BookOpen,
   Building2,
   ClipboardList,
+  DatabaseZap,
   FileText,
   FlaskConical,
   FlaskRound,
@@ -98,6 +99,14 @@ export const navigation: NavGroup[] = [
         ],
       },
       { title: "Audit Log", href: "/admin/audit", icon: ShieldCheck },
+      {
+        title: "Data Import",
+        href: "/admin/data-import/cdd",
+        icon: DatabaseZap,
+        children: [
+          { title: "CDD Vault", href: "/admin/data-import/cdd", icon: DatabaseZap },
+        ],
+      },
     ],
   },
 ];

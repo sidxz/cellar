@@ -23,6 +23,21 @@ export interface CddMoleculeImportStatus {
   pages_processed: number;
 }
 
+export interface CddMoleculeImportSummary {
+  id: string;
+  cdd_vault_id: string;
+  import_mode: string;
+  status: string;
+  workflow_id: string | null;
+  total_count: number;
+  registered_count: number;
+  duplicate_count: number;
+  error_count: number;
+  skipped_count: number;
+  submitted_at: string;
+  completed_at: string | null;
+}
+
 export function useStartCddMoleculeImport() {
   return useMutation({
     mutationFn: ({
@@ -32,7 +47,7 @@ export function useStartCddMoleculeImport() {
       maxMolecules,
     }: {
       originatingOrgId: string;
-      importMode?: string;
+      importMode?: "full_vault" | "sync";
       filterCriteria?: Record<string, unknown>;
       maxMolecules?: number;
     }) =>
@@ -91,5 +106,31 @@ export function useCancelCddMoleculeImport() {
         url: `/api/v1/cdd-import/molecules/${workflowId}/cancel`,
         method: "POST",
       }),
+  });
+}
+
+export function useForceFailImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (importId: string) =>
+      customInstance({
+        url: `/api/v1/cdd-import/molecules/${importId}/force-fail`,
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
+    },
+  });
+}
+
+export function useImportHistory() {
+  return useQuery({
+    queryKey: ["cdd-molecule-import", "history"],
+    queryFn: () =>
+      customInstance<CddMoleculeImportSummary[]>({
+        url: "/api/v1/cdd-import/molecules",
+        method: "GET",
+      }),
+    staleTime: 30_000,
   });
 }

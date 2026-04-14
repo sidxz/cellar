@@ -64,7 +64,7 @@ class StartCddMoleculeImport:
         """Validate CDD config. Returns CddImportConfig on success."""
         require_editor(auth)
 
-        if input.import_mode not in ("full_vault", "filtered"):
+        if input.import_mode not in ("full_vault", "filtered", "sync"):
             return Failure(ValidationError(f"Invalid import_mode: {input.import_mode}"))
 
         async with self._uow:

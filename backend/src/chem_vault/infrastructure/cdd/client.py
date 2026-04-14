@@ -207,10 +207,63 @@ class CddVaultClient:
         total = data.get("count", len(ids))
         return ids, total
 
+    async def check_export_progress(
+        self, vault_id: str, api_key: str, export_id: int
+    ) -> str:
+        """Lightweight export status check via /export_progress (no data download).
+
+        Returns status string: "new", "started", "finished", or "canceled".
+        """
+        url = f"{BASE_URL}/vaults/{vault_id}/export_progress/{export_id}"
+        data = await self._get(url, api_key)
+        return data.get("status", "unknown")
+
+    async def stream_export_to_file(
+        self, vault_id: str, api_key: str, export_id: int, dest_path: str
+    ) -> None:
+        """Download a finished export result by streaming to disk.
+
+        Follows the 302 redirect to the presigned S3 URL and writes the
+        response body in chunks — never holds the full payload in memory.
+        """
+        url = f"{BASE_URL}/vaults/{vault_id}/exports/{export_id}"
+        try:
+            response = await self._http.get(
+                url, headers=self._headers(api_key),
+                timeout=120.0, follow_redirects=False,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise CddConnectionError(f"Cannot reach CDD Vault: {exc}") from exc
+
+        if response.status_code != 302:
+            raise CddClientError(
+                f"Expected 302 redirect for finished export, got {response.status_code}",
+                status_code=response.status_code,
+            )
+
+        redirect_url = response.headers["location"]
+        # Presigned S3 URL — do NOT send CDD auth header, stream to disk
+        try:
+            async with self._http.stream(
+                "GET", redirect_url, timeout=1800.0, follow_redirects=True,
+            ) as stream:
+                if not stream.is_success:
+                    raise CddClientError(
+                        f"Export download failed: {stream.status_code}",
+                        status_code=stream.status_code,
+                    )
+                with open(dest_path, "wb") as f:
+                    async for chunk in stream.aiter_bytes(chunk_size=65536):
+                        f.write(chunk)
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise CddConnectionError(f"Export download timed out: {exc}") from exc
+
     async def get_export_status(
         self, vault_id: str, api_key: str, export_id: int
     ) -> dict[str, Any]:
-        """Check status of an async export.
+        """Check status of an async export (legacy — loads entire response into memory).
+
+        Prefer check_export_progress + stream_export_to_file for large exports.
 
         Returns:
             - ``{"status": "new"|"started", ...}`` while processing

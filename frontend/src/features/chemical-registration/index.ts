@@ -9,8 +9,8 @@ export { MergeConfirmationDialog } from "./components/merge-confirmation-dialog"
 export { useMolecules, useMolecule, useRegisterMolecule, useUpdateMolecule, useSearchMolecules, useMoleculeByIdentifier } from "./hooks/use-molecules";
 export { useDisclosuresForMolecule, useSubmitDisclosure, useMergeMolecules, useResolveDisclosureConflict, useMergeHistory } from "./hooks/use-disclosures";
 export { useBulkRegistration } from "./hooks/use-bulk-registration";
-export { CddMoleculeImportDialog } from "./components/cdd-molecule-import-dialog";
-export { useStartCddMoleculeImport, useCddMoleculeImportStatus } from "./hooks/use-cdd-molecule-import";
+export { DataImportPage } from "./components/data-import-page";
+export { useStartCddMoleculeImport, useCddMoleculeImportStatus, useImportHistory } from "./hooks/use-cdd-molecule-import";
 export type { Molecule, RegisterMoleculeInput, RegistrationResponse, UpdateMoleculeInput } from "./types";
 export type {
   DisclosureRequest,

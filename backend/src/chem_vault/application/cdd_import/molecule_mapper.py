@@ -50,6 +50,7 @@ class MappedMolecule:
     molecule_type: str = "small_molecule"
     external_ids: list[dict[str, str]] = field(default_factory=list)
     batches: list[MappedBatch] = field(default_factory=list)
+    cdd_modified_at: str | None = None  # ISO timestamp from CDD
     skipped: bool = False
     skip_reason: str | None = None
 
@@ -113,6 +114,7 @@ def _map_single(
             smiles=smiles,
             external_ids=external_ids,
             batches=batches,
+            cdd_modified_at=obj.get("modified_at"),
         ),
         warnings,
     )

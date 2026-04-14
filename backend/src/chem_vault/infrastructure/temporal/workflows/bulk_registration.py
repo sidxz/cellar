@@ -156,6 +156,7 @@ class BulkRegistrationWorkflow:
             await workflow.execute_activity(
                 BulkTrackingActivities.update_bulk_reg_progress,
                 UpdateBulkRegProgressInput(
+                    workspace_id=input.workspace_id,
                     bulk_reg_id=bulk_reg_id,
                     registered=chunk_result.registered,
                     duplicate=chunk_result.duplicate,
@@ -196,7 +197,7 @@ class BulkRegistrationWorkflow:
         if not self._cancel_requested:
             await workflow.execute_activity(
                 BulkTrackingActivities.complete_bulk_registration,
-                CompleteBulkRegInput(bulk_reg_id=bulk_reg_id),
+                CompleteBulkRegInput(workspace_id=input.workspace_id, bulk_reg_id=bulk_reg_id),
                 start_to_close_timeout=timedelta(seconds=30),
             )
             self._progress.status = "completed"

@@ -25,6 +25,8 @@ import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mo
 import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models  # noqa: F401
 import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models  # noqa: F401
 import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models  # noqa: F401
+import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_models  # noqa: F401
+import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_model  # noqa: F401
 import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
 import chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
