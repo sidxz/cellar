@@ -133,34 +133,49 @@ class CddFetchActivities:
 
         return CddPollExportOutput(finished=True, count=count, storage_path=str(export_dir))
 
-    @activity.defn
-    async def load_export_chunk(self, input: LoadExportChunkInput) -> LoadExportChunkOutput:
-        """Load a chunk of molecules from a pre-split chunk file and map to ChunkItems."""
+    @staticmethod
+    def _load_raw_chunk(
+        storage_path: str,
+        offset: int,
+        limit: int,
+        max_items: int | None = None,
+    ) -> tuple[list[dict], bool]:
+        """Load raw JSON objects from a pre-split chunk file.
 
-        export_dir = Path(input.storage_path)
+        Returns (objects, has_more). Generic — works for any CDD entity type.
+        """
+        export_dir = Path(storage_path)
         if not export_dir.exists():
-            raise FileNotFoundError(f"Export directory not found: {input.storage_path}")
+            raise FileNotFoundError(f"Export directory not found: {storage_path}")
 
         manifest = json.loads((export_dir / "manifest.json").read_text())
         total_objects = manifest["count"]
 
-        # Cap at max_molecules if set
-        effective_total = min(total_objects, input.max_molecules) if input.max_molecules else total_objects
+        effective_total = min(total_objects, max_items) if max_items else total_objects
 
-        # Read the pre-split chunk file for this offset
-        chunk_path = export_dir / f"chunk_{input.offset:06d}.json"
+        chunk_path = export_dir / f"chunk_{offset:06d}.json"
         if not chunk_path.exists():
-            # No chunk at this offset — we're past the end
-            return LoadExportChunkOutput(items=[], skipped=0, has_more=False, molecule_count=0)
+            return [], False
 
         chunk_objects = json.loads(chunk_path.read_text())
 
-        # If max_molecules limits us mid-chunk, trim
-        remaining = effective_total - input.offset
+        remaining = effective_total - offset
         if remaining < len(chunk_objects):
             chunk_objects = chunk_objects[:remaining]
 
-        has_more = (input.offset + input.limit) < effective_total
+        has_more = (offset + limit) < effective_total
+        return chunk_objects, has_more
+
+    @activity.defn
+    async def load_export_chunk(self, input: LoadExportChunkInput) -> LoadExportChunkOutput:
+        """Load a chunk of molecules from a pre-split chunk file and map to ChunkItems."""
+
+        chunk_objects, has_more = self._load_raw_chunk(
+            input.storage_path, input.offset, input.limit, input.max_molecules,
+        )
+
+        if not chunk_objects:
+            return LoadExportChunkOutput(items=[], skipped=0, has_more=False, molecule_count=0)
 
         mapped, _ = map_cdd_molecules(chunk_objects)
 
@@ -171,8 +186,6 @@ class CddFetchActivities:
             if mol.skipped:
                 skipped += 1
                 continue
-            # row_index is a sequential index (not CDD ID) so mol_outcomes
-            # deduplication in process_chunk works even if CDD IDs are missing.
             row_index = input.offset + mol_idx
             molecule_count += 1
             if mol.batches:
