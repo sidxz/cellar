@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
@@ -50,8 +51,8 @@ class CddMoleculeImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
         Integer, nullable=False, server_default="0"
     )
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    submitted_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
-    completed_at: Mapped[str | None] = mapped_column(DateTime(timezone=True))
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         Index("ix_cdd_mol_import_ws_status", "workspace_id", "status"),
