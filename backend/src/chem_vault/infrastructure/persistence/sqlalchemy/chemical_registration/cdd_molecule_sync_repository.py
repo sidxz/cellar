@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from dateutil.parser import isoparse
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -81,7 +82,7 @@ class CddMoleculeSyncRepository:
                 "cdd_vault_id": cdd_vault_id,
                 "cdd_molecule_id": cdd_mol_id,
                 "molecule_id": mol_id,
-                "cdd_modified_at": mod_at,
+                "cdd_modified_at": isoparse(mod_at) if mod_at else None,
                 "last_synced_at": now,
                 "created_at": now,
                 "updated_at": now,
