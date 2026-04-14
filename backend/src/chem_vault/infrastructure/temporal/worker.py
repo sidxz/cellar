@@ -69,10 +69,13 @@ async def run_worker() -> None:
             tracking.update_cdd_import_progress,
             tracking.complete_cdd_import,
             tracking.fail_cdd_import,
+            # CDD sync mapping
+            tracking.record_sync_mappings,
             # CDD fetch (async export model)
             cdd_fetch.start_molecule_export,
             cdd_fetch.poll_molecule_export,
             cdd_fetch.load_export_chunk,
+            cdd_fetch.get_sync_watermark,
             # File parsing
             file_parsing.parse_file,
             # Registration (shared)
