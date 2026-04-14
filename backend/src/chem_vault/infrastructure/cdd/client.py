@@ -4,10 +4,10 @@ Returns raw dicts (parsed JSON). Domain mapping happens in the application layer
 Designed for reuse across protocol, run, molecule, plate, project imports.
 
 CDD molecule export is async:
-  1. POST /molecules?async=true  → {id, status: "new"}
-  2. GET  /exports/{id}          → {status: "started"} (poll)
-  3. GET  /exports/{id}          → 302 redirect to result (follow it)
-  4. Result JSON                 → {count, objects: [{smiles, ...}]}
+  1. POST /molecules/query  (JSON body with "async": true) → {id, status: "new"}
+  2. GET  /exports/{id}     → {status: "started"} (poll)
+  3. GET  /exports/{id}     → 302 redirect to result (follow it)
+  4. Result JSON            → {count, objects: [{smiles, ...}]}
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ class CddVaultClient:
         self._check_response(response)
         return response.json()
 
-    async def _post_query(self, url: str, api_key: str, body: dict, *, timeout: float = 30.0) -> Any:
+    async def _post_query(self, url: str, api_key: str, body: dict[str, Any], *, timeout: float = 30.0) -> Any:
         """POST JSON body to a CDD /query endpoint."""
         try:
             response = await self._http.post(
@@ -138,6 +138,9 @@ class CddVaultClient:
 
         Returns the export job ID.
         """
+        if molecule_ids is not None and modified_after is not None:
+            raise ValueError("molecule_ids and modified_after are mutually exclusive")
+
         url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
         body: dict[str, Any] = {"async": True}
 
