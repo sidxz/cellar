@@ -75,6 +75,20 @@ class CddVaultClient:
         self._check_response(response)
         return response.json()
 
+    async def _post_query(self, url: str, api_key: str, body: dict, *, timeout: float = 30.0) -> Any:
+        """POST JSON body to a CDD /query endpoint."""
+        try:
+            response = await self._http.post(
+                url,
+                headers=self._headers(api_key),
+                json=body,
+                timeout=timeout,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise CddConnectionError(f"Cannot reach CDD Vault: {exc}") from exc
+        self._check_response(response)
+        return response.json()
+
     async def list_protocols(self, vault_id: str, api_key: str) -> list[dict[str, Any]]:
         """Fetch all protocols from CDD Vault, handling pagination."""
         all_objects: list[dict[str, Any]] = []
@@ -108,19 +122,39 @@ class CddVaultClient:
         api_key: str,
         *,
         molecule_ids: list[int] | None = None,
+        modified_after: str | None = None,
+        max_molecules: int | None = None,
     ) -> int:
-        """Trigger an async molecule export on CDD Vault.
+        """Trigger an async molecule export via POST /molecules/query.
 
         Args:
-            molecule_ids: Optional list of specific CDD molecule IDs to export.
-                          If None, exports ALL molecules in the vault.
+            molecule_ids: Export only these CDD molecule IDs.
+                          Cannot be combined with modified_after.
+            modified_after: ISO 8601 timestamp — export molecules
+                           modified/created after this date.
+                           Cannot be combined with molecule_ids.
+            max_molecules: Fetch this many IDs first (via only_ids),
+                           then export them. Used for testing caps.
 
-        Returns the export job ID. Poll with ``get_export_status``.
+        Returns the export job ID.
         """
-        url = f"{BASE_URL}/vaults/{vault_id}/molecules?async=true"
-        if molecule_ids:
-            url += f"&molecules={','.join(str(i) for i in molecule_ids)}"
-        data = await self._get(url, api_key)
+        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
+        body: dict[str, Any] = {"async": True}
+
+        if molecule_ids is not None:
+            # CDD wants comma-separated string, not a JSON array
+            body["molecules"] = ",".join(str(i) for i in molecule_ids)
+        elif modified_after is not None:
+            body["modified_after"] = modified_after
+        elif max_molecules is not None:
+            # Testing cap: fetch N IDs first, then export those
+            all_ids, _ = await self.list_molecule_ids(
+                vault_id, api_key, page_size=max_molecules,
+            )
+            ids_to_export = all_ids[:max_molecules]
+            body["molecules"] = ",".join(str(i) for i in ids_to_export)
+
+        data = await self._post_query(url, api_key, body)
         return data["id"]
 
     async def list_molecule_ids(
