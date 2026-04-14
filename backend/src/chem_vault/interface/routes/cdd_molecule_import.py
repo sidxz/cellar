@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from temporalio.client import WorkflowExecutionStatus
 from temporalio.service import RPCError, RPCStatusCode
 
 from chem_vault.application.auth import require_editor
@@ -195,9 +196,27 @@ async def get_cdd_molecule_import_status(
     try:
         handle = temporal_client.get_workflow_handle(workflow_id)
         progress = await handle.query(CddVaultImportWorkflow.get_progress)
+        status = progress.status
+
+        # Detect crashed workflows: Temporal says progress is non-terminal
+        # but the execution actually failed/terminated (activity retries exhausted, etc.)
+        if status not in ("completed", "completed_with_errors", "failed"):
+            try:
+                desc = await handle.describe()
+                exec_status = desc.status
+                if exec_status in (
+                    WorkflowExecutionStatus.FAILED,
+                    WorkflowExecutionStatus.TERMINATED,
+                    WorkflowExecutionStatus.TIMED_OUT,
+                    WorkflowExecutionStatus.CANCELED,
+                ):
+                    status = "failed"
+            except Exception:
+                pass  # describe() failed — use progress status as-is
+
         return CddMoleculeImportStatusResponse(
             import_id=progress.import_id,
-            status=progress.status,
+            status=status,
             total_count=progress.total_count,
             registered_count=progress.registered_count,
             duplicate_count=progress.duplicate_count,
@@ -251,7 +270,9 @@ async def cancel_cdd_molecule_import(
         await handle.signal(CddVaultImportWorkflow.cancel)
     except RPCError as exc:
         if exc.status == RPCStatusCode.NOT_FOUND:
-            raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
+            # Workflow already terminated (crashed/completed) — that's fine,
+            # the user wants it stopped and it already is. Return success.
+            return
         raise
 
 
