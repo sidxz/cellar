@@ -32,6 +32,8 @@ class ChunkItem:
     batch_source: str = "synthesized"
     appearance: str | None = None
     vendor_catalog_number: str | None = None  # CDD molecule_batch_identifier
+    cdd_molecule_id: int | None = None
+    cdd_modified_at: str | None = None  # ISO timestamp from CDD
 
 
 @dataclass
@@ -57,6 +59,8 @@ class ChunkItemResult:
     batch_number: str | None = None
     salt_matched: bool = False
     error: str | None = None
+    cdd_molecule_id: int | None = None
+    cdd_modified_at: str | None = None
 
 
 @dataclass
@@ -95,6 +99,7 @@ class CreateBulkRegInput:
 class UpdateBulkRegProgressInput:
     """Input for updating BulkRegistration progress counters."""
 
+    workspace_id: str
     bulk_reg_id: str
     registered: int = 0
     duplicate: int = 0
@@ -105,6 +110,7 @@ class UpdateBulkRegProgressInput:
 class CompleteBulkRegInput:
     """Input for completing a BulkRegistration."""
 
+    workspace_id: str
     bulk_reg_id: str
 
 
@@ -124,6 +130,15 @@ class CreateCddImportInput:
     submitted_by: str
     workflow_id: str | None = None
     filter_criteria: dict | None = None
+
+
+@dataclass
+class CompleteDiscoveryInput:
+    """Input for completing discovery phase (DISCOVERING -> PROCESSING)."""
+
+    workspace_id: str
+    import_id: str
+    total_count: int
 
 
 @dataclass
@@ -156,6 +171,29 @@ class FailCddImportInput:
     reason: str
 
 
+@dataclass
+class CddSyncWatermarkInput:
+    """Input for fetching the sync high-water-mark timestamp."""
+
+    workspace_id: str
+    vault_id: str
+
+
+@dataclass
+class CddSyncWatermarkOutput:
+    """Output of the sync watermark lookup."""
+
+    modified_after: str | None = None  # ISO 8601 or None if first sync
+    synced_count: int = 0
+
+
+@dataclass
+class RecordSyncMappingsInput:
+    workspace_id: str
+    cdd_vault_id: str
+    mappings: list[dict] = field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # CDD fetch
 # ---------------------------------------------------------------------------
@@ -169,6 +207,8 @@ class CddStartExportInput:
     secret_ref: str
     vault_id: str
     max_molecules: int | None = None
+    molecule_ids: list[int] | None = None
+    modified_after: str | None = None  # ISO 8601 timestamp for sync mode
 
 
 @dataclass
