@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
+import { CloudDownload, Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
@@ -23,6 +23,8 @@ import {
 import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
 import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
 import { BulkRegistrationDialog } from "./bulk-registration-dialog";
+import { CddMoleculeImportDialog } from "./cdd-molecule-import-dialog";
+import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import { CompoundSearchBar } from "./compound-search-bar";
 import { DisclosureDialog } from "./disclosure-dialog";
 import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
@@ -32,6 +34,8 @@ export function MoleculeList() {
   const { data: molecules, isLoading, error } = useMolecules();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [cddImportOpen, setCddImportOpen] = useState(false);
+  const { enabled: cddEnabled } = useCddEnabled();
   const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
   const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
@@ -165,6 +169,12 @@ export function MoleculeList() {
           <Download className="h-4 w-4" />
           Export SDF
         </Button>
+        {cddEnabled && (
+          <Button variant="outline" onClick={() => setCddImportOpen(true)}>
+            <CloudDownload className="mr-2 h-4 w-4" />
+            Import from CDD
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}>
           <Upload className="mr-2 h-4 w-4" />
           Bulk Upload
@@ -220,6 +230,7 @@ export function MoleculeList() {
         onOpenChange={setDialogOpen}
       />
       <BulkRegistrationDialog open={bulkOpen} onOpenChange={setBulkOpen} />
+      <CddMoleculeImportDialog open={cddImportOpen} onOpenChange={setCddImportOpen} />
       {discloseMol && (
         <DisclosureDialog
           molecule={discloseMol}

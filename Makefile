@@ -22,7 +22,7 @@ BACKEND  := cd backend
 FRONTEND := cd frontend
 LOGDIR   := .logs
 
-.PHONY: help up down install dev dev-be dev-fe stop migrate test test-api test-all lint nuke restart status logs logs-dev
+.PHONY: help up down install dev dev-be dev-fe dev-worker stop migrate test test-api test-all lint nuke restart status logs logs-dev
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -30,8 +30,8 @@ help: ## Show this help
 
 # ── Infrastructure ─────────────────────────────────────────────
 
-up: ## Start Postgres + Valkey + Infisical, run migrations, bootstrap secrets
-	docker compose up -d postgres valkey infisical-db infisical
+up: ## Start Postgres + Valkey + Infisical + Temporal, run migrations, bootstrap secrets
+	docker compose up -d postgres valkey infisical-db infisical temporal-db temporal temporal-ui
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec postgres pg_isready -U chemvault -q 2>/dev/null; do sleep 1; done
 	@echo "Postgres ready"
@@ -46,7 +46,7 @@ status: ## Show container status
 	docker compose ps
 
 logs: ## Tail container logs
-	docker compose logs -f postgres valkey infisical
+	docker compose logs -f postgres valkey infisical temporal
 
 # ── Dependencies ──────────────────────────────────────────────
 
@@ -56,21 +56,29 @@ install: ## Install all dependencies (backend + frontend)
 
 # ── Development Servers ────────────────────────────────────────
 
-dev: install stop ## Install deps, stop old instances, start backend + frontend
+dev: install stop migrate ## Install deps, stop old instances, run migrations, start backend + worker + frontend
 	@mkdir -p $(LOGDIR)
+	@pkill -f "chem_vault.infrastructure.temporal.worker" 2>/dev/null || true
+	@lsof -ti:8000 | xargs kill 2>/dev/null || true
+	@lsof -ti:3000 | xargs kill 2>/dev/null || true
+	@sleep 1
 	@echo "Starting backend on :8000..."
 	@nohup sh -c '$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
+	@echo "Starting Temporal worker..."
+	@nohup sh -c '$(BACKEND) && uv run python -m chem_vault.infrastructure.temporal.worker' \
+		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
 	@echo "Starting frontend on :3000..."
 	@nohup sh -c '$(FRONTEND) && pnpm dev' \
 		> $(LOGDIR)/frontend.log 2>&1 & echo "$$!" > $(LOGDIR)/frontend.pid
 	@sleep 1
 	@echo ""
 	@echo "  Backend:  http://localhost:8000  (PID $$(cat $(LOGDIR)/backend.pid))"
+	@echo "  Worker:   Temporal worker        (PID $$(cat $(LOGDIR)/worker.pid))"
 	@echo "  Frontend: http://localhost:3000  (PID $$(cat $(LOGDIR)/frontend.pid))"
 	@echo ""
 	@echo "  make logs-dev  — tail server output"
-	@echo "  make stop      — stop both servers"
+	@echo "  make stop      — stop all servers"
 
 dev-be: ## Start backend only
 	@mkdir -p $(LOGDIR)
@@ -84,22 +92,37 @@ dev-fe: ## Start frontend only
 		> $(LOGDIR)/frontend.log 2>&1 & echo "$$!" > $(LOGDIR)/frontend.pid
 	@echo "Frontend started on :3000 (PID $$(cat $(LOGDIR)/frontend.pid))"
 
-stop: ## Stop backend + frontend dev servers
+dev-worker: ## Start Temporal worker only (kills existing first)
+	@pkill -f "chem_vault.infrastructure.temporal.worker" 2>/dev/null || true
+	@sleep 1
+	@mkdir -p $(LOGDIR)
+	@nohup sh -c '$(BACKEND) && uv run python -m chem_vault.infrastructure.temporal.worker' \
+		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
+	@echo "Temporal worker started (PID $$(cat $(LOGDIR)/worker.pid))"
+
+stop: ## Stop backend + worker + frontend dev servers
 	@if [ -f $(LOGDIR)/backend.pid ] && kill -0 $$(cat $(LOGDIR)/backend.pid) 2>/dev/null; then \
 		kill $$(cat $(LOGDIR)/backend.pid) 2>/dev/null; \
 		echo "Backend stopped (PID $$(cat $(LOGDIR)/backend.pid))"; \
+	fi
+	@if [ -f $(LOGDIR)/worker.pid ] && kill -0 $$(cat $(LOGDIR)/worker.pid) 2>/dev/null; then \
+		kill $$(cat $(LOGDIR)/worker.pid) 2>/dev/null; \
+		echo "Worker stopped (PID $$(cat $(LOGDIR)/worker.pid))"; \
 	fi
 	@if [ -f $(LOGDIR)/frontend.pid ] && kill -0 $$(cat $(LOGDIR)/frontend.pid) 2>/dev/null; then \
 		kill $$(cat $(LOGDIR)/frontend.pid) 2>/dev/null; \
 		echo "Frontend stopped (PID $$(cat $(LOGDIR)/frontend.pid))"; \
 	fi
-	@rm -f $(LOGDIR)/backend.pid $(LOGDIR)/frontend.pid
+	@rm -f $(LOGDIR)/backend.pid $(LOGDIR)/frontend.pid $(LOGDIR)/worker.pid
 	@lsof -ti:8000 | xargs kill 2>/dev/null || true
 	@lsof -ti:3000 | xargs kill 2>/dev/null || true
 
 logs-dev: ## Tail dev server logs
-	@tail -f $(LOGDIR)/backend.log $(LOGDIR)/frontend.log 2>/dev/null || \
+	@tail -f $(LOGDIR)/backend.log $(LOGDIR)/worker.log $(LOGDIR)/frontend.log 2>/dev/null || \
 		echo "No logs found. Run 'make dev' first."
+
+logs-worker: ## Tail Temporal worker logs
+	@tail -f $(LOGDIR)/worker.log 2>/dev/null || echo "No worker log. Run 'make dev-worker' first."
 
 migrate: ## Run Alembic migrations
 	$(BACKEND) && uv run alembic upgrade head

@@ -146,6 +146,24 @@ class BulkRegistrationFileFormat(StrEnum):
     XLSX = "xlsx"
 
 
+class CddMoleculeImportStatus(StrEnum):
+    """Status of a CDD vault molecule import operation."""
+
+    PENDING = "pending"
+    DISCOVERING = "discovering"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    FAILED = "failed"
+
+
+class CddImportMode(StrEnum):
+    """How molecules are selected for CDD import."""
+
+    FULL_VAULT = "full_vault"
+    FILTERED = "filtered"
+
+
 # ---------------------------------------------------------------------------
 # Synthesis Route enums
 # ---------------------------------------------------------------------------

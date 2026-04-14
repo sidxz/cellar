@@ -7,6 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from chem_vault.domain.chemical_registration.bulk_disclosure import BulkDisclosure
 from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
+from chem_vault.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
 from chem_vault.domain.chemical_registration.molecule import Molecule
@@ -148,6 +149,23 @@ class BulkRegistrationRepository(Protocol):
         self, workspace_id: uuid.UUID
     ) -> list[BulkRegistration]: ...
     async def save(self, aggregate: BulkRegistration) -> None: ...
+
+
+@runtime_checkable
+class CddMoleculeImportRepository(Protocol):
+    """Repository for CddMoleculeImport aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> CddMoleculeImport | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> CddMoleculeImport | None: ...
+    async def find_by_workflow_id_in_workspace(
+        self, workspace_id: uuid.UUID, workflow_id: str
+    ) -> CddMoleculeImport | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[CddMoleculeImport]: ...
+    async def save(self, aggregate: CddMoleculeImport) -> None: ...
 
 
 @runtime_checkable

@@ -23,3 +23,11 @@ class CddNotFoundError(CddClientError):
 
 class CddConnectionError(CddClientError):
     """Cannot reach CDD Vault API."""
+
+
+class CddRateLimitError(CddClientError):
+    """CDD API rate limit exceeded (429). Retryable after ``retry_after`` seconds."""
+
+    def __init__(self, message: str, retry_after: int = 60) -> None:
+        super().__init__(message, status_code=429)
+        self.retry_after = retry_after

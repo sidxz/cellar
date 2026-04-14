@@ -1734,6 +1734,11 @@ def create_container(
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
 
+    # --- Temporal ---
+    from chem_vault.infrastructure.temporal.settings import TemporalSettings
+
+    container.define(TemporalSettings, Singleton(TemporalSettings))
+
     # --- CDD Import ---
     import httpx
 
@@ -1773,5 +1778,19 @@ def create_container(
     container.define(ListCddProtocols, _cdd_query(ListCddProtocols))
     container.define(PreviewCddProtocolImport, _cdd_query(PreviewCddProtocolImport))
     container.define(ImportCddProtocol, _cdd_import_cmd)
+
+    # --- CDD Molecule Import ---
+    from chem_vault.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
+
+    def _start_cdd_mol_import(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return StartCddMoleculeImport(
+            uow=uow,
+            secret_provider=c[SecretProvider],
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+        )
+
+    container.define(StartCddMoleculeImport, _start_cdd_mol_import)
 
     return container

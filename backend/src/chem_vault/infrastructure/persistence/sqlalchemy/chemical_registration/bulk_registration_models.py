@@ -24,6 +24,7 @@ class BulkRegistrationModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMix
     file_format: Mapped[str] = mapped_column(String(10), nullable=False)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     submitted_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
+    workflow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="pending"
     )

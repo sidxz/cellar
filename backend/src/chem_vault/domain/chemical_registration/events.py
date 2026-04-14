@@ -91,6 +91,37 @@ class BulkRegistrationCompleted(DomainEvent):
 
 
 # ---------------------------------------------------------------------------
+# CDD Molecule Import events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddMoleculeImportStarted(DomainEvent):
+    workspace_id: uuid.UUID
+    cdd_vault_id: str
+    import_mode: str
+    submitted_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddMoleculeImportDiscoveryComplete(DomainEvent):
+    total_count: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddMoleculeImportCompleted(DomainEvent):
+    registered_count: int
+    duplicate_count: int
+    error_count: int
+    skipped_count: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddMoleculeImportFailed(DomainEvent):
+    reason: str
+
+
+# ---------------------------------------------------------------------------
 # Synthesis Route events
 # ---------------------------------------------------------------------------
 

@@ -56,6 +56,26 @@ services:
     ports:
       - "8080:8080"
 
+  temporal-worker:
+    build: ./backend
+    command: [".venv/bin/python", "-m", "chem_vault.infrastructure.temporal.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chemvault:chemvault@postgres:5432/chemvault
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      STORAGE_ROOT: /data/storage
+      LOG_LEVEL: DEBUG
+      INFISICAL_BASE_URL: http://infisical:8080
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+    volumes:
+      - file-storage:/data/storage
+
   backend:
     build: ./backend
     depends_on:

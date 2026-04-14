@@ -41,6 +41,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     session_factory = container[async_sm]
     dispatcher.register(DomainEvent, AuditEventHandler(session_factory))
 
+    # Temporal client — graceful fallback to None for local dev without Temporal
+    from chem_vault.infrastructure.temporal import TemporalSettings, create_temporal_client
+
+    try:
+        temporal_settings = TemporalSettings()
+        temporal_client = await create_temporal_client(temporal_settings)
+        app.state.temporal_client = temporal_client
+    except Exception:
+        import structlog
+        structlog.get_logger().warning("temporal_unavailable", msg="Temporal not reachable — bulk ops will run synchronously")
+        app.state.temporal_client = None
+
     # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
     async with sentinel.lifespan(app):
         yield
@@ -184,6 +196,9 @@ def create_app() -> FastAPI:
 
     from chem_vault.interface.routes.cdd_import import router as cdd_import_router
     app.include_router(cdd_import_router)
+
+    from chem_vault.interface.routes.cdd_molecule_import import router as cdd_mol_import_router
+    app.include_router(cdd_mol_import_router)
 
     from chem_vault.interface.routes.plate_setup import router as plate_setup_router
     app.include_router(plate_setup_router)

@@ -61,6 +61,7 @@ def configure_logging(*, json_output: bool = True, log_level: str = "INFO") -> N
     # Quiet noisy libraries
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def bind_correlation_id(correlation_id: str | None = None) -> str:

@@ -1,4 +1,11 @@
 services:
+  temporal-worker:
+    build:
+      context: ./backend
+    command: .venv/bin/python -m chem_vault.infrastructure.temporal.worker
+    volumes:
+      - ./backend/src:/app/src
+
   backend:
     build:
       context: ./backend

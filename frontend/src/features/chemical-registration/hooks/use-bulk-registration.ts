@@ -1,6 +1,7 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { customInstance } from "@/shared/lib/api/custom-instance";
 import { getApiBaseUrl } from "@/shared/lib/api/custom-instance";
 import { getSentinelClient } from "@/shared/lib/auth/config";
 
@@ -27,6 +28,28 @@ export interface BulkRegistrationResponse {
   items: BulkRegistrationItemResult[];
 }
 
+export interface BulkRegistrationAccepted {
+  workflow_id: string;
+  status: string;
+  message: string;
+}
+
+export interface BulkRegistrationStatus {
+  bulk_reg_id: string;
+  status: string;
+  total_count: number;
+  registered_count: number;
+  duplicate_count: number;
+  error_count: number;
+  chunks_processed: number;
+  chunks_total: number;
+}
+
+/** Result type: either sync (201 with full results) or async (202 with workflow_id). */
+export type BulkRegistrationResult =
+  | { mode: "sync"; data: BulkRegistrationResponse }
+  | { mode: "async"; workflowId: string };
+
 export function useBulkRegistration() {
   const qc = useQueryClient();
   return useMutation({
@@ -38,7 +61,7 @@ export function useBulkRegistration() {
       file: File;
       fileFormat: string;
       originatingOrgId: string;
-    }) => {
+    }): Promise<BulkRegistrationResult> => {
       const client = getSentinelClient();
       const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
 
@@ -59,8 +82,46 @@ export function useBulkRegistration() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Upload failed: ${res.status}`);
       }
-      return res.json() as Promise<BulkRegistrationResponse>;
+
+      if (res.status === 202) {
+        const accepted = (await res.json()) as BulkRegistrationAccepted;
+        return { mode: "async", workflowId: accepted.workflow_id };
+      }
+
+      // 201 — sync result
+      const data = (await res.json()) as BulkRegistrationResponse;
+      return { mode: "sync", data };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
+    onSuccess: (result) => {
+      if (result.mode === "sync") {
+        qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      }
+    },
+  });
+}
+
+export function useBulkRegistrationStatus(workflowId: string | null) {
+  const qc = useQueryClient();
+
+  return useQuery({
+    queryKey: ["bulk-registration", "status", workflowId],
+    queryFn: async () => {
+      const result = await customInstance<BulkRegistrationStatus>({
+        url: `/api/v1/bulk-registrations/${workflowId}/status`,
+        method: "GET",
+      });
+      if (result.status === "completed" || result.status === "completed_with_errors") {
+        qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      }
+      return result;
+    },
+    enabled: !!workflowId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "completed" || status === "completed_with_errors") {
+        return false;
+      }
+      return 2000;
+    },
   });
 }
