@@ -48,6 +48,10 @@ class BulkRegistrationWorkflowInput:
     resume_registered: int = 0
     resume_duplicate: int = 0
     resume_error: int = 0
+    resume_disclosed: int = 0
+    resume_merge_candidate: int = 0
+    resume_conflict: int = 0
+    resume_merge_candidates_list: list[dict] = field(default_factory=list)
     resume_chunks: list[list[dict]] | None = None
 
 
@@ -61,12 +65,23 @@ class BulkRegistrationProgress:
     registered_count: int = 0
     duplicate_count: int = 0
     error_count: int = 0
+    disclosed_count: int = 0
+    merge_candidate_count: int = 0
+    conflict_count: int = 0
+    merge_candidates: list[dict] = field(default_factory=list)
     chunks_processed: int = 0
     chunks_total: int = 0
 
     @property
     def processed_count(self) -> int:
-        return self.registered_count + self.duplicate_count + self.error_count
+        return (
+            self.registered_count
+            + self.duplicate_count
+            + self.error_count
+            + self.disclosed_count
+            + self.merge_candidate_count
+            + self.conflict_count
+        )
 
 
 _CONTINUE_AS_NEW_EVERY = 2000  # chunks
@@ -91,6 +106,10 @@ class BulkRegistrationWorkflow:
             self._progress.registered_count = input.resume_registered
             self._progress.duplicate_count = input.resume_duplicate
             self._progress.error_count = input.resume_error
+            self._progress.disclosed_count = input.resume_disclosed
+            self._progress.merge_candidate_count = input.resume_merge_candidate
+            self._progress.conflict_count = input.resume_conflict
+            self._progress.merge_candidates = list(input.resume_merge_candidates_list)
             self._progress.status = "processing"
             chunks = input.resume_chunks or []
             self._progress.chunks_total = len(chunks) + input.resume_chunk_index
@@ -168,6 +187,20 @@ class BulkRegistrationWorkflow:
             self._progress.registered_count += chunk_result.registered
             self._progress.duplicate_count += chunk_result.duplicate
             self._progress.error_count += chunk_result.error
+            self._progress.disclosed_count += chunk_result.disclosed
+            self._progress.merge_candidate_count += chunk_result.merge_candidate
+            self._progress.conflict_count += chunk_result.conflict
+
+            # Collect merge candidates for review
+            for r in chunk_result.results:
+                if r.needs_merge_confirmation and r.disclosure_id:
+                    self._progress.merge_candidates.append({
+                        "row_index": r.row_index,
+                        "molecule_id": r.molecule_id,
+                        "matched_molecule_id": r.matched_molecule_id,
+                        "disclosure_id": r.disclosure_id,
+                    })
+
             self._progress.chunks_processed = (input.resume_chunk_index or 0) + i + 1
 
             chunks_in_this_run += 1
@@ -189,6 +222,10 @@ class BulkRegistrationWorkflow:
                         resume_registered=self._progress.registered_count,
                         resume_duplicate=self._progress.duplicate_count,
                         resume_error=self._progress.error_count,
+                        resume_disclosed=self._progress.disclosed_count,
+                        resume_merge_candidate=self._progress.merge_candidate_count,
+                        resume_conflict=self._progress.conflict_count,
+                        resume_merge_candidates_list=self._progress.merge_candidates,
                         resume_chunks=chunks[i + 1 :],
                     )
                 )

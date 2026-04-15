@@ -76,6 +76,10 @@ class BulkRegistrationStatusResponse(BaseModel):
     registered_count: int
     duplicate_count: int
     error_count: int
+    disclosed_count: int = 0
+    merge_candidate_count: int = 0
+    conflict_count: int = 0
+    merge_candidates: list[dict] = []
     chunks_processed: int
     chunks_total: int
 
@@ -207,6 +211,10 @@ async def get_bulk_registration_status(
         registered_count=progress.registered_count,
         duplicate_count=progress.duplicate_count,
         error_count=progress.error_count,
+        disclosed_count=progress.disclosed_count,
+        merge_candidate_count=progress.merge_candidate_count,
+        conflict_count=progress.conflict_count,
+        merge_candidates=progress.merge_candidates,
         chunks_processed=progress.chunks_processed,
         chunks_total=progress.chunks_total,
     )

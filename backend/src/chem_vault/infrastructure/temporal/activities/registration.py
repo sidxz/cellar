@@ -14,6 +14,9 @@ from returns.result import Failure
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
+from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
+from chem_vault.application.chemical_registration.merge_service import MergeService
+from chem_vault.application.chemical_registration.merge_side_effect_registry import MergeSideEffectRegistry
 from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
 from chem_vault.application.chemical_registration.register_molecule import (
     ExternalId,
@@ -23,7 +26,14 @@ from chem_vault.application.chemical_registration.register_molecule import (
 )
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
+from chem_vault.domain.chemical_registration.enums import RegistrationAction
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
+    SQLAlchemyDisclosureRequestRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (
+    SQLAlchemyMergeEventRepository,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
 )
@@ -58,15 +68,39 @@ class RegistrationActivities:
         dispatcher = c[EventDispatcher]
         structure_processor = c[StructureProcessorProtocol]
 
+        side_effect_registry = c[MergeSideEffectRegistry]
+
         # RegisterMolecule and CreateBatch each manage their own UoW lifecycle
         # internally (async with self._uow:), so they need separate UoW instances
         # to avoid one closing the session that the other still needs.
         reg_uow = AsyncUnitOfWork(session_factory)
+
+        # DisclosureService gets its own independent UoW because it is a
+        # standalone use case that manages its own transaction.
+        ds_uow = AsyncUnitOfWork(session_factory)
+        ds_mol_repo = SQLAlchemyMoleculeRepository(ds_uow)
+        ds_merge_svc = MergeService(
+            uow=ds_uow,
+            molecule_repo=ds_mol_repo,
+            merge_event_repo=SQLAlchemyMergeEventRepository(ds_uow),
+            dispatcher=dispatcher,
+            side_effect_registry=side_effect_registry,
+        )
+        disclosure_service = DisclosureService(
+            uow=ds_uow,
+            molecule_repo=ds_mol_repo,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(ds_uow),
+            structure_processor=structure_processor,
+            merge_service=ds_merge_svc,
+            dispatcher=dispatcher,
+        )
+
         register_uc = RegisterMolecule(
             uow=reg_uow,
             repo=SQLAlchemyMoleculeRepository(reg_uow),
             dispatcher=dispatcher,
             structure_processor=structure_processor,
+            disclosure_service=disclosure_service,
         )
 
         ws_id = uuid.UUID(input.workspace_id)
@@ -110,30 +144,49 @@ class RegistrationActivities:
                 continue
 
             outcome = result.unwrap()
-            if outcome.is_new:
-                output.registered += 1
-            else:
-                output.duplicate += 1
+            action = outcome.action
 
-            # Create batch — uses a fresh UoW since RegisterMolecule already closed its session
-            batch_id, batch_number, salt_matched = await _create_batch(
-                item=item,
-                reg_outcome=outcome,
-                workspace_id=ws_id,
-                submitted_by=submitted_by,
-                session_factory=session_factory,
-                dispatcher=dispatcher,
-            )
+            # Track counts by action
+            if action == RegistrationAction.REGISTERED:
+                output.registered += 1
+            elif action == RegistrationAction.DEDUPLICATED:
+                output.duplicate += 1
+            elif action == RegistrationAction.DISCLOSED:
+                output.disclosed += 1
+            elif action == RegistrationAction.MERGE_CANDIDATE:
+                output.merge_candidate += 1
+            elif action == RegistrationAction.CONFLICT:
+                output.conflict += 1
+
+            # Skip batch for merge candidates and conflicts — those molecules
+            # haven't been finalized yet, so creating a batch would be premature.
+            batch_id: uuid.UUID | None = None
+            batch_number: str | None = None
+            salt_matched = False
+            if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
+                batch_id, batch_number, salt_matched = await _create_batch(
+                    item=item,
+                    reg_outcome=outcome,
+                    workspace_id=ws_id,
+                    submitted_by=submitted_by,
+                    session_factory=session_factory,
+                    dispatcher=dispatcher,
+                )
 
             output.results.append(
                 ChunkItemResult(
                     row_index=item.row_index,
                     success=True,
                     is_new=outcome.is_new,
+                    action=action.value,
                     molecule_id=str(outcome.molecule.id),
                     batch_id=str(batch_id) if batch_id else None,
                     batch_number=batch_number,
                     salt_matched=salt_matched,
+                    needs_merge_confirmation=outcome.needs_merge_confirmation,
+                    matched_molecule_id=str(outcome.matched_molecule_id) if outcome.matched_molecule_id else None,
+                    disclosure_id=str(outcome.disclosure_id) if outcome.disclosure_id else None,
+                    conflict_reason=outcome.conflict_reason,
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
                 )

@@ -55,10 +55,15 @@ class ChunkItemResult:
     row_index: int
     success: bool
     is_new: bool = False
+    action: str = "registered"  # registered | deduplicated | disclosed | merge_candidate | conflict
     molecule_id: str | None = None
     batch_id: str | None = None
     batch_number: str | None = None
     salt_matched: bool = False
+    needs_merge_confirmation: bool = False
+    matched_molecule_id: str | None = None
+    disclosure_id: str | None = None
+    conflict_reason: str | None = None
     error: str | None = None
     cdd_molecule_id: int | None = None
     cdd_modified_at: str | None = None
@@ -71,6 +76,9 @@ class ChunkOutput:
     registered: int = 0
     duplicate: int = 0
     error: int = 0
+    disclosed: int = 0
+    merge_candidate: int = 0
+    conflict: int = 0
     # Molecule-level counts (batch-rows grouped by row_index).
     # A molecule is "registered" if any row was is_new, "duplicate" if all
     # rows were existing, "error" if all rows failed.
