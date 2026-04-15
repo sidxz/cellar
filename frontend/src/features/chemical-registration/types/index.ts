@@ -113,6 +113,11 @@ export interface RegistrationResponse {
   is_new: boolean;
   qc_warnings: string[];
   batch?: { id: string; batch_number: string } | null;
+  action: string;
+  needs_merge_confirmation: boolean;
+  matched_molecule_id: string | null;
+  disclosure_id: string | null;
+  conflict_reason: string | null;
 }
 
 export interface RegisterMoleculeInput {
