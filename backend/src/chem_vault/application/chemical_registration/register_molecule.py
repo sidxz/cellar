@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from returns.result import Failure, Result, Success
 
@@ -28,6 +28,9 @@ from chem_vault.application.workspace_config.custom_field_validator import Custo
 from chem_vault.domain.shared.errors import ConflictError, DomainError, ValidationError
 from chem_vault.domain.workspace_config.enums import FieldTarget
 from returns.pipeline import is_successful
+
+if TYPE_CHECKING:
+    from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,7 @@ class RegisterMoleculeCommand(Command):
     qc_reject_threshold: int | None = None
     qc_warn_threshold: int | None = None
     promote_name_as_identifier: bool = True  # False for auto-generated names
+    auto_approve: bool = True  # False from wizard — merge candidates need confirmation
 
 
 class RegisterMolecule:
@@ -89,6 +93,7 @@ class RegisterMolecule:
         structure_processor: StructureProcessorProtocol,
         custom_field_validator: CustomFieldValidator | None = None,
         disclosure_repo: DisclosureRequestRepository | None = None,
+        disclosure_service: DisclosureService | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -96,6 +101,7 @@ class RegisterMolecule:
         self._processor = structure_processor
         self._custom_field_validator = custom_field_validator
         self._disclosure_repo = disclosure_repo
+        self._disclosure_service = disclosure_service
 
     async def __call__(
         self,
@@ -248,15 +254,73 @@ class RegisterMolecule:
             input.workspace_id, inchi_key
         )
 
-        # 3. Batch-check all identifiers (name + external_ids) for conflicts
+        # 3. Check for undisclosed molecule match (before conflict check)
+        undisclosed_match: Molecule | None = None
+        if existing_by_inchi is None and self._disclosure_service is not None:
+            all_ids = self._collect_all_identifiers(input)
+            if all_ids:
+                undisclosed_match = await self._repo.find_undisclosed_by_identifiers(
+                    input.workspace_id, all_ids
+                )
+
+        # 4. Batch-check all identifiers (name + external_ids) for conflicts.
+        #    Allow the matched molecule's IDs so they don't trigger a conflict.
+        allowed_id = (
+            existing_by_inchi.id
+            if existing_by_inchi
+            else (undisclosed_match.id if undisclosed_match else None)
+        )
         conflict_check = await self._check_identifier_conflicts(
-            input,
-            allowed_molecule_id=existing_by_inchi.id if existing_by_inchi else None,
+            input, allowed_molecule_id=allowed_id,
         )
         if isinstance(conflict_check, Failure):
             return Failure(conflict_check.failure())
 
-        # 4a. Duplicate InChIKey — add identifiers to existing molecule
+        # 5. Disclosure path — delegate to DisclosureService if undisclosed match found.
+        #    The DisclosureService manages its own UoW (separate transaction), so we
+        #    return without committing our own UoW (nothing was written to it).
+        if undisclosed_match is not None and self._disclosure_service is not None:
+            from chem_vault.application.chemical_registration.disclosure_service import (
+                SubmitDisclosureCommand,
+            )
+
+            disclosure_result = await self._disclosure_service(
+                SubmitDisclosureCommand(
+                    workspace_id=input.workspace_id,
+                    molecule_id=undisclosed_match.id,
+                    disclosed_smiles=input.smiles,  # type: ignore[arg-type]
+                    requested_by=input.registered_by,
+                    disclosing_org_id=input.originating_org_id,
+                    scientist_name=input.scientist_name,
+                    auto_approve=input.auto_approve,
+                    notes="Auto-detected via identifier match during registration",
+                )
+            )
+            if isinstance(disclosure_result, Failure):
+                return Failure(disclosure_result.failure())
+
+            d_outcome = disclosure_result.unwrap()
+            if d_outcome.needs_confirmation:
+                action = RegistrationAction.MERGE_CANDIDATE
+            elif d_outcome.was_merged:
+                action = RegistrationAction.DEDUPLICATED
+            else:
+                action = RegistrationAction.DISCLOSED
+
+            return Success(
+                RegistrationOutcome(
+                    molecule=undisclosed_match,
+                    is_new=False,
+                    action=action,
+                    qc_warnings=qc_warnings,
+                    detected_salt=processed.detected_salt,
+                    needs_merge_confirmation=d_outcome.needs_confirmation,
+                    matched_molecule_id=d_outcome.matched_molecule_id,
+                    disclosure_id=d_outcome.disclosure_request.id,
+                )
+            )
+
+        # 6a. Duplicate InChIKey — add identifiers to existing molecule (disclosed match)
         if existing_by_inchi is not None:
             self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
             await self._repo.save(existing_by_inchi)
@@ -275,7 +339,7 @@ class RegisterMolecule:
                 )
             )
 
-        # 4b. New molecule
+        # 6b. New molecule
         if self._custom_field_validator and input.custom_fields:
             validation = await self._custom_field_validator.validate(
                 input.custom_fields, FieldTarget.MOLECULE, input.workspace_id

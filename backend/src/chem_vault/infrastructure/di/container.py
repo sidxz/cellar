@@ -603,7 +603,42 @@ def create_container(
             return uc_cls(uow, SQLAlchemyMoleculeRepository(uow))
         return _f
 
-    container.define(RegisterMolecule, _mol_cmd(RegisterMolecule))
+    def _register_molecule(c):  # type: ignore[no-untyped-def]
+        # RegisterMolecule's own UoW — used for direct registration paths.
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+
+        # DisclosureService gets its own independent UoW because it is a
+        # standalone use case that manages its own transaction.
+        ds_uow = AsyncUnitOfWork(c[async_sessionmaker])
+        ds_mol_repo = SQLAlchemyMoleculeRepository(ds_uow)
+        ds_merge_svc = MergeService(
+            uow=ds_uow,
+            molecule_repo=ds_mol_repo,
+            merge_event_repo=SQLAlchemyMergeEventRepository(ds_uow),
+            dispatcher=c[EventDispatcher],
+            side_effect_registry=c[MergeSideEffectRegistry],
+        )
+        ds = DisclosureService(
+            uow=ds_uow,
+            molecule_repo=ds_mol_repo,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(ds_uow),
+            structure_processor=c[StructureProcessorProtocol],
+            merge_service=ds_merge_svc,
+            dispatcher=c[EventDispatcher],
+        )
+
+        return RegisterMolecule(
+            uow=uow,
+            repo=mol_repo,
+            dispatcher=c[EventDispatcher],
+            structure_processor=c[StructureProcessorProtocol],
+            custom_field_validator=validator,
+            disclosure_service=ds,
+        )
+
+    container.define(RegisterMolecule, _register_molecule)
 
     def _update_molecule(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
