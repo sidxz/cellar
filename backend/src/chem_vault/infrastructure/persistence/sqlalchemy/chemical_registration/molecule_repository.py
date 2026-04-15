@@ -329,6 +329,34 @@ class SQLAlchemyMoleculeRepository(
         self._uow.track(domain)
         return domain
 
+    async def find_undisclosed_by_identifiers(
+        self, workspace_id: uuid.UUID, identifiers: set[str]
+    ) -> Molecule | None:
+        """Find a single undisclosed molecule whose identifiers overlap with the given set.
+
+        Returns None if no match or if identifiers map to multiple different
+        molecules (ambiguous).
+        """
+        if not identifiers:
+            return None
+        lower_ids = {v.lower() for v in identifiers}
+        stmt = (
+            select(MoleculeModel.id)
+            .join(MoleculeIdentifierModel)
+            .where(
+                MoleculeModel.workspace_id == workspace_id,
+                MoleculeModel.structure_status == "undisclosed",
+                MoleculeModel.merged_into_id.is_(None),
+                func.lower(MoleculeIdentifierModel.identifier).in_(lower_ids),
+            )
+            .distinct()
+        )
+        result = await self._session.execute(stmt)
+        mol_ids = list(result.scalars().all())
+        if len(mol_ids) != 1:
+            return None
+        return await self.find_by_id_in_workspace(workspace_id, mol_ids[0])
+
     async def find_identifiers_in_workspace(
         self, workspace_id: uuid.UUID, identifiers: set[str]
     ) -> dict[str, uuid.UUID]:

@@ -41,6 +41,16 @@ class MoleculeRepository(Protocol):
         self, workspace_id: uuid.UUID, identifier: str
     ) -> Molecule | None: ...
 
+    async def find_undisclosed_by_identifiers(
+        self, workspace_id: uuid.UUID, identifiers: set[str]
+    ) -> Molecule | None:
+        """Find a single undisclosed molecule whose identifiers overlap with the given set.
+
+        Returns None if no match or if identifiers map to multiple different molecules (ambiguous).
+        Only matches molecules with structure_status == UNDISCLOSED and no tombstone (merged_into_id is None).
+        """
+        ...
+
     async def find_identifiers_in_workspace(
         self, workspace_id: uuid.UUID, identifiers: set[str]
     ) -> dict[str, uuid.UUID]: ...
