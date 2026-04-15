@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
@@ -28,6 +29,7 @@ export function DisclosureDialog({
   open,
   onOpenChange,
 }: DisclosureDialogProps) {
+  const router = useRouter();
   const submitMutation = useSubmitDisclosure();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -53,13 +55,14 @@ export function DisclosureDialog({
       const result = await submitMutation.mutateAsync({
         molecule_id: molecule.id,
         disclosed_smiles: smiles.trim(),
+        auto_approve: false,
         notes: notes.trim() || null,
       });
       reset();
       onOpenChange(false);
-      if (result.was_merged) {
-        alert(
-          `Structure matched an existing compound. Molecule was merged into ${result.merged_into_molecule_id}.`
+      if (result.needs_confirmation) {
+        router.push(
+          `/compounds/${molecule.id}/merge-preview/${result.disclosure_request.id}`
         );
       }
     } catch (err: unknown) {

@@ -26,8 +26,6 @@ import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
 import { BulkRegistrationDialog } from "./bulk-registration-dialog";
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import { CompoundSearchBar } from "./compound-search-bar";
-import { DisclosureDialog } from "./disclosure-dialog";
-import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
 
 export function MoleculeList() {
   const router = useRouter();
@@ -35,8 +33,6 @@ export function MoleculeList() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const { enabled: cddEnabled } = useCddEnabled();
-  const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
-  const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
   const { exportSdf } = useSdfExport();
@@ -117,7 +113,7 @@ export function MoleculeList() {
       {
         headerName: "",
         field: "id",
-        width: 160,
+        width: 110,
         sortable: false,
         filter: false,
         resizable: false,
@@ -130,18 +126,12 @@ export function MoleculeList() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setDiscloseMol(mol)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/compounds/${mol.id}#disclose`);
+                  }}
                 >
                   Disclose
-                </Button>
-              )}
-              {!mol.merged_into_id && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setMergeMol(mol)}
-                >
-                  Merge
                 </Button>
               )}
             </div>
@@ -231,20 +221,6 @@ export function MoleculeList() {
         onOpenChange={setDialogOpen}
       />
       <BulkRegistrationDialog open={bulkOpen} onOpenChange={setBulkOpen} />
-      {discloseMol && (
-        <DisclosureDialog
-          molecule={discloseMol}
-          open={!!discloseMol}
-          onOpenChange={(open) => !open && setDiscloseMol(null)}
-        />
-      )}
-      {mergeMol && (
-        <MergeConfirmationDialog
-          sourceMolecule={mergeMol}
-          open={!!mergeMol}
-          onOpenChange={(open) => !open && setMergeMol(null)}
-        />
-      )}
       <CollectionPickerDialog
         open={pickerMolIds.length > 0}
         onOpenChange={(open) => {

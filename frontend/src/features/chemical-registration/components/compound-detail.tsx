@@ -13,8 +13,10 @@ import {
   LayoutDashboard,
   Link2,
   Paperclip,
+  ShieldAlert,
   TestTubes,
 } from "lucide-react";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -42,6 +44,7 @@ import {
   HistoryTab,
   FilesTab,
   ProjectsTab,
+  AdminOperationsTab,
 } from "./detail-tabs";
 
 // ---------------------------------------------------------------------------
@@ -65,6 +68,7 @@ interface CompoundDetailProps {
 export function CompoundDetail({ compoundId }: CompoundDetailProps) {
   const router = useRouter();
   const query = useMolecule(compoundId);
+  const isAdmin = useAuthzHasRole("admin");
 
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined") {
@@ -171,6 +175,12 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
                   <History className="mr-1.5 h-4 w-4" />
                   History
                 </TabsTrigger>
+                {isAdmin && !isTombstone && (
+                  <TabsTrigger value="admin">
+                    <ShieldAlert className="mr-1.5 h-4 w-4" />
+                    Admin
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="overview">
@@ -211,6 +221,12 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
               <TabsContent value="history">
                 <HistoryTab moleculeId={compoundId} molecule={mol} />
               </TabsContent>
+
+              {isAdmin && !isTombstone && (
+                <TabsContent value="admin">
+                  <AdminOperationsTab moleculeId={compoundId} />
+                </TabsContent>
+              )}
             </Tabs>
           </>
         );

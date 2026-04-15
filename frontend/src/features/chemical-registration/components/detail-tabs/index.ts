@@ -7,3 +7,4 @@ export { RelationshipsTab } from "./relationships-tab";
 export { HistoryTab } from "./history-tab";
 export { FilesTab } from "./files-tab";
 export { ProjectsTab } from "./projects-tab";
+export { AdminOperationsTab } from "./admin-operations-tab";

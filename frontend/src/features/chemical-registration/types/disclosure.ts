@@ -4,7 +4,8 @@ export type DisclosureStatus =
   | "disclosed"
   | "merged"
   | "conflict"
-  | "rejected";
+  | "rejected"
+  | "pending_confirmation";
 
 export const DISCLOSURE_STATUS_LABELS: Record<DisclosureStatus, string> = {
   pending: "Pending",
@@ -13,6 +14,7 @@ export const DISCLOSURE_STATUS_LABELS: Record<DisclosureStatus, string> = {
   merged: "Merged",
   conflict: "Conflict",
   rejected: "Rejected",
+  pending_confirmation: "Awaiting Confirmation",
 };
 
 export interface DisclosureRequest {
@@ -25,25 +27,58 @@ export interface DisclosureRequest {
   status: DisclosureStatus;
   resolution_type: string | null;
   resolved_to_molecule_id: string | null;
+  matched_molecule_id: string | null;
   disclosing_org_id: string | null;
+  scientist_name: string | null;
   requested_by: string;
   requested_at: string;
   resolved_at: string | null;
   conflict_reason: string | null;
   notes: string | null;
+  version: number;
 }
 
 export interface DisclosureOutcome {
   disclosure_request: DisclosureRequest;
   was_merged: boolean;
   merged_into_molecule_id: string | null;
+  needs_confirmation: boolean;
+  matched_molecule_id: string | null;
 }
 
 export interface SubmitDisclosureInput {
   molecule_id: string;
   disclosed_smiles: string;
   disclosing_org_id?: string | null;
+  scientist_name?: string | null;
+  auto_approve?: boolean;
   notes?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Merge impact preview
+// ---------------------------------------------------------------------------
+
+export interface MoleculeSummary {
+  id: string;
+  registration_number: string;
+  name: string;
+  structure_status: string;
+}
+
+export interface MergeImpactCategory {
+  name: string;
+  label: string;
+  count: number;
+  items: Record<string, unknown>[];
+  is_blocker: boolean;
+}
+
+export interface MergeImpact {
+  source: MoleculeSummary;
+  target: MoleculeSummary;
+  categories: MergeImpactCategory[];
+  blockers: string[];
 }
 
 export interface MergeInput {

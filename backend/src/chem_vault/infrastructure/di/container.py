@@ -149,8 +149,11 @@ from chem_vault.application.screening.manage_run import ApproveRun, CompleteRun,
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
 from chem_vault.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
+from chem_vault.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
+from chem_vault.application.chemical_registration.get_merge_impact import GetMergeImpact
+from chem_vault.application.chemical_registration.reject_disclosure import RejectDisclosure
 from chem_vault.application.chemical_registration.identifiers import (
     AddIdentifier,
     ListIdentifiers,
@@ -775,6 +778,42 @@ def create_container(
         )
 
     container.define(GetMergeHistory, _merge_history)
+
+    # --- Confirm / Reject Disclosure ---
+    def _confirm_disclosure(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        merge_svc = MergeService(
+            uow=uow,
+            molecule_repo=mol_repo,
+            merge_event_repo=SQLAlchemyMergeEventRepository(uow),
+            dispatcher=c[EventDispatcher],
+            side_effect_registry=c[MergeSideEffectRegistry],
+        )
+        return ConfirmDisclosure(
+            uow=uow,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+            merge_service=merge_svc,
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ConfirmDisclosure, _confirm_disclosure)
+
+    def _reject_disclosure(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RejectDisclosure(
+            uow=uow,
+            disclosure_repo=SQLAlchemyDisclosureRequestRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(RejectDisclosure, _reject_disclosure)
+
+    def _get_merge_impact(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetMergeImpact(uow=uow)
+
+    container.define(GetMergeImpact, _get_merge_impact)
 
     # --- Bulk Registration ---
     def _bulk_registration_service(c):  # type: ignore[no-untyped-def]

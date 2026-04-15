@@ -10,10 +10,16 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.chemical_registration.get_merge_history import GetMergeHistoryQuery
+from chem_vault.application.chemical_registration.get_merge_impact import (
+    GetMergeImpactQuery,
+    MergeImpact,
+    MergeImpactCategory,
+    MoleculeSummary,
+)
 from chem_vault.application.chemical_registration.merge_service import MergeCommand
 from chem_vault.domain.chemical_registration.enums import MergeReason
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
-from chem_vault.interface.dependencies import AuthDep, GetMergeHistoryDep, MergeServiceDep
+from chem_vault.interface.dependencies import AuthDep, GetMergeHistoryDep, GetMergeImpactDep, MergeServiceDep
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecules"])
@@ -103,3 +109,81 @@ async def get_merge_history(
     )
     events = result_to_response(await use_case(query))
     return [MergeEventResponse.from_domain(e) for e in events]
+
+
+# ---------------------------------------------------------------------------
+# Merge impact preview
+# ---------------------------------------------------------------------------
+
+
+class MoleculeSummaryResponse(BaseModel):
+    id: uuid.UUID
+    registration_number: str
+    name: str
+    structure_status: str
+
+    @classmethod
+    def from_domain(cls, s: MoleculeSummary) -> MoleculeSummaryResponse:
+        return cls(
+            id=s.id,
+            registration_number=s.registration_number,
+            name=s.name,
+            structure_status=s.structure_status,
+        )
+
+
+class MergeImpactCategoryResponse(BaseModel):
+    name: str
+    label: str
+    count: int
+    items: list[dict[str, Any]] = []
+    is_blocker: bool = False
+
+    @classmethod
+    def from_domain(cls, c: MergeImpactCategory) -> MergeImpactCategoryResponse:
+        return cls(
+            name=c.name,
+            label=c.label,
+            count=c.count,
+            items=c.items,
+            is_blocker=c.is_blocker,
+        )
+
+
+class MergeImpactResponse(BaseModel):
+    source: MoleculeSummaryResponse
+    target: MoleculeSummaryResponse
+    categories: list[MergeImpactCategoryResponse]
+    blockers: list[str]
+
+    @classmethod
+    def from_domain(cls, impact: MergeImpact) -> MergeImpactResponse:
+        return cls(
+            source=MoleculeSummaryResponse.from_domain(impact.source),
+            target=MoleculeSummaryResponse.from_domain(impact.target),
+            categories=[
+                MergeImpactCategoryResponse.from_domain(c)
+                for c in impact.categories
+            ],
+            blockers=impact.blockers,
+        )
+
+
+@router.get(
+    "/{source_molecule_id}/merge-impact/{target_molecule_id}",
+    response_model=MergeImpactResponse,
+)
+async def get_merge_impact(
+    source_molecule_id: uuid.UUID,
+    target_molecule_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: GetMergeImpactDep,
+) -> MergeImpactResponse:
+    """Preview what data would be affected by merging source into target."""
+    query = GetMergeImpactQuery(
+        workspace_id=auth.workspace_id,
+        source_molecule_id=source_molecule_id,
+        target_molecule_id=target_molecule_id,
+    )
+    impact = result_to_response(await use_case(query))
+    return MergeImpactResponse.from_domain(impact)

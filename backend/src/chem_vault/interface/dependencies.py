@@ -29,8 +29,11 @@ from chem_vault.application.chemical_registration.bulk_registration_service impo
 from chem_vault.application.chemical_registration.export_sdf import ExportMoleculesSDF
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
+from chem_vault.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
+from chem_vault.application.chemical_registration.get_merge_impact import GetMergeImpact
+from chem_vault.application.chemical_registration.reject_disclosure import RejectDisclosure
 from chem_vault.application.chemical_registration.identifiers import (
     AddIdentifier,
     ListIdentifiers,
@@ -406,6 +409,9 @@ ListDisclosuresDep = Annotated[ListDisclosures, Depends(_get_use_case(ListDisclo
 ListDisclosuresByWorkspaceDep = Annotated[ListDisclosuresByWorkspace, Depends(_get_use_case(ListDisclosuresByWorkspace))]
 ResolveDisclosureConflictDep = Annotated[ResolveDisclosureConflict, Depends(_get_use_case(ResolveDisclosureConflict))]
 GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHistory))]
+ConfirmDisclosureDep = Annotated[ConfirmDisclosure, Depends(_get_use_case(ConfirmDisclosure))]
+RejectDisclosureDep = Annotated[RejectDisclosure, Depends(_get_use_case(RejectDisclosure))]
+GetMergeImpactDep = Annotated[GetMergeImpact, Depends(_get_use_case(GetMergeImpact))]
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]
 
 # --- Inventory dependencies ---

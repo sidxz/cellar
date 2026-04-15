@@ -7,6 +7,7 @@ import type {
   DisclosureOutcome,
   DisclosureRequest,
   MergeEventResponse,
+  MergeImpact,
   MergeInput,
   SubmitDisclosureInput,
 } from "../types/disclosure";
@@ -101,5 +102,57 @@ export function useMergeHistory(moleculeId: string | undefined) {
         method: "GET",
       }),
     enabled: !!moleculeId,
+  });
+}
+
+export function usePendingDisclosures() {
+  return useDisclosures("pending_confirmation");
+}
+
+export function useConfirmDisclosure(disclosureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      customInstance<DisclosureOutcome>({
+        url: `/api/v1/disclosures/${disclosureId}/confirm`,
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: DISCLOSURES_KEY });
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Disclosure confirmed — compounds merged");
+    },
+  });
+}
+
+export function useRejectDisclosure(disclosureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { reason?: string }) =>
+      customInstance<DisclosureRequest>({
+        url: `/api/v1/disclosures/${disclosureId}/reject`,
+        method: "POST",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: DISCLOSURES_KEY });
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      showSuccess("Disclosure rejected");
+    },
+  });
+}
+
+export function useMergeImpact(
+  sourceId: string | undefined,
+  targetId: string | undefined
+) {
+  return useQuery({
+    queryKey: ["merge-impact", sourceId, targetId],
+    queryFn: () =>
+      customInstance<MergeImpact>({
+        url: `/api/v1/molecules/${sourceId}/merge-impact/${targetId}`,
+        method: "GET",
+      }),
+    enabled: !!sourceId && !!targetId,
   });
 }
