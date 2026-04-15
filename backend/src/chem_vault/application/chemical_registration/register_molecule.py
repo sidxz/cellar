@@ -12,10 +12,14 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.domain.chemical_registration.enums import MoleculeType
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
-from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.domain.chemical_registration.repository import (
+    DisclosureRequestRepository,
+    MoleculeRepository,
+)
 from chem_vault.application.chemical_registration.protocols import (
     DetectedSaltDTO,
     StructureProcessorProtocol,
@@ -51,6 +55,7 @@ class RegisterMoleculeCommand(Command):
     external_ids: list[ExternalId] = field(default_factory=list)
     originating_org_id: uuid.UUID
     registered_by: uuid.UUID
+    scientist_name: str | None = None
     custom_fields: dict[str, Any] | None = None
     qc_reject_threshold: int | None = None
     qc_warn_threshold: int | None = None
@@ -77,12 +82,14 @@ class RegisterMolecule:
         dispatcher: EventDispatcherProtocol,
         structure_processor: StructureProcessorProtocol,
         custom_field_validator: CustomFieldValidator | None = None,
+        disclosure_repo: DisclosureRequestRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._processor = structure_processor
         self._custom_field_validator = custom_field_validator
+        self._disclosure_repo = disclosure_repo
 
     async def __call__(
         self,
@@ -168,6 +175,48 @@ class RegisterMolecule:
                 )
                 existing_values.add(ext_id.identifier)
 
+    async def _record_disclosure_provenance(
+        self,
+        input: RegisterMoleculeCommand,
+        molecule_id: uuid.UUID,
+        canonical_smiles: str,
+        inchi_key: str,
+        *,
+        is_new: bool,
+        resolved_to_molecule_id: uuid.UUID | None = None,
+    ) -> None:
+        """Create an auto-resolved DisclosureRequest for provenance tracking.
+
+        Only records if a disclosure_repo was injected (opt-in).
+        """
+        if self._disclosure_repo is None:
+            return
+
+        dr = DisclosureRequest.create(
+            workspace_id=input.workspace_id,
+            molecule_id=molecule_id,
+            disclosed_smiles=input.smiles,  # type: ignore[arg-type]
+            requested_by=input.registered_by,
+            disclosing_org_id=input.originating_org_id,
+            scientist_name=input.scientist_name,
+            notes=f"Auto-recorded during registration",
+        )
+        dr.start_processing()
+
+        if is_new:
+            dr.resolve_as_new_structure(
+                canonical_smiles=canonical_smiles,
+                inchi_key=inchi_key,
+            )
+        else:
+            dr.resolve_as_merged(
+                canonical_smiles=canonical_smiles,
+                inchi_key=inchi_key,
+                resolved_to_molecule_id=resolved_to_molecule_id,  # type: ignore[arg-type]
+            )
+
+        await self._disclosure_repo.save(dr)
+
     async def _register_disclosed(
         self, input: RegisterMoleculeCommand
     ) -> Result[RegistrationOutcome, DomainError]:
@@ -205,6 +254,10 @@ class RegisterMolecule:
         if existing_by_inchi is not None:
             self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
             await self._repo.save(existing_by_inchi)
+            await self._record_disclosure_provenance(
+                input, existing_by_inchi.id, processed.structure.smiles, inchi_key,
+                is_new=False, resolved_to_molecule_id=existing_by_inchi.id,
+            )
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(
@@ -236,6 +289,9 @@ class RegisterMolecule:
         self._add_name_and_ids(mol, input, source="name")
 
         await self._repo.save(mol)
+        await self._record_disclosure_provenance(
+            input, mol.id, processed.structure.smiles, inchi_key, is_new=True,
+        )
         events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
         return Success(

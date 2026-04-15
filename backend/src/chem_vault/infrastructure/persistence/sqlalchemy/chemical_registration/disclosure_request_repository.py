@@ -44,6 +44,8 @@ class SQLAlchemyDisclosureRequestRepository(
                 else None
             ),
             resolved_to_molecule_id=model.resolved_to_molecule_id,
+            matched_molecule_id=model.matched_molecule_id,
+            scientist_name=model.scientist_name,
             disclosing_org_id=model.disclosing_org_id,
             requested_by=model.requested_by,
             requested_at=model.requested_at,
@@ -75,6 +77,8 @@ class SQLAlchemyDisclosureRequestRepository(
                 else None
             ),
             resolved_to_molecule_id=aggregate.resolved_to_molecule_id,
+            matched_molecule_id=aggregate.matched_molecule_id,
+            scientist_name=aggregate.scientist_name,
             disclosing_org_id=aggregate.disclosing_org_id,
             requested_by=aggregate.requested_by,
             requested_at=aggregate.requested_at,
@@ -98,6 +102,8 @@ class SQLAlchemyDisclosureRequestRepository(
             aggregate.resolution_type.value if aggregate.resolution_type else None
         )
         model.resolved_to_molecule_id = aggregate.resolved_to_molecule_id
+        model.matched_molecule_id = aggregate.matched_molecule_id
+        model.scientist_name = aggregate.scientist_name
         model.resolved_at = aggregate.resolved_at
         model.conflict_reason = aggregate.conflict_reason
         model.notes = aggregate.notes

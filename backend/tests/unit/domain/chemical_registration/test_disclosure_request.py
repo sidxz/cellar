@@ -11,6 +11,7 @@ from chem_vault.domain.chemical_registration.enums import (
 )
 from chem_vault.domain.chemical_registration.events import (
     DisclosureConflict,
+    DisclosurePendingConfirmation,
     DisclosureRequested,
     DisclosureResolved,
 )
@@ -337,3 +338,148 @@ class TestDisclosureRequestTransitions:
             inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
         )
         assert req.updated_at >= after_processing
+
+
+# ---------------------------------------------------------------------------
+# TestPendingConfirmation
+# ---------------------------------------------------------------------------
+
+
+class TestPendingConfirmation:
+    """Tests for the PENDING_CONFIRMATION state and its transitions."""
+
+    def test_mark_pending_confirmation(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        target_id = uuid.uuid4()
+        req = _make(molecule_id, user_id)
+        req.start_processing()
+        req.clear_events()
+
+        req.mark_pending_confirmation(
+            canonical_smiles="CCO",
+            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            matched_molecule_id=target_id,
+        )
+
+        assert req.status == DisclosureStatus.PENDING_CONFIRMATION
+        assert req.canonical_smiles == "CCO"
+        assert req.inchi_key == "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+        assert req.matched_molecule_id == target_id
+
+        events = req.collect_events()
+        assert len(events) == 1
+        assert isinstance(events[0], DisclosurePendingConfirmation)
+        assert events[0].matched_molecule_id == target_id
+
+    def test_resolve_as_merged_from_pending_confirmation(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        target_id = uuid.uuid4()
+        req = _make(molecule_id, user_id)
+        req.start_processing()
+        req.mark_pending_confirmation(
+            canonical_smiles="CCO",
+            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            matched_molecule_id=target_id,
+        )
+        req.clear_events()
+
+        req.resolve_as_merged(
+            canonical_smiles="CCO",
+            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            resolved_to_molecule_id=target_id,
+        )
+
+        assert req.status == DisclosureStatus.MERGED
+        assert req.resolution_type == DisclosureResolutionType.MERGED_INTO_EXISTING
+        assert req.resolved_to_molecule_id == target_id
+
+    def test_reject_from_pending_confirmation(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        target_id = uuid.uuid4()
+        req = _make(molecule_id, user_id)
+        req.start_processing()
+        req.mark_pending_confirmation(
+            canonical_smiles="CCO",
+            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            matched_molecule_id=target_id,
+        )
+        req.clear_events()
+
+        req.reject(reason="User chose not to merge")
+
+        assert req.status == DisclosureStatus.REJECTED
+        assert req.resolved_at is not None
+
+    def test_mark_conflict_from_pending_confirmation(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        target_id = uuid.uuid4()
+        req = _make(molecule_id, user_id)
+        req.start_processing()
+        req.mark_pending_confirmation(
+            canonical_smiles="CCO",
+            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            matched_molecule_id=target_id,
+        )
+        req.clear_events()
+
+        req.mark_conflict(reason="Merge failed: active sample requests")
+
+        assert req.status == DisclosureStatus.CONFLICT
+
+    def test_cannot_mark_pending_confirmation_from_pending(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        req = _make(molecule_id, user_id)
+
+        with pytest.raises(ValidationError, match="Cannot transition disclosure status"):
+            req.mark_pending_confirmation(
+                canonical_smiles="CCO",
+                inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+                matched_molecule_id=uuid.uuid4(),
+            )
+
+    def test_cannot_disclose_from_pending_confirmation(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        target_id = uuid.uuid4()
+        req = _make(molecule_id, user_id)
+        req.start_processing()
+        req.mark_pending_confirmation(
+            canonical_smiles="CCO",
+            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            matched_molecule_id=target_id,
+        )
+
+        with pytest.raises(ValidationError, match="Cannot transition disclosure status"):
+            req.resolve_as_new_structure(
+                canonical_smiles="CCO",
+                inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+            )
+
+    def test_matched_molecule_id_defaults_to_none(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        req = _make(molecule_id, user_id)
+        assert req.matched_molecule_id is None
+
+    def test_scientist_name_field(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        req = DisclosureRequest.create(
+            workspace_id=WS_ID,
+            molecule_id=molecule_id,
+            disclosed_smiles="CCO",
+            requested_by=user_id,
+            scientist_name="Dr. Jane Smith",
+        )
+        assert req.scientist_name == "Dr. Jane Smith"
+
+    def test_scientist_name_defaults_to_none(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        req = _make(molecule_id, user_id)
+        assert req.scientist_name is None

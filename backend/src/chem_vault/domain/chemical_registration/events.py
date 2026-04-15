@@ -69,6 +69,11 @@ class DisclosureConflict(DomainEvent):
     conflict_reason: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class DisclosurePendingConfirmation(DomainEvent):
+    matched_molecule_id: uuid.UUID
+
+
 # ---------------------------------------------------------------------------
 # Bulk Registration events
 # ---------------------------------------------------------------------------

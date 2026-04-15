@@ -40,6 +40,8 @@ class SubmitDisclosureCommand(Command):
     disclosed_smiles: str
     requested_by: uuid.UUID
     disclosing_org_id: uuid.UUID | None = None
+    scientist_name: str | None = None
+    auto_approve: bool = True
     notes: str | None = None
 
 
@@ -50,6 +52,8 @@ class DisclosureOutcome:
     disclosure_request: DisclosureRequest
     was_merged: bool
     merged_into_molecule_id: uuid.UUID | None = None
+    needs_confirmation: bool = False
+    matched_molecule_id: uuid.UUID | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +122,7 @@ class DisclosureService:
                 disclosed_smiles=input.disclosed_smiles,
                 requested_by=input.requested_by,
                 disclosing_org_id=input.disclosing_org_id,
+                scientist_name=input.scientist_name,
                 notes=input.notes,
             )
             dr.start_processing()
@@ -169,12 +174,31 @@ class DisclosureService:
                 )
 
             # ---- Path B: merge needed ----
+            target_molecule_id = existing.id
+
+            # If auto_approve is False, pause for user confirmation
+            if not input.auto_approve:
+                dr.mark_pending_confirmation(
+                    canonical_smiles=canonical_smiles,
+                    inchi_key=inchi_key,
+                    matched_molecule_id=target_molecule_id,
+                )
+                await self._disclosure_repo.save(dr)
+                events = await self._uow.commit()
+                await self._dispatcher.dispatch_all(events)
+                return Success(
+                    DisclosureOutcome(
+                        disclosure_request=dr,
+                        was_merged=False,
+                        needs_confirmation=True,
+                        matched_molecule_id=target_molecule_id,
+                    )
+                )
+
             # Execute merge within the SAME transaction for atomicity.
             # Save the disclosure request FIRST so the FK from
             # merge_events.disclosure_request_id is satisfiable.
             await self._disclosure_repo.save(dr)
-
-            target_molecule_id = existing.id
 
             merge_result = await self._merge_service.merge_in_transaction(
                 MergeCommand(

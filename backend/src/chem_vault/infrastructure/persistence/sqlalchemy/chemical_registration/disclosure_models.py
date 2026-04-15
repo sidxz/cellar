@@ -59,10 +59,14 @@ class DisclosureRequestModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
     canonical_smiles: Mapped[str | None] = mapped_column(Text)
     inchi_key: Mapped[str | None] = mapped_column(String(27))
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="pending"
+        String(30), nullable=False, server_default="pending"
     )
     resolution_type: Mapped[str | None] = mapped_column(String(30))
     resolved_to_molecule_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    matched_molecule_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("molecules.id"), nullable=True
+    )
+    scientist_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     disclosing_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     requested_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     requested_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)

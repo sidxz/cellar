@@ -11,6 +11,7 @@ from chem_vault.domain.chemical_registration.enums import (
 )
 from chem_vault.domain.chemical_registration.events import (
     DisclosureConflict,
+    DisclosurePendingConfirmation,
     DisclosureRequested,
     DisclosureResolved,
 )
@@ -26,6 +27,12 @@ _DISCLOSURE_TRANSITIONS: dict[DisclosureStatus, set[DisclosureStatus]] = {
     DisclosureStatus.PROCESSING: {
         DisclosureStatus.DISCLOSED,
         DisclosureStatus.MERGED,
+        DisclosureStatus.CONFLICT,
+        DisclosureStatus.PENDING_CONFIRMATION,
+    },
+    DisclosureStatus.PENDING_CONFIRMATION: {
+        DisclosureStatus.MERGED,
+        DisclosureStatus.REJECTED,
         DisclosureStatus.CONFLICT,
     },
     DisclosureStatus.DISCLOSED: set(),
@@ -44,13 +51,17 @@ class DisclosureRequest(AggregateRoot):
 
     State machine::
 
-        pending -> processing -> disclosed   (no InChIKey match)
-        pending -> processing -> merged      (InChIKey matched existing)
-        pending -> processing -> conflict    (needs manual review)
-        pending -> rejected                  (invalid SMILES / admin rejected)
-        conflict -> rejected                 (admin rejects conflict)
-        conflict -> merged                   (admin accepts merge resolution)
-        conflict -> disclosed                (admin accepts as new structure)
+        pending -> processing -> disclosed              (no InChIKey match)
+        pending -> processing -> merged                 (InChIKey match, auto_approve=true)
+        pending -> processing -> pending_confirmation   (InChIKey match, auto_approve=false)
+        pending -> processing -> conflict               (needs manual review)
+        pending -> rejected                             (invalid SMILES / admin rejected)
+        pending_confirmation -> merged                  (user confirmed merge)
+        pending_confirmation -> rejected                (user rejected merge)
+        pending_confirmation -> conflict                (merge failed during confirmation)
+        conflict -> rejected                            (admin rejects conflict)
+        conflict -> merged                              (admin accepts merge resolution)
+        conflict -> disclosed                           (admin accepts as new structure)
     """
 
     def __init__(
@@ -70,6 +81,8 @@ class DisclosureRequest(AggregateRoot):
         requested_by: uuid.UUID,
         requested_at: datetime | None = None,
         resolved_at: datetime | None = None,
+        matched_molecule_id: uuid.UUID | None = None,
+        scientist_name: str | None = None,
         conflict_reason: str | None = None,
         notes: str | None = None,
         created_at: datetime | None = None,
@@ -94,6 +107,8 @@ class DisclosureRequest(AggregateRoot):
         self.requested_by = requested_by
         self.requested_at = requested_at or datetime.now(UTC)
         self.resolved_at = resolved_at
+        self.matched_molecule_id = matched_molecule_id
+        self.scientist_name = scientist_name
         self.conflict_reason = conflict_reason
         self.notes = notes
 
@@ -111,6 +126,7 @@ class DisclosureRequest(AggregateRoot):
         requested_by: uuid.UUID,
         disclosing_org_id: uuid.UUID | None = None,
         bulk_disclosure_id: uuid.UUID | None = None,
+        scientist_name: str | None = None,
         notes: str | None = None,
     ) -> DisclosureRequest:
         """Create a new disclosure request in PENDING status."""
@@ -121,6 +137,7 @@ class DisclosureRequest(AggregateRoot):
             requested_by=requested_by,
             disclosing_org_id=disclosing_org_id,
             bulk_disclosure_id=bulk_disclosure_id,
+            scientist_name=scientist_name,
             notes=notes,
         )
         req.register_event(
@@ -214,8 +231,30 @@ class DisclosureRequest(AggregateRoot):
             )
         )
 
+    def mark_pending_confirmation(
+        self,
+        *,
+        canonical_smiles: str,
+        inchi_key: str,
+        matched_molecule_id: uuid.UUID,
+    ) -> None:
+        """PROCESSING -> PENDING_CONFIRMATION (match found, awaiting user decision)."""
+        self._guard_transition(DisclosureStatus.PENDING_CONFIRMATION)
+        self.status = DisclosureStatus.PENDING_CONFIRMATION
+        self.canonical_smiles = canonical_smiles
+        self.inchi_key = inchi_key
+        self.matched_molecule_id = matched_molecule_id
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            DisclosurePendingConfirmation(
+                aggregate_id=self.id,
+                aggregate_type="DisclosureRequest",
+                matched_molecule_id=matched_molecule_id,
+            )
+        )
+
     def reject(self, *, reason: str) -> None:
-        """PENDING|CONFLICT -> REJECTED."""
+        """PENDING|CONFLICT|PENDING_CONFIRMATION -> REJECTED."""
         self._guard_transition(DisclosureStatus.REJECTED)
         self.status = DisclosureStatus.REJECTED
         self.conflict_reason = reason

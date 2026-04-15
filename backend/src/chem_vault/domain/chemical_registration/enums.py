@@ -103,6 +103,7 @@ class DisclosureStatus(StrEnum):
     DISCLOSED = "disclosed"
     MERGED = "merged"
     CONFLICT = "conflict"
+    PENDING_CONFIRMATION = "pending_confirmation"
     REJECTED = "rejected"
 
 
