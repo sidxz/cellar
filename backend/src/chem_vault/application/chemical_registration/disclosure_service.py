@@ -170,6 +170,10 @@ class DisclosureService:
 
             # ---- Path B: merge needed ----
             # Execute merge within the SAME transaction for atomicity.
+            # Save the disclosure request FIRST so the FK from
+            # merge_events.disclosure_request_id is satisfiable.
+            await self._disclosure_repo.save(dr)
+
             target_molecule_id = existing.id
 
             merge_result = await self._merge_service.merge_in_transaction(

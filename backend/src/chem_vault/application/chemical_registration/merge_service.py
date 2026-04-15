@@ -190,12 +190,15 @@ class MergeService:
         #    UNIQUE(workspace_id, identifier) constraint violation.
         source.clear_identifiers()
 
-        # --- Side effects (e.g., re-point Batch FKs) ---
-        await self._side_effect_registry.execute_all(
-            self._uow,
-            source.id,
-            target.id,
-        )
+        # --- Side effects (e.g., re-point Batch FKs, block on active requests) ---
+        try:
+            await self._side_effect_registry.execute_all(
+                self._uow,
+                source.id,
+                target.id,
+            )
+        except ValueError as exc:
+            return Failure(ConflictError(str(exc)))
 
         # --- Mark source as tombstone ---
         source.mark_as_tombstone(

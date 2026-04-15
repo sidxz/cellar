@@ -254,9 +254,13 @@ from chem_vault.application.research_organization.update_saved_search import Upd
 from chem_vault.application.shared.molecule_resolver import MoleculeResolver
 from chem_vault.infrastructure.messaging.merge_handlers import (
     BatchMergeSideEffect,
+    CompoundFlagMergeSideEffect,
     DoseResponseCurveMergeSideEffect,
+    MixtureComponentMergeSideEffect,
     MoleculeRelationshipMergeSideEffect,
     ReadoutDataMergeSideEffect,
+    SampleRequestMergeSideEffect,
+    SynthesisRequestMergeSideEffect,
     SynthesisRouteMergeSideEffect,
 )
 from chem_vault.infrastructure.persistence.database import (
@@ -662,11 +666,15 @@ def create_container(
     container.define(
         MergeSideEffectRegistry,
         Singleton(lambda: MergeSideEffectRegistry([
+            SampleRequestMergeSideEffect(),
             BatchMergeSideEffect(),
             ReadoutDataMergeSideEffect(),
             DoseResponseCurveMergeSideEffect(),
+            CompoundFlagMergeSideEffect(),
             MoleculeRelationshipMergeSideEffect(),
+            MixtureComponentMergeSideEffect(),
             SynthesisRouteMergeSideEffect(),
+            SynthesisRequestMergeSideEffect(),
             CollectionMergeSideEffect(),
             AttachmentMergeSideEffect(storage_client),
         ])),

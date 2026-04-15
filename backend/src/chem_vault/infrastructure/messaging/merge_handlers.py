@@ -160,7 +160,85 @@ class MoleculeRelationshipMergeSideEffect:
 
 
 class SynthesisRouteMergeSideEffect:
-    """Re-point SynthesisRoute.target_molecule_id from source to target."""
+    """Re-point SynthesisRoute.target_molecule_id and
+    ReactionStep.product_molecule_id from source to target."""
+
+    async def on_merge(
+        self,
+        uow: UnitOfWork,
+        source_molecule_id: uuid.UUID,
+        target_molecule_id: uuid.UUID,
+    ) -> None:
+        session = _session(uow)
+        params = {"target": target_molecule_id, "source": source_molecule_id}
+        await session.execute(
+            sa.text(
+                "UPDATE synthesis_routes SET target_molecule_id = :target "
+                "WHERE target_molecule_id = :source"
+            ),
+            params,
+        )
+        await session.execute(
+            sa.text(
+                "UPDATE reaction_steps SET product_molecule_id = :target "
+                "WHERE product_molecule_id = :source"
+            ),
+            params,
+        )
+
+
+class CompoundFlagMergeSideEffect:
+    """Re-point compound_flags.molecule_id from source to target.
+
+    Dedup: if both source and target have a flag for the same
+    (workspace, protocol, flagged_by, flag_type), delete source's first.
+    """
+
+    async def on_merge(
+        self,
+        uow: UnitOfWork,
+        source_molecule_id: uuid.UUID,
+        target_molecule_id: uuid.UUID,
+    ) -> None:
+        session = _session(uow)
+        params = {"source": source_molecule_id, "target": target_molecule_id}
+
+        # Delete duplicates that would violate unique constraint
+        await session.execute(
+            sa.text(
+                "DELETE FROM compound_flags cf1 "
+                "WHERE cf1.molecule_id = :source "
+                "AND EXISTS ("
+                "SELECT 1 FROM compound_flags cf2 "
+                "WHERE cf2.molecule_id = :target "
+                "AND cf2.workspace_id = cf1.workspace_id "
+                "AND cf2.protocol_id = cf1.protocol_id "
+                "AND cf2.flagged_by = cf1.flagged_by "
+                "AND cf2.flag_type = cf1.flag_type"
+                ")"
+            ),
+            params,
+        )
+
+        # Re-point remaining
+        await session.execute(
+            sa.text(
+                "UPDATE compound_flags "
+                "SET molecule_id = :target "
+                "WHERE molecule_id = :source"
+            ),
+            params,
+        )
+
+
+class SynthesisRequestMergeSideEffect:
+    """Re-point non-terminal synthesis_requests.molecule_id to target.
+
+    Terminal statuses (fulfilled, rejected, cancelled, failed) are left
+    pointing at source as historical records.
+    """
+
+    _TERMINAL = ("fulfilled", "rejected", "cancelled", "failed")
 
     async def on_merge(
         self,
@@ -171,8 +249,104 @@ class SynthesisRouteMergeSideEffect:
         session = _session(uow)
         await session.execute(
             sa.text(
-                "UPDATE synthesis_routes SET target_molecule_id = :target "
-                "WHERE target_molecule_id = :source"
+                "UPDATE synthesis_requests SET molecule_id = :target "
+                "WHERE molecule_id = :source "
+                "AND status NOT IN ('fulfilled', 'rejected', 'cancelled', 'failed')"
             ),
             {"target": target_molecule_id, "source": source_molecule_id},
+        )
+
+
+class SampleRequestMergeSideEffect:
+    """Block merge if active sample requests exist, re-point completed ones.
+
+    Active = submitted, approved, preparing (physical material in flight).
+    Terminal = fulfilled, rejected, cancelled (safe to re-point for history).
+    """
+
+    _ACTIVE = ("submitted", "approved", "preparing")
+
+    async def on_merge(
+        self,
+        uow: UnitOfWork,
+        source_molecule_id: uuid.UUID,
+        target_molecule_id: uuid.UUID,
+    ) -> None:
+        session = _session(uow)
+        params = {"source": source_molecule_id, "target": target_molecule_id}
+
+        # Check for active requests — raise to abort merge
+        result = await session.execute(
+            sa.text(
+                "SELECT COUNT(*) FROM sample_requests "
+                "WHERE molecule_id = :source "
+                "AND status IN ('submitted', 'approved', 'preparing')"
+            ),
+            {"source": source_molecule_id},
+        )
+        active_count = result.scalar_one()
+        if active_count > 0:
+            raise ValueError(
+                f"Cannot merge: {active_count} active sample request(s) on source molecule"
+            )
+
+        # Re-point terminal requests for history
+        await session.execute(
+            sa.text(
+                "UPDATE sample_requests SET molecule_id = :target "
+                "WHERE molecule_id = :source"
+            ),
+            params,
+        )
+
+
+class MixtureComponentMergeSideEffect:
+    """Re-point mixture_components FKs from source to target.
+
+    Handles both mixture_molecule_id and component_molecule_id.
+    Deletes rows that would create duplicate components in the same mixture.
+    """
+
+    async def on_merge(
+        self,
+        uow: UnitOfWork,
+        source_molecule_id: uuid.UUID,
+        target_molecule_id: uuid.UUID,
+    ) -> None:
+        session = _session(uow)
+        params = {"source": source_molecule_id, "target": target_molecule_id}
+
+        # Delete component rows that would duplicate after re-point
+        # (same mixture, same component, same role)
+        await session.execute(
+            sa.text(
+                "DELETE FROM mixture_components mc1 "
+                "WHERE mc1.component_molecule_id = :source "
+                "AND EXISTS ("
+                "SELECT 1 FROM mixture_components mc2 "
+                "WHERE mc2.mixture_molecule_id = mc1.mixture_molecule_id "
+                "AND mc2.component_molecule_id = :target"
+                ")"
+            ),
+            params,
+        )
+
+        # Re-point component references
+        await session.execute(
+            sa.text(
+                "UPDATE mixture_components "
+                "SET component_molecule_id = :target "
+                "WHERE component_molecule_id = :source"
+            ),
+            params,
+        )
+
+        # Re-point mixture references
+        await session.execute(
+            sa.text(
+                "UPDATE mixture_components "
+                "SET mixture_molecule_id = :target "
+                "WHERE mixture_molecule_id = :source"
+            ),
+            params,
         )
