@@ -252,6 +252,11 @@ class RegistrationResponse(BaseModel):
     qc_warnings: list[str]
     batch: BatchResponse | None = None
     detected_salt: DetectedSaltResponse | None = None
+    action: str = "registered"
+    needs_merge_confirmation: bool = False
+    matched_molecule_id: uuid.UUID | None = None
+    disclosure_id: uuid.UUID | None = None
+    conflict_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -434,6 +439,11 @@ async def register_molecule(
         qc_warnings=outcome.qc_warnings,
         batch=batch_response,
         detected_salt=detected_salt_resp,
+        action=outcome.action.value,
+        needs_merge_confirmation=outcome.needs_merge_confirmation,
+        matched_molecule_id=outcome.matched_molecule_id,
+        disclosure_id=outcome.disclosure_id,
+        conflict_reason=outcome.conflict_reason,
     )
 
 
