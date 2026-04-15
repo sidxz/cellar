@@ -1,4 +1,8 @@
-"""Shared CDD vault configuration check for import use cases."""
+"""Shared CDD vault configuration check for import use cases.
+
+Delegates to GetDataSourceForImport (DataSource config system).
+Returns (vault_id, api_key) for backward compatibility with molecule import.
+"""
 
 from __future__ import annotations
 
@@ -6,38 +10,33 @@ import uuid
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.domain.shared.errors import DomainError, ValidationError
-from chem_vault.domain.shared.secret_provider import SecretProvider
-from chem_vault.domain.workspace_config.repository import (
-    ExternalApiKeyRepository,
-    WorkspaceSettingsRepository,
+from chem_vault.application.workspace_config.get_data_source_for_import import (
+    GetDataSourceForImport,
+    GetDataSourceForImportQuery,
 )
+from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.workspace_config.data_source import DataSourceType
 
 
 async def check_cdd_configured(
     workspace_id: uuid.UUID,
-    settings_repo: WorkspaceSettingsRepository,
-    api_key_repo: ExternalApiKeyRepository,
-    secret_provider: SecretProvider,
+    get_data_source: GetDataSourceForImport,
 ) -> Result[tuple[str, str], DomainError]:
     """Verify CDD Vault integration is configured. Returns (vault_id, api_key) on success."""
-    settings = await settings_repo.find_by_id(workspace_id)
-    if settings is None or not settings.cdd_vault_id:
-        return Failure(
-            ValidationError("CDD Vault ID is not configured. Go to Admin > Workspace Settings.")
+    result = await get_data_source(
+        GetDataSourceForImportQuery(
+            workspace_id=workspace_id,
+            source_type=DataSourceType.CDD_VAULT,
         )
+    )
 
-    api_key_entry = await api_key_repo.find_by_key_name(workspace_id, "cdd_vault")
-    if api_key_entry is None or not api_key_entry.is_active:
-        return Failure(
-            ValidationError("CDD Vault API key is not configured or inactive. Go to Admin > API Keys.")
-        )
+    if isinstance(result, Failure):
+        return result
 
-    secret_key = f"{workspace_id}:cdd_vault"
-    api_key = await secret_provider.get_secret(secret_key)
-    if api_key is None:
-        return Failure(
-            ValidationError("CDD Vault API key secret not found. Re-add the key in Admin > API Keys.")
-        )
+    config = result.unwrap()
+    vault_id = str(config.data_source.config.get("vault_id", ""))
+    if not vault_id:
+        from chem_vault.domain.shared.errors import ValidationError
+        return Failure(ValidationError("CDD Vault data source has no vault_id configured"))
 
-    return Success((settings.cdd_vault_id, api_key))
+    return Success((vault_id, config.api_key or ""))

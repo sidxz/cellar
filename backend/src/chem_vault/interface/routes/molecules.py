@@ -100,7 +100,7 @@ class IdentifierResponse(BaseModel):
         return cls(
             id=i.id,
             identifier=i.identifier,
-            identifier_type=i.identifier_type.value,
+            identifier_type=i.identifier_type,
             source=i.source,
             registered_by=i.registered_by,
         )

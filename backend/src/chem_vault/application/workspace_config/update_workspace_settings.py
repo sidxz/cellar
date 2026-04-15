@@ -28,7 +28,6 @@ class UpdateWorkspaceSettingsCommand(Command):
     signature_required_for: list[str] | object = UNSET
     audit_retention_days: int | None | object = UNSET
     formulation_number_scheme: str | None | object = UNSET
-    cdd_vault_id: str | None | object = UNSET
 
 
 class UpdateWorkspaceSettings:
@@ -57,7 +56,7 @@ class UpdateWorkspaceSettings:
             for key in (
                 "registration_rules", "custom_field_definitions", "default_molecule_type",
                 "audit_reason_policy", "signature_required_for", "audit_retention_days",
-                "formulation_number_scheme", "cdd_vault_id",
+                "formulation_number_scheme",
             ):
                 val = getattr(input, key)
                 if val is not UNSET:

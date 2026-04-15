@@ -12,7 +12,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from chem_vault.domain.chemical_registration.enums import (
     ComponentRole,
-    IdentifierType,
     LifecycleStage,
     MoleculeType,
     RegistrationStatus,
@@ -97,7 +96,7 @@ class SQLAlchemyMoleculeRepository(
                 id=ident.id,
                 molecule_id=ident.molecule_id,
                 identifier=ident.identifier,
-                identifier_type=IdentifierType(ident.identifier_type),
+                identifier_type=ident.identifier_type,
                 source=ident.source,
                 registered_by=ident.registered_by,
                 created_at=ident.created_at,
@@ -248,7 +247,7 @@ class SQLAlchemyMoleculeRepository(
             molecule_id=ident.molecule_id,
             workspace_id=workspace_id,
             identifier=ident.identifier,
-            identifier_type=ident.identifier_type.value,
+            identifier_type=ident.identifier_type,
             source=ident.source,
             registered_by=ident.registered_by,
         )

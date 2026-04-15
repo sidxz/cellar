@@ -6,6 +6,7 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
+from chem_vault.domain.workspace_config.data_source import DataSource
 from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
 from chem_vault.domain.workspace_config.enums import FieldTarget
 from chem_vault.domain.workspace_config.external_api_key import ExternalApiKey
@@ -198,5 +199,31 @@ class ProtocolFormRepository(Protocol):
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[ProtocolForm]: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class DataSourceRepository(Protocol):
+    """Repository for DataSource aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> DataSource | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> DataSource | None: ...
+
+    async def save(self, aggregate: DataSource) -> None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[DataSource]: ...
+
+    async def find_by_name(
+        self, workspace_id: uuid.UUID, name: str
+    ) -> DataSource | None: ...
+
+    async def find_active_by_source_type(
+        self, workspace_id: uuid.UUID, source_type: str
+    ) -> DataSource | None: ...
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...

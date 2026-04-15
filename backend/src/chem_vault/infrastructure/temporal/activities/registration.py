@@ -233,6 +233,11 @@ async def _create_batch(
         dispatcher=dispatcher,
     )
 
+    # Merge CDD batch ID into custom_fields for plate well resolution
+    custom_fields = None
+    if item.cdd_batch_id is not None:
+        custom_fields = {"cdd_batch_id": item.cdd_batch_id}
+
     batch_cmd = CreateBatchCommand(
         workspace_id=workspace_id,
         molecule_id=molecule.id,
@@ -248,6 +253,7 @@ async def _create_batch(
         purity=item.purity,
         appearance=item.appearance,
         vendor_catalog_number=item.vendor_catalog_number,
+        custom_fields=custom_fields,
     )
 
     batch_result = await create_batch(batch_cmd)

@@ -33,6 +33,7 @@ class ChunkItem:
     appearance: str | None = None
     vendor_catalog_number: str | None = None  # CDD molecule_batch_identifier
     cdd_molecule_id: int | None = None
+    cdd_batch_id: int | None = None  # CDD batch numeric ID (for plate well resolution)
     cdd_modified_at: str | None = None  # ISO timestamp from CDD
 
 
@@ -251,6 +252,7 @@ class LoadExportChunkInput:
     offset: int
     limit: int
     max_molecules: int | None = None
+    entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
 
 
 @dataclass
@@ -261,3 +263,121 @@ class LoadExportChunkOutput:
     skipped: int = 0
     has_more: bool = False
     molecule_count: int = 0  # distinct molecules (before batch expansion)
+
+
+# ---------------------------------------------------------------------------
+# CDD plate import tracking
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CreateCddPlateImportInput:
+    """Input for creating a CddPlateImport aggregate."""
+
+    workspace_id: str
+    cdd_vault_id: str
+    submitted_by: str
+    workflow_id: str | None = None
+
+
+@dataclass
+class UpdateCddPlateImportProgressInput:
+    """Input for updating CDD plate import progress counters."""
+
+    workspace_id: str
+    import_id: str
+    plates_registered: int = 0
+    plates_duplicate: int = 0
+    plates_error: int = 0
+    wells_mapped: int = 0
+    wells_unresolved: int = 0
+    last_processed_offset: int = 0
+
+
+@dataclass
+class CompleteCddPlateImportInput:
+    """Input for completing a CDD plate import."""
+
+    workspace_id: str
+    import_id: str
+
+
+@dataclass
+class FailCddPlateImportInput:
+    """Input for failing a CDD plate import."""
+
+    workspace_id: str
+    import_id: str
+    reason: str
+
+
+@dataclass
+class RecordPlateSyncMappingsInput:
+    workspace_id: str
+    cdd_vault_id: str
+    mappings: list[dict] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# CDD plate fetch
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CddStartPlateExportInput:
+    """Input for starting a CDD async plate export."""
+
+    workspace_id: str
+    secret_ref: str
+    vault_id: str
+
+
+@dataclass
+class LoadPlateChunkInput:
+    """Input for loading a chunk from a saved CDD plate export."""
+
+    storage_path: str
+    offset: int
+    limit: int
+    entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
+
+
+@dataclass
+class PlateChunkItem:
+    """A single plate record within a processing chunk."""
+
+    cdd_plate_id: int
+    name: str
+    format: str  # "96", "384", etc.
+    wells: list[dict] = field(default_factory=list)  # [{position, cdd_batch_id}, ...]
+
+
+@dataclass
+class LoadPlateChunkOutput:
+    """Output of loading a plate export chunk."""
+
+    items: list[dict] = field(default_factory=list)  # serialized PlateChunkItem dicts
+    has_more: bool = False
+
+
+@dataclass
+class PlateChunkInput:
+    """Input for the process_plate_chunk activity."""
+
+    workspace_id: str
+    cdd_vault_id: str
+    submitted_by: str
+    items: list[PlateChunkItem] = field(default_factory=list)
+    chunk_index: int = 0
+
+
+@dataclass
+class PlateChunkOutput:
+    """Output of the process_plate_chunk activity."""
+
+    plates_registered: int = 0
+    plates_duplicate: int = 0
+    plates_error: int = 0
+    wells_mapped: int = 0
+    wells_unresolved: int = 0
+    sync_pairs: list[dict] = field(default_factory=list)  # [{cdd_plate_id, plate_id, cdd_statistics}]

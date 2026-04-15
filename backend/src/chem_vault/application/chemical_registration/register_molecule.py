@@ -12,10 +12,7 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.chemical_registration.enums import (
-    IdentifierType,
-    MoleculeType,
-)
+from chem_vault.domain.chemical_registration.enums import MoleculeType
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
@@ -150,7 +147,7 @@ class RegisterMolecule:
                 MoleculeIdentifier.create(
                     molecule_id=mol.id,
                     identifier=input.name,
-                    identifier_type=IdentifierType.CUSTOM,
+                    identifier_type="custom",
                     source=f"Registration ({source})",
                     registered_by=input.registered_by,
                 )
@@ -164,7 +161,7 @@ class RegisterMolecule:
                     MoleculeIdentifier.create(
                         molecule_id=mol.id,
                         identifier=ext_id.identifier,
-                        identifier_type=IdentifierType(ext_id.identifier_type),
+                        identifier_type=ext_id.identifier_type,
                         source=f"Registration ({source})",
                         registered_by=input.registered_by,
                     )

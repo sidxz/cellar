@@ -132,3 +132,25 @@ class OntologySlotDefinitionCreated(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class OntologySlotDefinitionUpdated(DomainEvent):
     workspace_id: uuid.UUID
+
+
+# --- Data Sources ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class DataSourceCreated(DomainEvent):
+    workspace_id: uuid.UUID
+    name: str
+    source_type: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class DataSourceUpdated(DomainEvent):
+    workspace_id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class DataSourceDeactivated(DomainEvent):
+    workspace_id: uuid.UUID
+    name: str

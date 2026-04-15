@@ -46,24 +46,27 @@ async def run_worker() -> None:
     from chem_vault.infrastructure.temporal.activities.cdd_fetch import CddFetchActivities
     from chem_vault.infrastructure.temporal.activities.file_parsing import FileParsingActivities
     from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
+    from chem_vault.infrastructure.temporal.activities.plate_registration import PlateRegistrationActivities
     from chem_vault.infrastructure.temporal.workflows.bulk_registration import BulkRegistrationWorkflow
+    from chem_vault.infrastructure.temporal.workflows.cdd_plate_import import CddPlateImportWorkflow
     from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import CddVaultImportWorkflow
 
     tracking = BulkTrackingActivities(container)
     cdd_fetch = CddFetchActivities(container)
     file_parsing = FileParsingActivities()
     registration = RegistrationActivities(container)
+    plate_registration = PlateRegistrationActivities(container)
 
     worker = Worker(
         client,
         task_queue=settings.task_queue,
-        workflows=[CddVaultImportWorkflow, BulkRegistrationWorkflow],
+        workflows=[CddVaultImportWorkflow, BulkRegistrationWorkflow, CddPlateImportWorkflow],
         activities=[
             # BulkRegistration tracking
             tracking.create_bulk_registration,
             tracking.update_bulk_reg_progress,
             tracking.complete_bulk_registration,
-            # CDD import tracking
+            # CDD molecule import tracking
             tracking.create_cdd_import,
             tracking.complete_discovery,
             tracking.update_cdd_import_progress,
@@ -71,15 +74,28 @@ async def run_worker() -> None:
             tracking.fail_cdd_import,
             # CDD sync mapping
             tracking.record_sync_mappings,
+            # CDD plate import tracking
+            tracking.create_cdd_plate_import,
+            tracking.complete_plate_discovery,
+            tracking.update_cdd_plate_import_progress,
+            tracking.complete_cdd_plate_import,
+            tracking.fail_cdd_plate_import,
+            tracking.record_plate_sync_mappings,
             # CDD fetch (async export model)
             cdd_fetch.start_molecule_export,
             cdd_fetch.poll_molecule_export,
             cdd_fetch.load_export_chunk,
             cdd_fetch.get_sync_watermark,
+            # CDD plate fetch
+            cdd_fetch.start_plate_export,
+            cdd_fetch.poll_plate_export,
+            cdd_fetch.load_plate_chunk,
             # File parsing
             file_parsing.parse_file,
             # Registration (shared)
             registration.process_chunk,
+            # Plate registration
+            plate_registration.process_plate_chunk,
         ],
     )
 

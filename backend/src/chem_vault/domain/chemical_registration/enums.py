@@ -69,6 +69,8 @@ class IdentifierType(StrEnum):
     CAS_NUMBER = "cas_number"
     CHEMBL_ID = "chembl_id"
     PUBCHEM_CID = "pubchem_cid"
+    CDD_MOLECULE_ID = "cdd_molecule_id"
+    SYNONYM = "synonym"
     INTERNAL_LEGACY = "internal_legacy"
     CUSTOM = "custom"
 

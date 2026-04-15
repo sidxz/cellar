@@ -188,6 +188,9 @@ def create_app() -> FastAPI:
     from chem_vault.interface.routes.api_keys import router as api_keys_router
     app.include_router(api_keys_router)
 
+    from chem_vault.interface.routes.data_sources import router as data_sources_router
+    app.include_router(data_sources_router)
+
     from chem_vault.interface.routes.ontology import router as ontology_router
     app.include_router(ontology_router)
 
@@ -199,6 +202,9 @@ def create_app() -> FastAPI:
 
     from chem_vault.interface.routes.cdd_molecule_import import router as cdd_mol_import_router
     app.include_router(cdd_mol_import_router)
+
+    from chem_vault.interface.routes.cdd_plate_import import router as cdd_plate_import_router
+    app.include_router(cdd_plate_import_router)
 
     from chem_vault.interface.routes.plate_setup import router as plate_setup_router
     app.include_router(plate_setup_router)

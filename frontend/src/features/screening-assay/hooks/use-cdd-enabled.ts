@@ -1,20 +1,15 @@
 "use client";
 
-import { useApiKeys } from "@/features/workspace-config/hooks/use-api-keys";
-import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
+import { useDataSources } from "@/features/workspace-config/hooks/use-data-sources";
 
 export function useCddEnabled() {
-  const { data: apiKeys, isLoading: keysLoading } = useApiKeys();
-  const { data: settings, isLoading: settingsLoading } = useWorkspaceSettings();
+  const { data: sources, isLoading } = useDataSources();
 
-  const loading = keysLoading || settingsLoading;
+  if (isLoading) return { enabled: false, loading: true };
 
-  if (loading) return { enabled: false, loading: true };
-
-  const hasCddKey = apiKeys?.some(
-    (k) => k.key_name === "cdd_vault" && k.is_active
+  const hasActiveCdd = sources?.some(
+    (ds) => ds.source_type === "cdd_vault" && ds.is_active
   );
-  const hasCddVaultId = !!settings?.cdd_vault_id;
 
-  return { enabled: !!hasCddKey && hasCddVaultId, loading: false };
+  return { enabled: !!hasActiveCdd, loading: false };
 }

@@ -48,6 +48,13 @@ import {
   useForceFailImport,
   useImportHistory,
 } from "../hooks/use-cdd-molecule-import";
+import {
+  useStartCddPlateImport,
+  useCddPlateImportStatus,
+  useCancelCddPlateImport,
+  useForceFailPlateImport,
+  usePlateImportHistory,
+} from "../hooks/use-cdd-plate-import";
 
 const TERMINAL_STATUSES = ["completed", "completed_with_errors", "failed"];
 
@@ -186,7 +193,7 @@ export function DataImportPage() {
         <TabsList>
           <TabsTrigger value="molecules">Molecules &amp; Batches</TabsTrigger>
           <TabsTrigger value="protocols" disabled>Protocols</TabsTrigger>
-          <TabsTrigger value="plates" disabled>Plates</TabsTrigger>
+          <TabsTrigger value="plates">Plates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="molecules" className="mt-4">
@@ -453,8 +460,248 @@ export function DataImportPage() {
         </TabsContent>
           </Tabs>
         </TabsContent>
+
+        {/* ===== Plates tab ===== */}
+        <TabsContent value="plates" className="mt-4">
+          <PlateImportTab />
+        </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+/* ---------- Plate import tab ---------- */
+
+const PLATE_TERMINAL = ["completed", "completed_with_errors", "failed"];
+
+function PlateImportTab() {
+  const qc = useQueryClient();
+  const [plateWorkflowId, setPlateWorkflowId] = useState<string | null>(null);
+  const [plateError, setPlateError] = useState<string | null>(null);
+  const [plateCompletion, setPlateCompletion] = useState<string | null>(null);
+
+  const { data: plateHistory, refetch: refetchPlateHistory } = usePlateImportHistory();
+  const startPlate = useStartCddPlateImport();
+  const cancelPlate = useCancelCddPlateImport();
+  const forceFailPlate = useForceFailPlateImport();
+
+  const activePlateImport = plateHistory?.find(
+    (imp) => !PLATE_TERMINAL.includes(imp.status)
+  );
+
+  useEffect(() => {
+    if (activePlateImport?.workflow_id && !plateWorkflowId) {
+      setPlateWorkflowId(activePlateImport.workflow_id);
+    }
+  }, [activePlateImport, plateWorkflowId]);
+
+  const { data: plateLive } = useCddPlateImportStatus(plateWorkflowId);
+
+  useEffect(() => {
+    if (plateLive && PLATE_TERMINAL.includes(plateLive.status)) {
+      setPlateWorkflowId(null);
+      qc.invalidateQueries({ queryKey: ["cdd-plate-import", "history"] });
+      qc.invalidateQueries({ queryKey: ["plates"] });
+      if (plateLive.status === "completed") {
+        setPlateCompletion(
+          `Import completed. ${plateLive.plates_registered} plates registered, ${plateLive.plates_duplicate} duplicates, ${plateLive.wells_mapped} wells mapped.`
+        );
+      } else if (plateLive.status === "completed_with_errors") {
+        setPlateCompletion(
+          `Import completed with ${plateLive.plates_error} errors. ${plateLive.plates_registered} plates registered, ${plateLive.wells_unresolved} wells unresolved.`
+        );
+      } else {
+        setPlateCompletion("Import failed. Check the History tab for details.");
+      }
+    }
+  }, [plateLive, qc]);
+
+  const handleStartPlate = async () => {
+    setPlateError(null);
+    setPlateCompletion(null);
+    try {
+      const result = await startPlate.mutateAsync();
+      setPlateWorkflowId(result.workflow_id);
+      refetchPlateHistory();
+    } catch (err: unknown) {
+      setPlateError(err instanceof Error ? err.message : "Failed to start plate import");
+    }
+  };
+
+  const isPlateActive = !!plateWorkflowId;
+  const plateProcessed = plateLive
+    ? plateLive.plates_registered + plateLive.plates_duplicate + plateLive.plates_error
+    : 0;
+  const platePct =
+    plateLive && plateLive.total_count > 0
+      ? Math.round((plateProcessed / plateLive.total_count) * 100)
+      : 0;
+
+  return (
+    <Tabs defaultValue="new-import">
+      <TabsList>
+        <TabsTrigger value="new-import">New Import</TabsTrigger>
+        <TabsTrigger value="history">History</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="new-import" className="mt-4 space-y-6">
+        {plateCompletion && (
+          <div className="flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-800 dark:bg-green-950/30 dark:text-green-300">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{plateCompletion}</span>
+          </div>
+        )}
+
+        {plateError && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {plateError}
+          </div>
+        )}
+
+        {!isPlateActive && (
+          <div className="max-w-lg space-y-5">
+            <div className="rounded-md border p-4 text-sm space-y-2">
+              <p>This will:</p>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>Export all plates from your connected CDD Vault</li>
+                <li>Register each plate with barcode and format detection</li>
+                <li>Map wells to internal batches via CDD batch ID resolution</li>
+                <li>Wells with unresolvable batch IDs will be left unmapped</li>
+              </ul>
+              <p className="text-muted-foreground">
+                Plates are imported using your configured CDD Vault data source.
+              </p>
+            </div>
+            <Button onClick={handleStartPlate} disabled={startPlate.isPending}>
+              {startPlate.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Start Plate Import
+            </Button>
+          </div>
+        )}
+
+        {isPlateActive && plateLive && (
+          <div className="max-w-lg space-y-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {PLATE_TERMINAL.includes(plateLive.status) ? (
+                statusIcon(plateLive.status)
+              ) : (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              {plateLive.status === "processing"
+                ? `Registering plates... (chunk ${plateLive.pages_processed})`
+                : statusLabel(plateLive.status, plateLive.pages_processed)}
+            </div>
+
+            {plateLive.total_count > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {plateProcessed.toLocaleString()} of{" "}
+                    {plateLive.total_count.toLocaleString()}
+                  </span>
+                  <span>{platePct}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${platePct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-4 gap-3">
+              <CounterCard label="Registered" value={plateLive.plates_registered} color="text-green-600" />
+              <CounterCard label="Duplicate" value={plateLive.plates_duplicate} color="text-blue-600" />
+              <CounterCard label="Wells OK" value={plateLive.wells_mapped} color="text-muted-foreground" />
+              <CounterCard label="Errors" value={plateLive.plates_error} color="text-destructive" />
+            </div>
+
+            {!PLATE_TERMINAL.includes(plateLive.status) && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => plateWorkflowId && cancelPlate.mutate(plateWorkflowId)}
+                disabled={cancelPlate.isPending}
+              >
+                <Square className="mr-1.5 h-3 w-3" />
+                Stop Import
+              </Button>
+            )}
+          </div>
+        )}
+
+        {isPlateActive && !plateLive && (
+          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Starting plate import workflow...
+          </div>
+        )}
+      </TabsContent>
+
+      <TabsContent value="history" className="mt-4">
+        {!plateHistory || plateHistory.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No plate imports have been run yet.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Registered</TableHead>
+                <TableHead className="text-right">Duplicate</TableHead>
+                <TableHead className="text-right">Errors</TableHead>
+                <TableHead className="text-right">Wells</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {plateHistory.map((imp) => (
+                <TableRow key={imp.id}>
+                  <TableCell className="whitespace-nowrap">
+                    {formatDate(imp.submitted_at)}
+                  </TableCell>
+                  <TableCell>
+                    <ImportStatusBadge status={imp.status} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {imp.plates_registered.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {imp.plates_duplicate.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {imp.plates_error.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {imp.wells_mapped.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {imp.total_count.toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    {!PLATE_TERMINAL.includes(imp.status) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() => forceFailPlate.mutate(imp.id)}
+                        disabled={forceFailPlate.isPending}
+                      >
+                        Force Stop
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 }
 

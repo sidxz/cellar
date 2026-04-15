@@ -3,6 +3,7 @@ import {
   BookOpen,
   Building2,
   ClipboardList,
+  Database,
   DatabaseZap,
   FileText,
   FlaskConical,
@@ -94,6 +95,7 @@ export const navigation: NavGroup[] = [
         icon: Building2,
         children: [
           { title: "Organizations", href: "/admin/organizations", icon: Building2 },
+          { title: "Data Sources", href: "/admin/data-sources", icon: Database },
           { title: "API Keys", href: "/admin/api-keys", icon: KeyRound },
           { title: "Settings", href: "/admin/settings", icon: Settings },
         ],

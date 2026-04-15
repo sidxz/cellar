@@ -184,3 +184,22 @@ class ProtocolFormModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     __table_args__ = (
         Index("ix_protocol_form_ws", "workspace_id"),
     )
+
+
+class DataSourceModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """DataSource — external data source integration configuration."""
+
+    __tablename__ = "data_sources"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    api_key_name: Mapped[str | None] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    entity_mappings: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_data_source_ws_name"),
+        Index("ix_data_source_ws_type", "workspace_id", "source_type"),
+    )

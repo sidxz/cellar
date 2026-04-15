@@ -46,6 +46,7 @@ class CddVaultImportWorkflowInput:
     secret_ref: str
     filter_criteria: dict | None = None
     max_molecules: int | None = None
+    entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
     # Resume fields — populated by continue-as-new to carry state across executions
     import_id: str | None = None
     storage_path: str | None = None
@@ -161,6 +162,7 @@ class CddVaultImportWorkflow:
                     offset=offset,
                     limit=CHUNK_SIZE,
                     max_molecules=input.max_molecules,
+                    entity_mappings=input.entity_mappings,
                 ),
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=_RETRY,
@@ -252,6 +254,7 @@ class CddVaultImportWorkflow:
                         secret_ref=input.secret_ref,
                         filter_criteria=input.filter_criteria,
                         max_molecules=input.max_molecules,
+                        entity_mappings=input.entity_mappings,
                         import_id=import_id,
                         storage_path=storage_path,
                         resume_offset=offset,

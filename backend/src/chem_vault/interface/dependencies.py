@@ -199,7 +199,15 @@ from chem_vault.application.cdd_import.list_cdd_protocols import ListCddProtocol
 from chem_vault.application.cdd_import.force_fail_cdd_molecule_import import ForceFailCddMoleculeImport
 from chem_vault.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
 from chem_vault.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
+from chem_vault.application.cdd_import.force_fail_cdd_plate_import import ForceFailCddPlateImport
+from chem_vault.application.cdd_import.list_cdd_plate_imports import ListCddPlateImports
+from chem_vault.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
 from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
+from chem_vault.application.workspace_config.create_data_source import CreateDataSource
+from chem_vault.application.workspace_config.get_data_source import GetDataSource
+from chem_vault.application.workspace_config.list_data_sources import ListDataSources
+from chem_vault.application.workspace_config.update_data_source import UpdateDataSource
+from chem_vault.application.workspace_config.delete_data_source import DeleteDataSource
 from chem_vault.application.workspace_config.create_external_api_key import CreateExternalApiKey
 from chem_vault.application.workspace_config.list_external_api_keys import ListExternalApiKeys
 from chem_vault.application.workspace_config.update_external_api_key import UpdateExternalApiKey
@@ -350,6 +358,13 @@ CreateExternalApiKeyDep = Annotated[CreateExternalApiKey, Depends(_get_use_case(
 ListExternalApiKeysDep = Annotated[ListExternalApiKeys, Depends(_get_use_case(ListExternalApiKeys))]
 UpdateExternalApiKeyDep = Annotated[UpdateExternalApiKey, Depends(_get_use_case(UpdateExternalApiKey))]
 DeleteExternalApiKeyDep = Annotated[DeleteExternalApiKey, Depends(_get_use_case(DeleteExternalApiKey))]
+
+# --- Data Source dependencies ---
+CreateDataSourceDep = Annotated[CreateDataSource, Depends(_get_use_case(CreateDataSource))]
+GetDataSourceDep = Annotated[GetDataSource, Depends(_get_use_case(GetDataSource))]
+ListDataSourcesDep = Annotated[ListDataSources, Depends(_get_use_case(ListDataSources))]
+UpdateDataSourceDep = Annotated[UpdateDataSource, Depends(_get_use_case(UpdateDataSource))]
+DeleteDataSourceDep = Annotated[DeleteDataSource, Depends(_get_use_case(DeleteDataSource))]
 
 # --- Ontology Slot dependencies ---
 CreateOntologySlotDep = Annotated[CreateOntologySlot, Depends(_get_use_case(CreateOntologySlot))]
@@ -531,6 +546,9 @@ ImportCddProtocolDep = Annotated[ImportCddProtocol, Depends(_get_use_case(Import
 StartCddMoleculeImportDep = Annotated[StartCddMoleculeImport, Depends(_get_use_case(StartCddMoleculeImport))]
 ListCddMoleculeImportsDep = Annotated[ListCddMoleculeImports, Depends(_get_use_case(ListCddMoleculeImports))]
 ForceFailCddMoleculeImportDep = Annotated[ForceFailCddMoleculeImport, Depends(_get_use_case(ForceFailCddMoleculeImport))]
+StartCddPlateImportDep = Annotated[StartCddPlateImport, Depends(_get_use_case(StartCddPlateImport))]
+ListCddPlateImportsDep = Annotated[ListCddPlateImports, Depends(_get_use_case(ListCddPlateImports))]
+ForceFailCddPlateImportDep = Annotated[ForceFailCddPlateImport, Depends(_get_use_case(ForceFailCddPlateImport))]
 
 # --- Dashboard dependencies ---
 GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]

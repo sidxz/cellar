@@ -1658,6 +1658,46 @@ def create_container(
     container.define(ListExternalApiKeys, _apikey_query(ListExternalApiKeys))
     container.define(GetExternalApiKeySecret, lambda c: GetExternalApiKeySecret(c[SecretProvider]))
 
+    # --- Data Sources ---
+    from chem_vault.application.workspace_config.create_data_source import CreateDataSource
+    from chem_vault.application.workspace_config.get_data_source import GetDataSource
+    from chem_vault.application.workspace_config.list_data_sources import ListDataSources
+    from chem_vault.application.workspace_config.update_data_source import UpdateDataSource
+    from chem_vault.application.workspace_config.delete_data_source import DeleteDataSource
+    from chem_vault.application.workspace_config.get_data_source_for_import import GetDataSourceForImport
+    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.data_source_repository import (
+        SQLAlchemyDataSourceRepository,
+    )
+
+    def _ds_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyDataSourceRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _ds_query(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyDataSourceRepository(uow))
+        return _f
+
+    container.define(CreateDataSource, _ds_cmd(CreateDataSource))
+    container.define(UpdateDataSource, _ds_cmd(UpdateDataSource))
+    container.define(DeleteDataSource, _ds_cmd(DeleteDataSource))
+    container.define(ListDataSources, _ds_query(ListDataSources))
+    container.define(GetDataSource, _ds_query(GetDataSource))
+
+    def _get_ds_for_import(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetDataSourceForImport(
+            uow,
+            SQLAlchemyDataSourceRepository(uow),
+            SQLAlchemyExternalApiKeyRepository(uow),
+            c[SecretProvider],
+        )
+
+    container.define(GetDataSourceForImport, _get_ds_for_import)
+
     # --- Ontology Slot Definitions ---
     from chem_vault.application.workspace_config.create_ontology_slot import CreateOntologySlot
     from chem_vault.application.workspace_config.list_ontology_slots import ListOntologySlots
@@ -1789,12 +1829,13 @@ def create_container(
 
     def _start_cdd_mol_import(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return StartCddMoleculeImport(
+        get_ds = GetDataSourceForImport(
             uow=uow,
-            secret_provider=c[SecretProvider],
-            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            ds_repo=SQLAlchemyDataSourceRepository(uow),
             api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+            secret_provider=c[SecretProvider],
         )
+        return StartCddMoleculeImport(get_data_source=get_ds)
 
     def _list_cdd_mol_imports(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -1814,5 +1855,43 @@ def create_container(
     container.define(StartCddMoleculeImport, _start_cdd_mol_import)
     container.define(ListCddMoleculeImports, _list_cdd_mol_imports)
     container.define(ForceFailCddMoleculeImport, _force_fail_cdd_mol_import)
+
+    # ---- CDD plate import use cases ----
+    from chem_vault.application.cdd_import.force_fail_cdd_plate_import import ForceFailCddPlateImport
+    from chem_vault.application.cdd_import.list_cdd_plate_imports import ListCddPlateImports
+    from chem_vault.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
+    from chem_vault.application.workspace_config.get_data_source_for_import import GetDataSourceForImport
+    from chem_vault.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_repository import (
+        SQLAlchemyCddPlateImportRepository,
+    )
+
+    def _start_cdd_plate_import(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        get_ds = GetDataSourceForImport(
+            uow=uow,
+            ds_repo=SQLAlchemyDataSourceRepository(uow),
+            api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+            secret_provider=c[SecretProvider],
+        )
+        return StartCddPlateImport(get_data_source=get_ds)
+
+    def _list_cdd_plate_imports(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListCddPlateImports(
+            uow=uow,
+            repo=SQLAlchemyCddPlateImportRepository(uow),
+        )
+
+    def _force_fail_cdd_plate_import(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ForceFailCddPlateImport(
+            uow=uow,
+            repo=SQLAlchemyCddPlateImportRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(StartCddPlateImport, _start_cdd_plate_import)
+    container.define(ListCddPlateImports, _list_cdd_plate_imports)
+    container.define(ForceFailCddPlateImport, _force_fail_cdd_plate_import)
 
     return container

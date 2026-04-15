@@ -166,6 +166,7 @@ async def start_cdd_molecule_import(
             secret_ref=config.secret_ref,
             filter_criteria=body.filter_criteria,
             max_molecules=body.max_molecules,
+            entity_mappings=config.entity_mappings,
         ),
         id=workflow_id,
         task_queue=MAIN_TASK_QUEUE,

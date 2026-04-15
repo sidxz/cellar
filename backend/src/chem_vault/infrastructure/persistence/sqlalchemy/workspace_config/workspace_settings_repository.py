@@ -26,7 +26,6 @@ class SQLAlchemyWorkspaceSettingsRepository(
             signature_required_for=list(model.signature_required_for or []),
             audit_retention_days=model.audit_retention_days,
             formulation_number_scheme=model.formulation_number_scheme,
-            cdd_vault_id=model.cdd_vault_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -42,7 +41,6 @@ class SQLAlchemyWorkspaceSettingsRepository(
             signature_required_for=aggregate.signature_required_for,
             audit_retention_days=aggregate.audit_retention_days,
             formulation_number_scheme=aggregate.formulation_number_scheme,
-            cdd_vault_id=aggregate.cdd_vault_id,
             version=aggregate.version,
         )
 
@@ -56,4 +54,3 @@ class SQLAlchemyWorkspaceSettingsRepository(
         model.signature_required_for = aggregate.signature_required_for
         model.audit_retention_days = aggregate.audit_retention_days
         model.formulation_number_scheme = aggregate.formulation_number_scheme
-        model.cdd_vault_id = aggregate.cdd_vault_id

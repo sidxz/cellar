@@ -113,6 +113,17 @@ VALID_PARENT_TYPES: dict[StorageLocationType, set[StorageLocationType | None]] =
 }
 
 
+class CddPlateImportStatus(StrEnum):
+    """Status of a CDD vault plate import operation."""
+
+    PENDING = "pending"
+    DISCOVERING = "discovering"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    FAILED = "failed"
+
+
 class PlateType(StrEnum):
     """Type/role of a registered plate."""
 

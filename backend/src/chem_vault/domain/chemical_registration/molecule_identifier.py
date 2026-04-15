@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from chem_vault.domain.chemical_registration.enums import IdentifierType
 from chem_vault.domain.shared.errors import ValidationError
 
 
@@ -21,7 +20,7 @@ class MoleculeIdentifier:
         id: uuid.UUID | None = None,
         molecule_id: uuid.UUID,
         identifier: str,
-        identifier_type: IdentifierType,
+        identifier_type: str,
         source: str,
         registered_by: uuid.UUID,
         created_at: datetime | None = None,
@@ -42,7 +41,7 @@ class MoleculeIdentifier:
         *,
         molecule_id: uuid.UUID,
         identifier: str,
-        identifier_type: IdentifierType,
+        identifier_type: str,
         source: str,
         registered_by: uuid.UUID,
     ) -> MoleculeIdentifier:

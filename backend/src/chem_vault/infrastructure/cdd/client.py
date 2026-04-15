@@ -331,3 +331,11 @@ class CddVaultClient:
         url = f"{BASE_URL}/vaults/{vault_id}/molecules?page_size=1&offset=0"
         data = await self._get(url, api_key)
         return data.get("count", 0) if isinstance(data, dict) else 0
+
+    async def get_plate_count(
+        self, vault_id: str, api_key: str
+    ) -> int:
+        """Get total plate count via a sync metadata-only call."""
+        url = f"{BASE_URL}/vaults/{vault_id}/plates?page_size=1&offset=0"
+        data = await self._get(url, api_key)
+        return data.get("count", 0) if isinstance(data, dict) else 0

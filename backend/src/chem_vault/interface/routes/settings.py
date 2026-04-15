@@ -31,7 +31,6 @@ class WorkspaceSettingsResponse(BaseModel):
     signature_required_for: list[str]
     audit_retention_days: int | None = None
     formulation_number_scheme: str | None = None
-    cdd_vault_id: str | None = None
     version: int
 
     @classmethod
@@ -44,7 +43,6 @@ class WorkspaceSettingsResponse(BaseModel):
             signature_required_for=s.signature_required_for,
             audit_retention_days=s.audit_retention_days,
             formulation_number_scheme=s.formulation_number_scheme,
-            cdd_vault_id=s.cdd_vault_id,
             version=s.version,
         )
 
@@ -57,7 +55,6 @@ class UpdateWorkspaceSettingsBody(BaseModel):
     signature_required_for: list[str] | None = None
     audit_retention_days: int | None = None
     formulation_number_scheme: str | None = None
-    cdd_vault_id: str | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -86,7 +83,7 @@ async def update_settings(
             for key in (
                 "registration_rules", "custom_field_definitions", "default_molecule_type",
                 "audit_reason_policy", "signature_required_for", "audit_retention_days",
-                "formulation_number_scheme", "cdd_vault_id",
+                "formulation_number_scheme",
             )
             if key in provided
         },

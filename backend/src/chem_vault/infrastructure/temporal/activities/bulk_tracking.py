@@ -18,6 +18,7 @@ from chem_vault.domain.chemical_registration.enums import (
     BulkRegistrationFileFormat,
     CddImportMode,
 )
+from chem_vault.domain.inventory.cdd_plate_import import CddPlateImport
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
     SQLAlchemyBulkRegistrationRepository,
@@ -28,17 +29,28 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
     CddMoleculeSyncRepository,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_repository import (
+    SQLAlchemyCddPlateImportRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
+    CddPlateSyncRepository,
+)
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.activities.dtos import (
     CompleteBulkRegInput,
     CompleteCddImportInput,
+    CompleteCddPlateImportInput,
     CompleteDiscoveryInput,
     CreateBulkRegInput,
     CreateCddImportInput,
+    CreateCddPlateImportInput,
     FailCddImportInput,
+    FailCddPlateImportInput,
+    RecordPlateSyncMappingsInput,
     RecordSyncMappingsInput,
     UpdateBulkRegProgressInput,
     UpdateCddImportProgressInput,
+    UpdateCddPlateImportProgressInput,
 )
 
 
@@ -202,6 +214,115 @@ class BulkTrackingActivities:
             await repo.save(imp)
             events = await uow.commit()
             await dispatcher.dispatch_all(events)
+
+    # ------------------------------------------------------------------
+    # CDD plate import tracking
+    # ------------------------------------------------------------------
+
+    def _make_plate_import_deps(self):
+        session_factory = self._container[async_sessionmaker]
+        uow = AsyncUnitOfWork(session_factory)
+        repo = SQLAlchemyCddPlateImportRepository(uow)
+        dispatcher = self._container[EventDispatcher]
+        return uow, repo, dispatcher
+
+    @activity.defn
+    async def create_cdd_plate_import(self, input: CreateCddPlateImportInput) -> str:
+        """Create a CddPlateImport aggregate and return its ID."""
+        uow, repo, dispatcher = self._make_plate_import_deps()
+        async with uow:
+            imp = CddPlateImport.create(
+                workspace_id=uuid.UUID(input.workspace_id),
+                cdd_vault_id=input.cdd_vault_id,
+                submitted_by=uuid.UUID(input.submitted_by),
+                workflow_id=input.workflow_id,
+            )
+            imp.start_discovery()
+            await repo.save(imp)
+            events = await uow.commit()
+            await dispatcher.dispatch_all(events)
+        return str(imp.id)
+
+    @activity.defn
+    async def complete_plate_discovery(self, input: CompleteDiscoveryInput) -> None:
+        """Transition plate import DISCOVERING -> PROCESSING with total_count."""
+        uow, repo, dispatcher = self._make_plate_import_deps()
+        ws_id = uuid.UUID(input.workspace_id)
+        async with uow:
+            imp = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.import_id))
+            if imp is None:
+                raise ValueError(f"CddPlateImport {input.import_id} not found")
+            imp.complete_discovery(input.total_count)
+            await repo.save(imp)
+            events = await uow.commit()
+            await dispatcher.dispatch_all(events)
+
+    @activity.defn
+    async def update_cdd_plate_import_progress(self, input: UpdateCddPlateImportProgressInput) -> None:
+        """Update plate import counters after a chunk completes."""
+        uow, repo, _ = self._make_plate_import_deps()
+        ws_id = uuid.UUID(input.workspace_id)
+        async with uow:
+            imp = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.import_id))
+            if imp is None:
+                raise ValueError(f"CddPlateImport {input.import_id} not found")
+            if input.plates_registered:
+                imp.record_registered(input.plates_registered)
+            if input.plates_duplicate:
+                imp.record_duplicate(input.plates_duplicate)
+            if input.plates_error:
+                imp.record_error(input.plates_error)
+            if input.wells_mapped or input.wells_unresolved:
+                imp.record_wells(input.wells_mapped, input.wells_unresolved)
+            imp.update_offset(input.last_processed_offset)
+            await repo.save(imp)
+            await uow.commit()
+
+    @activity.defn
+    async def complete_cdd_plate_import(self, input: CompleteCddPlateImportInput) -> None:
+        """Complete plate import (PROCESSING -> COMPLETED/COMPLETED_WITH_ERRORS)."""
+        uow, repo, dispatcher = self._make_plate_import_deps()
+        ws_id = uuid.UUID(input.workspace_id)
+        async with uow:
+            imp = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.import_id))
+            if imp is None:
+                raise ValueError(f"CddPlateImport {input.import_id} not found")
+            imp.complete()
+            await repo.save(imp)
+            events = await uow.commit()
+            await dispatcher.dispatch_all(events)
+
+    @activity.defn
+    async def fail_cdd_plate_import(self, input: FailCddPlateImportInput) -> None:
+        """Fail plate import (DISCOVERING/PROCESSING -> FAILED)."""
+        uow, repo, dispatcher = self._make_plate_import_deps()
+        ws_id = uuid.UUID(input.workspace_id)
+        async with uow:
+            imp = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.import_id))
+            if imp is None:
+                raise ValueError(f"CddPlateImport {input.import_id} not found")
+            imp.fail(input.reason)
+            await repo.save(imp)
+            events = await uow.commit()
+            await dispatcher.dispatch_all(events)
+
+    @activity.defn
+    async def record_plate_sync_mappings(self, input: RecordPlateSyncMappingsInput) -> None:
+        """Record CDD->internal plate mappings after successful registration."""
+        session_factory = self._container[async_sessionmaker]
+        uow = AsyncUnitOfWork(session_factory)
+        sync_repo = CddPlateSyncRepository(uow)
+        async with uow:
+            mappings = [
+                (m["cdd_plate_id"], uuid.UUID(m["plate_id"]))
+                for m in input.mappings
+                if m.get("cdd_plate_id") and m.get("plate_id")
+            ]
+            if mappings:
+                await sync_repo.bulk_upsert(
+                    uuid.UUID(input.workspace_id), input.cdd_vault_id, mappings
+                )
+            await uow.commit()
 
     # ------------------------------------------------------------------
     # CDD sync mapping recording

@@ -23,11 +23,13 @@ from temporalio import activity
 
 from chem_vault.application.cdd_import.molecule_mapper import map_cdd_molecules
 from chem_vault.domain.shared.secret_provider import SecretProvider
+from chem_vault.domain.workspace_config.data_source import EntityMapping
 from chem_vault.infrastructure.cdd.client import CddVaultClient
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
     CddMoleculeSyncRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from chem_vault.application.cdd_import.plate_mapper import map_cdd_plate
 from chem_vault.infrastructure.temporal.activities.dtos import (
     CddPollExportInput,
     CddPollExportOutput,
@@ -35,8 +37,11 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
     CddStartExportOutput,
     CddSyncWatermarkInput,
     CddSyncWatermarkOutput,
+    CddStartPlateExportInput,
     LoadExportChunkInput,
     LoadExportChunkOutput,
+    LoadPlateChunkInput,
+    LoadPlateChunkOutput,
 )
 from chem_vault.infrastructure.temporal.task_queues import CHUNK_SIZE
 
@@ -173,6 +178,10 @@ class CddFetchActivities:
     ) -> tuple[list[dict], bool]:
         """Load raw JSON objects from a pre-split chunk file.
 
+        Chunk files on disk are split at CHUNK_SIZE (250) intervals.
+        The caller may request a smaller slice (e.g. plates use limit=5).
+        This method finds the right file and sub-slices within it.
+
         Returns (objects, has_more). Generic — works for any CDD entity type.
         """
         export_dir = Path(storage_path)
@@ -184,17 +193,28 @@ class CddFetchActivities:
 
         effective_total = min(total_objects, max_items) if max_items else total_objects
 
-        chunk_path = export_dir / f"chunk_{offset:06d}.json"
+        if offset >= effective_total:
+            return [], False
+
+        # Find the chunk file that contains this offset.
+        # Files are named chunk_000000.json, chunk_000250.json, etc.
+        file_offset = (offset // CHUNK_SIZE) * CHUNK_SIZE
+        chunk_path = export_dir / f"chunk_{file_offset:06d}.json"
         if not chunk_path.exists():
             return [], False
 
         chunk_objects = json.loads(chunk_path.read_text())
 
+        # Sub-slice within the file
+        inner_offset = offset - file_offset
+        chunk_objects = chunk_objects[inner_offset : inner_offset + limit]
+
+        # Cap at effective_total
         remaining = effective_total - offset
         if remaining < len(chunk_objects):
             chunk_objects = chunk_objects[:remaining]
 
-        has_more = (offset + limit) < effective_total
+        has_more = (offset + len(chunk_objects)) < effective_total
         return chunk_objects, has_more
 
     @activity.defn
@@ -208,7 +228,21 @@ class CddFetchActivities:
         if not chunk_objects:
             return LoadExportChunkOutput(items=[], skipped=0, has_more=False, molecule_count=0)
 
-        mapped, _ = map_cdd_molecules(chunk_objects)
+        # Deserialize entity mappings from workflow input
+        mol_mapping: EntityMapping | None = None
+        batch_mapping: EntityMapping | None = None
+        if input.entity_mappings:
+            for em_dict in input.entity_mappings:
+                em = EntityMapping.from_dict(em_dict)
+                if em.entity_type == "molecule":
+                    mol_mapping = em
+                elif em.entity_type == "batch":
+                    batch_mapping = em
+
+        if mol_mapping is None:
+            raise ValueError("No molecule EntityMapping found in entity_mappings")
+
+        mapped, _ = map_cdd_molecules(chunk_objects, mol_mapping, batch_mapping)
 
         items: list[dict] = []
         skipped = 0
@@ -236,6 +270,7 @@ class CddFetchActivities:
                         "appearance": batch.appearance,
                         "vendor_catalog_number": batch.batch_name,
                         "cdd_molecule_id": mol.cdd_molecule_id,
+                        "cdd_batch_id": batch.cdd_batch_id,
                         "cdd_modified_at": mol.cdd_modified_at,
                     })
             else:
@@ -284,3 +319,67 @@ class CddFetchActivities:
             modified_after=modified_after_iso,
             synced_count=known_count,
         )
+
+    # ------------------------------------------------------------------
+    # CDD plate export
+    # ------------------------------------------------------------------
+
+    @activity.defn
+    async def start_plate_export(self, input: CddStartPlateExportInput) -> CddStartExportOutput:
+        """Trigger an async plate export on CDD."""
+        api_key = await self._resolve_api_key(input.secret_ref)
+        client = self._container[CddVaultClient]
+
+        total_count = await client.get_plate_count(input.vault_id, api_key)
+
+        export_id = await client.start_export(
+            input.vault_id, api_key, "plates",
+        )
+
+        logger.info(
+            "CDD plate export started: vault=%s export_id=%d total=%d",
+            input.vault_id, export_id, total_count,
+        )
+        return CddStartExportOutput(export_id=export_id, total_count=total_count)
+
+    @activity.defn
+    async def poll_plate_export(self, input: CddPollExportInput) -> CddPollExportOutput:
+        """Poll a CDD plate export. Identical to molecule poll — reuses stream_export_to_file."""
+        return await self.poll_molecule_export(input)
+
+    @activity.defn
+    async def load_plate_chunk(self, input: LoadPlateChunkInput) -> LoadPlateChunkOutput:
+        """Load a chunk of plates from disk and map to PlateChunkItem dicts."""
+        chunk_objects, has_more = self._load_raw_chunk(
+            input.storage_path, input.offset, input.limit,
+        )
+
+        if not chunk_objects:
+            return LoadPlateChunkOutput(items=[], has_more=False)
+
+        # Deserialize entity mappings from workflow input
+        plate_mapping: EntityMapping | None = None
+        well_mapping: EntityMapping | None = None
+        if input.entity_mappings:
+            for em_dict in input.entity_mappings:
+                em = EntityMapping.from_dict(em_dict)
+                if em.entity_type == "plate":
+                    plate_mapping = em
+                elif em.entity_type == "well":
+                    well_mapping = em
+
+        if plate_mapping is None:
+            raise ValueError("No plate EntityMapping found in entity_mappings")
+
+        items: list[dict] = []
+        for raw in chunk_objects:
+            mapped = map_cdd_plate(raw, plate_mapping, well_mapping)
+            items.append({
+                "cdd_plate_id": mapped.cdd_plate_id,
+                "name": mapped.name,
+                "format": mapped.format,
+                "wells": [{"position": w.position, "cdd_batch_id": w.cdd_batch_id} for w in mapped.wells],
+            })
+
+        activity.heartbeat(f"loaded plate chunk offset={input.offset} plates={len(items)}")
+        return LoadPlateChunkOutput(items=items, has_more=has_more)

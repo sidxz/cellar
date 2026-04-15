@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 
 from chem_vault.application.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
+from chem_vault.domain.inventory.cdd_plate_import import CddPlateImport
 from chem_vault.domain.inventory.import_template import ImportTemplate
 from chem_vault.domain.inventory.registered_plate import RegisteredPlate
 from chem_vault.domain.inventory.sample import Sample
@@ -197,3 +198,20 @@ class ImportTemplateRepository(Protocol):
     ) -> list[ImportTemplate]: ...
     async def save(self, entity: ImportTemplate) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class CddPlateImportRepository(Protocol):
+    """Repository for CddPlateImport aggregates."""
+
+    async def find_by_id(self, id: uuid.UUID) -> CddPlateImport | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> CddPlateImport | None: ...
+    async def find_by_workflow_id_in_workspace(
+        self, workspace_id: uuid.UUID, workflow_id: str
+    ) -> CddPlateImport | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[CddPlateImport]: ...
+    async def save(self, aggregate: CddPlateImport) -> None: ...

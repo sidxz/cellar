@@ -19,7 +19,7 @@ from chem_vault.application.chemical_registration.merge_side_effect_registry imp
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.chemical_registration.enums import IdentifierType, MergeReason
+from chem_vault.domain.chemical_registration.enums import MergeReason
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
@@ -51,7 +51,7 @@ def _build_snapshot(molecule: Molecule) -> dict:
         "molecule_type": molecule.molecule_type.value,
         "structure_status": molecule.structure_status.value,
         "identifiers": [
-            {"identifier": ident.identifier, "type": ident.identifier_type.value}
+            {"identifier": ident.identifier, "type": ident.identifier_type}
             for ident in molecule.identifiers
         ],
         "tags": list(molecule.tags),
@@ -165,7 +165,7 @@ class MergeService:
                 MoleculeIdentifier.create(
                     molecule_id=target.id,
                     identifier=reg_value,
-                    identifier_type=IdentifierType.INTERNAL_LEGACY,
+                    identifier_type="internal_legacy",
                     source=f"Merge from {reg_value}",
                     registered_by=input.merged_by,
                 )

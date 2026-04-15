@@ -234,3 +234,34 @@ class PlateStatusChanged(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class PlateDisposed(DomainEvent):
     barcode: str
+
+
+# ---------------------------------------------------------------------------
+# CDD plate import events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddPlateImportStarted(DomainEvent):
+    workspace_id: uuid.UUID
+    cdd_vault_id: str
+    submitted_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddPlateImportDiscoveryComplete(DomainEvent):
+    total_count: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddPlateImportCompleted(DomainEvent):
+    plates_registered: int
+    plates_duplicate: int
+    plates_error: int
+    wells_mapped: int
+    wells_unresolved: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CddPlateImportFailed(DomainEvent):
+    reason: str

@@ -286,9 +286,7 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
   const synonyms = molecule.identifiers.filter(
     (id) => id.identifier_type === "custom"
   );
-  const structuredIdentifiers = molecule.identifiers.filter(
-    (id) => id.identifier_type !== "custom"
-  );
+  const structuredIdentifiers = molecule.identifiers;
 
   const handleAddSynonym = (e: React.FormEvent) => {
     e.preventDefault();

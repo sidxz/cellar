@@ -8,3 +8,6 @@ MAIN_TASK_QUEUE = "chem-vault-main"
 
 # Number of CDD/bulk molecules per processing chunk
 CHUNK_SIZE = 250
+
+# Plates carry ~96 wells each, so smaller chunks to stay under Temporal's 4MB payload limit
+PLATE_CHUNK_SIZE = 5

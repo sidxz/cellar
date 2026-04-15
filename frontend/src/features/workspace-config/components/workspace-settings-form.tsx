@@ -49,7 +49,6 @@ export function WorkspaceSettingsForm() {
   const [sigRequired, setSigRequired] = useState<string[]>([]);
   const [formulationScheme, setFormulationScheme] = useState("");
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
-  const [cddVaultId, setExternalVaultId] = useState("");
 
   useEffect(() => {
     if (settings) {
@@ -65,7 +64,6 @@ export function WorkspaceSettingsForm() {
           ? settings.custom_field_definitions
           : []
       );
-      setExternalVaultId(settings.cdd_vault_id ?? "");
     }
   }, [settings]);
 
@@ -85,7 +83,6 @@ export function WorkspaceSettingsForm() {
       audit_reason_policy: auditReasonPolicy,
       signature_required_for: sigRequired,
       formulation_number_scheme: formulationScheme || null,
-      cdd_vault_id: cddVaultId || null,
       custom_field_definitions: customFields.filter((f) => f.name.trim()),
     });
   };
@@ -147,18 +144,12 @@ export function WorkspaceSettingsForm() {
         <Card className="p-6">
           <h2 className="text-lg font-semibold">Integrations</h2>
           <div className="mt-4 grid gap-6 max-w-lg">
-            <div className="grid gap-2">
-              <Label>CDD Vault ID</Label>
-              <Input
-                value={cddVaultId}
-                onChange={(e) => setExternalVaultId(e.target.value)}
-                placeholder="e.g., 12345"
-              />
-              <p className="text-xs text-muted-foreground">
-                Numeric Vault ID from external screening platform. Required for protocol import.
-                Find it in your vault URL.
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              External data sources are managed in{" "}
+              <a href="/admin/data-sources" className="underline text-primary">
+                Data Sources
+              </a>.
+            </p>
           </div>
         </Card>
 
