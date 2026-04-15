@@ -217,3 +217,13 @@ class ReagentRole(StrEnum):
     SOLVENT = "solvent"
     BASE = "base"
     LIGAND = "ligand"
+
+
+class RegistrationAction(StrEnum):
+    """Outcome action from the unified registration pipeline."""
+
+    REGISTERED = "registered"
+    DEDUPLICATED = "deduplicated"
+    DISCLOSED = "disclosed"
+    MERGE_CANDIDATE = "merge_candidate"
+    CONFLICT = "conflict"

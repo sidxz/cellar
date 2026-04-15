@@ -13,7 +13,7 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
-from chem_vault.domain.chemical_registration.enums import MoleculeType
+from chem_vault.domain.chemical_registration.enums import MoleculeType, RegistrationAction
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from chem_vault.domain.chemical_registration.repository import (
@@ -36,8 +36,14 @@ class RegistrationOutcome:
 
     molecule: Molecule
     is_new: bool
+    action: RegistrationAction = RegistrationAction.REGISTERED
     qc_warnings: list[str] = field(default_factory=list)
     detected_salt: DetectedSaltDTO | None = None
+    # Disclosure detection fields (populated by Task 3)
+    needs_merge_confirmation: bool = False
+    matched_molecule_id: uuid.UUID | None = None
+    disclosure_id: uuid.UUID | None = None
+    conflict_reason: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -262,7 +268,9 @@ class RegisterMolecule:
             await self._dispatcher.dispatch_all(events)
             return Success(
                 RegistrationOutcome(
-                    molecule=existing_by_inchi, is_new=False, qc_warnings=qc_warnings,
+                    molecule=existing_by_inchi, is_new=False,
+                    action=RegistrationAction.DEDUPLICATED,
+                    qc_warnings=qc_warnings,
                     detected_salt=processed.detected_salt,
                 )
             )
@@ -295,7 +303,9 @@ class RegisterMolecule:
         events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
         return Success(
-            RegistrationOutcome(molecule=mol, is_new=True, qc_warnings=qc_warnings,
+            RegistrationOutcome(molecule=mol, is_new=True,
+                                action=RegistrationAction.REGISTERED,
+                                qc_warnings=qc_warnings,
                                 detected_salt=processed.detected_salt)
         )
 
@@ -343,7 +353,8 @@ class RegisterMolecule:
             events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(
-                RegistrationOutcome(molecule=matched_molecule, is_new=False)
+                RegistrationOutcome(molecule=matched_molecule, is_new=False,
+                                    action=RegistrationAction.DEDUPLICATED)
             )
 
         # 4. New undisclosed molecule
@@ -368,4 +379,5 @@ class RegisterMolecule:
         await self._repo.save(mol)
         events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
-        return Success(RegistrationOutcome(molecule=mol, is_new=True))
+        return Success(RegistrationOutcome(molecule=mol, is_new=True,
+                                           action=RegistrationAction.REGISTERED))
