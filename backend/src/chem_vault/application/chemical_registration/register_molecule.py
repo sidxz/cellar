@@ -199,7 +199,7 @@ class RegisterMolecule:
             requested_by=input.registered_by,
             disclosing_org_id=input.originating_org_id,
             scientist_name=input.scientist_name,
-            notes=f"Auto-recorded during registration",
+            notes="Auto-recorded during registration",
         )
         dr.start_processing()
 

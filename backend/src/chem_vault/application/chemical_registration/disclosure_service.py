@@ -220,7 +220,7 @@ class DisclosureService:
                 )
             else:
                 dr.mark_conflict(
-                    f"Merge failed: {merge_result.failure().message}"
+                    reason=f"Merge failed: {merge_result.failure().message}"
                 )
 
             await self._disclosure_repo.save(dr)
