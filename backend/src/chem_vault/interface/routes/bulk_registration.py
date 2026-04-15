@@ -10,15 +10,29 @@ import uuid
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from returns.result import Failure
 
 from chem_vault.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationItem,
     BulkRegistrationItemResult,
     StartBulkRegistrationCommand,
 )
+from chem_vault.application.chemical_registration.confirm_disclosure import (
+    ConfirmDisclosure,
+    ConfirmDisclosureCommand,
+)
+from chem_vault.application.chemical_registration.reject_disclosure import (
+    RejectDisclosure,
+    RejectDisclosureCommand,
+)
 from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from chem_vault.infrastructure.parsers.chemical_file_parser import get_parser
-from chem_vault.interface.dependencies import AuthDep, BulkRegistrationServiceDep
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    BulkRegistrationServiceDep,
+    ConfirmDisclosureDep,
+    RejectDisclosureDep,
+)
 from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/bulk-registrations", tags=["bulk-registration"])
@@ -82,6 +96,31 @@ class BulkRegistrationStatusResponse(BaseModel):
     merge_candidates: list[dict] = []
     chunks_processed: int
     chunks_total: int
+
+
+class MergeDecisionInput(BaseModel):
+    disclosure_id: uuid.UUID
+    action: str  # "confirm" | "reject"
+    reason: str | None = None
+
+
+class ConfirmMergesBody(BaseModel):
+    decisions: list[MergeDecisionInput]
+
+
+class MergeDecisionResult(BaseModel):
+    disclosure_id: uuid.UUID
+    action: str
+    success: bool
+    error: str | None = None
+    merged_into_molecule_id: uuid.UUID | None = None
+
+
+class ConfirmMergesResponse(BaseModel):
+    results: list[MergeDecisionResult]
+    confirmed_count: int
+    rejected_count: int
+    error_count: int
 
 
 # ---------------------------------------------------------------------------
@@ -217,4 +256,101 @@ async def get_bulk_registration_status(
         merge_candidates=progress.merge_candidates,
         chunks_processed=progress.chunks_processed,
         chunks_total=progress.chunks_total,
+    )
+
+
+@router.post("/{workflow_id}/confirm-merges", response_model=ConfirmMergesResponse)
+async def confirm_merges(
+    auth: AuthDep,
+    workflow_id: str,
+    body: ConfirmMergesBody,
+    confirm_uc: ConfirmDisclosureDep,
+    reject_uc: RejectDisclosureDep,
+) -> ConfirmMergesResponse:
+    """Batch confirm or reject merge candidates from a bulk registration workflow."""
+    results: list[MergeDecisionResult] = []
+    confirmed_count = 0
+    rejected_count = 0
+    error_count = 0
+
+    for decision in body.decisions:
+        if decision.action == "confirm":
+            result = await confirm_uc(
+                ConfirmDisclosureCommand(
+                    workspace_id=auth.workspace_id,
+                    disclosure_id=decision.disclosure_id,
+                    confirmed_by=auth.user_id,
+                ),
+                auth=auth,
+            )
+            if isinstance(result, Failure):
+                error = result.failure()
+                results.append(
+                    MergeDecisionResult(
+                        disclosure_id=decision.disclosure_id,
+                        action=decision.action,
+                        success=False,
+                        error=getattr(error, "message", str(error)),
+                    )
+                )
+                error_count += 1
+            else:
+                outcome = result.unwrap()
+                results.append(
+                    MergeDecisionResult(
+                        disclosure_id=decision.disclosure_id,
+                        action=decision.action,
+                        success=True,
+                        merged_into_molecule_id=outcome.merged_into_molecule_id,
+                    )
+                )
+                confirmed_count += 1
+
+        elif decision.action == "reject":
+            result = await reject_uc(
+                RejectDisclosureCommand(
+                    workspace_id=auth.workspace_id,
+                    disclosure_id=decision.disclosure_id,
+                    reason=decision.reason,
+                    rejected_by=auth.user_id,
+                ),
+                auth=auth,
+            )
+            if isinstance(result, Failure):
+                error = result.failure()
+                results.append(
+                    MergeDecisionResult(
+                        disclosure_id=decision.disclosure_id,
+                        action=decision.action,
+                        success=False,
+                        error=getattr(error, "message", str(error)),
+                    )
+                )
+                error_count += 1
+            else:
+                results.append(
+                    MergeDecisionResult(
+                        disclosure_id=decision.disclosure_id,
+                        action=decision.action,
+                        success=True,
+                    )
+                )
+                rejected_count += 1
+
+        else:
+            results.append(
+                MergeDecisionResult(
+                    disclosure_id=decision.disclosure_id,
+                    action=decision.action,
+                    success=False,
+                    error=f"Unknown action '{decision.action}'. Must be 'confirm' or 'reject'.",
+                )
+            )
+            error_count += 1
+
+    return ConfirmMergesResponse(
+        results=results,
+        confirmed_count=confirmed_count,
+        rejected_count=rejected_count,
+        error_count=error_count,
     )
