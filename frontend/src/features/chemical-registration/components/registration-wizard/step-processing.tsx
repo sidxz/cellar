@@ -16,7 +16,10 @@ import {
   useStartBulkRegistration,
   useBulkRegistrationStatus,
 } from "../../hooks/use-registration-wizard-api";
+import { useSubmitDisclosure } from "../../hooks/use-disclosures";
+import { useMolecule } from "../../hooks/use-molecules";
 import type { RegisterMoleculeInput } from "../../types";
+import type { SubmitDisclosureInput } from "../../types/disclosure";
 
 // ---------------------------------------------------------------------------
 // StepProcessing
@@ -41,55 +44,118 @@ function SingleProcessing() {
   const nextStep = useRegistrationWizard((s) => s.nextStep);
   const prevStep = useRegistrationWizard((s) => s.prevStep);
 
-  const submitMutation = useSubmitRegistration();
+  const registerMutation = useSubmitRegistration();
+  const disclosureMutation = useSubmitDisclosure();
+  // Fetch molecule data for disclosure mode (need name + org for result display)
+  const moleculeQuery = useMolecule(
+    singleInput.disclosureMode ? singleInput.moleculeId ?? undefined : undefined
+  );
   const hasSubmitted = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isDisclosure = singleInput.disclosureMode && !!singleInput.moleculeId;
 
   useEffect(() => {
     if (hasSubmitted.current) return;
+    // In disclosure mode, wait for molecule data before submitting
+    if (isDisclosure && !moleculeQuery.data) return;
     hasSubmitted.current = true;
 
-    const input: RegisterMoleculeInput = {
-      name: singleInput.name,
-      smiles: singleInput.smiles,
-      molecule_type: singleInput.moleculeType,
-      external_ids: singleInput.externalIds.map((e) => ({
-        identifier: e.identifier,
-        identifier_type: e.identifier_type,
-      })),
-      originating_org_id: singleInput.originatingOrgId ?? "",
-      custom_fields: singleInput.customFields,
-      ...(singleInput.disclosureMode ? { auto_approve: false } : {}),
-    };
+    if (isDisclosure) {
+      // Use the disclosure endpoint for existing undisclosed molecules
+      const disclosureInput: SubmitDisclosureInput = {
+        molecule_id: singleInput.moleculeId!,
+        disclosed_smiles: singleInput.smiles ?? "",
+        auto_approve: false,
+        notes: null,
+      };
 
-    submitMutation.mutateAsync(input).then((data) => {
-      setSingleResult(data);
-      if (data.needs_merge_confirmation) {
-        setMergeCandidates([
-          {
-            row_index: 0,
-            molecule_id: data.molecule.id,
-            matched_molecule_id: data.matched_molecule_id!,
-            disclosure_id: data.disclosure_id!,
-          },
-        ]);
-      }
-      nextStep();
-    }).catch(() => {
-      // Error is handled by the mutation's onError + shown below
-    });
+      disclosureMutation
+        .mutateAsync(disclosureInput)
+        .then((outcome) => {
+          // Map DisclosureOutcome to RegistrationResponse shape for downstream steps
+          const mol = moleculeQuery.data!;
+          setSingleResult({
+            molecule: mol,
+            is_new: false,
+            action: outcome.needs_confirmation
+              ? "merge_candidate"
+              : outcome.was_merged
+                ? "deduplicated"
+                : "disclosed",
+            qc_warnings: [],
+            needs_merge_confirmation: outcome.needs_confirmation,
+            matched_molecule_id: outcome.matched_molecule_id,
+            disclosure_id: outcome.disclosure_request.id,
+            conflict_reason: null,
+          });
+          if (outcome.needs_confirmation) {
+            setMergeCandidates([
+              {
+                row_index: 0,
+                molecule_id: mol.id,
+                matched_molecule_id: outcome.matched_molecule_id!,
+                disclosure_id: outcome.disclosure_request.id,
+              },
+            ]);
+          }
+          nextStep();
+        })
+        .catch((err: Error) => {
+          setError(err.message ?? "Disclosure failed");
+        });
+    } else {
+      // Standard registration
+      const input: RegisterMoleculeInput = {
+        name: singleInput.name,
+        smiles: singleInput.smiles,
+        molecule_type: singleInput.moleculeType,
+        external_ids: singleInput.externalIds.map((e) => ({
+          identifier: e.identifier,
+          identifier_type: e.identifier_type,
+        })),
+        originating_org_id: singleInput.originatingOrgId!,
+        custom_fields: singleInput.customFields,
+      };
+
+      registerMutation
+        .mutateAsync(input)
+        .then((data) => {
+          setSingleResult(data);
+          if (data.needs_merge_confirmation) {
+            setMergeCandidates([
+              {
+                row_index: 0,
+                molecule_id: data.molecule.id,
+                matched_molecule_id: data.matched_molecule_id!,
+                disclosure_id: data.disclosure_id!,
+              },
+            ]);
+          }
+          nextStep();
+        })
+        .catch((err: Error) => {
+          setError(err.message ?? "Registration failed");
+        });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [moleculeQuery.data]);
 
-  if (submitMutation.isError) {
+  const mutationError =
+    error ?? registerMutation.error?.message ?? disclosureMutation.error?.message;
+
+  if (mutationError) {
     return (
       <Card>
         <CardContent className="py-8">
           <div className="flex flex-col items-center gap-4 text-center">
             <AlertTriangle className="h-8 w-8 text-destructive" />
             <div>
-              <p className="text-sm font-medium">Registration failed</p>
+              <p className="text-sm font-medium">
+                {isDisclosure ? "Disclosure failed" : "Registration failed"}
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {submitMutation.error?.message ?? "An unexpected error occurred."}
+                {mutationError}
               </p>
             </div>
             <Button variant="outline" onClick={prevStep}>
@@ -108,7 +174,7 @@ function SingleProcessing() {
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">
-            Processing compound...
+            {isDisclosure ? "Disclosing compound..." : "Processing compound..."}
           </p>
         </div>
       </CardContent>
