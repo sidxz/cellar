@@ -61,7 +61,6 @@ export function useStartBulkRegistration() {
         url: "/api/v1/bulk-registrations",
         method: "POST",
         data: formData,
-        headers: { "Content-Type": "multipart/form-data" },
       });
     },
     onSuccess: () => {
@@ -83,7 +82,7 @@ export function useBulkRegistrationStatus(
     queryKey: [...BULK_REG_KEY, workflowId],
     queryFn: () =>
       customInstance<BulkProgress>({
-        url: `/api/v1/bulk-registrations/${workflowId}`,
+        url: `/api/v1/bulk-registrations/${workflowId}/status`,
         method: "GET",
       }),
     enabled: enabled && !!workflowId,
