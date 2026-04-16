@@ -33,6 +33,9 @@ const DEFAULT_SINGLE_INPUT: SingleInput = {
   customFields: {},
   disclosureMode: false,
   moleculeId: null,
+  scientistName: "",
+  disclosingOrgId: null,
+  notes: "",
 };
 
 const DEFAULT_BULK_INPUT: BulkInput = {

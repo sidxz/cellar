@@ -46,34 +46,33 @@ function SingleProcessing() {
 
   const registerMutation = useSubmitRegistration();
   const disclosureMutation = useSubmitDisclosure();
-  // Fetch molecule data for disclosure mode (need name + org for result display)
   const moleculeQuery = useMolecule(
     singleInput.disclosureMode ? singleInput.moleculeId ?? undefined : undefined
   );
-  const hasSubmitted = useRef(false);
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isDisclosure = singleInput.disclosureMode && !!singleInput.moleculeId;
+  const isSubmitting =
+    registerMutation.isPending || disclosureMutation.isPending;
 
-  useEffect(() => {
-    if (hasSubmitted.current) return;
-    // In disclosure mode, wait for molecule data before submitting
-    if (isDisclosure && !moleculeQuery.data) return;
-    hasSubmitted.current = true;
+  const handleSubmit = () => {
+    setConfirmed(true);
+    setError(null);
 
     if (isDisclosure) {
-      // Use the disclosure endpoint for existing undisclosed molecules
       const disclosureInput: SubmitDisclosureInput = {
         molecule_id: singleInput.moleculeId!,
         disclosed_smiles: singleInput.smiles ?? "",
         auto_approve: false,
-        notes: null,
+        scientist_name: singleInput.scientistName || null,
+        disclosing_org_id: singleInput.disclosingOrgId || null,
+        notes: singleInput.notes || null,
       };
 
       disclosureMutation
         .mutateAsync(disclosureInput)
         .then((outcome) => {
-          // Map DisclosureOutcome to RegistrationResponse shape for downstream steps
           const mol = moleculeQuery.data!;
           setSingleResult({
             molecule: mol,
@@ -103,9 +102,9 @@ function SingleProcessing() {
         })
         .catch((err: Error) => {
           setError(err.message ?? "Disclosure failed");
+          setConfirmed(false);
         });
     } else {
-      // Standard registration
       const input: RegisterMoleculeInput = {
         name: singleInput.name,
         smiles: singleInput.smiles,
@@ -136,15 +135,29 @@ function SingleProcessing() {
         })
         .catch((err: Error) => {
           setError(err.message ?? "Registration failed");
+          setConfirmed(false);
         });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moleculeQuery.data]);
+  };
 
-  const mutationError =
-    error ?? registerMutation.error?.message ?? disclosureMutation.error?.message;
+  // Submitting spinner
+  if (confirmed && isSubmitting) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">
+              {isDisclosure ? "Disclosing compound..." : "Registering compound..."}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  if (mutationError) {
+  // Error
+  if (error) {
     return (
       <Card>
         <CardContent className="py-8">
@@ -154,9 +167,7 @@ function SingleProcessing() {
               <p className="text-sm font-medium">
                 {isDisclosure ? "Disclosure failed" : "Registration failed"}
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {mutationError}
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{error}</p>
             </div>
             <Button variant="outline" onClick={prevStep}>
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -168,17 +179,66 @@ function SingleProcessing() {
     );
   }
 
+  // Confirmation review card
   return (
     <Card>
-      <CardContent className="py-12">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">
-            {isDisclosure ? "Disclosing compound..." : "Processing compound..."}
-          </p>
+      <CardHeader>
+        <CardTitle className="text-base">
+          {isDisclosure ? "Confirm Disclosure" : "Confirm Registration"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-lg border bg-muted/50 p-4 space-y-2 text-sm">
+          {isDisclosure ? (
+            <>
+              <Row label="Compound" value={moleculeQuery.data?.name ?? singleInput.moleculeId ?? ""} />
+              <Row label="SMILES" value={singleInput.smiles ?? ""} mono />
+              {singleInput.scientistName && (
+                <Row label="Scientist" value={singleInput.scientistName} />
+              )}
+              {singleInput.notes && (
+                <Row label="Notes" value={singleInput.notes} />
+              )}
+            </>
+          ) : (
+            <>
+              <Row label="Name" value={singleInput.name} />
+              {singleInput.smiles ? (
+                <Row label="SMILES" value={singleInput.smiles} mono />
+              ) : (
+                <Row label="Structure" value="Undisclosed" />
+              )}
+              <Row label="Type" value={singleInput.moleculeType} />
+              {singleInput.externalIds.length > 0 && (
+                <Row
+                  label="Identifiers"
+                  value={singleInput.externalIds.map((e) => e.identifier).join(", ")}
+                />
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-between pt-2">
+          <Button variant="outline" onClick={prevStep}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Button onClick={handleSubmit}>
+            {isDisclosure ? "Confirm & Disclose" : "Confirm & Register"}
+          </Button>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex gap-2">
+      <span className="text-muted-foreground w-24 shrink-0">{label}:</span>
+      <span className={mono ? "font-mono text-xs break-all" : ""}>{value}</span>
+    </div>
   );
 }
 

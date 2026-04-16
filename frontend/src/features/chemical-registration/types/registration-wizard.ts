@@ -23,6 +23,10 @@ export interface SingleInput {
   customFields: Record<string, unknown>;
   disclosureMode: boolean;
   moleculeId: string | null;
+  // Disclosure provenance fields
+  scientistName: string;
+  disclosingOrgId: string | null;
+  notes: string;
 }
 
 export interface BulkRow {

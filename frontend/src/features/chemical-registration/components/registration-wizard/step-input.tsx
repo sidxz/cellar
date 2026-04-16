@@ -401,6 +401,56 @@ function SingleInputForm() {
         </div>
       )}
 
+      {/* Disclosure provenance fields — only in disclosure mode */}
+      {singleInput.disclosureMode && (
+        <>
+          <Separator />
+          <div className="grid gap-2">
+            <Label htmlFor="wiz-scientist">Scientist Name</Label>
+            <Input
+              id="wiz-scientist"
+              placeholder="Name of disclosing scientist"
+              value={singleInput.scientistName}
+              onChange={(e) =>
+                updateSingleInput({ scientistName: e.target.value })
+              }
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="wiz-disc-org">Disclosing Organization</Label>
+            <Select
+              value={singleInput.disclosingOrgId ?? ""}
+              onValueChange={(v) =>
+                updateSingleInput({ disclosingOrgId: v || null })
+              }
+            >
+              <SelectTrigger id="wiz-disc-org">
+                <SelectValue placeholder="Select organization" />
+              </SelectTrigger>
+              <SelectContent>
+                {orgs?.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="wiz-notes">Notes</Label>
+            <Textarea
+              id="wiz-notes"
+              placeholder="Optional notes about this disclosure"
+              value={singleInput.notes}
+              onChange={(e) =>
+                updateSingleInput({ notes: e.target.value })
+              }
+              rows={2}
+            />
+          </div>
+        </>
+      )}
+
       {/* Molecule type — hidden in disclosure mode */}
       {!singleInput.disclosureMode && (
         <div className="grid gap-2">
