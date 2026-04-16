@@ -8,6 +8,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { StepInput } from "./step-input";
+import { StepProcessing } from "./step-processing";
+import { StepResults } from "./step-results";
 import type { WizardMode } from "../../types/registration-wizard";
 
 // ─── Step definitions per mode ──────────────────────────────────────────────
@@ -129,7 +131,17 @@ export function RegistrationWizard() {
       return <StepInput />;
     }
 
-    // Placeholder for future steps (Tasks 10-11)
+    // Step 1 = Processing
+    if (currentStep === 1) {
+      return <StepProcessing />;
+    }
+
+    // Step 2 = Results
+    if (currentStep === 2) {
+      return <StepResults />;
+    }
+
+    // Placeholder for remaining steps (Task 11: Batch + Summary)
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
         Step &quot;{steps[currentStep]}&quot; — coming in next task

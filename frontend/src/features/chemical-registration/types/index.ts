@@ -128,6 +128,7 @@ export interface RegisterMoleculeInput {
   originating_org_id: string;
   custom_fields?: Record<string, unknown> | null;
   batch?: BatchInput | null;
+  auto_approve?: boolean;
 }
 
 export interface UpdateMoleculeInput {

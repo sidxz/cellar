@@ -301,6 +301,7 @@ class RegisterMoleculeBody(BaseModel):
     originating_org_id: uuid.UUID
     custom_fields: dict | None = None
     batch: BatchBody | None = None
+    auto_approve: bool = True
 
 
 class UpdateMoleculeBody(BaseModel):
@@ -362,6 +363,7 @@ async def register_molecule(
         originating_org_id=body.originating_org_id,
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
+        auto_approve=body.auto_approve,
     )
     outcome = result_to_response(await use_case(command, auth=auth))
 
