@@ -1,7 +1,5 @@
 // Public API for chemical-registration
 export { MoleculeList } from "./components/molecule-list";
-export { MoleculeRegistrationDialog } from "./components/molecule-registration-dialog";
-export { BulkRegistrationDialog } from "./components/bulk-registration-dialog";
 export { CompoundSearchBar } from "./components/compound-search-bar";
 export { CompoundDetail } from "./components/compound-detail";
 export { DisclosureDialog } from "./components/disclosure-dialog";

@@ -22,16 +22,12 @@ import {
   type MoleculeType,
 } from "../types";
 import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
-import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
-import { BulkRegistrationDialog } from "./bulk-registration-dialog";
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import { CompoundSearchBar } from "./compound-search-bar";
 
 export function MoleculeList() {
   const router = useRouter();
   const { data: molecules, isLoading, error } = useMolecules();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [bulkOpen, setBulkOpen] = useState(false);
   const { enabled: cddEnabled } = useCddEnabled();
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
@@ -128,7 +124,7 @@ export function MoleculeList() {
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    router.push(`/compounds/${mol.id}#disclose`);
+                    router.push(`/compounds/register?disclose=${mol.id}`);
                   }}
                 >
                   Disclose
@@ -166,11 +162,11 @@ export function MoleculeList() {
             </Link>
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}>
+        <Button variant="outline" onClick={() => router.push("/compounds/register?mode=bulk")}>
           <Upload className="mr-2 h-4 w-4" />
           Bulk Upload
         </Button>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button onClick={() => router.push("/compounds/register")}>
           <Plus className="mr-2 h-4 w-4" />
           Register Compound
         </Button>
@@ -210,17 +206,12 @@ export function MoleculeList() {
               icon={FlaskConical}
               title="No compounds registered"
               description="Register your first compound to get started."
-              action={{ label: "Register Compound", onClick: () => setDialogOpen(true), icon: Plus }}
+              action={{ label: "Register Compound", onClick: () => router.push("/compounds/register"), icon: Plus }}
             />
           }
         />
       </div>
 
-      <MoleculeRegistrationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-      />
-      <BulkRegistrationDialog open={bulkOpen} onOpenChange={setBulkOpen} />
       <CollectionPickerDialog
         open={pickerMolIds.length > 0}
         onOpenChange={(open) => {

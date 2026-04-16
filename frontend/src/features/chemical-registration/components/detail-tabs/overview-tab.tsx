@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Loader2,
-  Pencil,
+  AlertTriangle,
   Plus,
   Trash2,
   FlaskConical,
@@ -12,7 +11,7 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { StructureRenderer, StructureEditorDialog } from "@/shared/components/chemistry";
+import { StructureRenderer } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
@@ -30,8 +29,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Label } from "@/shared/components/ui/label";
-import { Textarea } from "@/shared/components/ui/textarea";
 import { Input } from "@/shared/components/ui/input";
 import {
   Select,
@@ -44,7 +41,6 @@ import {
   useAddIdentifier,
   useRemoveIdentifier,
 } from "../../hooks/use-molecules";
-import { useSubmitDisclosure } from "../../hooks/use-disclosures";
 import type { Molecule } from "../../types";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
@@ -271,163 +267,6 @@ function CustomFieldsSection({ molecule }: { molecule: Molecule }) {
 }
 
 // ---------------------------------------------------------------------------
-// Disclosure Section (inline on overview for undisclosed compounds)
-// ---------------------------------------------------------------------------
-
-function DisclosureSection({
-  molecule,
-  autoOpen,
-}: {
-  molecule: Molecule;
-  autoOpen?: boolean;
-}) {
-  const router = useRouter();
-  const submitMutation = useSubmitDisclosure();
-
-  const [expanded, setExpanded] = useState(autoOpen ?? false);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [smiles, setSmiles] = useState("");
-  const [notes, setNotes] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async () => {
-    setError(null);
-    if (!smiles.trim()) {
-      setError("SMILES is required to disclose a compound");
-      return;
-    }
-
-    try {
-      const result = await submitMutation.mutateAsync({
-        molecule_id: molecule.id,
-        disclosed_smiles: smiles.trim(),
-        auto_approve: false,
-        notes: notes.trim() || null,
-      });
-      if (result.needs_confirmation) {
-        router.push(
-          `/compounds/${molecule.id}/merge-preview/${result.disclosure_request.id}`
-        );
-      } else {
-        setSmiles("");
-        setNotes("");
-        setExpanded(false);
-      }
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Disclosure failed";
-      setError(message);
-    }
-  };
-
-  if (!expanded) {
-    return (
-      <Card className="border-yellow-500/30 bg-yellow-500/5">
-        <CardContent className="flex items-center justify-between py-4">
-          <div>
-            <p className="text-sm font-medium">Undisclosed structure</p>
-            <p className="text-xs text-muted-foreground">
-              Provide the SMILES to disclose this compound and check for
-              duplicates.
-            </p>
-          </div>
-          <Button size="sm" onClick={() => setExpanded(true)}>
-            Disclose Compound
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="border-yellow-500/30">
-      <CardHeader>
-        <CardTitle>Disclose Compound</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Provide the structure for{" "}
-          <span className="font-mono font-semibold">
-            {molecule.registration_number}
-          </span>
-          . It will be standardized and checked for duplicates.
-        </p>
-
-        <div className="grid gap-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="disclosure-smiles">SMILES</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditorOpen(true)}
-            >
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Draw
-            </Button>
-          </div>
-          <Textarea
-            id="disclosure-smiles"
-            placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O"
-            value={smiles}
-            onChange={(e) => setSmiles(e.target.value)}
-            rows={3}
-            className="font-mono text-sm"
-          />
-          <StructureEditorDialog
-            open={editorOpen}
-            onOpenChange={setEditorOpen}
-            initialStructure={smiles}
-            onApply={(s) => setSmiles(s)}
-            outputFormat="smiles"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="disclosure-notes">Notes (optional)</Label>
-          <Textarea
-            id="disclosure-notes"
-            placeholder="Reason for disclosure, source, etc."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-          />
-        </div>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <div className="flex gap-2">
-          <Button
-            onClick={handleSubmit}
-            disabled={submitMutation.isPending}
-          >
-            {submitMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Disclosing...
-              </>
-            ) : (
-              "Disclose"
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setExpanded(false);
-              setSmiles("");
-              setNotes("");
-              setError(null);
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // OverviewTab
 // ---------------------------------------------------------------------------
 
@@ -437,6 +276,7 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
+  const router = useRouter();
   const [showAddId, setShowAddId] = useState(false);
   const [newSynonym, setNewSynonym] = useState("");
   const removeMutation = useRemoveIdentifier(compoundId);
@@ -445,10 +285,6 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
   const isDisclosed = molecule.structure_status === "disclosed";
   const isTombstone = !!molecule.merged_into_id;
   const descriptors = molecule.descriptors;
-
-  // Auto-open disclosure if navigated with #disclose hash
-  const autoOpenDisclose =
-    typeof window !== "undefined" && window.location.hash === "#disclose";
 
   // Split identifiers into synonyms (custom type) and structured identifiers
   const synonyms = molecule.identifiers.filter(
@@ -472,12 +308,25 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Disclosure section for undisclosed compounds */}
+      {/* Disclosure banner for undisclosed compounds */}
       {!isDisclosed && !isTombstone && (
-        <DisclosureSection
-          molecule={molecule}
-          autoOpen={autoOpenDisclose}
-        />
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <span className="text-sm text-amber-800 dark:text-amber-200">
+                This compound is undisclosed — no structure on file.
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/compounds/register?disclose=${molecule.id}`)}
+            >
+              Disclose Compound →
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Structure Card */}
