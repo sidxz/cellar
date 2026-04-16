@@ -10,6 +10,8 @@ import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { StepInput } from "./step-input";
 import { StepProcessing } from "./step-processing";
 import { StepResults } from "./step-results";
+import { StepBatch } from "./step-batch";
+import { StepSummary } from "./step-summary";
 import type { WizardMode } from "../../types/registration-wizard";
 
 // ─── Step definitions per mode ──────────────────────────────────────────────
@@ -141,12 +143,18 @@ export function RegistrationWizard() {
       return <StepResults />;
     }
 
-    // Placeholder for remaining steps (Task 11: Batch + Summary)
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground">
-        Step &quot;{steps[currentStep]}&quot; — coming in next task
-      </div>
-    );
+    // Single mode: step 3 = Batch, step 4 = Summary
+    // Bulk mode:   step 3 = Summary (no batch step)
+    if (mode === "single") {
+      if (currentStep === 3) return <StepBatch />;
+      if (currentStep === 4) return <StepSummary />;
+    }
+
+    if (mode === "bulk") {
+      if (currentStep === 3) return <StepSummary />;
+    }
+
+    return null;
   }
 
   // Processing step disables back
