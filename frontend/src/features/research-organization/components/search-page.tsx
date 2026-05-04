@@ -178,8 +178,7 @@ function SearchPageInner() {
 
   // ── Load saved search from URL ─────────────────────────────────────────
   const savedSearchLoadedRef = useRef<string | null>(null);
-  const handleSearchRef = useRef(handleSearch);
-  handleSearchRef.current = handleSearch;
+  const { mutate: runSearch } = searchMutation;
 
   useEffect(() => {
     if (!savedSearchId || !savedSearches) return;
@@ -189,19 +188,42 @@ function SearchPageInner() {
     const saved = savedSearches.find((s: SavedSearch) => s.id === savedSearchId);
     if (!saved) return;
 
-    // Restore report config
     loadFromSavedSearch(saved.columns);
 
-    // Restore protocol columns from saved search
     const cols = saved.columns as { protocolColumns?: string[] } | null;
     const restoredColumns = cols?.protocolColumns ?? [];
-
-    // Execute the search — use ref to avoid handleSearch in deps
     const query = saved.query as unknown as SearchQuery;
-    if (query?.criteria) {
-      handleSearchRef.current(query, restoredColumns);
-    }
-  }, [savedSearchId, savedSearches, loadFromSavedSearch]);
+    if (!query?.criteria) return;
+
+    // Inline the search instead of going through handleSearch — its closure
+    // captures readoutExtraColumns from a render that loadFromSavedSearch
+    // above is about to invalidate, which can lose the mutation's onSuccess.
+    setCurrentQuery(query);
+    setProtocolColumns(restoredColumns);
+    setHasSearched(true);
+    setSelectedMolecule(null);
+    setGridSelectedIds(new Set());
+
+    const input = {
+      query,
+      ...(restoredColumns.length > 0 ? { protocol_columns: restoredColumns } : {}),
+    };
+
+    runSearch(
+      { input, limit: 100 },
+      {
+        onSuccess: (data) => {
+          setResults(enrichItems(data));
+          setNextCursor(data.next_cursor);
+          setTotalCount(data.total_count);
+        },
+        onError: (err) => {
+          console.error("[Search] saved-search mutation failed:", err);
+          setResults([]);
+        },
+      },
+    );
+  }, [savedSearchId, savedSearches, loadFromSavedSearch, runSearch, enrichItems]);
 
   // ── SDF export ─────────────────────────────────────────────────────────
   const handleExportSdf = useCallback(() => {
