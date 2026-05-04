@@ -104,6 +104,15 @@ class ExecuteSearch:
                 molecules = molecules[: input.limit]
                 next_cursor = str(molecules[-1].id)
 
+            # Saved-search write-back: record run metadata on first page only.
+            # Pagination requests skip this so we don't re-stamp last_run_at on
+            # every cursor scroll.
+            if input.saved_search_id is not None and input.cursor_id is None:
+                ss.record_execution(
+                    result_count=total_count if total_count is not None else len(molecules)
+                )
+                await self._ss_repo.save(ss)
+
             # Enrich with activity data if requested
             activity_data = None
             if input.protocol_columns and self._activity_service and molecules:
