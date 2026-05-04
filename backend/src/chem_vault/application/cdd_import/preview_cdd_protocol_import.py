@@ -15,13 +15,10 @@ from chem_vault.application.cdd_import.mapper import (
     map_cdd_protocol,
 )
 from chem_vault.application.shared.query import Query
-from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
-from chem_vault.domain.shared.secret_provider import SecretProvider
-from chem_vault.domain.workspace_config.repository import (
-    ExternalApiKeyRepository,
-    WorkspaceSettingsRepository,
+from chem_vault.application.workspace_config.get_data_source_for_import import (
+    GetDataSourceForImport,
 )
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 
 
@@ -35,30 +32,21 @@ class PreviewCddProtocolImport:
     def __init__(
         self,
         gateway: CddProtocolGateway,
-        secret_provider: SecretProvider,
-        settings_repo: WorkspaceSettingsRepository,
-        api_key_repo: ExternalApiKeyRepository,
-        uow: UnitOfWork,
+        get_data_source: GetDataSourceForImport,
     ) -> None:
         self._gateway = gateway
-        self._secret_provider = secret_provider
-        self._settings_repo = settings_repo
-        self._api_key_repo = api_key_repo
-        self._uow = uow
+        self._get_data_source = get_data_source
 
     async def __call__(
         self, input: PreviewCddProtocolImportQuery, auth: AuthContext | None = None
     ) -> Result[CddProtocolMappingResult, DomainError]:
         require_editor(auth)
 
-        async with self._uow:
-            config = await check_cdd_configured(
-                input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
-            )
-            if isinstance(config, Failure):
-                return config
+        config = await check_cdd_configured(input.workspace_id, self._get_data_source)
+        if isinstance(config, Failure):
+            return config
 
-            vault_id, api_key = config.unwrap()
+        vault_id, api_key = config.unwrap()
 
         try:
             raw = await self._gateway.get_protocol(vault_id, api_key, input.external_protocol_id)

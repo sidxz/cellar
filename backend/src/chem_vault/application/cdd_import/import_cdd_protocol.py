@@ -21,10 +21,8 @@ from chem_vault.domain.screening_assay.protocol import (
 )
 from chem_vault.domain.screening_assay.repository import ProtocolRepository
 from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError, ValidationError
-from chem_vault.domain.shared.secret_provider import SecretProvider
-from chem_vault.domain.workspace_config.repository import (
-    ExternalApiKeyRepository,
-    WorkspaceSettingsRepository,
+from chem_vault.application.workspace_config.get_data_source_for_import import (
+    GetDataSourceForImport,
 )
 from chem_vault.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -41,17 +39,13 @@ class ImportCddProtocol:
     def __init__(
         self,
         gateway: CddProtocolGateway,
-        secret_provider: SecretProvider,
-        settings_repo: WorkspaceSettingsRepository,
-        api_key_repo: ExternalApiKeyRepository,
+        get_data_source: GetDataSourceForImport,
         uow: UnitOfWork,
         protocol_repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._gateway = gateway
-        self._secret_provider = secret_provider
-        self._settings_repo = settings_repo
-        self._api_key_repo = api_key_repo
+        self._get_data_source = get_data_source
         self._uow = uow
         self._protocol_repo = protocol_repo
         self._dispatcher = dispatcher
@@ -63,15 +57,13 @@ class ImportCddProtocol:
         if auth is None:
             return Failure(AuthorizationError("Authentication required"))
 
+        config = await check_cdd_configured(input.workspace_id, self._get_data_source)
+        if isinstance(config, Failure):
+            return config
+
+        vault_id, api_key = config.unwrap()
+
         async with self._uow:
-            config = await check_cdd_configured(
-                input.workspace_id, self._settings_repo, self._api_key_repo, self._secret_provider
-            )
-            if isinstance(config, Failure):
-                return config
-
-            vault_id, api_key = config.unwrap()
-
             try:
                 raw = await self._gateway.get_protocol(vault_id, api_key, input.external_protocol_id)
             except CddAuthError:

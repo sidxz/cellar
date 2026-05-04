@@ -8,14 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-# CDD config flow was migrated to GetDataSourceForImport (DataSource config system),
-# but list/preview/import_cdd_protocol use cases still take the legacy
-# (settings_repo, api_key_repo, secret_provider) constructor args. Until those
-# use cases are updated to take GetDataSourceForImport, these tests cannot run.
-pytestmark = pytest.mark.skip(
-    reason="Pending update of CDD use cases to GetDataSourceForImport flow",
-)
-
 from chem_vault.application.cdd_import.import_cdd_protocol import (
     ImportCddProtocol,
     ImportCddProtocolCommand,
@@ -28,8 +20,15 @@ from chem_vault.application.cdd_import.preview_cdd_protocol_import import (
     PreviewCddProtocolImport,
     PreviewCddProtocolImportQuery,
 )
+from chem_vault.application.workspace_config.get_data_source_for_import import (
+    DataSourceImportConfig,
+)
 from chem_vault.domain.screening_assay.enums import ReadoutDataType
-from chem_vault.domain.shared.errors import AuthorizationError
+from chem_vault.domain.shared.errors import (
+    AuthorizationError,
+    NotFoundError,
+    ValidationError,
+)
 from chem_vault.application.cdd_import.errors import CddAuthError
 
 from tests.fakes.fake_auth import FakeAuth
@@ -57,52 +56,36 @@ class FakeGateway:
         return self._detail
 
 
-class FakeSecretProvider:
-    def __init__(self, secrets=None):
-        self._secrets = secrets or {}
-
-    async def get_secret(self, key):
-        return self._secrets.get(key)
-
-    async def set_secret(self, key, value):
-        self._secrets[key] = value
-
-    async def delete_secret(self, key):
-        self._secrets.pop(key, None)
+class _FakeDataSource:
+    def __init__(self, vault_id="12345"):
+        self.config = {"vault_id": vault_id} if vault_id else {}
 
 
-class FakeWorkspaceSettingsRepo:
-    def __init__(self, cdd_vault_id="12345"):
-        self._cdd_vault_id = cdd_vault_id
+class FakeGetDataSource:
+    """Stand-in for GetDataSourceForImport.
 
-    async def find_by_id(self, id):
-        if self._cdd_vault_id is None:
-            return None
-        from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
+    By default returns a DataSourceImportConfig pointing at vault_id=12345
+    with api_key="key123". Pass `result=Failure(...)` to simulate config errors.
+    """
 
-        ws = WorkspaceSettings.create_default(workspace_id=id)
-        ws.cdd_vault_id = self._cdd_vault_id
-        return ws
+    def __init__(
+        self,
+        *,
+        vault_id: str | None = "12345",
+        api_key: str | None = "key123",
+        result=None,
+    ):
+        if result is None:
+            result = Success(
+                DataSourceImportConfig(
+                    data_source=_FakeDataSource(vault_id=vault_id),
+                    api_key=api_key,
+                )
+            )
+        self._result = result
 
-
-class FakeApiKeyRepo:
-    def __init__(self, has_active_key=True):
-        self._has_active_key = has_active_key
-
-    async def find_by_key_name(self, workspace_id, key_name):
-        if not self._has_active_key:
-            return None
-        from chem_vault.domain.workspace_config.external_api_key import ExternalApiKey
-
-        return ExternalApiKey(
-            id=uuid.uuid4(),
-            workspace_id=workspace_id,
-            key_name=key_name,
-            label="CDD Vault",
-            key_prefix="abc***",
-            is_active=True,
-            created_by=uuid.uuid4(),
-        )
+    async def __call__(self, query):  # noqa: ARG002
+        return self._result
 
 
 class FakeUoW:
@@ -135,10 +118,6 @@ def _make_auth(*, role="editor"):
     return FakeAuth(role=role, user_id=USER_ID, workspace_id=WORKSPACE_ID)
 
 
-def _secret_key():
-    return f"{WORKSPACE_ID}:cdd_vault"
-
-
 # ---------------------------------------------------------------------------
 # ListCddProtocols
 # ---------------------------------------------------------------------------
@@ -152,13 +131,7 @@ class TestListCddProtocols:
                 {"id": 1, "name": "P1", "readout_definitions": [{"name": "R1", "data_type": "Number"}]},
             ]
         )
-        uc = ListCddProtocols(
-            gateway=gateway,
-            secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
-        )
+        uc = ListCddProtocols(gateway=gateway, get_data_source=FakeGetDataSource())
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Success)
         summaries = result.unwrap()
@@ -169,22 +142,18 @@ class TestListCddProtocols:
     async def test_no_vault_id_configured(self):
         uc = ListCddProtocols(
             gateway=FakeGateway(),
-            secret_provider=FakeSecretProvider(),
-            settings_repo=FakeWorkspaceSettingsRepo(cdd_vault_id=None),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
+            get_data_source=FakeGetDataSource(vault_id=None),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
     @pytest.mark.asyncio
-    async def test_no_api_key_configured(self):
+    async def test_no_data_source_configured(self):
         uc = ListCddProtocols(
             gateway=FakeGateway(),
-            secret_provider=FakeSecretProvider(),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(has_active_key=False),
-            uow=FakeUoW(),
+            get_data_source=FakeGetDataSource(
+                result=Failure(NotFoundError("DataSource", "no active CDD source")),
+            ),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
@@ -193,23 +162,16 @@ class TestListCddProtocols:
     async def test_no_secret_found(self):
         uc = ListCddProtocols(
             gateway=FakeGateway(),
-            secret_provider=FakeSecretProvider(),  # empty — no secret stored
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
+            get_data_source=FakeGetDataSource(
+                result=Failure(ValidationError("API key secret is empty")),
+            ),
         )
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
     @pytest.mark.asyncio
     async def test_viewer_rejected(self):
-        uc = ListCddProtocols(
-            gateway=FakeGateway(),
-            secret_provider=FakeSecretProvider(),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
-        )
+        uc = ListCddProtocols(gateway=FakeGateway(), get_data_source=FakeGetDataSource())
         with pytest.raises(AuthorizationError):
             await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth(role="viewer"))
 
@@ -219,13 +181,7 @@ class TestListCddProtocols:
             async def list_protocols(self, vault_id, api_key):
                 raise CddAuthError("Invalid key")
 
-        uc = ListCddProtocols(
-            gateway=AuthErrorGateway(),
-            secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
-        )
+        uc = ListCddProtocols(gateway=AuthErrorGateway(), get_data_source=FakeGetDataSource())
         result = await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth())
         assert isinstance(result, Failure)
 
@@ -240,10 +196,7 @@ class TestPreviewCddProtocolImport:
     async def test_success_with_mapping(self):
         uc = PreviewCddProtocolImport(
             gateway=FakeGateway(detail=_protocol_detail()),
-            secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
+            get_data_source=FakeGetDataSource(),
         )
         result = await uc(
             PreviewCddProtocolImportQuery(workspace_id=WORKSPACE_ID, external_protocol_id=1),
@@ -258,11 +211,8 @@ class TestPreviewCddProtocolImport:
     @pytest.mark.asyncio
     async def test_not_found_returns_failure(self):
         uc = PreviewCddProtocolImport(
-            gateway=FakeGateway(detail=None),  # will raise CddAuthError
-            secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
-            uow=FakeUoW(),
+            gateway=FakeGateway(detail=None),  # gateway raises CddAuthError
+            get_data_source=FakeGetDataSource(),
         )
         result = await uc(
             PreviewCddProtocolImportQuery(workspace_id=WORKSPACE_ID, external_protocol_id=999),
@@ -292,9 +242,7 @@ class TestImportCddProtocol:
 
         return ImportCddProtocol(
             gateway=FakeGateway(detail=detail or _protocol_detail()),
-            secret_provider=FakeSecretProvider({_secret_key(): "key123"}),
-            settings_repo=FakeWorkspaceSettingsRepo(),
-            api_key_repo=FakeApiKeyRepo(),
+            get_data_source=FakeGetDataSource(),
             uow=uow,
             protocol_repo=repo,
             dispatcher=dispatcher,

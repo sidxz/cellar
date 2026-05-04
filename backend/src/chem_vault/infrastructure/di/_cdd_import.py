@@ -46,9 +46,6 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.data_sour
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (
     SQLAlchemyExternalApiKeyRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
-    SQLAlchemyWorkspaceSettingsRepository,
-)
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
@@ -57,15 +54,20 @@ def register_cdd_import(container: Container) -> None:
     container.define(CddVaultClient, Singleton(lambda c: CddVaultClient(c[httpx.AsyncClient])))
 
     # --- CDD Protocol Import ---
+    def _make_get_data_source(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetDataSourceForImport(
+            uow=uow,
+            ds_repo=SQLAlchemyDataSourceRepository(uow),
+            api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+            secret_provider=c[SecretProvider],
+        )
+
     def _cdd_query(uc_cls):  # type: ignore[no-untyped-def]
         def _f(c):  # type: ignore[no-untyped-def]
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(
                 gateway=c[CddVaultClient],
-                secret_provider=c[SecretProvider],
-                settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
-                api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
-                uow=uow,
+                get_data_source=_make_get_data_source(c),
             )
         return _f
 
@@ -73,9 +75,7 @@ def register_cdd_import(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportCddProtocol(
             gateway=c[CddVaultClient],
-            secret_provider=c[SecretProvider],
-            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
-            api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
+            get_data_source=_make_get_data_source(c),
             uow=uow,
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             dispatcher=c[EventDispatcher],
