@@ -52,13 +52,10 @@ def create_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
     )
 
 
-# Lazy singleton — shared across app.py, dependencies.py, and routes.
-_instance: Sentinel | None = None
-
-
 def get_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
-    """Get the shared Sentinel instance (creates on first call)."""
-    global _instance
-    if _instance is None:
-        _instance = create_sentinel(settings)
-    return _instance
+    """Create and return a new Sentinel instance.
+
+    The caller (``create_app`` in ``app.py``) is expected to call this once
+    during application startup and hold the reference.
+    """
+    return create_sentinel(settings)

@@ -95,8 +95,9 @@ class MergeService:
             if isinstance(result, Failure):
                 return result
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return result
+
+        await self._dispatcher.dispatch_all(events)
+        return result
 
     async def merge_in_transaction(
         self, input: MergeCommand

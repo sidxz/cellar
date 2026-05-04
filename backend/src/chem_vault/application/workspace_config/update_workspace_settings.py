@@ -66,5 +66,6 @@ class UpdateWorkspaceSettings:
                 settings.update(**fields)
             await self._repo.save(settings)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(settings)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(settings)

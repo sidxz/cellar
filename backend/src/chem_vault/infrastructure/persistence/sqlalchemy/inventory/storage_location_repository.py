@@ -147,6 +147,9 @@ class SQLAlchemyStorageLocationRepository(
         self, model: StorageLocationModel, aggregate: StorageLocation
     ) -> None:
         model.name = aggregate.name
+        model.type = aggregate.type.value
+        model.parent_id = aggregate.parent_id
+        model.parent_type = aggregate.parent_type.value if aggregate.parent_type else None
         model.barcode = aggregate.barcode.value if aggregate.barcode else None
         model.temperature = aggregate.temperature
         model.rows = aggregate.rows

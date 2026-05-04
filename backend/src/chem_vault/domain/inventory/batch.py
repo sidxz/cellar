@@ -153,6 +153,7 @@ class Batch(AggregateRoot):
             BatchCreated(
                 aggregate_id=batch.id,
                 aggregate_type="Batch",
+                workspace_id=workspace_id,
                 molecule_id=molecule_id,
                 batch_number=batch_number.value,
                 source=source.value,
@@ -176,6 +177,7 @@ class Batch(AggregateRoot):
             BatchReassigned(
                 aggregate_id=self.id,
                 aggregate_type="Batch",
+                workspace_id=self.workspace_id,
                 old_molecule_id=old_id,
                 new_molecule_id=new_molecule_id,
                 merge_event_id=merge_event_id,

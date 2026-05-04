@@ -21,7 +21,7 @@ class MergeEvent(Entity):
         self,
         *,
         id: uuid.UUID | None = None,
-        workspace_id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID,
         source_molecule_id: uuid.UUID,
         target_molecule_id: uuid.UUID,
         reason: MergeReason,

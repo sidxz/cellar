@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -16,6 +18,15 @@ class SQLAlchemyWorkspaceSettingsRepository(
 ):
     model_class = WorkspaceSettingsModel
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> WorkspaceSettings | None:
+        """WorkspaceSettings uses id == workspace_id (singleton per workspace)."""
+        model = await self._session.get(WorkspaceSettingsModel, workspace_id)
+        if model is None:
+            return None
+        return self._to_domain_tracked(model)
+
     def _to_domain(self, model: WorkspaceSettingsModel) -> WorkspaceSettings:
         return WorkspaceSettings(
             id=model.id,
@@ -26,6 +37,7 @@ class SQLAlchemyWorkspaceSettingsRepository(
             signature_required_for=list(model.signature_required_for or []),
             audit_retention_days=model.audit_retention_days,
             formulation_number_scheme=model.formulation_number_scheme,
+            cdd_vault_id=model.cdd_vault_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -41,6 +53,7 @@ class SQLAlchemyWorkspaceSettingsRepository(
             signature_required_for=aggregate.signature_required_for,
             audit_retention_days=aggregate.audit_retention_days,
             formulation_number_scheme=aggregate.formulation_number_scheme,
+            cdd_vault_id=aggregate.cdd_vault_id,
             version=aggregate.version,
         )
 
@@ -54,3 +67,4 @@ class SQLAlchemyWorkspaceSettingsRepository(
         model.signature_required_for = aggregate.signature_required_for
         model.audit_retention_days = aggregate.audit_retention_days
         model.formulation_number_scheme = aggregate.formulation_number_scheme
+        model.cdd_vault_id = aggregate.cdd_vault_id

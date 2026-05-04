@@ -27,6 +27,7 @@ class InfisicalSecretProvider:
         token: str,
         project_id: str,
         environment: str = "dev",
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._project_id = project_id
@@ -35,6 +36,7 @@ class InfisicalSecretProvider:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+        self._client = client or httpx.AsyncClient()
 
     @staticmethod
     def _sanitize_key(key: str) -> str:
@@ -53,13 +55,12 @@ class InfisicalSecretProvider:
             f"&environment={self._environment}"
         )
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers=self._headers, timeout=10.0)
-                if resp.status_code == 404:
-                    return None
-                resp.raise_for_status()
-                data = resp.json()
-                return data.get("secret", {}).get("secretValue")
+            resp = await self._client.get(url, headers=self._headers, timeout=10.0)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("secret", {}).get("secretValue")
         except Exception:
             logger.warning("Failed to retrieve secret %s from Infisical", key, exc_info=True)
             return None
@@ -72,22 +73,21 @@ class InfisicalSecretProvider:
             "environment": self._environment,
             "secretValue": value,
         }
-        async with httpx.AsyncClient() as client:
-            patch_url = f"{self._base_url}/api/v3/secrets/raw/{safe_key}"
-            resp = await client.patch(
-                patch_url, headers=self._headers, json=body, timeout=10.0,
+        patch_url = f"{self._base_url}/api/v3/secrets/raw/{safe_key}"
+        resp = await self._client.patch(
+            patch_url, headers=self._headers, json=body, timeout=10.0,
+        )
+        if resp.status_code == 404:
+            create_body = {
+                **body,
+                "secretName": safe_key,
+                "type": "shared",
+            }
+            post_url = f"{self._base_url}/api/v3/secrets/raw/{safe_key}"
+            resp = await self._client.post(
+                post_url, headers=self._headers, json=create_body, timeout=10.0,
             )
-            if resp.status_code == 404:
-                create_body = {
-                    **body,
-                    "secretName": safe_key,
-                    "type": "shared",
-                }
-                post_url = f"{self._base_url}/api/v3/secrets/raw/{safe_key}"
-                resp = await client.post(
-                    post_url, headers=self._headers, json=create_body, timeout=10.0,
-                )
-            resp.raise_for_status()
+        resp.raise_for_status()
 
     async def delete_secret(self, key: str) -> None:
         safe_key = self._sanitize_key(key)
@@ -96,8 +96,7 @@ class InfisicalSecretProvider:
             f"?workspaceId={self._project_id}"
             f"&environment={self._environment}"
         )
-        async with httpx.AsyncClient() as client:
-            resp = await client.delete(url, headers=self._headers, timeout=10.0)
-            # 404 is acceptable — secret already gone.
-            if resp.status_code != 404:
-                resp.raise_for_status()
+        resp = await self._client.delete(url, headers=self._headers, timeout=10.0)
+        # 404 is acceptable — secret already gone.
+        if resp.status_code != 404:
+            resp.raise_for_status()

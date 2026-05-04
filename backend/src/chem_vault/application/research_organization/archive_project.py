@@ -47,5 +47,6 @@ class ArchiveProject:
             project.archive(archived_by=input.archived_by)
             await self._repo.save(project)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(project)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(project)

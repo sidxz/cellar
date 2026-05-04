@@ -44,5 +44,6 @@ class DeleteProtocolForm:
 
             await self._repo.delete(input.workspace_id, input.form_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)

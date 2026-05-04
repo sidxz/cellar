@@ -75,5 +75,6 @@ class CreateRegistrationForm:
             )
             await self._repo.save(new_form)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(new_form)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(new_form)

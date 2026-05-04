@@ -30,8 +30,20 @@ class SQLAlchemyCompoundFlagRepository:
         return [self._to_domain(m) for m in result.scalars()]
 
     async def save(self, flag: CompoundFlag) -> None:
-        model = self._to_model(flag)
-        await self._uow.session.merge(model)
+        existing = await self._uow.session.get(CompoundFlagModel, flag.id)
+        if existing is not None:
+            if existing.workspace_id != flag.workspace_id:
+                from chem_vault.domain.shared.errors import AuthorizationError
+                raise AuthorizationError("Cannot update CompoundFlag from a different workspace")
+            self._update_model(existing, flag)
+        else:
+            model = self._to_model(flag)
+            self._uow.session.add(model)
+
+    @staticmethod
+    def _update_model(model: CompoundFlagModel, flag: CompoundFlag) -> None:
+        model.flag_type = flag.flag_type.value
+        model.note = flag.note
 
     async def delete(self, workspace_id: uuid.UUID, flag_id: uuid.UUID) -> None:
         stmt = delete(CompoundFlagModel).where(

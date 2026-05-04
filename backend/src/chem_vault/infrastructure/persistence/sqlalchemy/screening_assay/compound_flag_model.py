@@ -2,28 +2,24 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
-
-from sqlalchemy import DateTime, Index, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import Index, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+from chem_vault.infrastructure.persistence.sqlalchemy.base import (
+    Base,
+    EntityModelMixin,
+    WorkspaceIdMixin,
+)
 
 
-class CompoundFlagModel(Base):
+class CompoundFlagModel(Base, EntityModelMixin, WorkspaceIdMixin):
     __tablename__ = "compound_flags"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    molecule_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    protocol_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    flagged_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    molecule_id: Mapped[Uuid] = mapped_column(Uuid, nullable=False)
+    protocol_id: Mapped[Uuid] = mapped_column(Uuid, nullable=False)
+    flagged_by: Mapped[Uuid] = mapped_column(Uuid, nullable=False)
     flag_type: Mapped[str] = mapped_column(String(20), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
 
     __table_args__ = (
         UniqueConstraint(

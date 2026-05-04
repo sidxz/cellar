@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from chem_vault.domain.chemical_registration.enums import RelationshipType
+from chem_vault.domain.shared.entity import Entity
 from chem_vault.domain.shared.errors import ValidationError
 
 
-class MoleculeRelationship:
+class MoleculeRelationship(Entity):
     """Semantic relationship between two molecules.
 
     Standalone entity — not inside either molecule's aggregate boundary.
@@ -27,17 +28,17 @@ class MoleculeRelationship:
         notes: str | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
+        updated_at: datetime | None = None,
     ) -> None:
+        super().__init__(id=id, created_at=created_at, updated_at=updated_at)
         if source_molecule_id == target_molecule_id:
             raise ValidationError("A molecule cannot have a relationship with itself")
-        self.id = id or uuid.uuid4()
         self.workspace_id = workspace_id
         self.source_molecule_id = source_molecule_id
         self.target_molecule_id = target_molecule_id
         self.relationship_type = relationship_type
         self.notes = notes
         self.created_by = created_by
-        self.created_at = created_at or datetime.now(UTC)
 
     @classmethod
     def create(
@@ -57,19 +58,4 @@ class MoleculeRelationship:
             relationship_type=relationship_type,
             notes=notes,
             created_by=created_by,
-        )
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, MoleculeRelationship):
-            return NotImplemented
-        return self.id == other.id
-
-    def __hash__(self) -> int:
-        return hash(self.id)
-
-    def __repr__(self) -> str:
-        return (
-            f"MoleculeRelationship(id={self.id}, "
-            f"{self.source_molecule_id} --[{self.relationship_type}]--> "
-            f"{self.target_molecule_id})"
         )

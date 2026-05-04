@@ -7,12 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_same_workspace
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.attachment.attachment import Attachment
 from chem_vault.domain.attachment.repository import AttachmentRepository
-from chem_vault.domain.attachment.storage import StorageClient
+from chem_vault.application.attachment.storage import StorageClient
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 
 
@@ -36,6 +36,8 @@ class DownloadAttachment:
     async def __call__(
         self, input: DownloadAttachmentQuery, auth: AuthContext | None = None
     ) -> Result[tuple[Attachment, bytes], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
+
         async with self._uow:
             attachment = await self._repo.find_by_id_in_workspace(input.workspace_id, input.attachment_id)
             if attachment is None:

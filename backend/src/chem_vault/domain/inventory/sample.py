@@ -124,6 +124,7 @@ class Sample(AggregateRoot):
             SampleCreated(
                 aggregate_id=sample.id,
                 aggregate_type="Sample",
+                workspace_id=workspace_id,
                 batch_id=batch_id,
                 barcode=barcode.value,
                 amount_value=amount.value,
@@ -172,6 +173,7 @@ class Sample(AggregateRoot):
             SampleAliquoted(
                 aggregate_id=self.id,
                 aggregate_type="Sample",
+                workspace_id=self.workspace_id,
                 amount_removed=amount_to_remove,
                 remaining_amount=remaining,
                 amount_unit=self.amount.unit.value,
@@ -185,6 +187,7 @@ class Sample(AggregateRoot):
                 SampleDepleted(
                     aggregate_id=self.id,
                     aggregate_type="Sample",
+                    workspace_id=self.workspace_id,
                     batch_id=self.batch_id,
                 )
             )
@@ -198,6 +201,7 @@ class Sample(AggregateRoot):
                 LowStockDetected(
                     aggregate_id=self.id,
                     aggregate_type="Sample",
+                    workspace_id=self.workspace_id,
                     batch_id=self.batch_id,
                     current_amount=remaining,
                     threshold=self.low_stock_threshold,
@@ -219,6 +223,7 @@ class Sample(AggregateRoot):
             SampleMoved(
                 aggregate_id=self.id,
                 aggregate_type="Sample",
+                workspace_id=self.workspace_id,
                 old_location_id=old_id,
                 new_location_id=location_id,
             )
@@ -247,6 +252,7 @@ class Sample(AggregateRoot):
             SampleQuarantined(
                 aggregate_id=self.id,
                 aggregate_type="Sample",
+                workspace_id=self.workspace_id,
                 reason=reason,
             )
         )
@@ -272,6 +278,7 @@ class Sample(AggregateRoot):
             SampleDisposed(
                 aggregate_id=self.id,
                 aggregate_type="Sample",
+                workspace_id=self.workspace_id,
                 batch_id=self.batch_id,
                 reason=reason,
             )

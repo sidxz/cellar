@@ -19,3 +19,4 @@ class DomainEvent:
     occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     aggregate_id: uuid.UUID
     aggregate_type: str
+    workspace_id: uuid.UUID

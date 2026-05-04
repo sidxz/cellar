@@ -9,10 +9,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.screening.get_protocol_activity import (
-    ActivitySummaryQuery,
+    GetProtocolActivityQuery,
 )
 from chem_vault.application.screening.get_protocol_stats import (
-    ProtocolStatsQuery,
+    GetProtocolStatsQuery,
 )
 from chem_vault.interface.dependencies import (
     AuthDep,
@@ -112,7 +112,7 @@ async def get_protocol_stats(
     uc: GetProtocolStatsDep,
 ) -> ProtocolStatsResponse:
     """Dashboard metrics for a single protocol: run counts, compounds, latest run."""
-    query = ProtocolStatsQuery(
+    query = GetProtocolStatsQuery(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
     )
@@ -151,7 +151,7 @@ async def get_protocol_activity_summary(
     uc: GetProtocolActivitySummaryDep,
 ) -> ActivitySummaryV2Response:
     """Compound-centric results aggregated across all runs for a protocol."""
-    query = ActivitySummaryQuery(
+    query = GetProtocolActivityQuery(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
     )
@@ -213,9 +213,9 @@ async def get_compound_dose_response(
     uc: GetCompoundCurvesDep,
 ) -> list[dict]:
     """All dose-response curves for a compound in a protocol."""
-    from chem_vault.application.screening.get_compound_curves import CompoundCurvesQuery
+    from chem_vault.application.screening.get_compound_curves import GetCompoundCurvesQuery
 
-    query = CompoundCurvesQuery(
+    query = GetCompoundCurvesQuery(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
         molecule_id=molecule_id,

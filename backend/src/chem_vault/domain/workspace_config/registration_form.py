@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
@@ -121,7 +121,7 @@ class RegistrationForm(AggregateRoot):
         if field_overrides is not UNSET:
             self.field_overrides = list(field_overrides) if field_overrides else []  # type: ignore[arg-type]
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             RegistrationFormUpdated(
                 aggregate_id=self.id,
@@ -133,7 +133,7 @@ class RegistrationForm(AggregateRoot):
     def set_default(self, is_default: bool) -> None:
         """Set or unset this form as the workspace default for its applies_to type."""
         self.is_default = is_default
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             RegistrationFormUpdated(
                 aggregate_id=self.id,

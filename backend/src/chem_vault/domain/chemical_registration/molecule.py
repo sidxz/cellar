@@ -20,6 +20,7 @@ from chem_vault.domain.chemical_registration.events import (
     MoleculeMerged,
     MoleculeRegistered,
     MoleculeTagsUpdated,
+    MoleculeUpdated,
 )
 from chem_vault.domain.chemical_registration.mixture_component import MixtureComponent
 from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
@@ -172,6 +173,40 @@ class Molecule(AggregateRoot):
             raise ValidationError("Cannot mutate a tombstone molecule")
 
     # ------------------------------------------------------------------
+    # Update mutable fields
+    # ------------------------------------------------------------------
+
+    def update(
+        self,
+        *,
+        name: str | None = ...,  # type: ignore[assignment]
+        sequence: str | None = ...,  # type: ignore[assignment]
+        stereochemistry: Stereochemistry | None = ...,  # type: ignore[assignment]
+        invention_date: date | None = ...,  # type: ignore[assignment]
+    ) -> None:
+        """Update core mutable fields using sentinel pattern."""
+        self._guard_tombstone()
+        if name is not ...:
+            if name is not None and (not name or not name.strip()):
+                raise ValidationError("Molecule name must not be empty")
+            if name is not None:
+                self.name = name.strip()
+        if sequence is not ...:
+            self.sequence = sequence
+        if stereochemistry is not ...:
+            self.stereochemistry = stereochemistry
+        if invention_date is not ...:
+            self.invention_date = invention_date
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            MoleculeUpdated(
+                aggregate_id=self.id,
+                aggregate_type="Molecule",
+                workspace_id=self.workspace_id,
+            )
+        )
+
+    # ------------------------------------------------------------------
     # Factory methods
     # ------------------------------------------------------------------
 
@@ -302,6 +337,7 @@ class Molecule(AggregateRoot):
             MoleculeDisclosed(
                 aggregate_id=self.id,
                 aggregate_type="Molecule",
+                workspace_id=self.workspace_id,
                 inchi_key=structure.inchi_key,  # type: ignore[arg-type]
             )
         )
@@ -376,6 +412,7 @@ class Molecule(AggregateRoot):
             MoleculeLifecycleChanged(
                 aggregate_id=self.id,
                 aggregate_type="Molecule",
+                workspace_id=self.workspace_id,
                 old_stage=old_stage.value,
                 new_stage=target.value,
                 changed_by=changed_by,
@@ -403,6 +440,7 @@ class Molecule(AggregateRoot):
             MoleculeMerged(
                 aggregate_id=self.id,
                 aggregate_type="Molecule",
+                workspace_id=self.workspace_id,
                 source_molecule_id=self.id,
                 target_molecule_id=merged_into_id,
                 merge_event_id=merge_event_id,
@@ -435,6 +473,7 @@ class Molecule(AggregateRoot):
             MoleculeTagsUpdated(
                 aggregate_id=self.id,
                 aggregate_type="Molecule",
+                workspace_id=self.workspace_id,
                 added_tags=tuple(added),
                 removed_tags=tuple(removed),
             )

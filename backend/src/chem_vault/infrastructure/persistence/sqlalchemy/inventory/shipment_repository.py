@@ -34,12 +34,7 @@ class SQLAlchemyShipmentRepository(
             stmt = stmt.where(ShipmentModel.status == status)
         stmt = stmt.order_by(ShipmentModel.created_at.desc())
         result = await self._session.execute(stmt)
-        shipments = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            shipments.append(domain)
-        return shipments
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = sa_delete(ShipmentModel).where(

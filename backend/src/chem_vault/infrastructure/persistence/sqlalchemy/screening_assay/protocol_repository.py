@@ -57,9 +57,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model = result.scalar_one_or_none()
         if model is None:
             return None
-        domain = self._to_domain(model)
-        self._uow.track(domain)
-        return domain
+        return self._to_domain_tracked(model)
 
     async def find_by_name(
         self, workspace_id: uuid.UUID, name: str
@@ -73,9 +71,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model = result.scalar_one_or_none()
         if model is None:
             return None
-        domain = self._to_domain(model)
-        self._uow.track(domain)
-        return domain
+        return self._to_domain_tracked(model)
 
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
@@ -87,12 +83,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             .order_by(ProtocolModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        protocols = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            protocols.append(domain)
-        return protocols
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_ids(
         self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
@@ -105,7 +96,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             ProtocolModel.id.in_(ids),
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a protocol by ID (only for DRAFT protocols)."""
@@ -188,12 +179,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             .order_by(ProtocolModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        protocols = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            protocols.append(domain)
-        return protocols
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_project_ids(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[uuid.UUID]:
         """Return all project IDs linked to a given protocol, scoped to workspace."""

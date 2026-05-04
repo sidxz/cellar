@@ -104,8 +104,9 @@ class AddIdentifier:
 
             await self._repo.save(mol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(mol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(mol)
 
 
 class RemoveIdentifier:
@@ -140,8 +141,9 @@ class RemoveIdentifier:
 
             await self._repo.save(mol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
 
 
 class ListIdentifiers:

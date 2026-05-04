@@ -50,12 +50,7 @@ class SQLAlchemySynthesisRouteRepository(
             .order_by(SynthesisRouteModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        routes = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            routes.append(domain)
-        return routes
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = sa_delete(SynthesisRouteModel).where(
@@ -76,9 +71,7 @@ class SQLAlchemySynthesisRouteRepository(
         model = result.scalar_one_or_none()
         if model is None:
             return None
-        domain = self._to_domain(model)
-        self._uow.track(domain)
-        return domain
+        return self._to_domain_tracked(model)
 
     # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate

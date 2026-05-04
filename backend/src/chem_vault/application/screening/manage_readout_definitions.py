@@ -131,8 +131,9 @@ class AddReadoutDefinition:
             protocol.add_readout_definition(definition)
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 class RemoveReadoutDefinition:
@@ -160,5 +161,6 @@ class RemoveReadoutDefinition:
             protocol.remove_readout_definition(input.definition_id)
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

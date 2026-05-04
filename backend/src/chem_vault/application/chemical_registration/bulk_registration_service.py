@@ -143,7 +143,8 @@ class BulkRegistrationService:
             bulk_reg.start_processing()
             await self._bulk_reg_repo.save(bulk_reg)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
+
+        await self._dispatcher.dispatch_all(events)
 
         # 2. Process each item sequentially (within-batch dedup)
         item_results = await self._process_items(
@@ -159,7 +160,8 @@ class BulkRegistrationService:
             bulk_reg.complete()
             await self._bulk_reg_repo.save(bulk_reg)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
+
+        await self._dispatcher.dispatch_all(events)
 
         return Success(
             BulkRegistrationOutcome(

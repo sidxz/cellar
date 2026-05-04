@@ -126,5 +126,6 @@ class CreateBatch:
 
             await self._repo.save(batch)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(batch)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(batch)

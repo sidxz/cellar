@@ -56,8 +56,15 @@ class SQLAlchemyPlateTemplateRepository:
         return [self._to_domain(m) for m in result.scalars().all()]
 
     async def save(self, entity: PlateTemplate) -> None:
-        model = self._to_model(entity)
-        await self._uow.session.merge(model)
+        existing = await self._uow.session.get(PlateTemplateModel, entity.id)
+        if existing is None:
+            model = self._to_model(entity)
+            self._uow.session.add(model)
+        else:
+            if existing.workspace_id != entity.workspace_id:
+                from chem_vault.domain.shared.errors import AuthorizationError
+                raise AuthorizationError("Cannot update PlateTemplate from a different workspace")
+            self._update_model(existing, entity)
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._uow.session.get(PlateTemplateModel, id)
@@ -116,3 +123,11 @@ class SQLAlchemyPlateTemplateRepository:
             description=entity.description,
             created_by=entity.created_by,
         )
+
+    @staticmethod
+    def _update_model(model: PlateTemplateModel, entity: PlateTemplate) -> None:
+        model.name = entity.name
+        model.format = entity.format.value
+        model.template_map = entity.template_map
+        model.description = entity.description
+        model.created_by = entity.created_by

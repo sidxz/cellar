@@ -96,8 +96,9 @@ class CreatePlateTemplate:
             )
             await self._repo.save(template)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(template)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(template)
 
 
 class UpdatePlateTemplate:
@@ -133,8 +134,9 @@ class UpdatePlateTemplate:
                 template.update(**kwargs)
                 await self._repo.save(template)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(template)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(template)
 
 
 class DeletePlateTemplate:
@@ -165,8 +167,9 @@ class DeletePlateTemplate:
 
             await self._repo.delete(input.workspace_id, input.template_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
 
 
 class GetPlateTemplate:

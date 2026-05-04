@@ -145,7 +145,10 @@ async def start_bulk_registration(
     if len(content) > 50 * 1024 * 1024:  # 50 MB
         raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
 
-    fmt = BulkRegistrationFileFormat(file_format)
+    try:
+        fmt = BulkRegistrationFileFormat(file_format)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Unsupported file format: {file_format!r}")
     temporal_client = getattr(request.app.state, "temporal_client", None)
 
     # --- Async path (Temporal available) ---
@@ -157,7 +160,7 @@ async def start_bulk_registration(
         )
 
         storage_path = save_upload_to_storage(content, file.filename or "unknown")
-        workflow_id = f"bulk-reg-{uuid.uuid4()}"
+        workflow_id = f"bulk-reg-{auth.workspace_id}-{uuid.uuid4()}"
 
         await temporal_client.start_workflow(
             BulkRegistrationWorkflow.run,
@@ -231,6 +234,8 @@ async def get_bulk_registration_status(
     workflow_id: str,
 ) -> BulkRegistrationStatusResponse:
     """Poll progress of an async bulk registration workflow."""
+    _verify_workspace_prefix(workflow_id, auth.workspace_id)
+
     temporal_client = getattr(request.app.state, "temporal_client", None)
     if temporal_client is None:
         raise HTTPException(status_code=503, detail="Temporal is not available.")
@@ -268,6 +273,8 @@ async def confirm_merges(
     reject_uc: RejectDisclosureDep,
 ) -> ConfirmMergesResponse:
     """Batch confirm or reject merge candidates from a bulk registration workflow."""
+    _verify_workspace_prefix(workflow_id, auth.workspace_id)
+
     results: list[MergeDecisionResult] = []
     confirmed_count = 0
     rejected_count = 0
@@ -354,3 +361,19 @@ async def confirm_merges(
         rejected_count=rejected_count,
         error_count=error_count,
     )
+
+
+def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
+    """Verify the workflow belongs to the requesting workspace.
+
+    Workflow IDs have the format: ``bulk-reg-{workspace_id}-{uuid}``.
+    """
+    prefix = "bulk-reg-"
+    if not workflow_id.startswith(prefix):
+        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
+    remainder = workflow_id[len(prefix) :]
+    if len(remainder) < 37:
+        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
+    embedded_ws = remainder[:36]
+    if embedded_ws != str(workspace_id):
+        raise HTTPException(status_code=404, detail="Workflow not found")

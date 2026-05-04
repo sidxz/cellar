@@ -14,7 +14,7 @@ from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.attachment.attachment import Attachment
 from chem_vault.domain.attachment.enums import AttachableType
 from chem_vault.domain.attachment.repository import AttachmentRepository
-from chem_vault.domain.attachment.storage import StorageClient
+from chem_vault.application.attachment.storage import StorageClient
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.domain.attachment.validation import validate_extension, validate_file_size
@@ -85,6 +85,7 @@ class UploadAttachment:
         async with self._uow:
             await self._repo.save(attachment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
+
+        await self._dispatcher.dispatch_all(events)
 
         return Success(attachment)

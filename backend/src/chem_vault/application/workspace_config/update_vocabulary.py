@@ -67,5 +67,6 @@ class UpdateVocabulary:
 
             await self._repo.save(vocab)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(vocab)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(vocab)

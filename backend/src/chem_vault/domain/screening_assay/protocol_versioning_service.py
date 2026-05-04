@@ -102,6 +102,7 @@ class ProtocolVersioningService:
             ProtocolVersionCreated(
                 aggregate_id=new_protocol.id,
                 aggregate_type="Protocol",
+                workspace_id=parent.workspace_id,
                 parent_protocol_id=parent.id,
                 version=new_protocol.protocol_version,
             )

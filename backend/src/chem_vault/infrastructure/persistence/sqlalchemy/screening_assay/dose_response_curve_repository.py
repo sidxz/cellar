@@ -126,8 +126,35 @@ class SQLAlchemyDoseResponseCurveRepository:
         return out
 
     async def save(self, entity: DoseResponseCurve) -> None:
-        model = self._to_model(entity)
-        await self._uow.session.merge(model)
+        existing = await self._uow.session.get(DoseResponseCurveModel, entity.id)
+        if existing is not None:
+            if existing.workspace_id != entity.workspace_id:
+                from chem_vault.domain.shared.errors import AuthorizationError
+                raise AuthorizationError("Cannot update DoseResponseCurve from a different workspace")
+            self._update_model(existing, entity)
+        else:
+            model = self._to_model(entity)
+            self._uow.session.add(model)
+
+    @staticmethod
+    def _update_model(model: DoseResponseCurveModel, entity: DoseResponseCurve) -> None:
+        model.molecule_id = entity.molecule_id
+        model.batch_id = entity.batch_id
+        model.protocol_id = entity.protocol_id
+        model.run_id = entity.run_id
+        model.curve_type = entity.curve_type.value
+        model.fitted_value = entity.fitted_value
+        model.fitted_unit = entity.fitted_unit
+        model.hill_slope = entity.hill_slope
+        model.top = entity.top
+        model.bottom = entity.bottom
+        model.r_squared = entity.r_squared
+        model.confidence_interval_low = entity.confidence_interval_low
+        model.confidence_interval_high = entity.confidence_interval_high
+        model.num_points = entity.num_points
+        model.curve_class = entity.curve_class.value if entity.curve_class else None
+        model.raw_data = entity.raw_data
+        model.excluded_points = entity.excluded_points
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(DoseResponseCurveModel).where(

@@ -13,68 +13,67 @@ from chem_vault.infrastructure.logging import configure_logging
 from chem_vault.infrastructure.sentinel.auth import get_sentinel
 from chem_vault.interface.error_handlers import register_error_handlers
 
-sentinel = get_sentinel()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """App lifespan — initialize container, register Sentinel actions, cleanup."""
-    # Structured logging
-    import os
-    configure_logging(
-        json_output=os.getenv("LOG_FORMAT", "json") == "json",
-        log_level=os.getenv("LOG_LEVEL", "INFO"),
-    )
-
-    # Initialize DI container and attach to app state
-    container = create_container()
-    app.state.container = container
-
-    # Wire audit event handler — catch-all for all domain events
-    from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
-
-    from chem_vault.domain.shared.events import DomainEvent
-    from chem_vault.infrastructure.messaging.audit_event_handler import AuditEventHandler
-    from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
-
-    dispatcher = container[EventDispatcher]
-    session_factory = container[async_sm]
-    dispatcher.register(DomainEvent, AuditEventHandler(session_factory))
-
-    # Temporal client — graceful fallback to None for local dev without Temporal
-    from chem_vault.infrastructure.temporal import TemporalSettings, create_temporal_client
-
-    try:
-        temporal_settings = TemporalSettings()
-        temporal_client = await create_temporal_client(temporal_settings)
-        app.state.temporal_client = temporal_client
-    except Exception:
-        import structlog
-        structlog.get_logger().warning("temporal_unavailable", msg="Temporal not reachable — bulk ops will run synchronously")
-        app.state.temporal_client = None
-
-    # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
-    async with sentinel.lifespan(app):
-        yield
-
-    # Cleanup: close httpx client used by vault integration
-    import httpx
-
-    try:
-        vault_http = container[httpx.AsyncClient]
-        await vault_http.aclose()
-    except Exception:
-        pass
-
-    # Cleanup: dispose the database engine
-    from sqlalchemy.ext.asyncio import AsyncEngine
-
-    engine = container[AsyncEngine]
-    await engine.dispose()
-
 
 def create_app() -> FastAPI:
     """Build the FastAPI application with auth, CORS, DI, and error handling."""
+    sentinel = get_sentinel()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        """App lifespan — initialize container, register Sentinel actions, cleanup."""
+        # Structured logging
+        import os
+        configure_logging(
+            json_output=os.getenv("LOG_FORMAT", "json") == "json",
+            log_level=os.getenv("LOG_LEVEL", "INFO"),
+        )
+
+        # Initialize DI container and attach to app state
+        container = create_container()
+        app.state.container = container
+
+        # Wire audit event handler — catch-all for all domain events
+        from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
+
+        from chem_vault.domain.shared.events import DomainEvent
+        from chem_vault.infrastructure.messaging.audit_event_handler import AuditEventHandler
+        from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+
+        dispatcher = container[EventDispatcher]
+        session_factory = container[async_sm]
+        dispatcher.register(DomainEvent, AuditEventHandler(session_factory))
+
+        # Temporal client — graceful fallback to None for local dev without Temporal
+        from chem_vault.infrastructure.temporal import TemporalSettings, create_temporal_client
+
+        try:
+            temporal_settings = TemporalSettings()
+            temporal_client = await create_temporal_client(temporal_settings)
+            app.state.temporal_client = temporal_client
+        except Exception:
+            import structlog
+            structlog.get_logger().warning("temporal_unavailable", msg="Temporal not reachable — bulk ops will run synchronously")
+            app.state.temporal_client = None
+
+        # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
+        async with sentinel.lifespan(app):
+            yield
+
+        # Cleanup: close httpx client used by vault integration
+        import httpx
+
+        try:
+            vault_http = container[httpx.AsyncClient]
+            await vault_http.aclose()
+        except Exception:
+            pass
+
+        # Cleanup: dispose the database engine
+        from sqlalchemy.ext.asyncio import AsyncEngine
+
+        engine = container[AsyncEngine]
+        await engine.dispose()
+
     app = FastAPI(
         title="Chem-Vault",
         version="0.1.0",
@@ -90,9 +89,12 @@ def create_app() -> FastAPI:
     )
 
     # CORS — added last so it runs first (LIFO)
+    import os
+
+    cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Tighten in production
+        allow_origins=[o.strip() for o in cors_origins],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

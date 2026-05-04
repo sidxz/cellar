@@ -282,6 +282,7 @@ class Protocol(AggregateRoot):
             ProtocolCreated(
                 aggregate_id=protocol.id,
                 aggregate_type="Protocol",
+                workspace_id=workspace_id,
                 name=protocol.name,
                 version=protocol.protocol_version,
                 protocol_type=protocol.protocol_type.value,
@@ -302,6 +303,7 @@ class Protocol(AggregateRoot):
             ProtocolPublished(
                 aggregate_id=self.id,
                 aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
             )
         )
 
@@ -314,6 +316,7 @@ class Protocol(AggregateRoot):
             ProtocolRetired(
                 aggregate_id=self.id,
                 aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
                 reason=reason,
             )
         )

@@ -51,9 +51,9 @@ class CreateRun:
     async def __call__(
         self, input: CreateRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required to create a run"))
         require_editor(auth)
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required"))
 
         async with self._uow:
             # Guard: protocol must exist, belong to same workspace, and be ACTIVE
@@ -96,5 +96,6 @@ class CreateRun:
             )
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)

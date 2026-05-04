@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from chem_vault.domain.shared.entity import AggregateRoot
@@ -34,7 +34,7 @@ class CustomFieldDefinition(AggregateRoot):
     def __init__(
         self,
         *,
-        id: uuid.UUID,
+        id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         name: str,
         label: str,
@@ -178,7 +178,7 @@ class CustomFieldDefinition(AggregateRoot):
                 self.data_type, self.pick_list_values, self.vocabulary_id
             )
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             CustomFieldDefinitionUpdated(
                 aggregate_id=self.id,
@@ -190,7 +190,7 @@ class CustomFieldDefinition(AggregateRoot):
     def deactivate(self) -> None:
         """Mark this field definition as inactive (soft-delete)."""
         self.is_active = False
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             CustomFieldDefinitionDeactivated(
                 aggregate_id=self.id,
@@ -202,7 +202,7 @@ class CustomFieldDefinition(AggregateRoot):
     def activate(self) -> None:
         """Re-enable a previously deactivated field definition."""
         self.is_active = True
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             CustomFieldDefinitionUpdated(
                 aggregate_id=self.id,

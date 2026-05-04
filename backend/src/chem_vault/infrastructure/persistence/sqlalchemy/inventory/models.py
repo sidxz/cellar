@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from sqlalchemy import (
     Date,
@@ -32,7 +33,9 @@ class BatchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     __tablename__ = "batches"
 
-    molecule_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    molecule_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("molecules.id"), nullable=False, index=True
+    )
     batch_number: Mapped[str] = mapped_column(String(50), nullable=False)
     salt_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("salt_catalog.id", ondelete="SET NULL"), nullable=True
@@ -51,8 +54,8 @@ class BatchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     vendor_catalog_number: Mapped[str | None] = mapped_column(String(200))
     vendor_lot_number: Mapped[str | None] = mapped_column(String(200))
     chemist: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    synthesis_date: Mapped[str | None] = mapped_column(Date)
-    expiry_date: Mapped[str | None] = mapped_column(Date)
+    synthesis_date: Mapped[date | None] = mapped_column(Date)
+    expiry_date: Mapped[date | None] = mapped_column(Date)
     notebook_reference: Mapped[str | None] = mapped_column(String(200))
     storage_temperature_celsius: Mapped[float | None] = mapped_column(Float)
     storage_humidity_percent: Mapped[float | None] = mapped_column(Float)

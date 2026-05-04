@@ -13,7 +13,7 @@ import uuid
 import sqlalchemy as sa
 
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.attachment.storage import StorageClient
+from chem_vault.application.attachment.storage import StorageClient
 
 
 class AttachmentMergeSideEffect:

@@ -248,13 +248,20 @@ class SQLAlchemyReadoutDataRepository:
         return result.rowcount
 
     async def save(self, entity: ReadoutData) -> None:
-        model = self._to_model(entity)
-        await self._uow.session.merge(model)
+        existing = await self._uow.session.get(ReadoutDataModel, entity.id)
+        if existing is None:
+            model = self._to_model(entity)
+            self._uow.session.add(model)
+        else:
+            if existing.workspace_id != entity.workspace_id:
+                from chem_vault.domain.shared.errors import AuthorizationError
+                raise AuthorizationError("Cannot update ReadoutData from a different workspace")
+            self._update_model(existing, entity)
 
     async def save_bulk(self, entities: list[ReadoutData]) -> None:
-        """Bulk insert readout data points."""
-        models = [self._to_model(e) for e in entities]
-        self._uow.session.add_all(models)
+        """Bulk upsert readout data points (safe for retry)."""
+        for entity in entities:
+            await self.save(entity)
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(ReadoutDataModel).where(
@@ -311,3 +318,16 @@ class SQLAlchemyReadoutDataRepository:
             is_outlier=entity.is_outlier,
             is_computed=entity.is_computed,
         )
+
+    @staticmethod
+    def _update_model(model: ReadoutDataModel, entity: ReadoutData) -> None:
+        model.run_id = entity.run_id
+        model.well_id = entity.well_id
+        model.molecule_id = entity.molecule_id
+        model.batch_id = entity.batch_id
+        model.readout_definition_id = entity.readout_definition_id
+        model.value_numeric = entity.value.value if entity.value else None
+        model.value_qualifier = entity.value.qualifier.value if entity.value else None
+        model.value_text = entity.value_text
+        model.is_outlier = entity.is_outlier
+        model.is_computed = entity.is_computed

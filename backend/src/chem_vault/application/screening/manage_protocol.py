@@ -71,8 +71,9 @@ class PublishProtocol:
 
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 class RetireProtocol:
@@ -97,8 +98,9 @@ class RetireProtocol:
             protocol.retire(reason=input.reason)
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 class VersionProtocol:
@@ -127,8 +129,9 @@ class VersionProtocol:
             # Save only the new draft — parent stays ACTIVE until new version is published
             await self._repo.save(new_protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(new_protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(new_protocol)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -185,8 +188,9 @@ class UpdateProtocol:
 
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -244,8 +248,9 @@ class DeleteProtocol:
 
             await self._repo.delete(protocol.workspace_id, input.protocol_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
 
 
 class ListProtocolsByProject:
@@ -291,8 +296,9 @@ class AddProtocolToProject:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             await self._repo.add_to_project(input.workspace_id, input.protocol_id, input.project_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
 
 
 class RemoveProtocolFromProject:
@@ -320,5 +326,6 @@ class RemoveProtocolFromProject:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             await self._repo.remove_from_project(input.workspace_id, input.protocol_id, input.project_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)

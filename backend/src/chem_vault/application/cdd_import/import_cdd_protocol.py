@@ -59,9 +59,9 @@ class ImportCddProtocol:
     async def __call__(
         self, input: ImportCddProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
+        require_editor(auth)
         if auth is None:
             return Failure(AuthorizationError("Authentication required"))
-        require_editor(auth)
 
         async with self._uow:
             config = await check_cdd_configured(
@@ -140,5 +140,6 @@ class ImportCddProtocol:
             )
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

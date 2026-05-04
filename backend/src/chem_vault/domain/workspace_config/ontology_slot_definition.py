@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
@@ -143,7 +143,7 @@ class OntologySlotDefinition(AggregateRoot):
         if display_order is not UNSET:
             self.display_order = int(display_order)  # type: ignore[arg-type]
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             OntologySlotDefinitionUpdated(
                 aggregate_id=self.id,

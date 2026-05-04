@@ -86,5 +86,6 @@ class UpdateMolecule:
 
             await self._repo.save(mol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(mol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(mol)

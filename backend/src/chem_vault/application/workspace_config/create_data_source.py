@@ -79,5 +79,6 @@ class CreateDataSource:
 
             await self._repo.save(ds)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(ds)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(ds)

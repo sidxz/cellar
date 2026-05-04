@@ -72,5 +72,6 @@ class UpdateStorageLocation:
                 loc.update(**fields)
             await self._repo.save(loc)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(loc)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(loc)

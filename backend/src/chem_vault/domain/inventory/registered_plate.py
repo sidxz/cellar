@@ -100,6 +100,7 @@ class RegisteredPlate(AggregateRoot):
         project_id: uuid.UUID | None = None,
         template_id: uuid.UUID | None = None,
         notes: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -122,6 +123,7 @@ class RegisteredPlate(AggregateRoot):
         self.project_id = project_id
         self.template_id = template_id
         self.notes = notes
+        self.custom_fields: dict[str, Any] | None = dict(custom_fields) if custom_fields else None
 
     # ------------------------------------------------------------------
     # Factory method
@@ -161,6 +163,7 @@ class RegisteredPlate(AggregateRoot):
             PlateRegistered(
                 aggregate_id=plate.id,
                 aggregate_type="RegisteredPlate",
+                workspace_id=workspace_id,
                 barcode=barcode.value,
                 format=format.value,
                 plate_type=plate_type.value,
@@ -199,6 +202,7 @@ class RegisteredPlate(AggregateRoot):
             PlateWellsMapped(
                 aggregate_id=self.id,
                 aggregate_type="RegisteredPlate",
+                workspace_id=self.workspace_id,
                 well_count=len(well_map),
                 batch_ids=batch_ids,
             )
@@ -210,6 +214,9 @@ class RegisteredPlate(AggregateRoot):
 
     def transition_status(self, new_status: PlateStatus) -> None:
         """Move to *new_status* if the transition is valid."""
+        if new_status == PlateStatus.DISPOSED:
+            self.dispose()
+            return
         allowed = VALID_PLATE_TRANSITIONS.get(self.status, set())
         if new_status not in allowed:
             raise ValidationError(
@@ -222,18 +229,34 @@ class RegisteredPlate(AggregateRoot):
             PlateStatusChanged(
                 aggregate_id=self.id,
                 aggregate_type="RegisteredPlate",
+                workspace_id=self.workspace_id,
                 old_status=old_status.value,
                 new_status=new_status.value,
             )
         )
 
+    def _guard_transition(self, target: PlateStatus) -> None:
+        """Raise if *target* is not a valid transition from the current status."""
+        allowed = VALID_PLATE_TRANSITIONS.get(self.status, set())
+        if target not in allowed:
+            raise ValidationError(
+                f"Invalid plate status transition from '{self.status}' to '{target}'"
+            )
+
     def dispose(self) -> None:
-        """Convenience method — transitions to DISPOSED and emits PlateDisposed."""
-        self.transition_status(PlateStatus.DISPOSED)
+        """Convenience method — transitions to DISPOSED and emits PlateDisposed.
+
+        Note: only emits PlateDisposed (not PlateStatusChanged) to avoid
+        double-eventing for a single logical operation.
+        """
+        self._guard_transition(PlateStatus.DISPOSED)
+        self.status = PlateStatus.DISPOSED
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             PlateDisposed(
                 aggregate_id=self.id,
                 aggregate_type="RegisteredPlate",
+                workspace_id=self.workspace_id,
                 barcode=self.barcode.value,
             )
         )
@@ -251,6 +274,7 @@ class RegisteredPlate(AggregateRoot):
             PlateMoved(
                 aggregate_id=self.id,
                 aggregate_type="RegisteredPlate",
+                workspace_id=self.workspace_id,
                 old_location_id=old_location_id,
                 new_location_id=new_location_id,
             )

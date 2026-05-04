@@ -169,8 +169,9 @@ class RegisterPlate:
 
             await self._repo.save(plate)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(plate)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(plate)
 
 
 class GetPlate:
@@ -258,8 +259,9 @@ class UpdatePlate:
 
             await self._repo.save(plate)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(plate)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(plate)
 
 
 class MapWells:
@@ -319,8 +321,9 @@ class MapWells:
 
             await self._repo.save(plate)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(plate)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(plate)
 
 
 class ChangeStatus:
@@ -352,8 +355,9 @@ class ChangeStatus:
 
             await self._repo.save(plate)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(plate)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(plate)
 
 
 class DerivePlate:
@@ -396,8 +400,9 @@ class DerivePlate:
 
             await self._repo.save(child)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(child)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(child)
 
 
 class DeletePlate:
@@ -435,8 +440,9 @@ class DeletePlate:
 
             await self._repo.delete(input.workspace_id, input.plate_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
 
 
 class ListChildren:

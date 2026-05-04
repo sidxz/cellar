@@ -65,8 +65,9 @@ class StartRun:
             run.start()
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)
 
 
 class CompleteRun:
@@ -91,8 +92,9 @@ class CompleteRun:
             run.complete(plate_count=input.plate_count, data_point_count=input.data_point_count)
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)
 
 
 class ApproveRun:
@@ -119,8 +121,9 @@ class ApproveRun:
             run.approve(approved_by=auth.user_id)
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)
 
 
 class RejectRun:
@@ -147,5 +150,6 @@ class RejectRun:
             run.reject(rejected_by=auth.user_id, reason=input.reason)
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)

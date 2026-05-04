@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -28,9 +28,6 @@ __all__ = [
     "FieldMapping",
     "IdStorageConfig",
 ]
-
-# Sentinel for "not provided" in update()
-UNSET = object()
 
 
 class DataSourceType(StrEnum):
@@ -151,7 +148,7 @@ class DataSource(AggregateRoot):
     def __init__(
         self,
         *,
-        id: uuid.UUID,
+        id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         name: str,
         source_type: str,
@@ -275,31 +272,31 @@ class DataSource(AggregateRoot):
     def update(
         self,
         *,
-        name: str | object = UNSET,
-        is_active: bool | object = UNSET,
-        config: dict[str, Any] | object = UNSET,
-        api_key_name: str | None | object = UNSET,
-        entity_mappings: list[EntityMapping] | object = UNSET,
+        name: str = ...,  # type: ignore[assignment]
+        is_active: bool = ...,  # type: ignore[assignment]
+        config: dict[str, Any] = ...,  # type: ignore[assignment]
+        api_key_name: str | None = ...,  # type: ignore[assignment]
+        entity_mappings: list[EntityMapping] = ...,  # type: ignore[assignment]
     ) -> None:
-        """Partial update — only provided fields are changed."""
-        if name is not UNSET:
+        """Partial update — only provided fields are changed. Uses sentinel ``...``."""
+        if name is not ...:
             name_str = str(name).strip()
             if not name_str:
                 raise ValidationError("name must not be empty")
             self.name = name_str
-        if is_active is not UNSET:
+        if is_active is not ...:
             self.is_active = bool(is_active)
-        if config is not UNSET:
-            self.config = dict(config)  # type: ignore[arg-type]
-        if api_key_name is not UNSET:
+        if config is not ...:
+            self.config = dict(config)
+        if api_key_name is not ...:
             if api_key_name is None:
                 self.api_key_name = None
             else:
                 self.api_key_name = str(api_key_name).strip() or None
-        if entity_mappings is not UNSET:
-            self.entity_mappings = list(entity_mappings)  # type: ignore[arg-type]
+        if entity_mappings is not ...:
+            self.entity_mappings = list(entity_mappings)
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             DataSourceUpdated(
                 aggregate_id=self.id,
@@ -312,7 +309,7 @@ class DataSource(AggregateRoot):
     def deactivate(self) -> None:
         """Soft-disable this data source."""
         self.is_active = False
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             DataSourceDeactivated(
                 aggregate_id=self.id,
@@ -325,7 +322,7 @@ class DataSource(AggregateRoot):
     def activate(self) -> None:
         """Re-enable a previously deactivated data source."""
         self.is_active = True
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             DataSourceUpdated(
                 aggregate_id=self.id,

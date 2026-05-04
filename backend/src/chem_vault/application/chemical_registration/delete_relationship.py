@@ -50,6 +50,6 @@ class DeleteRelationship:
 
             await self._relationship_repo.delete(input.workspace_id, input.relationship_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(None)
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)

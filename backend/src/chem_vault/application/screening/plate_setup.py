@@ -336,16 +336,16 @@ class SetUpRunPlate:
             run.add_plate(plate)
             await self._run_repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(
-                {
-                    "plate_id": plate.id,
-                    "wells_created": len(wells),
-                    "compounds_assigned": compounds_assigned,
-                    "unresolved": unresolved_names,
-                }
-            )
+        await self._dispatcher.dispatch_all(events)
+        return Success(
+            {
+                "plate_id": plate.id,
+                "wells_created": len(wells),
+                "compounds_assigned": compounds_assigned,
+                "unresolved": unresolved_names,
+            }
+        )
 
     @staticmethod
     def _extract_dose_series(protocol) -> list[float] | None:

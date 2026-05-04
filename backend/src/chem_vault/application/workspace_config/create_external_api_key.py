@@ -73,5 +73,6 @@ class CreateExternalApiKey:
             await self._secret_provider.set_secret(secret_key, secret)
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(entry)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(entry)

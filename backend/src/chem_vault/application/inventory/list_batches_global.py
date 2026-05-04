@@ -7,13 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from chem_vault.application.auth import AuthContext
-from chem_vault.application.shared.pagination import PageResult
+from chem_vault.application.auth import AuthContext, require_same_workspace
+from chem_vault.application.shared.pagination import PageResult, clamp_limit, parse_cursor
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.errors import DomainError
-from chem_vault.interface.pagination import clamp_limit, parse_cursor
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,6 +35,8 @@ class ListBatchesGlobal:
         input: ListBatchesGlobalQuery,
         auth: AuthContext | None = None,
     ) -> Result[PageResult[dict], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
+
         async with self._uow:
             result = await self._repo.list_global(
                 input.workspace_id,

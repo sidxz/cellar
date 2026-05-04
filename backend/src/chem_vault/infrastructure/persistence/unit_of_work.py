@@ -50,14 +50,16 @@ class AsyncUnitOfWork:
             self._tracked_aggregates.append(aggregate)
 
     async def commit(self) -> list[DomainEvent]:
-        """Flush, collect events, commit, clear events, return collected events."""
+        """Flush, commit, then collect and clear events.
+
+        Events are collected *after* a successful commit so that a commit
+        failure does not leave stale events on the aggregates.
+        """
         await self.session.flush()
+        await self.session.commit()
         events: list[DomainEvent] = []
         for aggregate in self._tracked_aggregates:
             events.extend(aggregate.collect_events())
-        await self.session.commit()
-        # Only clear after successful commit
-        for aggregate in self._tracked_aggregates:
             aggregate.clear_events()
         return events
 

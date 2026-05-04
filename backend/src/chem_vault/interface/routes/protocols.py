@@ -435,7 +435,7 @@ async def update_protocol(
     cmd = UpdateProtocolCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
-        name=body.name,
+        name=body.name if "name" in body.model_fields_set else UNSET,
         description=body.description if "description" in body.model_fields_set else UNSET,
         target_id=body.target_id if "target_id" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
@@ -833,8 +833,8 @@ async def update_target(
     cmd = UpdateTargetCommand(
         workspace_id=auth.workspace_id,
         target_id=target_id,
-        name=body.name,
-        target_type=body.target_type,
+        name=body.name if "name" in body.model_fields_set else UNSET,
+        target_type=body.target_type if "target_type" in body.model_fields_set else UNSET,
         organism=body.organism if "organism" in body.model_fields_set else UNSET,
         gene_name=body.gene_name if "gene_name" in body.model_fields_set else UNSET,
         uniprot_id=body.uniprot_id if "uniprot_id" in body.model_fields_set else UNSET,

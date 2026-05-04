@@ -45,12 +45,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             .order_by(RunModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        runs = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            runs.append(domain)
-        return runs
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_children(
         self, workspace_id: uuid.UUID, parent_run_id: uuid.UUID
@@ -65,12 +60,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             .order_by(RunModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        runs = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            runs.append(domain)
-        return runs
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def is_locked(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
         """Efficient lock check — selects only the is_locked column."""

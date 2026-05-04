@@ -35,8 +35,19 @@ from chem_vault.domain.shared.events import DomainEvent
 
 
 class FakeUnitOfWork:
+    def __init__(self) -> None:
+        self._tracked: list = []
+
+    def track(self, aggregate) -> None:
+        if aggregate not in self._tracked:
+            self._tracked.append(aggregate)
+
     async def commit(self) -> list[DomainEvent]:
-        return []
+        events: list[DomainEvent] = []
+        for agg in self._tracked:
+            events.extend(agg.collect_events())
+            agg.clear_events()
+        return events
 
     async def rollback(self) -> None:
         pass
@@ -90,7 +101,9 @@ class TestAddProjectMember:
         dispatcher.dispatch = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
-        uc = AddProjectMember(FakeUnitOfWork(), proj_repo, member_repo, dispatcher)
+        uow = FakeUnitOfWork()
+        uow.track(project)
+        uc = AddProjectMember(uow, proj_repo, member_repo, dispatcher)
         result = await uc(
             AddProjectMemberCommand(
                 workspace_id=auth.workspace_id,

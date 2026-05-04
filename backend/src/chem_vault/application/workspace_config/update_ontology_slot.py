@@ -61,5 +61,6 @@ class UpdateOntologySlot:
 
             await self._repo.save(slot)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(slot)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(slot)

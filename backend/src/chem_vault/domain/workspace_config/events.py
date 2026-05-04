@@ -11,19 +11,23 @@ from chem_vault.domain.workspace_config.enums import OrganizationType
 
 @dataclass(frozen=True, kw_only=True)
 class OrganizationCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
     org_type: OrganizationType
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrganizationUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrganizationDeactivated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrganizationActivated(DomainEvent):
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -33,13 +37,11 @@ class WorkspaceSettingsUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class VocabularyCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class VocabularyUpdated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
 
 
@@ -48,19 +50,18 @@ class VocabularyUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CustomFieldDefinitionCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
     applies_to: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class CustomFieldDefinitionUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class CustomFieldDefinitionDeactivated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 # --- Salt Catalog ---
@@ -68,13 +69,12 @@ class CustomFieldDefinitionDeactivated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class SaltEntryCreated(DomainEvent):
-    workspace_id: uuid.UUID
     code: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class SaltEntryUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 # --- Registration Forms ---
@@ -82,14 +82,13 @@ class SaltEntryUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class RegistrationFormCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
     applies_to: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class RegistrationFormUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 # --- Protocol Forms ---
@@ -97,13 +96,12 @@ class RegistrationFormUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ProtocolFormCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class ProtocolFormUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 # --- External API Keys ---
@@ -111,13 +109,12 @@ class ProtocolFormUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ExternalApiKeyCreated(DomainEvent):
-    workspace_id: uuid.UUID
     key_name: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class ExternalApiKeyUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 # --- Ontology Slot Definitions ---
@@ -125,13 +122,12 @@ class ExternalApiKeyUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class OntologySlotDefinitionCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class OntologySlotDefinitionUpdated(DomainEvent):
-    workspace_id: uuid.UUID
+    pass
 
 
 # --- Data Sources ---
@@ -139,18 +135,15 @@ class OntologySlotDefinitionUpdated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class DataSourceCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
     source_type: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class DataSourceUpdated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class DataSourceDeactivated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str

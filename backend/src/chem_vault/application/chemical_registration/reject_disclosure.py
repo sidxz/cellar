@@ -71,6 +71,6 @@ class RejectDisclosure:
 
             await self._disclosure_repo.save(dr)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(dr)
+        await self._dispatcher.dispatch_all(events)
+        return Success(dr)

@@ -59,8 +59,9 @@ class LockRun:
             )
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)
 
 
 class UnlockRun:
@@ -90,5 +91,6 @@ class UnlockRun:
             )
             await self._repo.save(run)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(run)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(run)

@@ -154,7 +154,7 @@ async def update_storage_location(
     cmd = UpdateStorageLocationCommand(
         workspace_id=auth.workspace_id,
         location_id=location_id,
-        name=body.name,
+        name=body.name if "name" in body.model_fields_set else UNSET,
         barcode=body.barcode if "barcode" in body.model_fields_set else UNSET,
         temperature=body.temperature if "temperature" in body.model_fields_set else UNSET,
         rows=body.rows if "rows" in body.model_fields_set else UNSET,

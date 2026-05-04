@@ -148,6 +148,9 @@ from chem_vault.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from chem_vault.application.screening.create_compound_flag import CreateCompoundFlag
+from chem_vault.application.screening.delete_compound_flag import DeleteCompoundFlag
+from chem_vault.application.screening.list_compound_flags import ListCompoundFlags
 from chem_vault.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from chem_vault.application.screening.create_dose_response import CreateDoseResponseCurve
 from chem_vault.application.screening.refit_dose_response import RefitDoseResponseCurve
@@ -497,6 +500,22 @@ GetProtocolStatsDep = Annotated[GetProtocolStats, Depends(_get_use_case(GetProto
 GetProtocolActivitySummaryDep = Annotated[GetProtocolActivitySummary, Depends(_get_use_case(GetProtocolActivitySummary))]
 GetCompoundCurvesDep = Annotated[GetCompoundCurves, Depends(_get_use_case(GetCompoundCurves))]
 
+from chem_vault.application.screening.list_runs_with_counts import ListRunsWithCounts
+ListRunsWithCountsDep = Annotated[ListRunsWithCounts, Depends(_get_use_case(ListRunsWithCounts))]
+from chem_vault.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
+ListReadoutDataEnrichedDep = Annotated[ListReadoutDataEnriched, Depends(_get_use_case(ListReadoutDataEnriched))]
+from chem_vault.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
+ListDoseResponseEnrichedDep = Annotated[ListDoseResponseEnriched, Depends(_get_use_case(ListDoseResponseEnriched))]
+from chem_vault.application.screening.get_plate_map import GetPlateMap
+GetPlateMapDep = Annotated[GetPlateMap, Depends(_get_use_case(GetPlateMap))]
+from chem_vault.application.screening.fit_curves_for_run import FitCurvesForRun
+FitCurvesForRunDep = Annotated[FitCurvesForRun, Depends(_get_use_case(FitCurvesForRun))]
+
+# --- Compound Flag dependencies ---
+ListCompoundFlagsDep = Annotated[ListCompoundFlags, Depends(_get_use_case(ListCompoundFlags))]
+CreateCompoundFlagDep = Annotated[CreateCompoundFlag, Depends(_get_use_case(CreateCompoundFlag))]
+DeleteCompoundFlagDep = Annotated[DeleteCompoundFlag, Depends(_get_use_case(DeleteCompoundFlag))]
+
 # --- Plate Template dependencies ---
 CreatePlateTemplateDep = Annotated[CreatePlateTemplate, Depends(_get_use_case(CreatePlateTemplate))]
 UpdatePlateTemplateDep = Annotated[UpdatePlateTemplate, Depends(_get_use_case(UpdatePlateTemplate))]
@@ -552,9 +571,21 @@ ImportCddProtocolDep = Annotated[ImportCddProtocol, Depends(_get_use_case(Import
 StartCddMoleculeImportDep = Annotated[StartCddMoleculeImport, Depends(_get_use_case(StartCddMoleculeImport))]
 ListCddMoleculeImportsDep = Annotated[ListCddMoleculeImports, Depends(_get_use_case(ListCddMoleculeImports))]
 ForceFailCddMoleculeImportDep = Annotated[ForceFailCddMoleculeImport, Depends(_get_use_case(ForceFailCddMoleculeImport))]
+from chem_vault.application.cdd_import.get_cdd_molecule_import_status import (
+    GetCddMoleculeImportStatusFromDb,
+    SyncFailedCddMoleculeImport,
+)
+GetCddMoleculeImportStatusFromDbDep = Annotated[GetCddMoleculeImportStatusFromDb, Depends(_get_use_case(GetCddMoleculeImportStatusFromDb))]
+SyncFailedCddMoleculeImportDep = Annotated[SyncFailedCddMoleculeImport, Depends(_get_use_case(SyncFailedCddMoleculeImport))]
 StartCddPlateImportDep = Annotated[StartCddPlateImport, Depends(_get_use_case(StartCddPlateImport))]
 ListCddPlateImportsDep = Annotated[ListCddPlateImports, Depends(_get_use_case(ListCddPlateImports))]
 ForceFailCddPlateImportDep = Annotated[ForceFailCddPlateImport, Depends(_get_use_case(ForceFailCddPlateImport))]
+from chem_vault.application.cdd_import.get_cdd_plate_import_status import (
+    GetCddPlateImportStatusFromDb,
+    SyncFailedCddPlateImport,
+)
+GetCddPlateImportStatusFromDbDep = Annotated[GetCddPlateImportStatusFromDb, Depends(_get_use_case(GetCddPlateImportStatusFromDb))]
+SyncFailedCddPlateImportDep = Annotated[SyncFailedCddPlateImport, Depends(_get_use_case(SyncFailedCddPlateImport))]
 
 # --- Dashboard dependencies ---
 GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]

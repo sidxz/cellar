@@ -12,6 +12,7 @@ from chem_vault.domain.chemical_registration.enums import (
 from chem_vault.domain.chemical_registration.events import (
     DisclosureConflict,
     DisclosurePendingConfirmation,
+    DisclosureRejected,
     DisclosureRequested,
     DisclosureResolved,
 )
@@ -144,6 +145,7 @@ class DisclosureRequest(AggregateRoot):
             DisclosureRequested(
                 aggregate_id=req.id,
                 aggregate_type="DisclosureRequest",
+                workspace_id=workspace_id,
                 molecule_id=molecule_id,
                 disclosing_org_id=disclosing_org_id,
             )
@@ -187,6 +189,7 @@ class DisclosureRequest(AggregateRoot):
             DisclosureResolved(
                 aggregate_id=self.id,
                 aggregate_type="DisclosureRequest",
+                workspace_id=self.workspace_id,
                 resolution_type=DisclosureResolutionType.NEW_STRUCTURE.value,
                 resolved_to_molecule_id=None,
             )
@@ -212,6 +215,7 @@ class DisclosureRequest(AggregateRoot):
             DisclosureResolved(
                 aggregate_id=self.id,
                 aggregate_type="DisclosureRequest",
+                workspace_id=self.workspace_id,
                 resolution_type=DisclosureResolutionType.MERGED_INTO_EXISTING.value,
                 resolved_to_molecule_id=resolved_to_molecule_id,
             )
@@ -227,6 +231,7 @@ class DisclosureRequest(AggregateRoot):
             DisclosureConflict(
                 aggregate_id=self.id,
                 aggregate_type="DisclosureRequest",
+                workspace_id=self.workspace_id,
                 conflict_reason=reason,
             )
         )
@@ -249,6 +254,7 @@ class DisclosureRequest(AggregateRoot):
             DisclosurePendingConfirmation(
                 aggregate_id=self.id,
                 aggregate_type="DisclosureRequest",
+                workspace_id=self.workspace_id,
                 matched_molecule_id=matched_molecule_id,
             )
         )
@@ -260,3 +266,11 @@ class DisclosureRequest(AggregateRoot):
         self.conflict_reason = reason
         self.resolved_at = datetime.now(UTC)
         self.updated_at = datetime.now(UTC)
+        self.register_event(
+            DisclosureRejected(
+                aggregate_id=self.id,
+                aggregate_type="DisclosureRequest",
+                workspace_id=self.workspace_id,
+                reason=reason,
+            )
+        )

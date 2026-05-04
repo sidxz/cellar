@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSON
@@ -24,7 +25,7 @@ class BulkDisclosureModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin
     source_file: Mapped[str] = mapped_column(String(500), nullable=False)
     partner_org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    submitted_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="pending"
     )
@@ -41,7 +42,7 @@ class BulkDisclosureModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin
     error_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
-    completed_at: Mapped[str | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DisclosureRequestModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
@@ -62,15 +63,17 @@ class DisclosureRequestModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
         String(30), nullable=False, server_default="pending"
     )
     resolution_type: Mapped[str | None] = mapped_column(String(30))
-    resolved_to_molecule_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    resolved_to_molecule_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("molecules.id"), nullable=True
+    )
     matched_molecule_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("molecules.id"), nullable=True
     )
     scientist_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     disclosing_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     requested_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    requested_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
-    resolved_at: Mapped[str | None] = mapped_column(DateTime(timezone=True))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     conflict_reason: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
 
@@ -97,7 +100,7 @@ class MergeEventModel(Base, EntityModelMixin):
     )
     reason: Mapped[str] = mapped_column(String(30), nullable=False)
     merged_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    merged_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
+    merged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
 

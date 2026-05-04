@@ -176,6 +176,7 @@ class CddMoleculeImport(AggregateRoot):
             CddMoleculeImportDiscoveryComplete(
                 aggregate_id=self.id,
                 aggregate_type="CddMoleculeImport",
+                workspace_id=self.workspace_id,
                 total_count=total_count,
             )
         )
@@ -232,6 +233,7 @@ class CddMoleculeImport(AggregateRoot):
             CddMoleculeImportCompleted(
                 aggregate_id=self.id,
                 aggregate_type="CddMoleculeImport",
+                workspace_id=self.workspace_id,
                 registered_count=self.registered_count,
                 duplicate_count=self.duplicate_count,
                 error_count=self.error_count,
@@ -249,6 +251,7 @@ class CddMoleculeImport(AggregateRoot):
             CddMoleculeImportFailed(
                 aggregate_id=self.id,
                 aggregate_type="CddMoleculeImport",
+                workspace_id=self.workspace_id,
                 reason=reason,
             )
         )

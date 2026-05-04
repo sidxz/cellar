@@ -161,6 +161,7 @@ class CddPlateImport(AggregateRoot):
             CddPlateImportDiscoveryComplete(
                 aggregate_id=self.id,
                 aggregate_type="CddPlateImport",
+                workspace_id=self.workspace_id,
                 total_count=total_count,
             )
         )
@@ -208,6 +209,7 @@ class CddPlateImport(AggregateRoot):
             CddPlateImportCompleted(
                 aggregate_id=self.id,
                 aggregate_type="CddPlateImport",
+                workspace_id=self.workspace_id,
                 plates_registered=self.plates_registered,
                 plates_duplicate=self.plates_duplicate,
                 plates_error=self.plates_error,
@@ -226,6 +228,7 @@ class CddPlateImport(AggregateRoot):
             CddPlateImportFailed(
                 aggregate_id=self.id,
                 aggregate_type="CddPlateImport",
+                workspace_id=self.workspace_id,
                 reason=reason,
             )
         )

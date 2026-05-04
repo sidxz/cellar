@@ -56,8 +56,15 @@ class SQLAlchemyTargetRepository:
         return [self._to_domain(m) for m in result.scalars().all()]
 
     async def save(self, entity: Target) -> None:
-        model = self._to_model(entity)
-        await self._uow.session.merge(model)
+        existing = await self._uow.session.get(TargetModel, entity.id)
+        if existing is None:
+            model = self._to_model(entity)
+            self._uow.session.add(model)
+        else:
+            if existing.workspace_id != entity.workspace_id:
+                from chem_vault.domain.shared.errors import AuthorizationError
+                raise AuthorizationError("Cannot update Target from a different workspace")
+            self._update_model(existing, entity)
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._uow.session.get(TargetModel, id)
@@ -101,3 +108,15 @@ class SQLAlchemyTargetRepository:
             target_class=entity.target_class,
             sequence=entity.sequence,
         )
+
+    @staticmethod
+    def _update_model(model: TargetModel, entity: Target) -> None:
+        model.name = entity.name
+        model.target_type = entity.target_type.value
+        model.organism = entity.organism
+        model.gene_name = entity.gene_name
+        model.uniprot_id = entity.uniprot_id
+        model.ncbi_gene_id = entity.ncbi_gene_id
+        model.description = entity.description
+        model.target_class = entity.target_class
+        model.sequence = entity.sequence

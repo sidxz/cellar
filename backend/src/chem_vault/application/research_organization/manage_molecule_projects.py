@@ -77,16 +77,18 @@ class AddMoleculeToProject:
             await self._molecule_repo.add_to_project(input.workspace_id, input.molecule_id, input.project_id)
 
             events = await self._uow.commit()
-            events.append(EntityAddedToProject(
-                aggregate_id=input.project_id,
-                aggregate_type="Project",
-                entity_type="molecule",
-                entity_id=input.molecule_id,
-                project_id=input.project_id,
-            ))
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(None)
+        events.append(EntityAddedToProject(
+            aggregate_id=input.project_id,
+            aggregate_type="Project",
+            workspace_id=input.workspace_id,
+            entity_type="molecule",
+            entity_id=input.molecule_id,
+            project_id=input.project_id,
+        ))
+        await self._dispatcher.dispatch_all(events)
+
+        return Success(None)
 
 
 # ---------------------------------------------------------------------------
@@ -143,16 +145,18 @@ class RemoveMoleculeFromProject:
             )
 
             events = await self._uow.commit()
-            events.append(EntityRemovedFromProject(
-                aggregate_id=input.project_id,
-                aggregate_type="Project",
-                entity_type="molecule",
-                entity_id=input.molecule_id,
-                project_id=input.project_id,
-            ))
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(None)
+        events.append(EntityRemovedFromProject(
+            aggregate_id=input.project_id,
+            aggregate_type="Project",
+            workspace_id=input.workspace_id,
+            entity_type="molecule",
+            entity_id=input.molecule_id,
+            project_id=input.project_id,
+        ))
+        await self._dispatcher.dispatch_all(events)
+
+        return Success(None)
 
 
 # ---------------------------------------------------------------------------

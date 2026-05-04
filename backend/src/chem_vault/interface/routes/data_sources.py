@@ -147,8 +147,8 @@ async def create_data_source(
 
 
 @router.get("/templates/{source_type}", response_model=list[EntityMappingResponse])
-async def get_template(source_type: str) -> list[EntityMappingResponse]:
-    """Preview default entity mappings for a source type (no auth — read-only reference)."""
+async def get_template(source_type: str, _auth: AuthDep) -> list[EntityMappingResponse]:
+    """Preview default entity mappings for a source type (read-only reference)."""
     template = get_default_template(source_type)
     return [_em_to_response(em) for em in template]
 

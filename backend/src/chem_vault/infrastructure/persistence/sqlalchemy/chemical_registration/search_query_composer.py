@@ -221,7 +221,13 @@ def _activity_clause(
         )
 
     # Raw readout filtering
-    readout_def_id = criterion["readout_definition_id"]
+    readout_def_id = criterion.get("readout_definition_id")
+    if not readout_def_id:
+        msg = (
+            "Activity criterion is incomplete: "
+            "choose either a curve type or a readout definition"
+        )
+        raise ValueError(msg)
     col = ReadoutDataModel.value_numeric
     filters = [
         ReadoutDataModel.workspace_id == workspace_id,

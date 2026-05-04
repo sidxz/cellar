@@ -39,6 +39,7 @@ class SQLAlchemyMoleculeRelationshipRepository:
             notes=model.notes,
             created_by=model.created_by,
             created_at=model.created_at,
+            updated_at=model.updated_at,
         )
 
     def _to_model(self, entity: MoleculeRelationship) -> MoleculeRelationshipModel:

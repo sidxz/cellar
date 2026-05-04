@@ -16,6 +16,7 @@ from chem_vault.domain.inventory.events import (
     SynthesisFeasibilityFlagged,
     SynthesisRequestApproved,
     SynthesisRequestAssigned,
+    SynthesisRequestCreated,
     SynthesisRequestFulfilled,
     SynthesisRequestRejected,
     SynthesisRequested,
@@ -183,7 +184,7 @@ class SynthesisRequest(AggregateRoot):
             if target_purity <= 0 or target_purity > 100:
                 raise ValidationError("Target purity must be in (0, 100]")
 
-        return cls(
+        sr = cls(
             workspace_id=workspace_id,
             requester_id=requester_id,
             molecule_id=molecule_id,
@@ -196,6 +197,42 @@ class SynthesisRequest(AggregateRoot):
             parent_request_id=parent_request_id,
             bulk_request_id=bulk_request_id,
         )
+        sr.register_event(
+            SynthesisRequestCreated(
+                aggregate_id=sr.id,
+                aggregate_type="SynthesisRequest",
+                workspace_id=workspace_id,
+                molecule_id=molecule_id,
+                requested_by=requester_id,
+            )
+        )
+        return sr
+
+    # -- Mutable field updates --
+
+    def update_details(
+        self,
+        *,
+        purpose: str | None = ...,  # type: ignore[assignment]
+        priority: RequestPriority | None = ...,  # type: ignore[assignment]
+        target_purity: float | None = ...,  # type: ignore[assignment]
+        requested_amount: Amount | None = ...,  # type: ignore[assignment]
+    ) -> None:
+        """Update mutable fields on a draft request (sentinel pattern)."""
+        if self.status != SynthesisRequestStatus.DRAFT:
+            raise ValidationError("Can only update draft synthesis requests")
+        if purpose is not ...:
+            if purpose is not None:
+                self.purpose = purpose
+        if priority is not ...:
+            if priority is not None:
+                self.priority = priority
+        if target_purity is not ...:
+            self.target_purity = target_purity
+        if requested_amount is not ...:
+            if requested_amount is not None:
+                self.requested_amount = requested_amount
+        self.updated_at = datetime.now(UTC)
 
     # -- State transitions --
 
@@ -208,6 +245,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisRequested(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 molecule_id=self.molecule_id,
                 requester_id=self.requester_id,
                 requested_amount=self.requested_amount.value,
@@ -227,6 +265,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisRequestApproved(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 approved_by=approved_by,
             )
         )
@@ -243,6 +282,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisRequestRejected(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 rejected_by=rejected_by,
                 reason=reason,
             )
@@ -258,6 +298,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisRequestAssigned(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 assignment_type=assignment.assignment_type.value,
                 assigned_to=assignment.assigned_to,
                 assigned_org_id=assignment.assigned_org_id,
@@ -274,6 +315,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisStarted(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 proposed_route_id=proposed_route_id,
             )
         )
@@ -294,6 +336,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisFeasibilityFlagged(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 feasibility_status=feasibility_status.value,
                 feasibility_notes=feasibility_notes,
             )
@@ -310,6 +353,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisCompleted(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 actual_cost_value=actual_cost.value if actual_cost else None,
                 actual_cost_unit=actual_cost.unit.value if actual_cost else None,
             )
@@ -325,6 +369,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisRequestFulfilled(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 fulfilled_batch_id=batch_id,
             )
         )
@@ -341,6 +386,7 @@ class SynthesisRequest(AggregateRoot):
             SynthesisFailed(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRequest",
+                workspace_id=self.workspace_id,
                 failure_reason=reason,
             )
         )

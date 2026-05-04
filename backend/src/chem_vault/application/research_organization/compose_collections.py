@@ -68,6 +68,6 @@ class ComposeCollections:
             collection.molecule_count = len(molecule_ids)
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(collection)
+        await self._dispatcher.dispatch_all(events)
+        return Success(collection)

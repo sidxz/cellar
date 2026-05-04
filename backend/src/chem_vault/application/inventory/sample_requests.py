@@ -18,7 +18,7 @@ from chem_vault.domain.inventory.repository import BatchRepository, SampleReposi
 from chem_vault.domain.inventory.sample_request import SampleRequest
 from chem_vault.domain.shared.enums import AmountUnit
 from chem_vault.application.shared.sentinel import UNSET
-from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError, ValidationError
+from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import Amount
 
 
@@ -155,8 +155,9 @@ class CreateSampleRequest:
             )
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class GetSampleRequest:
@@ -184,8 +185,6 @@ class ListSampleRequests:
     async def __call__(
         self, input: ListSampleRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SampleRequest], DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
         async with self._uow:
             requests = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status
@@ -217,8 +216,9 @@ class ApproveSampleRequest:
             request.approve(assigned_to=input.assigned_to)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class RejectSampleRequest:
@@ -245,8 +245,9 @@ class RejectSampleRequest:
             request.reject(reason=input.reason)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class FulfillSampleRequest:
@@ -284,8 +285,9 @@ class FulfillSampleRequest:
             request.fulfill(sample_id=input.sample_id)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class CancelSampleRequest:
@@ -312,8 +314,9 @@ class CancelSampleRequest:
             request.cancel()
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class StartPreparingSampleRequest:
@@ -340,8 +343,9 @@ class StartPreparingSampleRequest:
             request.start_preparing()
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class UpdateSampleRequest:
@@ -366,20 +370,23 @@ class UpdateSampleRequest:
             if request is None:
                 return Failure(NotFoundError("SampleRequest", str(input.request_id)))
 
-            if request.status != SampleRequestStatus.SUBMITTED:
-                return Failure(ValidationError("Can only update submitted sample requests"))
+            try:
+                new_amount = ...
+                if input.amount_value is not UNSET or input.amount_unit is not UNSET:
+                    new_value = input.amount_value if input.amount_value is not UNSET else request.requested_amount.value
+                    new_unit = input.amount_unit if input.amount_unit is not UNSET else request.requested_amount.unit.value
+                    new_amount = Amount(value=new_value, unit=AmountUnit(new_unit))
 
-            if input.purpose is not UNSET:
-                request.purpose = input.purpose
-            if input.priority is not UNSET:
-                request.priority = RequestPriority(input.priority)
-
-            if input.amount_value is not UNSET or input.amount_unit is not UNSET:
-                new_value = input.amount_value if input.amount_value is not UNSET else request.requested_amount.value
-                new_unit = input.amount_unit if input.amount_unit is not UNSET else request.requested_amount.unit.value
-                request.requested_amount = Amount(value=new_value, unit=AmountUnit(new_unit))
+                request.update_details(
+                    purpose=input.purpose if input.purpose is not UNSET else ...,
+                    priority=RequestPriority(input.priority) if input.priority is not UNSET else ...,
+                    requested_amount=new_amount,
+                )
+            except ValidationError as exc:
+                return Failure(exc)
 
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)

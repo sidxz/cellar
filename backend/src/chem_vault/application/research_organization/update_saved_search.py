@@ -72,5 +72,6 @@ class UpdateSavedSearch:
                 search.update(**fields)
             await self._repo.save(search)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(search)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(search)

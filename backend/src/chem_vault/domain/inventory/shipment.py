@@ -134,6 +134,7 @@ class Shipment(AggregateRoot):
             ShipmentCreated(
                 aggregate_id=shipment.id,
                 aggregate_type="Shipment",
+                workspace_id=workspace_id,
                 destination_org_id=destination_org_id,
                 item_count=len(items),
             )
@@ -146,6 +147,29 @@ class Shipment(AggregateRoot):
         if self.status != ShipmentStatus.PREPARING:
             raise ValidationError("Items can only be added to preparing shipments")
         self._items.append(item)
+        self.updated_at = datetime.now(UTC)
+
+    # -- Mutable field updates --
+
+    def update_details(
+        self,
+        *,
+        carrier: str | None = ...,  # type: ignore[assignment]
+        expected_arrival_date: date | None = ...,  # type: ignore[assignment]
+        shipping_conditions: str | None = ...,  # type: ignore[assignment]
+        notes: str | None = ...,  # type: ignore[assignment]
+    ) -> None:
+        """Update mutable fields on a preparing shipment (sentinel pattern)."""
+        if self.status != ShipmentStatus.PREPARING:
+            raise ValidationError("Can only update shipments in preparing status")
+        if carrier is not ...:
+            self.carrier = carrier
+        if expected_arrival_date is not ...:
+            self.expected_arrival_date = expected_arrival_date
+        if shipping_conditions is not ...:
+            self.shipping_conditions = shipping_conditions
+        if notes is not ...:
+            self.notes = notes
         self.updated_at = datetime.now(UTC)
 
     # -- State transitions --
@@ -162,6 +186,7 @@ class Shipment(AggregateRoot):
             ShipmentShipped(
                 aggregate_id=self.id,
                 aggregate_type="Shipment",
+                workspace_id=self.workspace_id,
                 tracking_number=tracking_number,
             )
         )
@@ -180,6 +205,7 @@ class Shipment(AggregateRoot):
             ShipmentDelivered(
                 aggregate_id=self.id,
                 aggregate_type="Shipment",
+                workspace_id=self.workspace_id,
                 received_date=self.received_date.isoformat(),
             )
         )

@@ -6,18 +6,16 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio.client import WorkflowExecutionStatus
 from temporalio.service import RPCError, RPCStatusCode
 
 from chem_vault.application.auth import require_editor
+from chem_vault.application.cdd_import.get_cdd_molecule_import_status import (
+    GetCddMoleculeImportStatusQuery,
+)
 from chem_vault.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImportCommand,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (
-    SQLAlchemyCddMoleculeImportRepository,
-)
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
 from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import (
     CddVaultImportWorkflow,
@@ -26,8 +24,10 @@ from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import (
 from chem_vault.interface.dependencies import (
     AuthDep,
     ForceFailCddMoleculeImportDep,
+    GetCddMoleculeImportStatusFromDbDep,
     ListCddMoleculeImportsDep,
     StartCddMoleculeImportDep,
+    SyncFailedCddMoleculeImportDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -183,6 +183,8 @@ async def get_cdd_molecule_import_status(
     request: Request,
     auth: AuthDep,
     workflow_id: str,
+    db_status_uc: GetCddMoleculeImportStatusFromDbDep,
+    sync_failed_uc: SyncFailedCddMoleculeImportDep,
 ) -> CddMoleculeImportStatusResponse:
     """Poll progress of a CDD molecule import workflow.
 
@@ -214,11 +216,10 @@ async def get_cdd_molecule_import_status(
                     status = "failed"
                     # Sync DB aggregate to match — otherwise history
                     # still shows "processing" and the UI loops.
-                    await _sync_failed_import_to_db(
-                        request, auth.workspace_id, progress.import_id
-                    )
+                    await sync_failed_uc(auth.workspace_id, progress.import_id)
             except Exception:
-                pass  # describe() failed — use progress status as-is
+                import structlog
+                structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id, detail="describe() failed")
 
         return CddMoleculeImportStatusResponse(
             import_id=progress.import_id,
@@ -236,27 +237,25 @@ async def get_cdd_molecule_import_status(
             raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
         # Fall through to DB lookup for nondeterminism errors, etc.
     except Exception:
-        pass  # Fall through to DB lookup
+        import structlog
+        structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id)
 
     # Fallback: read from DB (handles completed/failed workflows and code-change replays)
-    container = request.app.state.container
-    session_factory = container[async_sessionmaker]
-    uow = AsyncUnitOfWork(session_factory)
-    repo = SQLAlchemyCddMoleculeImportRepository(uow)
-    async with uow:
-        imp = await repo.find_by_workflow_id_in_workspace(auth.workspace_id, workflow_id)
-    if imp is None:
-        raise HTTPException(status_code=404, detail=f"Import not found: {workflow_id}")
+    query = GetCddMoleculeImportStatusQuery(
+        workspace_id=auth.workspace_id, workflow_id=workflow_id
+    )
+    result = await db_status_uc(query, auth=auth)
+    data = result_to_response(result)
     return CddMoleculeImportStatusResponse(
-        import_id=str(imp.id),
-        status=imp.status.value,
-        total_count=imp.total_count,
-        registered_count=imp.registered_count,
-        duplicate_count=imp.duplicate_count,
-        error_count=imp.error_count,
-        skipped_count=imp.skipped_count,
-        current_offset=imp.last_processed_offset,
-        pages_processed=0,
+        import_id=data.import_id,
+        status=data.status,
+        total_count=data.total_count,
+        registered_count=data.registered_count,
+        duplicate_count=data.duplicate_count,
+        error_count=data.error_count,
+        skipped_count=data.skipped_count,
+        current_offset=data.current_offset,
+        pages_processed=data.pages_processed,
     )
 
 
@@ -322,32 +321,3 @@ def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
         raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
 
 
-async def _sync_failed_import_to_db(
-    request: Request, workspace_id: uuid.UUID, import_id: str
-) -> None:
-    """Update a crashed import's DB record to FAILED.
-
-    Called when the status endpoint detects the Temporal workflow is
-    terminated but the DB aggregate is still in a non-terminal state.
-    Best-effort — swallows errors so it never breaks the status response.
-    """
-    if not import_id:
-        return
-    try:
-        container = request.app.state.container
-        session_factory = container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
-        repo = SQLAlchemyCddMoleculeImportRepository(uow)
-        async with uow:
-            imp = await repo.find_by_id_in_workspace(
-                workspace_id, uuid.UUID(import_id)
-            )
-            if imp is None:
-                return
-            if imp.status.value in ("completed", "completed_with_errors", "failed"):
-                return  # Already terminal
-            imp.fail("Workflow crashed (detected by status poll)")
-            await repo.save(imp)
-            await uow.commit()
-    except Exception:
-        pass  # Best-effort — don't break the status response

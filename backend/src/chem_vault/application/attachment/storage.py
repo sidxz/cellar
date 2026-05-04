@@ -1,4 +1,4 @@
-"""Storage client protocol — domain-layer abstraction over blob storage."""
+"""Storage client protocol — application-layer abstraction over blob storage."""
 
 from __future__ import annotations
 

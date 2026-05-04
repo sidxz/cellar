@@ -102,12 +102,13 @@ class ResolveDisclosureConflict:
                     )
                 )
 
-            if resolution == ConflictResolution.REJECT:
-                return await self._handle_reject(dr, input)
-            elif resolution == ConflictResolution.ACCEPT_AS_NEW:
-                return await self._handle_accept_as_new(dr, molecule, input)
-            else:
-                return await self._handle_accept_merge(dr, molecule, input, auth)
+        # Dispatch to resolution handlers (each manages its own UoW)
+        if resolution == ConflictResolution.REJECT:
+            return await self._handle_reject(dr, input)
+        elif resolution == ConflictResolution.ACCEPT_AS_NEW:
+            return await self._handle_accept_as_new(dr, molecule, input)
+        else:
+            return await self._handle_accept_merge(dr, molecule, input, auth)
 
     async def _handle_reject(
         self,
@@ -116,8 +117,11 @@ class ResolveDisclosureConflict:
     ) -> Result[DisclosureRequest, DomainError]:
         reason = input.reason or "Conflict rejected by admin"
         dr.reject(reason=reason)
-        await self._disclosure_repo.save(dr)
-        events = await self._uow.commit()
+
+        async with self._uow:
+            await self._disclosure_repo.save(dr)
+            events = await self._uow.commit()
+
         await self._dispatcher.dispatch_all(events)
         return Success(dr)
 
@@ -149,9 +153,11 @@ class ResolveDisclosureConflict:
             inchi_key=processed.structure.inchi_key,
         )
 
-        await self._molecule_repo.save(molecule)
-        await self._disclosure_repo.save(dr)
-        events = await self._uow.commit()
+        async with self._uow:
+            await self._molecule_repo.save(molecule)
+            await self._disclosure_repo.save(dr)
+            events = await self._uow.commit()
+
         await self._dispatcher.dispatch_all(events)
         return Success(dr)
 
@@ -179,20 +185,21 @@ class ResolveDisclosureConflict:
             canonical_smiles = dr.canonical_smiles or dr.disclosed_smiles
             inchi_key = dr.inchi_key
 
-        target = await self._molecule_repo.find_by_inchi_key(
-            input.workspace_id, inchi_key
-        )
-        if target is None:
-            return Failure(
-                ConflictError(
-                    "No existing molecule with matching InChIKey found for merge"
-                )
+        async with self._uow:
+            target = await self._molecule_repo.find_by_inchi_key(
+                input.workspace_id, inchi_key
             )
+            if target is None:
+                return Failure(
+                    ConflictError(
+                        "No existing molecule with matching InChIKey found for merge"
+                    )
+                )
 
-        # Save DR before merge (in case merge transaction is separate)
-        await self._disclosure_repo.save(dr)
-        events = await self._uow.commit()
-        await self._dispatcher.dispatch_all(events)
+            # Save DR before merge for FK integrity (merge_events.disclosure_request_id).
+            # No state transition on DR yet — real transitions happen after the merge.
+            await self._disclosure_repo.save(dr)
+            await self._uow.commit()
 
         # Delegate merge to MergeService (opens its own UoW)
         merge_result = await self._merge_service(
@@ -234,9 +241,10 @@ class ResolveDisclosureConflict:
 
             await self._disclosure_repo.save(loaded_dr)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            if isinstance(merge_result, Failure):
-                return Failure(merge_result.failure())
+        await self._dispatcher.dispatch_all(events)
 
-            return Success(loaded_dr)
+        if isinstance(merge_result, Failure):
+            return Failure(merge_result.failure())
+
+        return Success(loaded_dr)

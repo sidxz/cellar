@@ -32,7 +32,7 @@ from chem_vault.domain.shared.errors import DomainError
 
 
 @dataclass(frozen=True, kw_only=True)
-class MoleculeActivityDetailQuery(Query):
+class GetMoleculeActivityDetailQuery(Query):
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
 
@@ -116,7 +116,7 @@ class GetMoleculeActivityDetail:
 
     async def __call__(
         self,
-        input: MoleculeActivityDetailQuery,
+        input: GetMoleculeActivityDetailQuery,
         auth: AuthContext | None = None,
     ) -> Result[MoleculeActivityDetail, DomainError]:
         require_same_workspace(auth, input.workspace_id)

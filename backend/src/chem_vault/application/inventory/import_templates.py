@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_same_workspace
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -60,8 +60,9 @@ class CreateImportTemplate:
             )
             await self._repo.save(template)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(template)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(template)
 
 
 class ListImportTemplates:
@@ -70,8 +71,10 @@ class ListImportTemplates:
         self._repo = repo
 
     async def __call__(
-        self, input: ListImportTemplatesQuery
+        self, input: ListImportTemplatesQuery, auth: AuthContext | None = None
     ) -> Result[list[ImportTemplate], DomainError]:
+        require_same_workspace(auth, input.workspace_id)
+
         async with self._uow:
             templates = await self._repo.find_by_workspace(input.workspace_id)
             return Success(templates)
@@ -95,5 +98,6 @@ class DeleteImportTemplate:
                 return Failure(NotFoundError("ImportTemplate", str(input.template_id)))
             await self._repo.delete(input.workspace_id, input.template_id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)

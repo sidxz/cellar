@@ -62,5 +62,6 @@ class CreateSaltEntry:
             )
             await self._repo.save(entry)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(entry)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(entry)

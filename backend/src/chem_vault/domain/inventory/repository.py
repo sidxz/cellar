@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
-from chem_vault.application.shared.pagination import PageResult
+from chem_vault.domain.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.cdd_plate_import import CddPlateImport
 from chem_vault.domain.inventory.import_template import ImportTemplate

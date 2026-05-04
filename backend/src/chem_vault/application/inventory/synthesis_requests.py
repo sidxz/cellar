@@ -186,8 +186,9 @@ class CreateSynthesisRequest:
             )
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class SubmitSynthesisRequest:
@@ -214,8 +215,9 @@ class SubmitSynthesisRequest:
             request.submit()
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class ApproveSynthesisRequest:
@@ -242,8 +244,9 @@ class ApproveSynthesisRequest:
             request.approve(approved_by=input.approved_by)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class RejectSynthesisRequest:
@@ -270,8 +273,9 @@ class RejectSynthesisRequest:
             request.reject(reason=input.reason, rejected_by=input.rejected_by)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class AssignSynthesisRequest:
@@ -303,8 +307,9 @@ class AssignSynthesisRequest:
             request.assign(assignment)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class StartSynthesis:
@@ -331,8 +336,9 @@ class StartSynthesis:
             request.start(proposed_route_id=input.proposed_route_id)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class FlagInfeasible:
@@ -362,8 +368,9 @@ class FlagInfeasible:
             )
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class CompleteSynthesis:
@@ -396,8 +403,9 @@ class CompleteSynthesis:
             request.complete_synthesis(actual_cost=actual_cost)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class FulfillSynthesisRequest:
@@ -435,8 +443,9 @@ class FulfillSynthesisRequest:
             request.fulfill(batch_id=input.batch_id)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class FailSynthesis:
@@ -463,8 +472,9 @@ class FailSynthesis:
             request.fail(reason=input.reason)
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class CancelSynthesisRequest:
@@ -491,8 +501,9 @@ class CancelSynthesisRequest:
             request.cancel()
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class GetSynthesisRequest:
@@ -554,25 +565,27 @@ class UpdateSynthesisRequest:
             if request is None:
                 return Failure(NotFoundError("SynthesisRequest", str(input.request_id)))
 
-            if request.status != SynthesisRequestStatus.DRAFT:
-                return Failure(ValidationError("Can only update draft synthesis requests"))
+            try:
+                new_amount = ...
+                if input.amount_value is not UNSET or input.amount_unit is not UNSET:
+                    new_value = input.amount_value if input.amount_value is not UNSET else request.requested_amount.value
+                    new_unit = input.amount_unit if input.amount_unit is not UNSET else request.requested_amount.unit.value
+                    new_amount = Amount(value=new_value, unit=AmountUnit(new_unit))
 
-            if input.purpose is not UNSET:
-                request.purpose = input.purpose
-            if input.priority is not UNSET:
-                request.priority = RequestPriority(input.priority)
-            if input.target_purity is not UNSET:
-                request.target_purity = input.target_purity
-
-            if input.amount_value is not UNSET or input.amount_unit is not UNSET:
-                new_value = input.amount_value if input.amount_value is not UNSET else request.requested_amount.value
-                new_unit = input.amount_unit if input.amount_unit is not UNSET else request.requested_amount.unit.value
-                request.requested_amount = Amount(value=new_value, unit=AmountUnit(new_unit))
+                request.update_details(
+                    purpose=input.purpose if input.purpose is not UNSET else ...,
+                    priority=RequestPriority(input.priority) if input.priority is not UNSET else ...,
+                    target_purity=input.target_purity if input.target_purity is not UNSET else ...,
+                    requested_amount=new_amount,
+                )
+            except ValidationError as exc:
+                return Failure(exc)
 
             await self._repo.save(request)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(request)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
 
 
 class DeleteSynthesisRequest:
@@ -602,5 +615,6 @@ class DeleteSynthesisRequest:
 
             await self._repo.delete(request.workspace_id, request.id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)

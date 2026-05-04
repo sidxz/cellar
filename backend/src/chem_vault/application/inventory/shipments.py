@@ -183,8 +183,9 @@ class CreateShipment:
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class GetShipment:
@@ -246,8 +247,9 @@ class ShipShipment:
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class MarkShipmentInTransit:
@@ -277,8 +279,9 @@ class MarkShipmentInTransit:
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class DeliverShipment:
@@ -308,8 +311,9 @@ class DeliverShipment:
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class ReturnShipment:
@@ -339,8 +343,9 @@ class ReturnShipment:
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class AddShipmentItem:
@@ -388,8 +393,9 @@ class AddShipmentItem:
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class UpdateShipment:
@@ -414,22 +420,21 @@ class UpdateShipment:
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
 
-            if shipment.status != ShipmentStatus.PREPARING:
-                return Failure(ValidationError("Can only update shipments in preparing status"))
-
-            if input.carrier is not UNSET:
-                shipment.carrier = input.carrier
-            if input.expected_arrival_date is not UNSET:
-                shipment.expected_arrival_date = input.expected_arrival_date
-            if input.shipping_conditions is not UNSET:
-                shipment.shipping_conditions = input.shipping_conditions
-            if input.notes is not UNSET:
-                shipment.notes = input.notes
+            try:
+                shipment.update_details(
+                    carrier=input.carrier if input.carrier is not UNSET else ...,
+                    expected_arrival_date=input.expected_arrival_date if input.expected_arrival_date is not UNSET else ...,
+                    shipping_conditions=input.shipping_conditions if input.shipping_conditions is not UNSET else ...,
+                    notes=input.notes if input.notes is not UNSET else ...,
+                )
+            except ValidationError as exc:
+                return Failure(exc)
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(shipment)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(shipment)
 
 
 class DeleteShipment:
@@ -459,5 +464,6 @@ class DeleteShipment:
 
             await self._repo.delete(shipment.workspace_id, shipment.id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)

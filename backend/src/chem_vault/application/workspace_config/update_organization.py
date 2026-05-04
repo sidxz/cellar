@@ -78,5 +78,6 @@ class UpdateOrganization:
                 org.update(**fields)
             await self._repo.save(org)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(org)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(org)

@@ -110,10 +110,9 @@ class RegisterMolecule:
     ) -> Result[RegistrationOutcome, DomainError]:
         require_editor(auth)
 
-        async with self._uow:
-            if input.smiles is not None:
-                return await self._register_disclosed(input)
-            return await self._register_undisclosed(input)
+        if input.smiles is not None:
+            return await self._register_disclosed(input)
+        return await self._register_undisclosed(input)
 
     def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
         """Collect name + all external IDs into a single set for batch lookup."""
@@ -249,32 +248,33 @@ class RegisterMolecule:
         if inchi_key is None:
             return Failure(ValidationError("Structure processor returned no InChI key"))
 
-        # 2. Check InChIKey against existing active molecules
-        existing_by_inchi = await self._repo.find_by_inchi_key(
-            input.workspace_id, inchi_key
-        )
+        async with self._uow:
+            # 2. Check InChIKey against existing active molecules
+            existing_by_inchi = await self._repo.find_by_inchi_key(
+                input.workspace_id, inchi_key
+            )
 
-        # 3. Check for undisclosed molecule match (before conflict check)
-        undisclosed_match: Molecule | None = None
-        if existing_by_inchi is None and self._disclosure_service is not None:
-            all_ids = self._collect_all_identifiers(input)
-            if all_ids:
-                undisclosed_match = await self._repo.find_undisclosed_by_identifiers(
-                    input.workspace_id, all_ids
-                )
+            # 3. Check for undisclosed molecule match (before conflict check)
+            undisclosed_match: Molecule | None = None
+            if existing_by_inchi is None and self._disclosure_service is not None:
+                all_ids = self._collect_all_identifiers(input)
+                if all_ids:
+                    undisclosed_match = await self._repo.find_undisclosed_by_identifiers(
+                        input.workspace_id, all_ids
+                    )
 
-        # 4. Batch-check all identifiers (name + external_ids) for conflicts.
-        #    Allow the matched molecule's IDs so they don't trigger a conflict.
-        allowed_id = (
-            existing_by_inchi.id
-            if existing_by_inchi
-            else (undisclosed_match.id if undisclosed_match else None)
-        )
-        conflict_check = await self._check_identifier_conflicts(
-            input, allowed_molecule_id=allowed_id,
-        )
-        if isinstance(conflict_check, Failure):
-            return Failure(conflict_check.failure())
+            # 4. Batch-check all identifiers (name + external_ids) for conflicts.
+            #    Allow the matched molecule's IDs so they don't trigger a conflict.
+            allowed_id = (
+                existing_by_inchi.id
+                if existing_by_inchi
+                else (undisclosed_match.id if undisclosed_match else None)
+            )
+            conflict_check = await self._check_identifier_conflicts(
+                input, allowed_molecule_id=allowed_id,
+            )
+            if isinstance(conflict_check, Failure):
+                return Failure(conflict_check.failure())
 
         # 5. Disclosure path — delegate to DisclosureService if undisclosed match found.
         #    The DisclosureService manages its own UoW (separate transaction), so we
@@ -322,13 +322,15 @@ class RegisterMolecule:
 
         # 6a. Duplicate InChIKey — add identifiers to existing molecule (disclosed match)
         if existing_by_inchi is not None:
-            self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
-            await self._repo.save(existing_by_inchi)
-            await self._record_disclosure_provenance(
-                input, existing_by_inchi.id, processed.structure.smiles, inchi_key,
-                is_new=False, resolved_to_molecule_id=existing_by_inchi.id,
-            )
-            events = await self._uow.commit()
+            async with self._uow:
+                self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
+                await self._repo.save(existing_by_inchi)
+                await self._record_disclosure_provenance(
+                    input, existing_by_inchi.id, processed.structure.smiles, inchi_key,
+                    is_new=False, resolved_to_molecule_id=existing_by_inchi.id,
+                )
+                events = await self._uow.commit()
+
             await self._dispatcher.dispatch_all(events)
             return Success(
                 RegistrationOutcome(
@@ -347,24 +349,26 @@ class RegisterMolecule:
             if not is_successful(validation):
                 return Failure(validation.failure())
 
-        reg_number = await self._repo.next_registration_number(input.workspace_id)
-        mol = Molecule.register_disclosed(
-            workspace_id=input.workspace_id,
-            registration_number=reg_number,
-            name=input.name,
-            molecule_type=MoleculeType(input.molecule_type),
-            structure=processed.structure,
-            descriptors=processed.descriptors,
-            originating_org_id=input.originating_org_id,
-            custom_fields=input.custom_fields,
-        )
-        self._add_name_and_ids(mol, input, source="name")
+        async with self._uow:
+            reg_number = await self._repo.next_registration_number(input.workspace_id)
+            mol = Molecule.register_disclosed(
+                workspace_id=input.workspace_id,
+                registration_number=reg_number,
+                name=input.name,
+                molecule_type=MoleculeType(input.molecule_type),
+                structure=processed.structure,
+                descriptors=processed.descriptors,
+                originating_org_id=input.originating_org_id,
+                custom_fields=input.custom_fields,
+            )
+            self._add_name_and_ids(mol, input, source="name")
 
-        await self._repo.save(mol)
-        await self._record_disclosure_provenance(
-            input, mol.id, processed.structure.smiles, inchi_key, is_new=True,
-        )
-        events = await self._uow.commit()
+            await self._repo.save(mol)
+            await self._record_disclosure_provenance(
+                input, mol.id, processed.structure.smiles, inchi_key, is_new=True,
+            )
+            events = await self._uow.commit()
+
         await self._dispatcher.dispatch_all(events)
         return Success(
             RegistrationOutcome(molecule=mol, is_new=True,
@@ -376,45 +380,49 @@ class RegisterMolecule:
     async def _register_undisclosed(
         self, input: RegisterMoleculeCommand
     ) -> Result[RegistrationOutcome, DomainError]:
-        # 1. Batch-check all identifiers (name + external_ids)
-        all_ids = self._collect_all_identifiers(input)
-        existing_map = await self._repo.find_identifiers_in_workspace(
-            input.workspace_id, all_ids
-        )
+        async with self._uow:
+            # 1. Batch-check all identifiers (name + external_ids)
+            all_ids = self._collect_all_identifiers(input)
+            existing_map = await self._repo.find_identifiers_in_workspace(
+                input.workspace_id, all_ids
+            )
 
-        # 2. Determine if any existing molecule is matched
-        matched_molecule: Molecule | None = None
-        matched_id: uuid.UUID | None = None
+            # 2. Determine if any existing molecule is matched
+            matched_molecule: Molecule | None = None
+            matched_id: uuid.UUID | None = None
 
-        for identifier, owner_id in existing_map.items():
-            if matched_id is None:
-                matched_id = owner_id
-            elif owner_id != matched_id:
-                return Failure(
-                    ConflictError(
-                        f"Identifiers map to different molecules"
+            for identifier, owner_id in existing_map.items():
+                if matched_id is None:
+                    matched_id = owner_id
+                elif owner_id != matched_id:
+                    return Failure(
+                        ConflictError(
+                            f"Identifiers map to different molecules"
+                        )
                     )
-                )
 
-        if matched_id is not None:
-            matched_molecule = await self._repo.find_by_id_in_workspace(input.workspace_id, matched_id)
-            if matched_molecule is not None and matched_molecule.structure_status.value == "disclosed":
-                # One of our identifiers/name is claimed by a disclosed molecule
-                conflict_id = next(
-                    k for k, v in existing_map.items() if v == matched_id
-                )
-                return Failure(
-                    ConflictError(
-                        f"Identifier '{conflict_id}' belongs to disclosed "
-                        f"molecule '{matched_molecule.registration_number.value}'"
+            if matched_id is not None:
+                matched_molecule = await self._repo.find_by_id_in_workspace(input.workspace_id, matched_id)
+                if matched_molecule is not None and matched_molecule.structure_status.value == "disclosed":
+                    # One of our identifiers/name is claimed by a disclosed molecule
+                    conflict_id = next(
+                        k for k, v in existing_map.items() if v == matched_id
                     )
-                )
+                    return Failure(
+                        ConflictError(
+                            f"Identifier '{conflict_id}' belongs to disclosed "
+                            f"molecule '{matched_molecule.registration_number.value}'"
+                        )
+                    )
 
-        # 3a. Matched existing undisclosed — add new IDs
+            # 3a. Matched existing undisclosed — add new IDs
+            events = []
+            if matched_molecule is not None:
+                self._add_name_and_ids(matched_molecule, input, source="duplicate")
+                await self._repo.save(matched_molecule)
+                events = await self._uow.commit()
+
         if matched_molecule is not None:
-            self._add_name_and_ids(matched_molecule, input, source="duplicate")
-            await self._repo.save(matched_molecule)
-            events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
             return Success(
                 RegistrationOutcome(molecule=matched_molecule, is_new=False,
@@ -429,19 +437,21 @@ class RegisterMolecule:
             if not is_successful(validation):
                 return Failure(validation.failure())
 
-        reg_number = await self._repo.next_registration_number(input.workspace_id)
-        mol = Molecule.register_undisclosed(
-            workspace_id=input.workspace_id,
-            registration_number=reg_number,
-            name=input.name,
-            molecule_type=MoleculeType(input.molecule_type),
-            originating_org_id=input.originating_org_id,
-            custom_fields=input.custom_fields,
-        )
-        self._add_name_and_ids(mol, input, source="name")
+        async with self._uow:
+            reg_number = await self._repo.next_registration_number(input.workspace_id)
+            mol = Molecule.register_undisclosed(
+                workspace_id=input.workspace_id,
+                registration_number=reg_number,
+                name=input.name,
+                molecule_type=MoleculeType(input.molecule_type),
+                originating_org_id=input.originating_org_id,
+                custom_fields=input.custom_fields,
+            )
+            self._add_name_and_ids(mol, input, source="name")
 
-        await self._repo.save(mol)
-        events = await self._uow.commit()
+            await self._repo.save(mol)
+            events = await self._uow.commit()
+
         await self._dispatcher.dispatch_all(events)
         return Success(RegistrationOutcome(molecule=mol, is_new=True,
                                            action=RegistrationAction.REGISTERED))

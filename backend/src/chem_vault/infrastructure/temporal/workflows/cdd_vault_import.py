@@ -348,6 +348,7 @@ class CddVaultImportWorkflow:
                         export_id=export_result.export_id,
                     ),
                     start_to_close_timeout=timedelta(minutes=60),
+                    heartbeat_timeout=timedelta(seconds=60),
                     retry_policy=_RETRY,
                 )
             except Exception as exc:

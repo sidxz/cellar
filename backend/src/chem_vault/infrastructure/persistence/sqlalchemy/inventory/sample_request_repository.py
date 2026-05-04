@@ -33,12 +33,7 @@ class SQLAlchemySampleRequestRepository(
             stmt = stmt.where(SampleRequestModel.status == status)
         stmt = stmt.order_by(SampleRequestModel.created_at.desc())
         result = await self._session.execute(stmt)
-        requests = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            requests.append(domain)
-        return requests
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     def _to_domain(self, model: SampleRequestModel) -> SampleRequest:
         return SampleRequest(

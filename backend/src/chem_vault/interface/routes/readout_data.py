@@ -21,8 +21,14 @@ from chem_vault.application.screening.create_readout_data import (
     CreateReadoutData,
     CreateReadoutDataCommand,
 )
-from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun, ListDoseResponseByRunQuery
-from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun, ListReadoutDataByRunQuery
+from chem_vault.application.screening.list_dose_response_enriched import (
+    ListDoseResponseEnriched,
+    ListDoseResponseEnrichedQuery,
+)
+from chem_vault.application.screening.list_readout_data_enriched import (
+    ListReadoutDataEnriched,
+    ListReadoutDataEnrichedQuery,
+)
 from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from chem_vault.interface.dependencies import (
     AuthDep,
@@ -30,11 +36,10 @@ from chem_vault.interface.dependencies import (
     ClassifyDoseResponseCurveDep,
     CreateDoseResponseCurveDep,
     CreateReadoutDataDep,
-    ListDoseResponseByRunDep,
-    ListReadoutDataByRunDep,
+    ListDoseResponseEnrichedDep,
+    ListReadoutDataEnrichedDep,
     ReadoutCalculationEngineDep,
     RefitDoseResponseCurveDep,
-    UoWDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -299,48 +304,18 @@ async def bulk_create_readout_data(
 async def list_readout_data(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
-    uc: ListReadoutDataByRunDep,
-    uow: UoWDep,
+    uc: ListReadoutDataEnrichedDep,
 ) -> list[ReadoutDataResponse]:
-    query = ListReadoutDataByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
+    query = ListReadoutDataEnrichedQuery(workspace_id=auth.workspace_id, run_id=run_id)
     result = await uc(query, auth=auth)
-    data = result_to_response(result)
-
-    # Batch-resolve molecule registration_numbers and batch_numbers
-    from sqlalchemy import select as sa_select
-    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
-        MoleculeModel,
-    )
-    from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
-        BatchModel,
-    )
-
-    mol_ids = list({rd.molecule_id for rd in data if rd.molecule_id})
-    batch_ids = list({rd.batch_id for rd in data if rd.batch_id})
-    mol_map: dict[uuid.UUID, str] = {}
-    batch_map: dict[uuid.UUID, str] = {}
-
-    async with uow as u:
-        if mol_ids:
-            rows = (await u.session.execute(
-                sa_select(MoleculeModel.id, MoleculeModel.registration_number)
-                .where(MoleculeModel.id.in_(mol_ids))
-            )).all()
-            mol_map = {r.id: r.registration_number for r in rows}
-        if batch_ids:
-            rows = (await u.session.execute(
-                sa_select(BatchModel.id, BatchModel.batch_number)
-                .where(BatchModel.id.in_(batch_ids))
-            )).all()
-            batch_map = {r.id: r.batch_number for r in rows}
-
+    items = result_to_response(result)
     return [
         ReadoutDataResponse.from_domain(
-            rd,
-            registration_number=mol_map.get(rd.molecule_id) if rd.molecule_id else None,
-            batch_number=batch_map.get(rd.batch_id) if rd.batch_id else None,
+            item.readout,
+            registration_number=item.registration_number,
+            batch_number=item.batch_number,
         )
-        for rd in data
+        for item in items
     ]
 
 
@@ -378,40 +353,18 @@ async def create_dose_response_curve(
 async def list_dose_response_curves(
     auth: AuthDep,
     run_id: Annotated[uuid.UUID, Query()],
-    uc: ListDoseResponseByRunDep,
-    uow: UoWDep,
+    uc: ListDoseResponseEnrichedDep,
 ) -> list[DoseResponseCurveResponse]:
-    query = ListDoseResponseByRunQuery(workspace_id=auth.workspace_id, run_id=run_id)
+    query = ListDoseResponseEnrichedQuery(workspace_id=auth.workspace_id, run_id=run_id)
     result = await uc(query, auth=auth)
-    curves = result_to_response(result)
-
-    # Batch-resolve molecule names and batch numbers for display
-    mol_ids = list({c.molecule_id for c in curves})
-    batch_ids = list({c.batch_id for c in curves})
-    mol_names: dict[uuid.UUID, str] = {}
-    batch_numbers: dict[uuid.UUID, str] = {}
-
-    if mol_ids:
-        from sqlalchemy import select
-        from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
-        from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
-
-        async with uow:
-            stmt = select(MoleculeModel.id, MoleculeModel.name).where(MoleculeModel.id.in_(mol_ids))
-            rows = await uow.session.execute(stmt)
-            mol_names = {row[0]: row[1] for row in rows}
-
-            stmt = select(BatchModel.id, BatchModel.batch_number).where(BatchModel.id.in_(batch_ids))
-            rows = await uow.session.execute(stmt)
-            batch_numbers = {row[0]: row[1] for row in rows}
-
+    items = result_to_response(result)
     return [
         DoseResponseCurveResponse.from_domain(
-            c,
-            molecule_name=mol_names.get(c.molecule_id),
-            batch_number=batch_numbers.get(c.batch_id),
+            item.curve,
+            molecule_name=item.molecule_name,
+            batch_number=item.batch_number,
         )
-        for c in curves
+        for item in items
     ]
 
 

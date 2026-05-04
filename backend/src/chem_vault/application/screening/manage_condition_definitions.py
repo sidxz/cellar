@@ -79,8 +79,9 @@ class AddConditionDefinition:
             protocol.add_condition_definition(definition)
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 class RemoveConditionDefinition:
@@ -110,5 +111,6 @@ class RemoveConditionDefinition:
             protocol.remove_condition_definition(input.definition_id)
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
@@ -122,7 +122,7 @@ class ExternalApiKey(AggregateRoot):
             else:
                 self.description = str(description).strip() or None
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             ExternalApiKeyUpdated(
                 aggregate_id=self.id,
@@ -136,7 +136,7 @@ class ExternalApiKey(AggregateRoot):
         if not new_prefix or not new_prefix.strip():
             raise ValidationError("key_prefix must not be empty")
         self.key_prefix = new_prefix.strip()
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             ExternalApiKeyUpdated(
                 aggregate_id=self.id,
@@ -148,7 +148,7 @@ class ExternalApiKey(AggregateRoot):
     def deactivate(self) -> None:
         """Mark this API key as inactive (soft-disable)."""
         self.is_active = False
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             ExternalApiKeyUpdated(
                 aggregate_id=self.id,
@@ -160,7 +160,7 @@ class ExternalApiKey(AggregateRoot):
     def activate(self) -> None:
         """Re-enable a previously deactivated API key."""
         self.is_active = True
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             ExternalApiKeyUpdated(
                 aggregate_id=self.id,
@@ -171,5 +171,5 @@ class ExternalApiKey(AggregateRoot):
 
     def mark_used(self) -> None:
         """Record the last-used timestamp (no domain event — high-frequency)."""
-        self.last_used_at = datetime.now(timezone.utc)
-        self.updated_at = datetime.now(timezone.utc)
+        self.last_used_at = datetime.now(UTC)
+        self.updated_at = datetime.now(UTC)

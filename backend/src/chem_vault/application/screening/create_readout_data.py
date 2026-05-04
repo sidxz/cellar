@@ -90,5 +90,6 @@ class CreateReadoutData:
             )
             await self._repo.save(readout)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(readout)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(readout)

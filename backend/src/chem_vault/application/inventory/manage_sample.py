@@ -84,8 +84,9 @@ class AliquotSample:
             sample.aliquot(input.amount)
             await self._repo.save(sample)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(sample)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(sample)
 
 
 class MoveSample:
@@ -122,8 +123,9 @@ class MoveSample:
             sample.move_to(input.location_id)
             await self._repo.save(sample)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(sample)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(sample)
 
 
 class QuarantineSample:
@@ -152,8 +154,9 @@ class QuarantineSample:
             sample.quarantine(reason=input.reason)
             await self._repo.save(sample)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(sample)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(sample)
 
 
 class ClearQuarantineSample:
@@ -182,8 +185,9 @@ class ClearQuarantineSample:
             sample.clear_quarantine()
             await self._repo.save(sample)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(sample)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(sample)
 
 
 class DisposeSample:
@@ -212,5 +216,6 @@ class DisposeSample:
             sample.dispose(reason=input.reason)
             await self._repo.save(sample)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(sample)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(sample)

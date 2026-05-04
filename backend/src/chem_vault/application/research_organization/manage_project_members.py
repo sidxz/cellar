@@ -84,24 +84,26 @@ class AddProjectMember:
 
             await self._member_repo.add_member(input.workspace_id, input.project_id, input.user_id, role)
 
-            events = await self._uow.commit()
-            events.append(
+            project.register_event(
                 ProjectMemberAdded(
                     aggregate_id=input.project_id,
                     aggregate_type="Project",
+                    workspace_id=input.workspace_id,
                     project_id=input.project_id,
                     user_id=input.user_id,
                     role=role.value,
                 )
             )
-            await self._dispatcher.dispatch_all(events)
+            events = await self._uow.commit()
 
-            member = ProjectMember(
-                project_id=input.project_id,
-                user_id=input.user_id,
-                role=role,
-            )
-            return Success(member)
+        await self._dispatcher.dispatch_all(events)
+
+        member = ProjectMember(
+            project_id=input.project_id,
+            user_id=input.user_id,
+            role=role,
+        )
+        return Success(member)
 
 
 # ---------------------------------------------------------------------------
@@ -149,18 +151,20 @@ class RemoveProjectMember:
 
             await self._member_repo.remove_member(input.workspace_id, input.project_id, input.user_id)
 
-            events = await self._uow.commit()
-            events.append(
+            project.register_event(
                 ProjectMemberRemoved(
                     aggregate_id=input.project_id,
                     aggregate_type="Project",
+                    workspace_id=input.workspace_id,
                     project_id=input.project_id,
                     user_id=input.user_id,
                 )
             )
-            await self._dispatcher.dispatch_all(events)
+            events = await self._uow.commit()
 
-            return Success(None)
+        await self._dispatcher.dispatch_all(events)
+
+        return Success(None)
 
 
 # ---------------------------------------------------------------------------
@@ -232,14 +236,15 @@ class UpdateProjectMemberRole:
             await self._member_repo.update_role(input.workspace_id, input.project_id, input.user_id, role)
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            member = ProjectMember(
-                project_id=input.project_id,
-                user_id=input.user_id,
-                role=role,
-            )
-            return Success(member)
+        await self._dispatcher.dispatch_all(events)
+
+        member = ProjectMember(
+            project_id=input.project_id,
+            user_id=input.user_id,
+            role=role,
+        )
+        return Success(member)
 
 
 # ---------------------------------------------------------------------------

@@ -12,7 +12,6 @@ from chem_vault.domain.shared.events import DomainEvent
 class AttachmentUploaded(DomainEvent):
     """Raised when a file is attached to an entity."""
 
-    workspace_id: uuid.UUID
     attachable_type: str
     attachable_id: uuid.UUID
     file_name: str
@@ -24,7 +23,6 @@ class AttachmentUploaded(DomainEvent):
 class AttachmentDeleted(DomainEvent):
     """Raised when an attachment is removed."""
 
-    workspace_id: uuid.UUID
     attachable_type: str
     attachable_id: uuid.UUID
     file_name: str

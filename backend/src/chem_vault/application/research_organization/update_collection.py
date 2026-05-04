@@ -67,5 +67,6 @@ class UpdateCollection:
                 collection.update(**fields)
             await self._repo.save(collection)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(collection)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(collection)

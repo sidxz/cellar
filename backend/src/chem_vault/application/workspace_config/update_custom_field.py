@@ -72,5 +72,6 @@ class UpdateCustomField:
 
             await self._repo.save(cfd)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(cfd)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(cfd)

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_same_workspace
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.molecule import Molecule
@@ -26,8 +27,10 @@ class GetMolecule:
         self._repo = repo
 
     async def __call__(
-        self, input: GetMoleculeQuery
+        self, input: GetMoleculeQuery, auth: AuthContext | None = None
     ) -> Result[Molecule, DomainError]:
+        require_same_workspace(auth, input.workspace_id)
+
         async with self._uow:
             mol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
             if mol is None:

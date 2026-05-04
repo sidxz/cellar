@@ -79,5 +79,6 @@ class UpdateTarget:
                 target.update(**fields)
             await self._repo.save(target)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(target)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(target)

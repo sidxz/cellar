@@ -9,6 +9,7 @@ from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.domain.workspace_config.enums import OrganizationType
 from chem_vault.domain.workspace_config.events import (
+    OrganizationActivated,
     OrganizationCreated,
     OrganizationDeactivated,
     OrganizationUpdated,
@@ -121,3 +122,10 @@ class Organization(AggregateRoot):
             raise ValidationError("Organization is already active")
         self.is_active = True
         self.updated_at = datetime.now(UTC)
+        self.register_event(
+            OrganizationActivated(
+                aggregate_id=self.id,
+                aggregate_type="Organization",
+                workspace_id=self.workspace_id,
+            )
+        )

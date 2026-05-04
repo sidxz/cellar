@@ -88,6 +88,7 @@ class SQLAlchemyBulkRegistrationRepository(
         self, model: BulkRegistrationModel, aggregate: BulkRegistration
     ) -> None:
         model.status = aggregate.status.value
+        model.total_count = aggregate.total_count
         model.registered_count = aggregate.registered_count
         model.duplicate_count = aggregate.duplicate_count
         model.error_count = aggregate.error_count

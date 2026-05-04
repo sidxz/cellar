@@ -32,11 +32,9 @@ class AuditEventHandler:
 
     async def __call__(self, event: DomainEvent) -> None:
         try:
-            async with self._session_factory() as session:
-                repo = SQLAlchemyAuditRepository(session)
-                service = AuditRecordingService(repo)
-                await service.handle_event(event)
-                await session.commit()
+            repo = SQLAlchemyAuditRepository(self._session_factory)
+            service = AuditRecordingService(repo)
+            await service.handle_event(event)
         except Exception:
             # Audit failure must not break the business operation.
             # Log and continue — the primary use case already committed.

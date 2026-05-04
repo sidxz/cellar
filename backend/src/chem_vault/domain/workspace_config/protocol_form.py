@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
@@ -202,7 +202,7 @@ class ProtocolForm(AggregateRoot):
         if ontology_defaults is not UNSET:
             self.ontology_defaults = list(ontology_defaults) if ontology_defaults else []  # type: ignore[arg-type]
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             ProtocolFormUpdated(
                 aggregate_id=self.id,
@@ -214,7 +214,7 @@ class ProtocolForm(AggregateRoot):
     def set_default(self, is_default: bool) -> None:
         """Set or unset this form as the workspace default."""
         self.is_default = is_default
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             ProtocolFormUpdated(
                 aggregate_id=self.id,

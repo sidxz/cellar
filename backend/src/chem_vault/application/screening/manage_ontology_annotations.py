@@ -63,8 +63,9 @@ class SetOntologyAnnotation:
 
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -103,5 +104,6 @@ class RemoveOntologyAnnotation:
 
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

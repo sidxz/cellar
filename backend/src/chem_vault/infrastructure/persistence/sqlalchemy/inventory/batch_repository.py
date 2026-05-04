@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.sql import expression
 
-from chem_vault.application.shared.pagination import PageResult
+from chem_vault.domain.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.enums import BatchSource
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit, LightCondition
@@ -274,6 +274,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         )
 
     def _update_model(self, model: BatchModel, aggregate: Batch) -> None:
+        model.batch_number = aggregate.batch_number.value
         model.molecule_id = aggregate.molecule_id
         model.salt_entry_id = aggregate.salt_entry_id
         model.salt_name = aggregate.salt_name

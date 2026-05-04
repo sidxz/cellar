@@ -1,33 +1,40 @@
-"""Application-layer pagination primitives."""
+"""Application-layer pagination primitives.
+
+Re-exports domain pagination types and adds application-level utilities.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Generic, TypeVar
+import uuid
 
-T = TypeVar("T")
+from chem_vault.domain.shared.pagination import EnrichedPageResult, PageResult
 
+# Re-export domain types so existing application-layer imports continue to work.
+__all__ = [
+    "EnrichedPageResult",
+    "PageResult",
+    "DEFAULT_PAGE_SIZE",
+    "MAX_PAGE_SIZE",
+    "clamp_limit",
+    "parse_cursor",
+]
 
-@dataclass(frozen=True)
-class PageResult(Generic[T]):
-    """A single page of query results.
-
-    Attributes:
-        items: The items in this page.
-        next_cursor: Opaque cursor for the next page (``None`` if last page).
-        total_count: Optional total result count.
-    """
-
-    items: list[T]
-    next_cursor: str | None = None
-    total_count: int | None = None
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 200
 
 
-@dataclass(frozen=True)
-class EnrichedPageResult(Generic[T]):
-    """Page result with optional activity enrichment data."""
+def parse_cursor(cursor: str | None) -> uuid.UUID | None:
+    """Parse a cursor string into a UUID, or return ``None``."""
+    if cursor is None:
+        return None
+    try:
+        return uuid.UUID(cursor)
+    except ValueError:
+        return None
 
-    items: list[T]
-    next_cursor: str | None = None
-    activity_data: dict | None = None
-    total_count: int | None = None
+
+def clamp_limit(limit: int | None) -> int:
+    """Clamp a requested page size to [1, MAX_PAGE_SIZE], defaulting to DEFAULT_PAGE_SIZE."""
+    if limit is None:
+        return DEFAULT_PAGE_SIZE
+    return max(1, min(limit, MAX_PAGE_SIZE))

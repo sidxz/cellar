@@ -81,8 +81,9 @@ class SetControlLayout:
             )
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
 
 
 class RemoveControlLayout:
@@ -112,5 +113,6 @@ class RemoveControlLayout:
             protocol.remove_control_layout(PlateFormat(input.plate_format))
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

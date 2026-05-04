@@ -12,7 +12,6 @@ from chem_vault.domain.shared.events import DomainEvent
 class MoleculeRegistered(DomainEvent):
     registration_number: str
     molecule_type: str
-    workspace_id: uuid.UUID
     originating_org_id: uuid.UUID
 
 
@@ -74,6 +73,11 @@ class DisclosurePendingConfirmation(DomainEvent):
     matched_molecule_id: uuid.UUID
 
 
+@dataclass(frozen=True, kw_only=True)
+class DisclosureRejected(DomainEvent):
+    reason: str
+
+
 # ---------------------------------------------------------------------------
 # Bulk Registration events
 # ---------------------------------------------------------------------------
@@ -81,7 +85,6 @@ class DisclosurePendingConfirmation(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class BulkRegistrationStarted(DomainEvent):
-    workspace_id: uuid.UUID
     source_file: str
     file_format: str
     total_count: int
@@ -96,13 +99,43 @@ class BulkRegistrationCompleted(DomainEvent):
 
 
 # ---------------------------------------------------------------------------
+# Bulk Disclosure events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class BulkDisclosureStarted(DomainEvent):
+    source_file: str
+    partner_org_id: uuid.UUID
+    total_count: int
+    submitted_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class BulkDisclosureCompleted(DomainEvent):
+    disclosed_count: int
+    merged_count: int
+    conflict_count: int
+    error_count: int
+
+
+# ---------------------------------------------------------------------------
+# Molecule Updated event
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class MoleculeUpdated(DomainEvent):
+    pass
+
+
+# ---------------------------------------------------------------------------
 # CDD Molecule Import events
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, kw_only=True)
 class CddMoleculeImportStarted(DomainEvent):
-    workspace_id: uuid.UUID
     cdd_vault_id: str
     import_mode: str
     submitted_by: uuid.UUID

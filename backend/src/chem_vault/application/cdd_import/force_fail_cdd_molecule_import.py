@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -42,7 +42,7 @@ class ForceFailCddMoleculeImport:
         input: ForceFailCddMoleculeImportCommand,
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
-        require_editor(auth)
+        require_admin(auth)
 
         async with self._uow:
             imp = await self._repo.find_by_id_in_workspace(
@@ -57,6 +57,7 @@ class ForceFailCddMoleculeImport:
             imp.fail("Force-failed by admin")
             await self._repo.save(imp)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
+
+        await self._dispatcher.dispatch_all(events)
 
         return Success(None)

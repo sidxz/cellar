@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from chem_vault.application.inventory.get_inventory_summary import (
-    InventorySummaryQuery,
+    GetInventorySummaryQuery,
 )
 from chem_vault.application.inventory.list_batches_global import (
     ListBatchesGlobalQuery,
@@ -172,7 +172,7 @@ async def get_inventory_summary(
     uc: GetInventorySummaryDep,
 ) -> InventorySummaryResponse:
     """Dashboard metrics: low stock, expiring batches, pending requests, recent activity."""
-    query = InventorySummaryQuery(workspace_id=auth.workspace_id)
+    query = GetInventorySummaryQuery(workspace_id=auth.workspace_id)
     summary = result_to_response(await uc(query, auth=auth))
     return InventorySummaryResponse(
         low_stock_count=summary.low_stock_count,

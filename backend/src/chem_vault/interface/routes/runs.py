@@ -10,7 +10,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.screening.create_run import CreateRun, CreateRunCommand
-from chem_vault.application.screening.get_run import GetRun, GetRunQuery, ListRunsByProtocol, ListRunsByProtocolQuery
+from chem_vault.application.screening.get_run import GetRun, GetRunQuery
+from chem_vault.application.screening.list_runs_with_counts import ListRunsWithCounts, ListRunsWithCountsQuery
 from chem_vault.application.screening.lock_run import LockRun, LockRunCommand, UnlockRun, UnlockRunCommand
 from chem_vault.application.screening.manage_run import (
     ApproveRun,
@@ -29,12 +30,11 @@ from chem_vault.interface.dependencies import (
     CompleteRunDep,
     CreateRunDep,
     GetRunDep,
-    ListRunsByProtocolDep,
+    ListRunsWithCountsDep,
     LockRunDep,
     RejectRunDep,
     StartRunDep,
     UnlockRunDep,
-    UoWDep,
     UpdateRunDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
@@ -163,24 +163,14 @@ async def create_run(
 async def list_runs_by_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uc: ListRunsByProtocolDep,
-    uow: UoWDep,
+    uc: ListRunsWithCountsDep,
 ) -> list[RunResponse]:
     result = await uc(
-        ListRunsByProtocolQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+        ListRunsWithCountsQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
         auth=auth,
     )
-    runs = result_to_response(result)
-
-    # Compute molecule counts in bulk
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
-        SQLAlchemyReadoutDataRepository,
-    )
-    async with uow as u:
-        rd_repo = SQLAlchemyReadoutDataRepository(u)
-        counts = await rd_repo.get_molecule_counts(auth.workspace_id, [r.id for r in runs])
-
-    return [RunResponse.from_domain(r, molecule_count=counts.get(r.id, 0)) for r in runs]
+    items = result_to_response(result)
+    return [RunResponse.from_domain(item.run, molecule_count=item.molecule_count) for item in items]
 
 
 @router.get("/runs/{run_id}", response_model=RunResponse)

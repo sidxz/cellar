@@ -98,5 +98,6 @@ class CreateDoseResponseCurve:
             )
             await self._repo.save(curve)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(curve)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(curve)

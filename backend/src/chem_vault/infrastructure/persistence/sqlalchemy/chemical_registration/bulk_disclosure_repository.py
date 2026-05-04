@@ -71,6 +71,7 @@ class SQLAlchemyBulkDisclosureRepository(
         self, model: BulkDisclosureModel, aggregate: BulkDisclosure
     ) -> None:
         model.status = aggregate.status.value
+        model.total_count = aggregate.total_count
         model.disclosed_count = aggregate.disclosed_count
         model.merged_count = aggregate.merged_count
         model.conflict_count = aggregate.conflict_count

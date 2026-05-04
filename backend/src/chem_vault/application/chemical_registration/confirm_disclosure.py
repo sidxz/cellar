@@ -107,15 +107,16 @@ class ConfirmDisclosure:
 
             await self._disclosure_repo.save(dr)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            if isinstance(merge_result, Failure):
-                return Failure(merge_result.failure())
+        await self._dispatcher.dispatch_all(events)
 
-            return Success(
-                DisclosureOutcome(
-                    disclosure_request=dr,
-                    was_merged=True,
-                    merged_into_molecule_id=target_molecule_id,
-                )
+        if isinstance(merge_result, Failure):
+            return Failure(merge_result.failure())
+
+        return Success(
+            DisclosureOutcome(
+                disclosure_request=dr,
+                was_merged=True,
+                merged_into_molecule_id=target_molecule_id,
             )
+        )

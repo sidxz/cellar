@@ -58,9 +58,9 @@ class CreateProtocol:
     async def __call__(
         self, input: CreateProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required to create a protocol"))
         require_editor(auth)
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required"))
 
         # Use a temporary protocol_id for building owned entities;
         # Protocol.__init__ will rebind them to the actual aggregate ID.
@@ -128,5 +128,6 @@ class CreateProtocol:
             )
             await self._repo.save(protocol)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(protocol)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

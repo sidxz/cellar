@@ -115,6 +115,7 @@ class SampleRequest(AggregateRoot):
             SampleRequestCreated(
                 aggregate_id=request.id,
                 aggregate_type="SampleRequest",
+                workspace_id=workspace_id,
                 molecule_id=molecule_id,
                 requester_id=requester_id,
                 requested_amount=requested_amount.value,
@@ -123,6 +124,33 @@ class SampleRequest(AggregateRoot):
             )
         )
         return request
+
+    # -- Mutable field updates --
+
+    def update_details(
+        self,
+        *,
+        purpose: str | None = ...,  # type: ignore[assignment]
+        priority: RequestPriority | None = ...,  # type: ignore[assignment]
+        requested_amount: Amount | None = ...,  # type: ignore[assignment]
+    ) -> None:
+        """Update mutable fields on a submitted request (sentinel pattern)."""
+        if self.status != SampleRequestStatus.SUBMITTED:
+            raise ValidationError("Can only update submitted sample requests")
+        if purpose is not ...:
+            if purpose is not None and not purpose.strip():
+                raise ValidationError("Purpose is required")
+            if purpose is not None:
+                self.purpose = purpose
+        if priority is not ...:
+            if priority is not None:
+                self.priority = priority
+        if requested_amount is not ...:
+            if requested_amount is not None:
+                if requested_amount.value <= 0:
+                    raise ValidationError("Requested amount must be positive")
+                self.requested_amount = requested_amount
+        self.updated_at = datetime.now(UTC)
 
     # -- State transitions --
 
@@ -135,6 +163,7 @@ class SampleRequest(AggregateRoot):
             SampleRequestApproved(
                 aggregate_id=self.id,
                 aggregate_type="SampleRequest",
+                workspace_id=self.workspace_id,
                 assigned_to=assigned_to,
             )
         )
@@ -154,6 +183,7 @@ class SampleRequest(AggregateRoot):
             SampleRequestFulfilled(
                 aggregate_id=self.id,
                 aggregate_type="SampleRequest",
+                workspace_id=self.workspace_id,
                 fulfilled_sample_id=sample_id,
             )
         )
@@ -169,6 +199,7 @@ class SampleRequest(AggregateRoot):
             SampleRequestRejected(
                 aggregate_id=self.id,
                 aggregate_type="SampleRequest",
+                workspace_id=self.workspace_id,
                 reason=reason,
             )
         )

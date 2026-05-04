@@ -68,5 +68,6 @@ class CreateProject:
                 )
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(project)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(project)

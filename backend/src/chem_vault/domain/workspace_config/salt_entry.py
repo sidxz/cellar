@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
@@ -128,7 +128,7 @@ class SaltEntry(AggregateRoot):
                 raise ValidationError("molecular_weight must be greater than 0")
             self.molecular_weight = mw
 
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             SaltEntryUpdated(
                 aggregate_id=self.id,
@@ -140,7 +140,7 @@ class SaltEntry(AggregateRoot):
     def deactivate(self) -> None:
         """Mark this salt entry as inactive (soft-disable)."""
         self.is_active = False
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             SaltEntryUpdated(
                 aggregate_id=self.id,
@@ -152,7 +152,7 @@ class SaltEntry(AggregateRoot):
     def activate(self) -> None:
         """Re-enable a previously deactivated salt entry."""
         self.is_active = True
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             SaltEntryUpdated(
                 aggregate_id=self.id,

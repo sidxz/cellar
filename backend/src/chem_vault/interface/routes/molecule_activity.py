@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from chem_vault.application.screening.get_molecule_activity_detail import (
     MoleculeActivityDetail,
-    MoleculeActivityDetailQuery,
+    GetMoleculeActivityDetailQuery,
 )
 from chem_vault.interface.dependencies import AuthDep, GetMoleculeActivityDetailDep
 from chem_vault.interface.error_handlers import result_to_response
@@ -108,7 +108,7 @@ async def get_molecule_activity_detail(
     uc: GetMoleculeActivityDetailDep,
 ) -> MoleculeActivityDetailResponse:
     """Get all dose-response curves for a molecule, grouped by protocol."""
-    query = MoleculeActivityDetailQuery(
+    query = GetMoleculeActivityDetailQuery(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
     )

@@ -101,9 +101,19 @@ class DisclosureService:
         """
         require_editor(auth)
 
+        # --- Process SMILES before opening the UoW (pure computation) ---
+        process_result = self._structure_processor.process(input.disclosed_smiles)
+
+        # --- Single UoW: validate, mutate, commit ---
+        merge_failure: DomainError | None = None
+        outcome: DisclosureOutcome | None = None
+        events: list = []
+
         async with self._uow:
-            # --- Load & validate molecule ---
-            molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.molecule_id)
+            # 1. Load and validate molecule
+            molecule = await self._molecule_repo.find_by_id_in_workspace(
+                input.workspace_id, input.molecule_id
+            )
             if molecule is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
@@ -115,7 +125,7 @@ class DisclosureService:
                     ValidationError("Only undisclosed molecules can be disclosed")
                 )
 
-            # --- Create disclosure request ---
+            # 2. Create disclosure request and move to PROCESSING
             dr = DisclosureRequest.create(
                 workspace_id=input.workspace_id,
                 molecule_id=input.molecule_id,
@@ -127,14 +137,13 @@ class DisclosureService:
             )
             dr.start_processing()
 
-            # --- Process SMILES ---
-            process_result = self._structure_processor.process(input.disclosed_smiles)
+            # 3. Handle structure processing failure
             if isinstance(process_result, Failure):
-                # Reject disclosure if structure processing fails
                 reason = str(process_result.failure())
                 dr.reject(reason=reason)
                 await self._disclosure_repo.save(dr)
                 events = await self._uow.commit()
+
                 await self._dispatcher.dispatch_all(events)
                 return Failure(
                     ValidationError(f"Structure processing failed: {reason}")
@@ -144,7 +153,7 @@ class DisclosureService:
             canonical_smiles = processed.structure.smiles
             inchi_key = processed.structure.inchi_key
 
-            # --- Check for existing molecule with same InChIKey ---
+            # 4. Check for existing molecule with same InChIKey
             existing = await self._molecule_repo.find_by_inchi_key(
                 input.workspace_id, inchi_key
             )
@@ -164,20 +173,14 @@ class DisclosureService:
                 await self._molecule_repo.save(molecule)
                 await self._disclosure_repo.save(dr)
                 events = await self._uow.commit()
-                await self._dispatcher.dispatch_all(events)
-
-                return Success(
-                    DisclosureOutcome(
-                        disclosure_request=dr,
-                        was_merged=False,
-                    )
+                outcome = DisclosureOutcome(
+                    disclosure_request=dr,
+                    was_merged=False,
                 )
 
-            # ---- Path B: merge needed ----
-            target_molecule_id = existing.id
-
-            # If auto_approve is False, pause for user confirmation
-            if not input.auto_approve:
+            elif not input.auto_approve:
+                # ---- Path B1: merge needed, pause for confirmation ----
+                target_molecule_id = existing.id
                 dr.mark_pending_confirmation(
                     canonical_smiles=canonical_smiles,
                     inchi_key=inchi_key,
@@ -185,55 +188,61 @@ class DisclosureService:
                 )
                 await self._disclosure_repo.save(dr)
                 events = await self._uow.commit()
-                await self._dispatcher.dispatch_all(events)
-                return Success(
-                    DisclosureOutcome(
-                        disclosure_request=dr,
-                        was_merged=False,
-                        needs_confirmation=True,
-                        matched_molecule_id=target_molecule_id,
-                    )
-                )
-
-            # Execute merge within the SAME transaction for atomicity.
-            # Save the disclosure request FIRST so the FK from
-            # merge_events.disclosure_request_id is satisfiable.
-            await self._disclosure_repo.save(dr)
-
-            merge_result = await self._merge_service.merge_in_transaction(
-                MergeCommand(
-                    workspace_id=input.workspace_id,
-                    source_molecule_id=input.molecule_id,
-                    target_molecule_id=target_molecule_id,
-                    reason=MergeReason.DISCLOSURE_RESOLVED,
-                    merged_by=input.requested_by,
-                    disclosure_request_id=dr.id,
-                    notes=input.notes,
-                ),
-            )
-
-            if isinstance(merge_result, Success):
-                dr.resolve_as_merged(
-                    canonical_smiles=canonical_smiles,
-                    inchi_key=inchi_key,
-                    resolved_to_molecule_id=target_molecule_id,
-                )
-            else:
-                dr.mark_conflict(
-                    reason=f"Merge failed: {merge_result.failure().message}"
-                )
-
-            await self._disclosure_repo.save(dr)
-            events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-
-            if isinstance(merge_result, Failure):
-                return Failure(merge_result.failure())
-
-            return Success(
-                DisclosureOutcome(
+                outcome = DisclosureOutcome(
                     disclosure_request=dr,
-                    was_merged=True,
-                    merged_into_molecule_id=target_molecule_id,
+                    was_merged=False,
+                    needs_confirmation=True,
+                    matched_molecule_id=target_molecule_id,
                 )
-            )
+
+            else:
+                # ---- Path B2: merge needed, auto-approve ----
+                target_molecule_id = existing.id
+
+                # Execute merge within the SAME transaction for atomicity.
+                # Save the disclosure request FIRST so the FK from
+                # merge_events.disclosure_request_id is satisfiable.
+                await self._disclosure_repo.save(dr)
+
+                merge_result = await self._merge_service.merge_in_transaction(
+                    MergeCommand(
+                        workspace_id=input.workspace_id,
+                        source_molecule_id=input.molecule_id,
+                        target_molecule_id=target_molecule_id,
+                        reason=MergeReason.DISCLOSURE_RESOLVED,
+                        merged_by=input.requested_by,
+                        disclosure_request_id=dr.id,
+                        notes=input.notes,
+                    ),
+                )
+
+                if isinstance(merge_result, Success):
+                    dr.resolve_as_merged(
+                        canonical_smiles=canonical_smiles,
+                        inchi_key=inchi_key,
+                        resolved_to_molecule_id=target_molecule_id,
+                    )
+                else:
+                    dr.mark_conflict(
+                        reason=f"Merge failed: {merge_result.failure().message}"
+                    )
+
+                await self._disclosure_repo.save(dr)
+                events = await self._uow.commit()
+
+                if isinstance(merge_result, Failure):
+                    merge_failure = merge_result.failure()
+                else:
+                    outcome = DisclosureOutcome(
+                        disclosure_request=dr,
+                        was_merged=True,
+                        merged_into_molecule_id=target_molecule_id,
+                    )
+
+        await self._dispatcher.dispatch_all(events)
+
+        if merge_failure is not None:
+            return Failure(merge_failure)
+
+        assert outcome is not None  # merge_failure guard above ensures this
+        return Success(outcome)

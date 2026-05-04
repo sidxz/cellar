@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from chem_vault.domain.screening_assay.compound_flag import CompoundFlag, FlagType
-from chem_vault.interface.dependencies import AuthDep, UoWDep
+from chem_vault.application.screening.create_compound_flag import CreateCompoundFlagCommand
+from chem_vault.application.screening.delete_compound_flag import DeleteCompoundFlagCommand
+from chem_vault.application.screening.list_compound_flags import ListCompoundFlagsQuery
+from chem_vault.domain.screening_assay.compound_flag import CompoundFlag
+from chem_vault.interface.dependencies import (
+    AuthDep,
+    CreateCompoundFlagDep,
+    DeleteCompoundFlagDep,
+    ListCompoundFlagsDep,
+)
+from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["compound-flags"])
 
@@ -61,15 +70,13 @@ class CreateFlagRequest(BaseModel):
 async def list_flags(
     protocol_id: uuid.UUID,
     auth: AuthDep,
-    uow: UoWDep,
+    use_case: ListCompoundFlagsDep,
 ) -> list[CompoundFlagResponse]:
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
-        SQLAlchemyCompoundFlagRepository,
+    query = ListCompoundFlagsQuery(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
     )
-
-    async with uow as u:
-        repo = SQLAlchemyCompoundFlagRepository(u)
-        flags = await repo.list_by_protocol(auth.workspace_id, protocol_id)
+    flags = result_to_response(await use_case(query))
     return [CompoundFlagResponse.from_domain(f) for f in flags]
 
 
@@ -82,25 +89,16 @@ async def create_flag(
     protocol_id: uuid.UUID,
     body: CreateFlagRequest,
     auth: AuthDep,
-    uow: UoWDep,
+    use_case: CreateCompoundFlagDep,
 ) -> CompoundFlagResponse:
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
-        SQLAlchemyCompoundFlagRepository,
-    )
-
-    flag = CompoundFlag(
+    command = CreateCompoundFlagCommand(
         workspace_id=auth.workspace_id,
         molecule_id=body.molecule_id,
         protocol_id=protocol_id,
-        flagged_by=auth.user_id,
-        flag_type=FlagType(body.flag_type),
+        flag_type=body.flag_type,
         note=body.note,
-        created_at=datetime.now(timezone.utc),
     )
-    async with uow as u:
-        repo = SQLAlchemyCompoundFlagRepository(u)
-        await repo.save(flag)
-        await u.commit()
+    flag = result_to_response(await use_case(command, auth=auth))
     return CompoundFlagResponse.from_domain(flag)
 
 
@@ -109,13 +107,10 @@ async def delete_flag(
     protocol_id: uuid.UUID,
     flag_id: uuid.UUID,
     auth: AuthDep,
-    uow: UoWDep,
+    use_case: DeleteCompoundFlagDep,
 ) -> None:
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
-        SQLAlchemyCompoundFlagRepository,
+    command = DeleteCompoundFlagCommand(
+        workspace_id=auth.workspace_id,
+        flag_id=flag_id,
     )
-
-    async with uow as u:
-        repo = SQLAlchemyCompoundFlagRepository(u)
-        await repo.delete(auth.workspace_id, flag_id)
-        await u.commit()
+    result_to_response(await use_case(command, auth=auth))

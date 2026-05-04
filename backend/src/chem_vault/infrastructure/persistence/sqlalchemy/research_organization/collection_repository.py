@@ -23,7 +23,7 @@ class SQLAlchemyCollectionRepository(
 ):
     model_class = CollectionModel
 
-    def _to_domain(self, model: CollectionModel, *, molecule_count: int = 0) -> Collection:
+    def _to_domain(self, model: CollectionModel) -> Collection:
         return Collection(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -32,12 +32,18 @@ class SQLAlchemyCollectionRepository(
             project_id=model.project_id,
             owned_by_org_id=model.owned_by_org_id,
             created_by=model.created_by,
-            molecule_count=molecule_count,
+            molecule_count=0,
             visibility=CollectionVisibility(model.visibility),
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
         )
+
+    def _to_domain_with_count(self, model: CollectionModel, molecule_count: int) -> Collection:
+        """Map model to domain with an explicit molecule count."""
+        entity = self._to_domain(model)
+        entity.molecule_count = molecule_count
+        return entity
 
     def _to_model(self, aggregate: Collection) -> CollectionModel:
         return CollectionModel(
@@ -78,7 +84,7 @@ class SQLAlchemyCollectionRepository(
         if model is None:
             return None
         count = await self.count_molecules(workspace_id, id)
-        domain_entity = self._to_domain(model, molecule_count=count)
+        domain_entity = self._to_domain_with_count(model, count)
         self._uow.track(domain_entity)
         return domain_entity
 
@@ -112,10 +118,12 @@ class SQLAlchemyCollectionRepository(
         stmt = stmt.order_by(CollectionModel.name)
 
         result = await self._session.execute(stmt)
-        return [
-            self._to_domain(row[0], molecule_count=row[1])
-            for row in result.all()
-        ]
+        collections = []
+        for row in result.all():
+            entity = self._to_domain_with_count(row[0], row[1])
+            self._uow.track(entity)
+            collections.append(entity)
+        return collections
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(CollectionModel).where(
@@ -227,10 +235,12 @@ class SQLAlchemyCollectionRepository(
             .order_by(CollectionModel.name)
         )
         result = await self._session.execute(stmt)
-        return [
-            self._to_domain(row[0], molecule_count=row[1])
-            for row in result.all()
-        ]
+        collections = []
+        for row in result.all():
+            entity = self._to_domain_with_count(row[0], row[1])
+            self._uow.track(entity)
+            collections.append(entity)
+        return collections
 
     async def compose_molecule_ids(
         self,

@@ -30,6 +30,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
@@ -85,12 +86,14 @@ class ImportRunReadouts:
         protocol_repo: ProtocolRepository,
         readout_data_repo: ReadoutDataRepository,
         batch_repo: BatchRepository,
+        dispatcher: EventDispatcherProtocol | None = None,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
         self._readout_data_repo = readout_data_repo
         self._batch_repo = batch_repo
+        self._dispatcher = dispatcher
 
     async def __call__(
         self,
@@ -261,7 +264,10 @@ class ImportRunReadouts:
         if entities:
             await self._readout_data_repo.save_bulk(entities)
 
-        await self._uow.commit()
+        events = await self._uow.commit()
+
+        if self._dispatcher and events:
+            await self._dispatcher.dispatch_all(events)
         return Success(result)
 
 

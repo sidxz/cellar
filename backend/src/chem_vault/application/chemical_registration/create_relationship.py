@@ -89,6 +89,6 @@ class CreateRelationship:
 
             await self._relationship_repo.save(rel)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
 
-            return Success(rel)
+        await self._dispatcher.dispatch_all(events)
+        return Success(rel)

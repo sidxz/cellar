@@ -6,7 +6,7 @@ import uuid
 
 from sqlalchemy import or_, select
 
-from chem_vault.application.shared.pagination import PageResult
+from chem_vault.domain.shared.pagination import PageResult
 from chem_vault.domain.inventory.enums import ContainerType, SampleStatus
 from chem_vault.domain.inventory.sample import Sample
 from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit

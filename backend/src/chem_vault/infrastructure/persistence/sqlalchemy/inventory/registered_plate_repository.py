@@ -55,10 +55,7 @@ class SQLAlchemyRegisteredPlateRepository(
             .order_by(RegisteredPlateModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
-        for p in plates:
-            self._uow.track(p)
-        return plates
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_children(
         self, workspace_id: uuid.UUID, parent_plate_id: uuid.UUID
@@ -72,10 +69,7 @@ class SQLAlchemyRegisteredPlateRepository(
             .order_by(RegisteredPlateModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
-        for p in plates:
-            self._uow.track(p)
-        return plates
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_project(
         self, workspace_id: uuid.UUID, project_id: uuid.UUID
@@ -89,10 +83,7 @@ class SQLAlchemyRegisteredPlateRepository(
             .order_by(RegisteredPlateModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
-        for p in plates:
-            self._uow.track(p)
-        return plates
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def search(
         self,
@@ -127,10 +118,7 @@ class SQLAlchemyRegisteredPlateRepository(
             stmt = stmt.where(RegisteredPlateModel.project_id == project_id)
         stmt = stmt.order_by(RegisteredPlateModel.created_at.desc())
         result = await self._session.execute(stmt)
-        plates = [self._to_domain_tracked(m) for m in result.scalars().all()]
-        for p in plates:
-            self._uow.track(p)
-        return plates
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._session.get(RegisteredPlateModel, id)
@@ -154,6 +142,8 @@ class SQLAlchemyRegisteredPlateRepository(
             well_map=model.well_map if model.well_map is not None else {},
             storage_location_id=model.storage_location_id,
             parent_plate_id=model.parent_plate_id,
+            project_id=model.project_id,
+            template_id=model.template_id,
             notes=model.notes,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -173,6 +163,8 @@ class SQLAlchemyRegisteredPlateRepository(
             well_map=aggregate.well_map if aggregate.well_map else None,
             storage_location_id=aggregate.storage_location_id,
             parent_plate_id=aggregate.parent_plate_id,
+            project_id=aggregate.project_id,
+            template_id=aggregate.template_id,
             notes=aggregate.notes,
             version=aggregate.version,
         )
@@ -188,4 +180,6 @@ class SQLAlchemyRegisteredPlateRepository(
         model.well_map = aggregate.well_map if aggregate.well_map else None
         model.storage_location_id = aggregate.storage_location_id
         model.parent_plate_id = aggregate.parent_plate_id
+        model.project_id = aggregate.project_id
+        model.template_id = aggregate.template_id
         model.notes = aggregate.notes

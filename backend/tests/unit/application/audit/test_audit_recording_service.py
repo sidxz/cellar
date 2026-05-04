@@ -176,6 +176,6 @@ class TestInferOperationType:
 
     def test_unknown_event_defaults_to_data_entry(self) -> None:
         event = DomainEvent(
-            aggregate_id=uuid.uuid4(), aggregate_type="unknown"
+            aggregate_id=uuid.uuid4(), aggregate_type="unknown", workspace_id=uuid.uuid4()
         )
         assert _infer_operation_type(event) == OperationType.DATA_ENTRY

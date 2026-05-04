@@ -85,7 +85,6 @@ class SampleQuarantined(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class StorageLocationCreated(DomainEvent):
-    workspace_id: uuid.UUID
     name: str
     location_type: str
     parent_id: uuid.UUID | None = None
@@ -144,6 +143,12 @@ class ShipmentDelivered(DomainEvent):
 # ---------------------------------------------------------------------------
 # Synthesis request events
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class SynthesisRequestCreated(DomainEvent):
+    molecule_id: uuid.UUID
+    requested_by: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -243,7 +248,6 @@ class PlateDisposed(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CddPlateImportStarted(DomainEvent):
-    workspace_id: uuid.UUID
     cdd_vault_id: str
     submitted_by: uuid.UUID
 

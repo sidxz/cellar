@@ -8,6 +8,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, File, Query, UploadFile
 from pydantic import BaseModel
 
+from chem_vault.application.screening.fit_curves_for_run import FitCurvesForRun, FitCurvesForRunQuery
+from chem_vault.application.screening.get_plate_map import GetPlateMap, GetPlateMapQuery
 from chem_vault.application.screening.import_run_readouts import (
     ImportRunReadouts,
     ImportRunReadoutsCommand,
@@ -21,15 +23,15 @@ from chem_vault.application.screening.plate_setup import (
     SetUpRunPlateCommand,
 )
 from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
-from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
+from chem_vault.domain.shared.errors import DomainError
 from chem_vault.interface.dependencies import (
     AuthDep,
-    FitDoseResponseCurvesDep,
+    FitCurvesForRunDep,
+    GetPlateMapDep,
     ImportRunReadoutsDep,
     ParsePlateMapFileDep,
     ReadoutCalculationEngineDep,
     SetUpRunPlateDep,
-    UoWDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -181,102 +183,42 @@ async def set_up_run_plate(
 async def get_plate_map(
     run_id: uuid.UUID,
     auth: AuthDep,
-    uow: UoWDep,
+    uc: GetPlateMapDep,
 ) -> PlateMapResponse:
     """Return structured plate map data with molecule names and concentrations.
 
     Loads the run's plates and wells, then batch-resolves molecule names from
     the chemical registration store for display.
     """
-    from sqlalchemy import select
-
-    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
-    from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
-        PlateModel,
-        RunModel,
-        WellModel,
+    result = await uc(
+        GetPlateMapQuery(workspace_id=auth.workspace_id, run_id=run_id),
+        auth=auth,
     )
+    data = result_to_response(result)
 
-    async with uow:
-        # Load run (workspace scoped)
-        run_stmt = select(RunModel).where(
-            RunModel.id == run_id,
-            RunModel.workspace_id == auth.workspace_id,
+    plates_data = []
+    for plate in data.plates:
+        well_entries = [
+            WellMapEntry(
+                well_id=w.well_id,
+                row=w.row,
+                column=w.column,
+                well_type=w.well_type,
+                batch_id=w.batch_id,
+                molecule_id=w.molecule_id,
+                molecule_name=w.molecule_name,
+                concentration_value=w.concentration_value,
+                concentration_unit=w.concentration_unit,
+            ).model_dump()
+            for w in plate.wells
+        ]
+        plates_data.append(
+            {
+                "plate_id": str(plate.plate_id),
+                "plate_number": plate.plate_number,
+                "wells": well_entries,
+            }
         )
-        run_row = await uow.session.execute(run_stmt)
-        run_model = run_row.scalar_one_or_none()
-        if run_model is None:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Run not found")
-
-        # Load plates for this run
-        plates_stmt = select(PlateModel).where(PlateModel.run_id == run_id)
-        plates_result = await uow.session.execute(plates_stmt)
-        plates = plates_result.scalars().all()
-
-        plate_ids = [p.id for p in plates]
-
-        # Load wells for all plates
-        wells: list[WellModel] = []
-        if plate_ids:
-            wells_stmt = select(WellModel).where(WellModel.plate_id.in_(plate_ids))
-            wells_result = await uow.session.execute(wells_stmt)
-            wells = list(wells_result.scalars().all())
-
-        # Batch-resolve batch → molecule_id
-        batch_ids = list({w.batch_id for w in wells if w.batch_id is not None})
-        batch_to_mol: dict[uuid.UUID, uuid.UUID] = {}
-        mol_names: dict[uuid.UUID, str] = {}
-
-        if batch_ids:
-            batch_stmt = select(BatchModel.id, BatchModel.molecule_id).where(
-                BatchModel.id.in_(batch_ids)
-            )
-            batch_rows = await uow.session.execute(batch_stmt)
-            batch_to_mol = {row[0]: row[1] for row in batch_rows}
-
-            mol_ids = list(set(batch_to_mol.values()))
-            if mol_ids:
-                mol_stmt = select(MoleculeModel.id, MoleculeModel.name).where(
-                    MoleculeModel.id.in_(mol_ids)
-                )
-                mol_rows = await uow.session.execute(mol_stmt)
-                mol_names = {row[0]: row[1] for row in mol_rows}
-
-        # Build plate_id → wells mapping
-        plate_wells: dict[uuid.UUID, list[WellModel]] = {p.id: [] for p in plates}
-        for w in wells:
-            plate_wells[w.plate_id].append(w)
-
-        plates_data = []
-        for plate in sorted(plates, key=lambda p: p.plate_number):
-            well_entries = []
-            for well in sorted(plate_wells[plate.id], key=lambda w: (w.row, w.column)):
-                molecule_id = batch_to_mol.get(well.batch_id) if well.batch_id else None
-                conc_value: float | None = well.concentration_value
-                conc_unit: str | None = well.concentration_unit
-
-                well_entries.append(
-                    WellMapEntry(
-                        well_id=well.id,
-                        row=well.row,
-                        column=well.column,
-                        well_type=well.well_type,
-                        batch_id=well.batch_id,
-                        molecule_id=molecule_id,
-                        molecule_name=mol_names.get(molecule_id) if molecule_id else None,
-                        concentration_value=conc_value,
-                        concentration_unit=conc_unit,
-                    ).model_dump()
-                )
-            plates_data.append(
-                {
-                    "plate_id": str(plate.id),
-                    "plate_number": plate.plate_number,
-                    "wells": well_entries,
-                }
-            )
 
     return PlateMapResponse(run_id=run_id, plates=plates_data)
 
@@ -354,49 +296,21 @@ class FitCurvesResponse(BaseModel):
 async def fit_curves_for_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    fit_uc: FitDoseResponseCurvesDep,
-    uow: UoWDep,
+    uc: FitCurvesForRunDep,
 ) -> FitCurvesResponse:
     """Trigger dose-response curve fitting for a run.
 
-    Calls FitDoseResponseCurves directly — loads run (with wells),
-    protocol, and readout data, then fits 4PL curves.  Idempotent:
-    deletes previous curves before re-fitting.
+    Loads run (with wells), protocol, and readout data, then fits 4PL
+    curves.  Idempotent: deletes previous curves before re-fitting.
     """
-    from chem_vault.interface.error_handlers import result_to_response
-
-    # Load run, protocol, readout data through repos
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import SQLAlchemyRunRepository
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import SQLAlchemyProtocolRepository
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import SQLAlchemyReadoutDataRepository
-
-    async with uow as u:
-        run_repo = SQLAlchemyRunRepository(u)
-        proto_repo = SQLAlchemyProtocolRepository(u)
-        rd_repo = SQLAlchemyReadoutDataRepository(u)
-
-        run = await run_repo.find_by_id_in_workspace(auth.workspace_id, run_id)
-        if run is None:
-            from chem_vault.domain.shared.errors import NotFoundError
-            raise NotFoundError("Run", str(run_id))
-
-        protocol = await proto_repo.find_by_id_in_workspace(auth.workspace_id, run.protocol_id)
-        if protocol is None:
-            from chem_vault.domain.shared.errors import NotFoundError
-            raise NotFoundError("Protocol", str(run.protocol_id))
-
-        readout_data = await rd_repo.find_by_run(auth.workspace_id, run_id)
-
-    # Fit curves (uses its own UoW internally)
     try:
-        result = await fit_uc.fit_for_run(
-            run=run, protocol=protocol, readout_data=readout_data
+        result = await uc(
+            FitCurvesForRunQuery(workspace_id=auth.workspace_id, run_id=run_id),
+            auth=auth,
         )
         curves = result_to_response(result)
         return FitCurvesResponse(curves_fitted=len(curves))
-    except Exception as exc:
-        import structlog
-        structlog.get_logger().warning("fit_curves_failure", run_id=str(run_id), error=str(exc))
+    except DomainError as exc:
         return FitCurvesResponse(
             curves_fitted=0,
             warnings=[FitWarning(reason=str(exc))],

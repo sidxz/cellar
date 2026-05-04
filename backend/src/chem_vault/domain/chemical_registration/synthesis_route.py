@@ -98,6 +98,12 @@ class ReactionStep(Entity):
         self.batch_id = batch_id
         self.notes = notes
 
+    def _set_outcome(self, outcome: ReactionOutcome, batch_id: uuid.UUID | None = None) -> None:
+        """Record the outcome for this step."""
+        self.outcome = outcome
+        self.batch_id = batch_id
+        self.updated_at = datetime.now(UTC)
+
 
 # ---------------------------------------------------------------------------
 # SynthesisRoute — aggregate root
@@ -197,6 +203,7 @@ class SynthesisRoute(AggregateRoot):
             SynthesisRouteCreated(
                 aggregate_id=route.id,
                 aggregate_type="SynthesisRoute",
+                workspace_id=workspace_id,
                 target_molecule_id=target_molecule_id,
                 route_type=route_type.value,
                 source=source.value,
@@ -226,15 +233,14 @@ class SynthesisRoute(AggregateRoot):
         step = next((s for s in self._steps if s.id == step_id), None)
         if step is None:
             raise ValidationError(f"Step {step_id} not found in route")
-        step.outcome = outcome
-        if batch_id is not None:
-            step.batch_id = batch_id
+        step._set_outcome(outcome, batch_id)
         self._recompute_overall_yield()
         self.updated_at = datetime.now(UTC)
         self.register_event(
             ReactionStepOutcomeRecorded(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRoute",
+                workspace_id=self.workspace_id,
                 step_id=step_id,
                 yield_percent=outcome.yield_percent,
                 batch_id=batch_id,
@@ -254,6 +260,7 @@ class SynthesisRoute(AggregateRoot):
             SynthesisRouteValidated(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRoute",
+                workspace_id=self.workspace_id,
                 total_steps=self.total_steps,
                 overall_yield=self.overall_yield,
             )
@@ -267,6 +274,7 @@ class SynthesisRoute(AggregateRoot):
             SynthesisRoutePreferred(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRoute",
+                workspace_id=self.workspace_id,
                 target_molecule_id=self.target_molecule_id,
                 previous_preferred_id=previous_preferred_id,
             )
@@ -280,6 +288,7 @@ class SynthesisRoute(AggregateRoot):
             SynthesisRouteDeprecated(
                 aggregate_id=self.id,
                 aggregate_type="SynthesisRoute",
+                workspace_id=self.workspace_id,
                 reason=reason,
             )
         )

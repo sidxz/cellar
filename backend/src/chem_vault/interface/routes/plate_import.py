@@ -252,7 +252,7 @@ async def list_import_templates(
     uc: Annotated[ListImportTemplates, Depends(_list_import_templates)],
 ) -> list[ImportTemplateResponse]:
     templates = result_to_response(
-        await uc(ListImportTemplatesQuery(workspace_id=auth.workspace_id))
+        await uc(ListImportTemplatesQuery(workspace_id=auth.workspace_id), auth=auth)
     )
     return [ImportTemplateResponse.from_domain(t) for t in templates]
 

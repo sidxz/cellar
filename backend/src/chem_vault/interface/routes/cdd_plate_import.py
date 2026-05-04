@@ -6,18 +6,16 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio.client import WorkflowExecutionStatus
 from temporalio.service import RPCError, RPCStatusCode
 
 from chem_vault.application.auth import require_editor
+from chem_vault.application.cdd_import.get_cdd_plate_import_status import (
+    GetCddPlateImportStatusQuery,
+)
 from chem_vault.application.cdd_import.start_cdd_plate_import import (
     StartCddPlateImportCommand,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_repository import (
-    SQLAlchemyCddPlateImportRepository,
-)
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
 from chem_vault.infrastructure.temporal.workflows.cdd_plate_import import (
     CddPlateImportWorkflow,
@@ -26,8 +24,10 @@ from chem_vault.infrastructure.temporal.workflows.cdd_plate_import import (
 from chem_vault.interface.dependencies import (
     AuthDep,
     ForceFailCddPlateImportDep,
+    GetCddPlateImportStatusFromDbDep,
     ListCddPlateImportsDep,
     StartCddPlateImportDep,
+    SyncFailedCddPlateImportDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -160,6 +160,8 @@ async def get_cdd_plate_import_status(
     request: Request,
     auth: AuthDep,
     workflow_id: str,
+    db_status_uc: GetCddPlateImportStatusFromDbDep,
+    sync_failed_uc: SyncFailedCddPlateImportDep,
 ) -> CddPlateImportStatusResponse:
     temporal_client = _get_temporal_client(request)
     _verify_workspace_prefix(workflow_id, auth.workspace_id)
@@ -179,11 +181,10 @@ async def get_cdd_plate_import_status(
                     WorkflowExecutionStatus.CANCELED,
                 ):
                     status = "failed"
-                    await _sync_failed_import_to_db(
-                        request, auth.workspace_id, progress.import_id
-                    )
+                    await sync_failed_uc(auth.workspace_id, progress.import_id)
             except Exception:
-                pass
+                import structlog
+                structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id, detail="describe() failed")
 
         return CddPlateImportStatusResponse(
             import_id=progress.import_id,
@@ -201,28 +202,26 @@ async def get_cdd_plate_import_status(
         if exc.status == RPCStatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
     except Exception:
-        pass
+        import structlog
+        structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id)
 
-    # Fallback: DB
-    container = request.app.state.container
-    session_factory = container[async_sessionmaker]
-    uow = AsyncUnitOfWork(session_factory)
-    repo = SQLAlchemyCddPlateImportRepository(uow)
-    async with uow:
-        imp = await repo.find_by_workflow_id_in_workspace(auth.workspace_id, workflow_id)
-    if imp is None:
-        raise HTTPException(status_code=404, detail=f"Import not found: {workflow_id}")
+    # Fallback: read from DB (handles completed/failed workflows and code-change replays)
+    query = GetCddPlateImportStatusQuery(
+        workspace_id=auth.workspace_id, workflow_id=workflow_id
+    )
+    result = await db_status_uc(query, auth=auth)
+    data = result_to_response(result)
     return CddPlateImportStatusResponse(
-        import_id=str(imp.id),
-        status=imp.status.value,
-        total_count=imp.total_count,
-        plates_registered=imp.plates_registered,
-        plates_duplicate=imp.plates_duplicate,
-        plates_error=imp.plates_error,
-        wells_mapped=imp.wells_mapped,
-        wells_unresolved=imp.wells_unresolved,
-        current_offset=imp.last_processed_offset,
-        pages_processed=0,
+        import_id=data.import_id,
+        status=data.status,
+        total_count=data.total_count,
+        plates_registered=data.plates_registered,
+        plates_duplicate=data.plates_duplicate,
+        plates_error=data.plates_error,
+        wells_mapped=data.wells_mapped,
+        wells_unresolved=data.wells_unresolved,
+        current_offset=data.current_offset,
+        pages_processed=data.pages_processed,
     )
 
 
@@ -277,26 +276,3 @@ def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
         raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
 
 
-async def _sync_failed_import_to_db(
-    request: Request, workspace_id: uuid.UUID, import_id: str
-) -> None:
-    if not import_id:
-        return
-    try:
-        container = request.app.state.container
-        session_factory = container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
-        repo = SQLAlchemyCddPlateImportRepository(uow)
-        async with uow:
-            imp = await repo.find_by_id_in_workspace(
-                workspace_id, uuid.UUID(import_id)
-            )
-            if imp is None:
-                return
-            if imp.status.value in ("completed", "completed_with_errors", "failed"):
-                return
-            imp.fail("Workflow crashed (detected by status poll)")
-            await repo.save(imp)
-            await uow.commit()
-    except Exception:
-        pass

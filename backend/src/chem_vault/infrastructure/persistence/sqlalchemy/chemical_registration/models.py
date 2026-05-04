@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, datetime
 
 from sqlalchemy import (
     Date,
@@ -63,7 +64,7 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     pka: Mapped[float | None] = mapped_column(Float)
     logs: Mapped[float | None] = mapped_column(Float)
     prediction_source: Mapped[str | None] = mapped_column(String(100))
-    predicted_at: Mapped[str | None] = mapped_column(DateTime(timezone=True))
+    predicted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Fingerprints (binary)
     fp_morgan: Mapped[bytes | None] = mapped_column(LargeBinary)
@@ -92,8 +93,8 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     structure_image_key: Mapped[str | None] = mapped_column(String(500))
     tags: Mapped[list | None] = mapped_column(JSON)
     custom_fields: Mapped[dict | None] = mapped_column(JSON)
-    invention_date: Mapped[str | None] = mapped_column(Date)
-    disclosed_at: Mapped[str | None] = mapped_column(DateTime(timezone=True))
+    invention_date: Mapped[date | None] = mapped_column(Date)
+    disclosed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disclosed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     merged_into_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     originating_org_id: Mapped[uuid.UUID] = mapped_column(
@@ -154,7 +155,7 @@ class MixtureComponentModel(Base, EntityModelMixin):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
-class MoleculeRelationshipModel(Base, EntityModelMixin, WorkspaceIdMixin):
+class MoleculeRelationshipModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     """Semantic relationships between molecules."""
 
     __tablename__ = "molecule_relationships"

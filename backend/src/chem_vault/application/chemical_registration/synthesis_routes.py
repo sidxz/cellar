@@ -160,9 +160,10 @@ class CreateSynthesisRoute:
     async def __call__(
         self, input: CreateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required to create a synthesis route"))
         require_editor(auth)
+        if auth is None:
+            return Failure(AuthorizationError("Authentication required"))
+
         async with self._uow:
             molecule = await self._molecule_repo.find_by_id_in_workspace(input.workspace_id, input.target_molecule_id)
             if molecule is None:
@@ -181,8 +182,9 @@ class CreateSynthesisRoute:
             )
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class GetSynthesisRoute:
@@ -272,8 +274,9 @@ class AddReactionStep:
             route.add_step(step)
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class RecordStepOutcome:
@@ -305,8 +308,9 @@ class RecordStepOutcome:
             route.record_step_outcome(input.step_id, outcome, batch_id=input.batch_id)
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class ValidateSynthesisRoute:
@@ -331,8 +335,9 @@ class ValidateSynthesisRoute:
             route.validate_route()
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class SetPreferredRoute:
@@ -366,8 +371,9 @@ class SetPreferredRoute:
             route.set_preferred(previous_preferred_id=previous_id)
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class DeprecateSynthesisRoute:
@@ -392,8 +398,9 @@ class DeprecateSynthesisRoute:
             route.deprecate(reason=input.reason)
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class UpdateSynthesisRoute:
@@ -428,8 +435,9 @@ class UpdateSynthesisRoute:
 
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)
 
 
 class DeleteSynthesisRoute:
@@ -457,8 +465,9 @@ class DeleteSynthesisRoute:
 
             await self._route_repo.delete(route.workspace_id, route.id)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(None)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
 
 
 class RemoveReactionStep:
@@ -487,5 +496,6 @@ class RemoveReactionStep:
             route.remove_step(input.step_id)
             await self._route_repo.save(route)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(route)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(route)

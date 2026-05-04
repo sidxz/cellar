@@ -90,4 +90,13 @@ async def list_workspace_members(
         members = await auth.search_workspace_members(q, limit=20)
     else:
         members = await auth.list_members(limit=50)
-    return [WorkspaceMemberResponse(**m) for m in members]
+    return [
+        WorkspaceMemberResponse(
+            user_id=m["user_id"],
+            email=m["email"],
+            name=m["name"],
+            avatar_url=m.get("avatar_url"),
+            role=m["role"],
+        )
+        for m in members
+    ]

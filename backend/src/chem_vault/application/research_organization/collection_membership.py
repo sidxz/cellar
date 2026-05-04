@@ -106,14 +106,15 @@ class AddMoleculesToCollection:
                 )
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(
-                MembershipResult(
-                    added=added_ids,
-                    already_present=already_present,
-                    unresolved=unresolved,
-                )
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(
+            MembershipResult(
+                added=added_ids,
+                already_present=already_present,
+                unresolved=unresolved,
             )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -169,8 +170,9 @@ class RemoveMoleculesFromCollection:
                 )
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(removed_count)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(removed_count)
 
 
 # ---------------------------------------------------------------------------

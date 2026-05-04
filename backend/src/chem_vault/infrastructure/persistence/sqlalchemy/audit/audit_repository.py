@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from chem_vault.domain.audit_compliance.models import (
@@ -26,18 +26,19 @@ from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_models import 
 class SQLAlchemyAuditRepository:
     """Append-only audit repository — no update, no delete."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
 
     async def save(self, operation: AuditOperation) -> None:
         """Persist an audit operation with entries and optional signature.
 
-        This repo uses its own dedicated session (not shared with UoW),
-        so commit() is safe — it only affects this repo's transaction.
+        Uses its own short-lived session (not shared with UoW) so that
+        audit records are committed independently of business transactions.
         """
         model = self._to_operation_model(operation)
-        self._session.add(model)
-        await self._session.commit()
+        async with self._session_factory() as session:
+            session.add(model)
+            await session.commit()
 
     async def find_by_id(self, id: uuid.UUID) -> AuditOperation | None:
         """Retrieve an audit operation by ID (with entries + signature eager-loaded)."""
@@ -49,11 +50,12 @@ class SQLAlchemyAuditRepository:
                 selectinload(AuditOperationModel.signature),
             )
         )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-        if model is None:
-            return None
-        return self._to_domain(model)
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            model = result.scalar_one_or_none()
+            if model is None:
+                return None
+            return self._to_domain(model)
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -70,11 +72,12 @@ class SQLAlchemyAuditRepository:
                 selectinload(AuditOperationModel.signature),
             )
         )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-        if model is None:
-            return None
-        return self._to_domain(model)
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            model = result.scalar_one_or_none()
+            if model is None:
+                return None
+            return self._to_domain(model)
 
     async def find_by_entity(
         self, workspace_id: uuid.UUID, entity_type: str, entity_id: uuid.UUID
@@ -93,8 +96,9 @@ class SQLAlchemyAuditRepository:
             )
             .order_by(AuditOperationModel.started_at.desc())
         )
-        result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            return [self._to_domain(m) for m in result.scalars().all()]
 
     async def find_all(
         self,
@@ -121,8 +125,9 @@ class SQLAlchemyAuditRepository:
         if user_id is not None:
             stmt = stmt.where(AuditOperationModel.user_id == user_id)
         stmt = stmt.order_by(AuditOperationModel.started_at.desc()).limit(limit)
-        result = await self._session.execute(stmt)
-        return [self._to_domain(m) for m in result.scalars().all()]
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            return [self._to_domain(m) for m in result.scalars().all()]
 
     # ------------------------------------------------------------------
     # Mapping helpers

@@ -6,6 +6,10 @@ import uuid
 from datetime import UTC, datetime
 
 from chem_vault.domain.chemical_registration.enums import BulkDisclosureStatus
+from chem_vault.domain.chemical_registration.events import (
+    BulkDisclosureCompleted,
+    BulkDisclosureStarted,
+)
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.errors import ValidationError
 
@@ -88,13 +92,25 @@ class BulkDisclosure(AggregateRoot):
         total_count: int,
     ) -> BulkDisclosure:
         """Create a new bulk disclosure in PENDING status."""
-        return cls(
+        bd = cls(
             workspace_id=workspace_id,
             source_file=source_file,
             partner_org_id=partner_org_id,
             submitted_by=submitted_by,
             total_count=total_count,
         )
+        bd.register_event(
+            BulkDisclosureStarted(
+                aggregate_id=bd.id,
+                aggregate_type="BulkDisclosure",
+                workspace_id=workspace_id,
+                source_file=source_file,
+                partner_org_id=partner_org_id,
+                total_count=total_count,
+                submitted_by=submitted_by,
+            )
+        )
+        return bd
 
     # ------------------------------------------------------------------
     # Computed property
@@ -178,3 +194,14 @@ class BulkDisclosure(AggregateRoot):
         self.status = target
         self.completed_at = datetime.now(UTC)
         self.updated_at = datetime.now(UTC)
+        self.register_event(
+            BulkDisclosureCompleted(
+                aggregate_id=self.id,
+                aggregate_type="BulkDisclosure",
+                workspace_id=self.workspace_id,
+                disclosed_count=self.disclosed_count,
+                merged_count=self.merged_count,
+                conflict_count=self.conflict_count,
+                error_count=self.error_count,
+            )
+        )

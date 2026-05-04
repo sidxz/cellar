@@ -37,12 +37,7 @@ class SQLAlchemySynthesisRequestRepository(
             stmt = stmt.where(SynthesisRequestModel.status == status)
         stmt = stmt.order_by(SynthesisRequestModel.created_at.desc())
         result = await self._session.execute(stmt)
-        requests = []
-        for model in result.scalars().all():
-            domain = self._to_domain(model)
-            self._uow.track(domain)
-            requests.append(domain)
-        return requests
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
@@ -56,7 +51,7 @@ class SQLAlchemySynthesisRequestRepository(
             .order_by(SynthesisRequestModel.created_at.desc())
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain(row) for row in result.scalars()]
+        return [self._to_domain_tracked(row) for row in result.scalars()]
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = sa_delete(SynthesisRequestModel).where(

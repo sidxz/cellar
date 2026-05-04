@@ -265,5 +265,6 @@ class BulkCreateReadoutData:
                 await self._repo.save_bulk(entities)
 
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            return Success(result)
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(result)

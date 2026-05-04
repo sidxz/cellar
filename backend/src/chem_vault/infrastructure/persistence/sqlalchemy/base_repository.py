@@ -129,4 +129,7 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
                     entity_type=type(aggregate).__name__,
                     entity_id=str(aggregate.id),
                 )
+            # Sync both the ORM model and the domain aggregate so that a
+            # subsequent session.flush() does not regress the version column.
+            existing.version = loaded_version + 1  # type: ignore[attr-defined]
             aggregate.version = loaded_version + 1

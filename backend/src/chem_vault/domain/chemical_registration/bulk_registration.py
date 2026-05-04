@@ -195,6 +195,7 @@ class BulkRegistration(AggregateRoot):
             BulkRegistrationCompleted(
                 aggregate_id=self.id,
                 aggregate_type="BulkRegistration",
+                workspace_id=self.workspace_id,
                 registered_count=self.registered_count,
                 duplicate_count=self.duplicate_count,
                 error_count=self.error_count,

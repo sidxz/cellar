@@ -13,8 +13,8 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.attachment.repository import AttachmentRepository
-from chem_vault.domain.attachment.storage import StorageClient
-from chem_vault.domain.shared.errors import AuthorizationError, DomainError, NotFoundError
+from chem_vault.application.attachment.storage import StorageClient
+from chem_vault.domain.shared.errors import DomainError, NotFoundError
 
 logger = structlog.get_logger(__name__)
 
@@ -41,8 +41,6 @@ class DeleteAttachment:
     async def __call__(
         self, input: DeleteAttachmentCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required for attachment operations"))
         require_editor(auth)
 
         async with self._uow:
@@ -60,6 +58,7 @@ class DeleteAttachment:
             attachment.delete()
             await self._repo.delete(attachment)
             events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
+
+        await self._dispatcher.dispatch_all(events)
 
         return Success(None)

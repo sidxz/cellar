@@ -258,6 +258,7 @@ class Run(AggregateRoot):
             RunCreated(
                 aggregate_id=run.id,
                 aggregate_type="Run",
+                workspace_id=workspace_id,
                 protocol_id=protocol_id,
                 operator=operator,
             )
@@ -283,6 +284,7 @@ class Run(AggregateRoot):
             RunCompleted(
                 aggregate_id=self.id,
                 aggregate_type="Run",
+                workspace_id=self.workspace_id,
                 plate_count=plate_count,
                 data_point_count=data_point_count,
             )
@@ -297,6 +299,7 @@ class Run(AggregateRoot):
             RunApproved(
                 aggregate_id=self.id,
                 aggregate_type="Run",
+                workspace_id=self.workspace_id,
                 approved_by=approved_by,
             )
         )
@@ -312,6 +315,7 @@ class Run(AggregateRoot):
             RunRejected(
                 aggregate_id=self.id,
                 aggregate_type="Run",
+                workspace_id=self.workspace_id,
                 rejected_by=rejected_by,
                 reason=reason.strip(),
             )
@@ -387,6 +391,7 @@ class Run(AggregateRoot):
             RunLocked(
                 aggregate_id=self.id,
                 aggregate_type="Run",
+                workspace_id=self.workspace_id,
                 locked_by=locked_by,
                 lock_reason=reason.strip(),
             )
@@ -408,6 +413,7 @@ class Run(AggregateRoot):
             RunUnlocked(
                 aggregate_id=self.id,
                 aggregate_type="Run",
+                workspace_id=self.workspace_id,
                 unlocked_by=unlocked_by,
                 reason=reason.strip(),
             )

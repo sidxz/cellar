@@ -291,9 +291,7 @@ class SQLAlchemyMoleculeRepository(
         model = result.scalar_one_or_none()
         if model is None:
             return None
-        domain = self._to_domain(model)
-        self._uow.track(domain)
-        return domain
+        return self._to_domain_tracked(model)
 
     async def find_by_registration_number(
         self, workspace_id: uuid.UUID, reg_number: str
@@ -306,9 +304,7 @@ class SQLAlchemyMoleculeRepository(
         model = result.scalar_one_or_none()
         if model is None:
             return None
-        domain = self._to_domain(model)
-        self._uow.track(domain)
-        return domain
+        return self._to_domain_tracked(model)
 
     async def find_by_identifier(
         self, workspace_id: uuid.UUID, identifier: str
@@ -325,9 +321,7 @@ class SQLAlchemyMoleculeRepository(
         model = result.scalar_one_or_none()
         if model is None:
             return None
-        domain = self._to_domain(model)
-        self._uow.track(domain)
-        return domain
+        return self._to_domain_tracked(model)
 
     async def find_undisclosed_by_identifiers(
         self, workspace_id: uuid.UUID, identifiers: set[str]
@@ -736,7 +730,7 @@ class SQLAlchemyMoleculeRepository(
         )
         result = await self._session.execute(stmt)
         return [
-            (self._to_domain(row[0]), float(row[1]))
+            (self._to_domain_tracked(row[0]), float(row[1]))
             for row in result.all()
         ]
 

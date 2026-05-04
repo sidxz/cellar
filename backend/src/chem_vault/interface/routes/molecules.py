@@ -536,6 +536,53 @@ async def get_molecule_by_identifier(
     return MoleculeResponse.from_domain(mol)
 
 
+# ---------------------------------------------------------------------------
+# Batch structure depiction (must be above /{molecule_id} routes)
+# ---------------------------------------------------------------------------
+
+
+class DepictRequest(BaseModel):
+    smiles_list: list[str]
+    width: int = 150
+    height: int = 100
+
+
+class DepictResponse(BaseModel):
+    """Maps SMILES -> base64 PNG. Missing entries failed to parse."""
+    images: dict[str, str]
+
+
+@router.post("/depict", response_model=DepictResponse)
+async def depict_structures(body: DepictRequest, _auth: AuthDep) -> DepictResponse:
+    """Render 2D structure depictions for a batch of SMILES strings.
+
+    Returns a dict mapping each valid SMILES to a base64-encoded PNG.
+    Invalid SMILES are silently skipped.  Max 200 SMILES per request.
+    """
+    if len(body.smiles_list) > 200:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Max 200 SMILES per request")
+    import base64
+    import io
+
+    from rdkit import Chem
+    from rdkit.Chem import Draw
+
+    images: dict[str, str] = {}
+    for smiles in body.smiles_list:
+        if not smiles or smiles in images:
+            continue
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            continue
+        img = Draw.MolToImage(mol, size=(body.width, body.height))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        images[smiles] = base64.b64encode(buf.getvalue()).decode()
+
+    return DepictResponse(images=images)
+
+
 @router.get("/{molecule_id}", response_model=MoleculeResponse)
 async def get_molecule(
     molecule_id: uuid.UUID,
@@ -543,7 +590,7 @@ async def get_molecule(
     use_case: GetMoleculeDep,
 ) -> MoleculeResponse:
     query = GetMoleculeQuery(workspace_id=auth.workspace_id, molecule_id=molecule_id)
-    mol = result_to_response(await use_case(query))
+    mol = result_to_response(await use_case(query, auth=auth))
     return MoleculeResponse.from_domain(mol)
 
 
@@ -697,47 +744,3 @@ async def list_molecule_projects(
         )
     )
     return result_to_response(result)
-
-
-# ---------------------------------------------------------------------------
-# Batch structure depiction
-# ---------------------------------------------------------------------------
-
-
-class DepictRequest(BaseModel):
-    smiles_list: list[str]
-    width: int = 150
-    height: int = 100
-
-
-class DepictResponse(BaseModel):
-    """Maps SMILES → base64 PNG. Missing entries failed to parse."""
-    images: dict[str, str]
-
-
-@router.post("/depict", response_model=DepictResponse)
-async def depict_structures(body: DepictRequest) -> DepictResponse:
-    """Render 2D structure depictions for a batch of SMILES strings.
-
-    Returns a dict mapping each valid SMILES to a base64-encoded PNG.
-    Invalid SMILES are silently skipped.
-    """
-    import base64
-    import io
-
-    from rdkit import Chem
-    from rdkit.Chem import Draw
-
-    images: dict[str, str] = {}
-    for smiles in body.smiles_list:
-        if not smiles or smiles in images:
-            continue
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            continue
-        img = Draw.MolToImage(mol, size=(body.width, body.height))
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        images[smiles] = base64.b64encode(buf.getvalue()).decode()
-
-    return DepictResponse(images=images)
