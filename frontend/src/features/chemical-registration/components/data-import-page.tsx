@@ -55,6 +55,7 @@ import {
   useForceFailPlateImport,
   usePlateImportHistory,
 } from "../hooks/use-cdd-plate-import";
+import { MOLECULES_KEY } from "../hooks/query-keys";
 
 const TERMINAL_STATUSES = ["completed", "completed_with_errors", "failed"];
 
@@ -100,7 +101,7 @@ export function DataImportPage() {
     if (liveStatus && TERMINAL_STATUSES.includes(liveStatus.status)) {
       setWorkflowId(null);
       qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
-      qc.invalidateQueries({ queryKey: ["molecules"] });
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
 
       if (liveStatus.status === "completed") {
         setCompletionMessage(
@@ -472,7 +473,6 @@ export function DataImportPage() {
 
 /* ---------- Plate import tab ---------- */
 
-const PLATE_TERMINAL = ["completed", "completed_with_errors", "failed"];
 
 function PlateImportTab() {
   const qc = useQueryClient();
@@ -486,7 +486,7 @@ function PlateImportTab() {
   const forceFailPlate = useForceFailPlateImport();
 
   const activePlateImport = plateHistory?.find(
-    (imp) => !PLATE_TERMINAL.includes(imp.status)
+    (imp) => !TERMINAL_STATUSES.includes(imp.status)
   );
 
   useEffect(() => {
@@ -498,7 +498,7 @@ function PlateImportTab() {
   const { data: plateLive } = useCddPlateImportStatus(plateWorkflowId);
 
   useEffect(() => {
-    if (plateLive && PLATE_TERMINAL.includes(plateLive.status)) {
+    if (plateLive && TERMINAL_STATUSES.includes(plateLive.status)) {
       setPlateWorkflowId(null);
       qc.invalidateQueries({ queryKey: ["cdd-plate-import", "history"] });
       qc.invalidateQueries({ queryKey: ["plates"] });
@@ -582,7 +582,7 @@ function PlateImportTab() {
         {isPlateActive && plateLive && (
           <div className="max-w-lg space-y-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {PLATE_TERMINAL.includes(plateLive.status) ? (
+              {TERMINAL_STATUSES.includes(plateLive.status) ? (
                 statusIcon(plateLive.status)
               ) : (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -617,7 +617,7 @@ function PlateImportTab() {
               <CounterCard label="Errors" value={plateLive.plates_error} color="text-destructive" />
             </div>
 
-            {!PLATE_TERMINAL.includes(plateLive.status) && (
+            {!TERMINAL_STATUSES.includes(plateLive.status) && (
               <Button
                 variant="destructive"
                 size="sm"
@@ -683,7 +683,7 @@ function PlateImportTab() {
                     {imp.total_count.toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    {!PLATE_TERMINAL.includes(imp.status) && (
+                    {!TERMINAL_STATUSES.includes(imp.status) && (
                       <Button
                         variant="ghost"
                         size="sm"

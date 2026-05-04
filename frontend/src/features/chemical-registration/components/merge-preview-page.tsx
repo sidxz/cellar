@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  ChevronDown,
   Loader2,
   ShieldAlert,
   X,
@@ -20,11 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/shared/components/ui/collapsible";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { useMolecule } from "../hooks/use-molecules";
 import {
@@ -33,7 +27,7 @@ import {
   useRejectDisclosure,
 } from "../hooks/use-disclosures";
 import { useDisclosuresForMolecule } from "../hooks/use-disclosures";
-import type { MergeImpactCategory } from "../types/disclosure";
+import { ImpactRow } from "./merge-impact-row";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -71,8 +65,7 @@ export function MergePreviewPage({
   const isLoading =
     disclosuresQuery.isLoading ||
     sourceQuery.isLoading ||
-    targetQuery.isLoading ||
-    impactQuery.isLoading;
+    targetQuery.isLoading;
 
   const source = sourceQuery.data;
   const target = targetQuery.data;
@@ -189,11 +182,6 @@ export function MergePreviewPage({
           </CardContent>
         </Card>
 
-        {/* Arrow */}
-        <div className="absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 md:block pointer-events-none" style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {/* This is visually handled by the grid gap */}
-        </div>
-
         {/* Target card */}
         <Card>
           <CardHeader className="pb-3">
@@ -236,6 +224,15 @@ export function MergePreviewPage({
       </div>
 
       {/* Impact sections */}
+      {impactQuery.isLoading && (
+        <Card>
+          <CardContent className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading impact analysis...
+          </CardContent>
+        </Card>
+      )}
+
       {impact && impact.categories.length > 0 && (
         <Card>
           <CardHeader>
@@ -289,6 +286,7 @@ export function MergePreviewPage({
           onClick={handleConfirm}
           disabled={
             hasBlockers ||
+            impactQuery.isLoading ||
             confirmMutation.isPending ||
             rejectMutation.isPending
           }
@@ -332,38 +330,3 @@ export function MergePreviewPage({
   );
 }
 
-// ---------------------------------------------------------------------------
-// ImpactRow — collapsible category row
-// ---------------------------------------------------------------------------
-
-function ImpactRow({ category }: { category: MergeImpactCategory }) {
-  const hasItems = category.items.length > 0;
-
-  return (
-    <Collapsible>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted/60 transition-colors">
-        {hasItems && <ChevronDown className="h-4 w-4 shrink-0 transition-transform [[data-state=open]>&]:rotate-180" />}
-        {!hasItems && <div className="h-4 w-4" />}
-        <span className="flex-1 text-left">{category.label}</span>
-        <Badge variant={category.is_blocker ? "destructive" : "secondary"}>
-          {category.count}
-        </Badge>
-      </CollapsibleTrigger>
-      {hasItems && (
-        <CollapsibleContent className="px-9 pb-2">
-          <div className="space-y-1 text-xs text-muted-foreground">
-            {category.items.map((item, i) => (
-              <div key={i} className="flex gap-2">
-                {Object.entries(item).map(([k, v]) => (
-                  <span key={k}>
-                    {k.replace(/_/g, " ")}: {String(v)}
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        </CollapsibleContent>
-      )}
-    </Collapsible>
-  );
-}

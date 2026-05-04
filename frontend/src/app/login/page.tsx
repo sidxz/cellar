@@ -1,17 +1,11 @@
 "use client";
 
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
+import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { useAppConfig } from "@/shared/lib/app-config";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-
-const CHEM_ITEMS = [
-  "IC₅₀",       "Kinase",      "ADMET",        "Tanimoto",    "SMILES",      "Mol Wt",      "LogP",
-  "EC₅₀",       "GPCR",        "Scaffold",     "pKa",         "HBA / HBD",   "InChI",       "SAR",
-  "Ki",          "Protease",    "Pharmacophore", "tPSA",        "CLogP",       "Selectivity", "Markush",
-  "Kd",          "Ion Channel", "Substructure",  "Ro5",         "Solubility",  "MMP",         "QSAR",
-];
 
 function GoogleIcon() {
   return (

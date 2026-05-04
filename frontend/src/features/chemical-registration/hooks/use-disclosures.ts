@@ -12,8 +12,9 @@ import type {
   SubmitDisclosureInput,
 } from "../types/disclosure";
 
+import { MOLECULES_KEY } from "./query-keys";
+
 const DISCLOSURES_KEY = ["disclosures"];
-const MOLECULES_KEY = ["molecules"];
 
 export function useDisclosures(status?: string) {
   return useQuery({

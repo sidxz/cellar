@@ -12,8 +12,7 @@ import type {
   RegistrationResponse,
   UpdateMoleculeInput,
 } from "../types";
-
-const MOLECULES_KEY = ["molecules"];
+import { MOLECULES_KEY } from "./query-keys";
 
 const moleculeHooks = createCrudHooks<Molecule, RegisterMoleculeInput, UpdateMoleculeInput>({
   entityName: "Compound",

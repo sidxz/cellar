@@ -45,16 +45,6 @@ const DEFAULT_BULK_INPUT: BulkInput = {
   originatingOrgId: null,
 };
 
-const DEFAULT_BATCH_INPUT: WizardBatchInput = {
-  source: "synthesis",
-  amountValue: null,
-  amountUnit: "mg",
-  purity: null,
-  saltEntryId: null,
-  saltStoichiometry: 1,
-  appearance: null,
-};
-
 // ─── Store interface ─────────────────────────────────────────────────────────
 
 interface RegistrationWizardState {
@@ -69,7 +59,6 @@ interface RegistrationWizardState {
 
   // Job tracking
   workflowId: string | null;
-  jobStatus: string | null;
   progress: BulkProgress | null;
 
   // Results
@@ -119,7 +108,6 @@ export const useRegistrationWizard = create<RegistrationWizardState>()(
     bulkInput: DEFAULT_BULK_INPUT,
     batchInput: null,
     workflowId: null,
-    jobStatus: null,
     progress: null,
     singleResult: null,
     mergeCandidates: [],
@@ -140,8 +128,7 @@ export const useRegistrationWizard = create<RegistrationWizardState>()(
 
     // Job tracking
     setWorkflowId: (workflowId) => set({ workflowId }),
-    setProgress: (progress) =>
-      set({ progress, jobStatus: progress?.status ?? null }),
+    setProgress: (progress) => set({ progress }),
     setSingleResult: (singleResult) => set({ singleResult }),
 
     // Merge decisions
@@ -185,7 +172,6 @@ export const useRegistrationWizard = create<RegistrationWizardState>()(
         bulkInput: DEFAULT_BULK_INPUT,
         batchInput: null,
         workflowId: null,
-        jobStatus: null,
         progress: null,
         singleResult: null,
         mergeCandidates: [],

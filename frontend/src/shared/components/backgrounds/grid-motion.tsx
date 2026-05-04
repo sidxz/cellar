@@ -25,17 +25,15 @@ export function GridMotion({
       ? items.slice(0, TOTAL_ITEMS)
       : Array.from({ length: TOTAL_ITEMS }, (_, i) => `Item ${i + 1}`);
 
+  const lastMoveRef = useRef<number[]>([]);
+
   useEffect(() => {
-    gsap.ticker.lagSmoothing(0);
+    const maxMove = 300;
+    const baseDuration = 0.8;
+    const inertia = [0.6, 0.4, 0.3, 0.2];
 
     const onMouseMove = (e: MouseEvent) => {
       mouseXRef.current = e.clientX;
-    };
-
-    const updateMotion = () => {
-      const maxMove = 300;
-      const baseDuration = 0.8;
-      const inertia = [0.6, 0.4, 0.3, 0.2];
 
       rowRefs.current.forEach((row, i) => {
         if (!row) return;
@@ -43,6 +41,9 @@ export function GridMotion({
         const move =
           ((mouseXRef.current / window.innerWidth) * maxMove - maxMove / 2) *
           dir;
+
+        if (Math.abs(move - (lastMoveRef.current[i] ?? 0)) < 0.5) return;
+        lastMoveRef.current[i] = move;
 
         gsap.to(row, {
           x: move,
@@ -53,12 +54,10 @@ export function GridMotion({
       });
     };
 
-    const removeTicker = gsap.ticker.add(updateMotion);
     window.addEventListener("mousemove", onMouseMove);
 
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
-      removeTicker();
     };
   }, []);
 

@@ -10,7 +10,8 @@ import type {
   MergeDecision,
 } from "../types/registration-wizard";
 
-const MOLECULES_KEY = ["molecules"];
+import { MOLECULES_KEY } from "./query-keys";
+
 const BULK_REG_KEY = ["bulk-registrations"];
 
 // ─── Single Registration ────────────────────────────────────────────────────

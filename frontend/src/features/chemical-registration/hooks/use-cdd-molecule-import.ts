@@ -2,8 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-
-const MOLECULES_KEY = ["molecules"];
+import { MOLECULES_KEY } from "./query-keys";
 
 export interface CddMoleculeImportAccepted {
   import_id: string | null;

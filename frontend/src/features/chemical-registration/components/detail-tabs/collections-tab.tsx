@@ -11,6 +11,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMoleculeCollections } from "../../hooks/use-molecule-collections";
+import { MOLECULES_KEY } from "../../hooks/query-keys";
 import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
         data: { molecule_ids: [moleculeId] },
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["molecules", moleculeId, "collections"] });
+      qc.invalidateQueries({ queryKey: [...MOLECULES_KEY, moleculeId, "collections"] });
       qc.invalidateQueries({ queryKey: ["collections"] });
       showSuccess("Removed from collection");
     },
@@ -107,7 +108,7 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
         onOpenChange={setPickerOpen}
         moleculeIds={[moleculeId]}
         onComplete={() => {
-          qc.invalidateQueries({ queryKey: ["molecules", moleculeId, "collections"] });
+          qc.invalidateQueries({ queryKey: [...MOLECULES_KEY, moleculeId, "collections"] });
         }}
       />
     </div>

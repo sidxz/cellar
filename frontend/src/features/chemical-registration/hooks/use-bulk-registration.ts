@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { getApiBaseUrl } from "@/shared/lib/api/custom-instance";
 import { getSentinelClient } from "@/shared/lib/auth/config";
-
-const MOLECULES_KEY = ["molecules"];
+import { MOLECULES_KEY } from "./query-keys";
 
 export interface BulkRegistrationItemResult {
   row_index: number;

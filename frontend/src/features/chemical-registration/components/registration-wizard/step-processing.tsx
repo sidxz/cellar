@@ -284,11 +284,8 @@ function BulkProcessing() {
   // Poll for progress
   const statusQuery = useBulkRegistrationStatus(workflowId, !!workflowId);
 
-  // Sync progress to store
   useEffect(() => {
-    if (statusQuery.data) {
-      setProgress(statusQuery.data);
-    }
+    if (statusQuery.data) setProgress(statusQuery.data);
   }, [statusQuery.data, setProgress]);
 
   // Auto-advance when complete

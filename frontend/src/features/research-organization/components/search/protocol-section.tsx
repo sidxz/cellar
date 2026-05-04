@@ -95,6 +95,9 @@ function ActivityRow({
 
   const curveTypeOptions = getProtocolCurveTypes(protocol);
   const hasProtocol = Boolean(criterion.protocol_id);
+  const protocolInvalid = !hasProtocol;
+  const selectionInvalid =
+    hasProtocol && !criterion.curve_type && !criterion.readout_definition_id;
 
   return (
     <div className="space-y-1">
@@ -139,7 +142,9 @@ function ActivityRow({
               className={cn(
                 "flex h-8 min-w-[160px] flex-1 items-center justify-between rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
                 !criterion.protocol_id && "text-muted-foreground",
+                protocolInvalid && "border-destructive",
               )}
+              aria-invalid={protocolInvalid}
             >
               <span className="truncate">
                 {criterion.protocol_id
@@ -206,7 +211,13 @@ function ActivityRow({
               }
             }}
           >
-            <SelectTrigger className="h-8 w-28 text-sm shrink-0">
+            <SelectTrigger
+              className={cn(
+                "h-8 w-28 text-sm shrink-0",
+                selectionInvalid && "border-destructive",
+              )}
+              aria-invalid={selectionInvalid}
+            >
               <SelectValue placeholder="Select…" />
             </SelectTrigger>
             <SelectContent>
@@ -271,6 +282,14 @@ function ActivityRow({
             }
           />
         </div>
+      )}
+
+      {(protocolInvalid || selectionInvalid) && (
+        <p className="ml-[70px] text-xs text-destructive">
+          {protocolInvalid
+            ? "Choose a protocol."
+            : "Choose a curve type or readout."}
+        </p>
       )}
     </div>
   );

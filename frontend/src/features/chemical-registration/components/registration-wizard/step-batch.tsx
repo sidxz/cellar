@@ -243,8 +243,8 @@ export function StepBatch() {
 
         {/* Actions */}
         <div className="flex items-center gap-3 border-t pt-4">
-          <Button onClick={nextStep}>Skip &amp; Auto-Create</Button>
-          <Button variant="outline" onClick={nextStep}>
+          <Button variant="outline" onClick={nextStep}>Skip &amp; Auto-Create</Button>
+          <Button onClick={() => { setBatchInput(current); nextStep(); }}>
             Save Batch Info &amp; Continue
           </Button>
         </div>

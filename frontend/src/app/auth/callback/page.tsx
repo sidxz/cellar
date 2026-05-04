@@ -3,15 +3,9 @@
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
+import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { AuthzCallback } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
-
-const CHEM_ITEMS = [
-  "IC₅₀",       "Kinase",      "ADMET",        "Tanimoto",    "SMILES",      "Mol Wt",      "LogP",
-  "EC₅₀",       "GPCR",        "Scaffold",     "pKa",         "HBA / HBD",   "InChI",       "SAR",
-  "Ki",          "Protease",    "Pharmacophore", "tPSA",        "CLogP",       "Selectivity", "Markush",
-  "Kd",          "Ion Channel", "Substructure",  "Ro5",         "Solubility",  "MMP",         "QSAR",
-];
 
 export default function CallbackPage() {
   const router = useRouter();
