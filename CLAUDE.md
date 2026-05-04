@@ -197,72 +197,78 @@ Closing the issue automatically moves it to "Done" on the project board.
 
 ## Current Session Notes
 
-> ### What Was Built (2026-04-15, branch: `fe2`) — ALL COMMITTED
+> ### What Was Built (2026-05-03, branch: `fe2`) — ALL COMMITTED + PUSHED
 >
-> **Two-Phase Disclosure with Merge Preview — Phase A Complete**
+> **Major backend refactor + Phase A/B wizard work consolidation.** Cleaned up
+> 226 uncommitted files plus pre-existing test breakage on `fe2`.
 >
-> **Design doc:** `docs/planning/merge-preview-design.md`
+> #### New commits this session
 >
-> #### Summary of All Commits on fe2
+> 1. `06f6971` refactor(backend): hoist workspace_id into DomainEvent base, extract CQRS readers, split DI container
+> 2. `d5743e2` feat(frontend): wizard polish, merge-impact row, query-key extraction
+> 3. `3d35e2e` fix(execute-search): restore saved-search write-back on first page
+> 4. `d3d558f` refactor(cdd-import): migrate protocol use cases to GetDataSourceForImport
 >
-> 1. `886ac86` fix: disclosure FK violation + add missing merge side effects
-> 2. `1ac9022` feat: two-phase disclosure with merge preview (domain + application)
-> 3. `43ee2a3` fix: mark_conflict keyword arg + add find_by_id_in_workspace to Protocol
-> 4. `91d86c5` feat: merge preview UI + API wiring (Steps 3-5, Phase A)
+> #### Backend refactor highlights (`06f6971`)
 >
-> #### What Phase A Delivered (Steps 1-5)
+> - **Domain events:** `workspace_id` hoisted into `DomainEvent` base; per-context events
+>   (attachment, research_org, chemical_reg, inventory, screening, workspace_config)
+>   updated; emitting entities now pass `workspace_id` at construction.
+> - **Attachment:** `StorageClient` protocol moved domain → application; auth tightened
+>   (`require_same_workspace`); event dispatch moved outside the UoW transaction.
+> - **CQRS Reader pattern:** raw-SQL read queries extracted from use cases into
+>   infrastructure `*_reader.py` classes — `inventory_summary`, `merge_impact`,
+>   `plate_map`, `protocol_activity`, `protocol_stats`, `dose_response_enriched`,
+>   `readout_data_enriched`, `compound_curves`. Application now exposes thin Reader interfaces.
+> - **DI:** monolithic 1979-line `container.py` split into per-context modules
+>   (`_attachment`, `_audit`, `_cdd_import`, `_chemical_registration`, `_core`,
+>   `_dashboard`, `_inventory`, `_research_organization`, `_screening`, `_user`,
+>   `_workspace_config`).
+> - **New screening features:** compound flags CRUD, `fit_curves_for_run`,
+>   `get_plate_map`, `list_runs_with_counts`, `list_dose_response_enriched`,
+>   `list_readout_data_enriched`.
+> - **CDD import:** dedicated status query handlers extracted
+>   (`get_cdd_molecule_import_status`, `get_cdd_plate_import_status`).
+> - **Domain pagination VO** (`domain/shared/pagination.py`) introduced.
 >
-> **Backend:**
-> - `PENDING_CONFIRMATION` status + state machine transitions on DisclosureRequest
-> - `matched_molecule_id`, `scientist_name` fields on DR entity + persistence
-> - `auto_approve` flag on `SubmitDisclosureCommand` (default True, backwards-compatible)
-> - `ConfirmDisclosure`, `RejectDisclosure`, `GetMergeImpact` use cases
-> - DI wiring + 3 new endpoints: `POST .../confirm`, `POST .../reject`, `GET .../merge-impact/{tgt}`
-> - 226 chem-reg unit tests passing
+> #### Test status
 >
-> **Frontend:**
-> - **Merge preview page** (`/compounds/[id]/merge-preview/[disclosureId]`)
->   - Side-by-side source/target cards, expandable impact sections, blocker detection
->   - Confirm → merges + redirects to target; Reject → molecule stays undisclosed
->   - Human-readable breadcrumbs via `useBreadcrumbTrail`
-> - **Inline disclosure** on compound detail overview tab (replaces popup dialog)
->   - "Disclose" on list navigates to `/compounds/{id}#disclose`, auto-opens form
->   - Sends `auto_approve: false`, redirects to merge preview on match
-> - **Admin Operations tab** — admin-only (`useAuthzHasRole("admin")`), manual merge
-> - **Merge button removed** from compound list
-> - Types: `pending_confirmation` status, `MergeImpact`, hooks for confirm/reject/impact
+> **1462 unit tests pass, 0 skipped, 0 failing.** (Started at 1448 passing + 14 failing.)
+> Two pre-existing breakages on `fe2` (unrelated to this session's WIP) were
+> properly fixed rather than papered over: ExecuteSearch saved-search write-back
+> (`3d35e2e`) and CDD protocol use cases that called `check_cdd_configured` with
+> the wrong arity (`d3d558f`).
 >
-> #### NEXT SESSION — Phase B: Unified Registration + Disclosure Wizard
+> Integration/API tests (172 errors) skipped — require Docker Postgres.
 >
-> **Design doc section:** `docs/planning/merge-preview-design.md` → "Phase B Vision"
+> #### Phase B wizard status (committed earlier on `fe2`)
 >
-> Phase B is **not yet designed in detail**. The vision section captures:
-> - Unified registration + disclosure wizard (7-step: Info → Structure → Processing → Merge Preview → Provenance → Batch → Review)
-> - Single UI for both new registration and undisclosed disclosure
-> - Bulk wizard merge confirmation review step
-> - Disclosure provenance as separate aggregate/VO list
+> - StepBatch + StepSummary wizard steps wired in (`7212871`)
+> - Entry points point at wizard, old dialogs removed (`29c8bf7`)
+> - Disclosure mode hits disclosure endpoint, not registration (`84d696d`)
+> - Disclosure provenance fields + pre-submit confirmation (`9a62ef4`)
+> - FormData Content-Type + status poll URL fixes (`c4f8714`)
 >
-> **Before coding Phase B, design it first.** The current registration dialog
-> (`molecule-registration-dialog.tsx`, 480 lines) and disclosure flow
-> (now inline on overview tab) would be replaced by a single full-page wizard.
+> ---
 >
-> #### Also Consider for Next Session
+> ### Recommended next session
 >
-> - **Merge fe2 → main** — Phase A is stable, tested manually
-> - **Pending disclosures visibility** — badge on dashboard or disclosure review list
->   for compounds stuck in `pending_confirmation` status
+> 1. **Merge `fe2` → `main`.** `fe2` is now 20+ commits ahead, all green, all pushed.
+>    Phase A (two-phase disclosure with merge preview) is stable and Phase B wizard
+>    is functional.
+> 2. **Pending-disclosures visibility** — badge on dashboard / disclosure review list
+>    for compounds stuck in `pending_confirmation` status.
+> 3. **Search revamp follow-through** — saved searches now functional again
+>    (write-back fixed), but the broader revamp (cross-protocol selectivity, unified
+>    search UI, readout column customization) is still open.
 >
-> #### What Else Needs Attention
+> ### Operational backlog (from prior sessions, still open)
 >
-> - **Complete 214K molecule import** — use resume script or start fresh
-> - **Re-import molecules to populate cdd_batch_id** — existing batches don't have it
-> - **Run plate import** against live vault (2,152 plates)
-> - **Export file cleanup** — old chunk files on disk are never deleted
->
-> ### Still Pending (from previous sessions)
->
-> - **Bulk protocol import** — single protocol import works, need Temporal pipeline for bulk
-> - **Import Wizard Phase 2** (runs + readout data) — designed not built
-> - **Screening dashboard redesign** (global views, summary cards for `/assays`)
-> - **Readout Column Customization** — per-protocol readout checkboxes in search
-> - **Search revamp** — saved searches broken, cross-protocol selectivity + unified search UI
+> - Complete 214K molecule import (resume script or fresh start)
+> - Re-import molecules to populate `cdd_batch_id` on existing batches
+> - Run plate import against live vault (2,152 plates)
+> - Export file cleanup (old chunk files never deleted)
+> - Bulk protocol import — Temporal pipeline (single import works)
+> - Import Wizard Phase 2 (runs + readout data) — designed, not built
+> - Screening dashboard redesign (`/assays` global views, summary cards)
+> - T10 Custom Fields + Salt Forms (next from Gap Fix Plan)
