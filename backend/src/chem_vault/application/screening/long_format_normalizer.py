@@ -478,10 +478,19 @@ def _infer_well_type(
     concentration: float | None,
     readouts: dict[uuid.UUID, float],
 ) -> WellType:
+    """Infer the type of a long-format row.
+
+    A row with a batch ref or concentration is a SAMPLE. A row with no batch
+    and no concentration but a readout value is treated as a NEGATIVE_CONTROL
+    (vehicle / DMSO well — the standard 100% activity reference for
+    % Inhibition normalization).  A pure buffer-only blank well is rare in
+    screening files; if a lab needs the distinction they should add an
+    explicit well-type column.
+    """
     if batch_ref or concentration is not None:
         return WellType.SAMPLE
     if readouts:
-        return WellType.BLANK
+        return WellType.NEGATIVE_CONTROL
     return WellType.SAMPLE
 
 

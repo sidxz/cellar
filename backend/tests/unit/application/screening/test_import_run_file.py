@@ -274,7 +274,7 @@ class TestPreviewRunFile:
         plate = preview.plates[0]
         assert plate.plate_name == "P1"
         assert plate.sample_count == 2
-        assert plate.blank_count == 1
+        assert plate.control_count == 1
         assert preview.matched_batches == 1
         assert preview.unmatched_batches == ()
         # Cached for follow-up import

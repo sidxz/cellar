@@ -741,7 +741,7 @@ function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
                 <th className="px-3 py-2 text-left font-medium">Format</th>
                 <th className="px-3 py-2 text-right font-medium">Wells</th>
                 <th className="px-3 py-2 text-right font-medium">Samples</th>
-                <th className="px-3 py-2 text-right font-medium">Blanks</th>
+                <th className="px-3 py-2 text-right font-medium">Controls</th>
               </tr>
             </thead>
             <tbody>
@@ -751,7 +751,7 @@ function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
                   <td className="px-3 py-2">{p.plate_format}</td>
                   <td className="px-3 py-2 text-right">{p.well_count}</td>
                   <td className="px-3 py-2 text-right">{p.sample_count}</td>
-                  <td className="px-3 py-2 text-right">{p.blank_count}</td>
+                  <td className="px-3 py-2 text-right">{p.control_count}</td>
                 </tr>
               ))}
             </tbody>
@@ -828,7 +828,7 @@ function ConfirmStep({
           <p className="mt-1 text-xs text-muted-foreground">
             {result.plates_created} plates · {result.wells_created} wells ·{" "}
             {result.readouts_created} readouts · {result.controls_inferred}{" "}
-            blanks inferred
+            controls inferred
             {result.unmatched_batches.length > 0 && (
               <>
                 {" "}

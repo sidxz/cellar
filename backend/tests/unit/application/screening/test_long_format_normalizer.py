@@ -175,7 +175,7 @@ class TestNormalizePlateFormat:
 
 
 class TestNormalizeControlInference:
-    def test_no_batch_no_concentration_is_blank(self) -> None:
+    def test_no_batch_no_concentration_is_negative_control(self) -> None:
         rd_id = uuid.uuid4()
         table = _make_table(
             ["Well", "Conc", "Batch", "Raw"],
@@ -188,7 +188,7 @@ class TestNormalizeControlInference:
             readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
         )
         row = normalize(table, mapping).unwrap().rows[0]
-        assert row.inferred_well_type == WellType.BLANK
+        assert row.inferred_well_type == WellType.NEGATIVE_CONTROL
         assert row.batch_ref is None
         assert row.concentration is None
 
@@ -311,12 +311,12 @@ class TestNadDFixture:
         )
         out = normalize(fixture_table, mapping).unwrap()
         sample_rows = [r for r in out.rows if r.inferred_well_type == WellType.SAMPLE]
-        blank_rows = [r for r in out.rows if r.inferred_well_type == WellType.BLANK]
+        neg_ctrl_rows = [r for r in out.rows if r.inferred_well_type == WellType.NEGATIVE_CONTROL]
         assert len(sample_rows) > 0
-        assert len(blank_rows) > 0
-        # First plate, A01: empty conc + empty batch + has Raw Data → BLANK
+        assert len(neg_ctrl_rows) > 0
+        # First plate, A01: empty conc + empty batch + has Raw Data → NEGATIVE_CONTROL
         a01_p1 = [
             r for r in out.rows
             if r.well == WellPosition(row="A", column=1) and "Plate-1" in r.plate_name
         ]
-        assert a01_p1 and a01_p1[0].inferred_well_type == WellType.BLANK
+        assert a01_p1 and a01_p1[0].inferred_well_type == WellType.NEGATIVE_CONTROL

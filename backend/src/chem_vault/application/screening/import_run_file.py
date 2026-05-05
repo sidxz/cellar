@@ -37,6 +37,9 @@ from chem_vault.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
+from chem_vault.application.screening.readout_calculation_engine import (
+    ReadoutCalculationEngine,
+)
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -137,7 +140,7 @@ class PlatePreview:
     plate_format: str
     well_count: int
     sample_count: int
-    blank_count: int
+    control_count: int
 
 
 @dataclass(frozen=True)
@@ -308,6 +311,7 @@ class ImportRunFile:
         molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
         dispatcher: EventDispatcherProtocol | None = None,
+        calculation_engine: ReadoutCalculationEngine | None = None,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -317,6 +321,7 @@ class ImportRunFile:
         self._molecule_repo = molecule_repo
         self._store = preview_store
         self._dispatcher = dispatcher
+        self._calc_engine = calculation_engine
 
     async def __call__(
         self,
@@ -440,7 +445,7 @@ class ImportRunFile:
                 batch_id, molecule_id = resolved
 
             well_type = row.inferred_well_type
-            if well_type == WellType.BLANK:
+            if well_type != WellType.SAMPLE:
                 result.controls_inferred += 1
 
             concentration = (
@@ -489,6 +494,17 @@ class ImportRunFile:
             result.readouts_created = len(readouts)
 
         events = await self._uow.commit()
+
+        # Trigger normalization (% inhibition / % activation / etc.) after
+        # readouts are persisted. Engine runs in its own UoW. Failures here
+        # (e.g. protocol missing controls) are non-fatal — the import is done.
+        if self._calc_engine is not None and result.readouts_created > 0:
+            try:
+                await self._calc_engine.compute_for_run(
+                    run_id=run.id, workspace_id=cmd.workspace_id
+                )
+            except DomainError:
+                pass
         if self._dispatcher and events:
             await self._dispatcher.dispatch_all(events)
 
@@ -541,7 +557,9 @@ def _summarize_plates(
                 plate_format=plate_formats.get(plate, PlateFormat.F96).value,
                 well_count=len(plate_rows),
                 sample_count=sum(1 for r in plate_rows if r.inferred_well_type == WellType.SAMPLE),
-                blank_count=sum(1 for r in plate_rows if r.inferred_well_type == WellType.BLANK),
+                control_count=sum(
+                    1 for r in plate_rows if r.inferred_well_type != WellType.SAMPLE
+                ),
             )
         )
     return tuple(out)

@@ -527,6 +527,7 @@ def register_screening(container: Container) -> None:
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
             dispatcher=c[EventDispatcher],
+            calculation_engine=c[ReadoutCalculationEngine],
         )
 
     container.define(ImportRunFile, _import_run_file)

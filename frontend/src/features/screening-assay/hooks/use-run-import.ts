@@ -28,7 +28,7 @@ export interface PlatePreview {
   plate_format: string;
   well_count: number;
   sample_count: number;
-  blank_count: number;
+  control_count: number;
 }
 
 export interface PreviewRunFileResponse {

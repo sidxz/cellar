@@ -56,7 +56,7 @@ class PlatePreviewModel(BaseModel):
     plate_format: str
     well_count: int
     sample_count: int
-    blank_count: int
+    control_count: int
 
 
 class PreviewRunFileResponse(BaseModel):
@@ -118,7 +118,7 @@ async def preview_run_file(
                 plate_format=p.plate_format,
                 well_count=p.well_count,
                 sample_count=p.sample_count,
-                blank_count=p.blank_count,
+                control_count=p.control_count,
             )
             for p in preview.plates
         ],
