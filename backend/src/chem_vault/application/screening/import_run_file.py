@@ -582,7 +582,7 @@ async def _resolve_batch_ref(
     if molecule is None:
         return None
 
-    cv_batch_number = f"{molecule.registration_number}-{seq:03d}"
+    cv_batch_number = f"{molecule.registration_number.value}-{seq:03d}"
     batch = await batch_repo.find_by_batch_number(workspace_id, cv_batch_number)
     if batch is None:
         return None

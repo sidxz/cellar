@@ -88,9 +88,16 @@ class FakeBatch:
 
 
 @dataclass
+class _FakeRegNumber:
+    value: str = "CV-00001"
+
+
+@dataclass
 class FakeMolecule:
     id: uuid.UUID = field(default_factory=uuid.uuid4)
-    registration_number: str = "CV-00001"
+    registration_number: _FakeRegNumber = field(
+        default_factory=lambda: _FakeRegNumber(value="CV-00001")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +681,7 @@ class TestResolveBatchRef:
     @pytest.mark.asyncio
     async def test_synonym_prefix_resolves_via_molecule(self) -> None:
         ws = uuid.uuid4()
-        mol = FakeMolecule(registration_number="CV-00042")
+        mol = FakeMolecule(registration_number=_FakeRegNumber(value="CV-00042"))
         cv_batch = FakeBatch(molecule_id=mol.id)
         result = await _resolve_batch_ref(
             "LG-0021362-001",
@@ -687,7 +694,7 @@ class TestResolveBatchRef:
     @pytest.mark.asyncio
     async def test_zero_pads_seq_to_three_digits(self) -> None:
         ws = uuid.uuid4()
-        mol = FakeMolecule(registration_number="CV-00042")
+        mol = FakeMolecule(registration_number=_FakeRegNumber(value="CV-00042"))
         cv_batch = FakeBatch(molecule_id=mol.id)
         # File seq is "1" but local batch is stored as "001".
         result = await _resolve_batch_ref(
@@ -701,7 +708,7 @@ class TestResolveBatchRef:
     @pytest.mark.asyncio
     async def test_higher_seq_picks_correct_batch(self) -> None:
         ws = uuid.uuid4()
-        mol = FakeMolecule(registration_number="CV-00042")
+        mol = FakeMolecule(registration_number=_FakeRegNumber(value="CV-00042"))
         b1 = FakeBatch(molecule_id=mol.id)
         b2 = FakeBatch(molecule_id=mol.id)
         result = await _resolve_batch_ref(
@@ -738,7 +745,7 @@ class TestResolveBatchRef:
     @pytest.mark.asyncio
     async def test_known_molecule_but_missing_seq_returns_none(self) -> None:
         ws = uuid.uuid4()
-        mol = FakeMolecule(registration_number="CV-00042")
+        mol = FakeMolecule(registration_number=_FakeRegNumber(value="CV-00042"))
         # Molecule exists but its first batch isn't there.
         result = await _resolve_batch_ref(
             "LG-0021362-005",
@@ -751,7 +758,7 @@ class TestResolveBatchRef:
     @pytest.mark.asyncio
     async def test_multi_dash_synonym_splits_on_last_dash(self) -> None:
         ws = uuid.uuid4()
-        mol = FakeMolecule(registration_number="CV-00042")
+        mol = FakeMolecule(registration_number=_FakeRegNumber(value="CV-00042"))
         cv_batch = FakeBatch(molecule_id=mol.id)
         # Synonym itself contains dashes; only the trailing -NNN is the seq.
         result = await _resolve_batch_ref(

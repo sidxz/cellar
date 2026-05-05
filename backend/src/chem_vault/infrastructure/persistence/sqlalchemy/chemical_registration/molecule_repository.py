@@ -309,13 +309,19 @@ class SQLAlchemyMoleculeRepository(
     async def find_by_identifier(
         self, workspace_id: uuid.UUID, identifier: str
     ) -> Molecule | None:
+        # Case-insensitive + whitespace-trimmed match to be forgiving about
+        # how the identifier was originally registered.
+        needle = (identifier or "").strip().lower()
+        if not needle:
+            return None
         stmt = (
             select(MoleculeModel)
             .join(MoleculeIdentifierModel)
             .where(
                 MoleculeModel.workspace_id == workspace_id,
-                MoleculeIdentifierModel.identifier == identifier,
+                func.lower(MoleculeIdentifierModel.identifier) == needle,
             )
+            .limit(1)
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
