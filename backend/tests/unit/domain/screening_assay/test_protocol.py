@@ -428,6 +428,27 @@ class TestProtocolDefinitionManagement:
         with pytest.raises(NotFoundError, match="ReadoutDefinition"):
             protocol.update_readout_definition(uuid.uuid4(), name="X")
 
+    def test_update_condition_changes_name(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        cd = _make_condition(protocol.id, name="Buffer pH")
+        protocol.add_condition_definition(cd)
+
+        protocol.update_condition_definition(cd.id, name="pH")
+        assert protocol.condition_definitions[0].name == "pH"
+        assert protocol.condition_definitions[0].id == cd.id
+
+    def test_update_condition_on_active_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        cd = _make_condition(protocol.id, name="Buffer pH")
+        protocol.add_condition_definition(cd)
+        protocol.publish()
+        with pytest.raises(ConflictError, match="only DRAFT"):
+            protocol.update_condition_definition(cd.id, name="pH")
+
     def test_add_condition_to_draft(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:

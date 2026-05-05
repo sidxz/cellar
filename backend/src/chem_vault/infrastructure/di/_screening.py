@@ -63,6 +63,7 @@ from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.manage_condition_definitions import (
     AddConditionDefinition,
     RemoveConditionDefinition,
+    UpdateConditionDefinition,
 )
 from chem_vault.application.screening.manage_control_layouts import (
     RemoveControlLayout,
@@ -236,6 +237,7 @@ def register_screening(container: Container) -> None:
 
     container.define(AddConditionDefinition, _protocol_cmd(AddConditionDefinition))
     container.define(RemoveConditionDefinition, _protocol_cmd(RemoveConditionDefinition))
+    container.define(UpdateConditionDefinition, _protocol_cmd(UpdateConditionDefinition))
 
     def _set_control_layout(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])

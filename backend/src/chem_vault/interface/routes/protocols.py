@@ -37,6 +37,8 @@ from chem_vault.application.screening.manage_condition_definitions import (
     AddConditionDefinitionCommand,
     RemoveConditionDefinition,
     RemoveConditionDefinitionCommand,
+    UpdateConditionDefinition,
+    UpdateConditionDefinitionCommand,
 )
 from chem_vault.application.screening.manage_control_layouts import (
     RemoveControlLayout,
@@ -62,6 +64,7 @@ from chem_vault.application.screening.manage_readout_definitions import (
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from chem_vault.interface.dependencies import (
     AddConditionDefinitionDep,
+    UpdateConditionDefinitionDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
     UpdateReadoutDefinitionDep,
@@ -608,6 +611,43 @@ async def add_condition_definition(
         unit=body.unit,
         pick_list_values=body.pick_list_values,
     )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+class UpdateConditionDefinitionRequest(BaseModel):
+    """Partial-update payload."""
+
+    name: str | None = None
+    data_type: str | None = None
+    unit: str | None = None
+    pick_list_values: list[str] | None = None
+
+
+@router.put(
+    "/protocols/{protocol_id}/condition-definitions/{definition_id}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def update_condition_definition(
+    protocol_id: uuid.UUID,
+    definition_id: uuid.UUID,
+    body: UpdateConditionDefinitionRequest,
+    auth: AuthDep,
+    uc: UpdateConditionDefinitionDep,
+) -> ProtocolResponse:
+    """Edit a condition definition on a DRAFT protocol. Partial-update semantics."""
+    sent = body.model_fields_set
+    cmd_kwargs: dict = {
+        "workspace_id": auth.workspace_id,
+        "protocol_id": protocol_id,
+        "definition_id": definition_id,
+    }
+    for key in ("name", "data_type", "unit", "pick_list_values"):
+        if key in sent:
+            cmd_kwargs[key] = getattr(body, key)
+
+    cmd = UpdateConditionDefinitionCommand(**cmd_kwargs)
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
 

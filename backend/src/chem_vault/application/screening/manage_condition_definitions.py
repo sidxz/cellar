@@ -39,6 +39,20 @@ class RemoveConditionDefinitionCommand(Command):
     definition_id: uuid.UUID
 
 
+_UNSET = object()
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateConditionDefinitionCommand(Command):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
+    definition_id: uuid.UUID
+    name: str | None = None
+    data_type: str | None = None
+    unit: str | None | object = _UNSET
+    pick_list_values: list[str] | None | object = _UNSET
+
+
 # ---------------------------------------------------------------------------
 # Use cases
 # ---------------------------------------------------------------------------
@@ -109,6 +123,52 @@ class RemoveConditionDefinition:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
             protocol.remove_condition_definition(input.definition_id)
+            await self._repo.save(protocol)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
+
+
+class UpdateConditionDefinition:
+    """Edit a condition definition on a DRAFT protocol."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ProtocolRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: UpdateConditionDefinitionCommand, auth: AuthContext | None = None
+    ) -> Result[Protocol, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            protocol = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+
+            kwargs: dict = {}
+            if input.name is not None:
+                kwargs["name"] = input.name
+            if input.data_type is not None:
+                kwargs["data_type"] = ConditionDataType(input.data_type)
+            if input.unit is not _UNSET:
+                kwargs["unit"] = input.unit
+            if input.pick_list_values is not _UNSET:
+                kwargs["pick_list_values"] = input.pick_list_values
+
+            try:
+                protocol.update_condition_definition(input.definition_id, **kwargs)
+            except DomainError as exc:
+                return Failure(exc)
+
             await self._repo.save(protocol)
             events = await self._uow.commit()
 

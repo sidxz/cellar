@@ -42,6 +42,7 @@ import {
   useUpdateReadoutDefinition,
   useAddConditionDefinition,
   useRemoveConditionDefinition,
+  useUpdateConditionDefinition,
   useSetControlLayout,
   useRemoveControlLayout,
   useSetOntologyAnnotation,
@@ -88,6 +89,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const updateReadoutDef = useUpdateReadoutDefinition(protocolId);
   const addConditionDef = useAddConditionDefinition(protocolId);
   const removeConditionDef = useRemoveConditionDefinition(protocolId);
+  const updateConditionDef = useUpdateConditionDefinition(protocolId);
   const setControlLayout = useSetControlLayout(protocolId);
   const removeControlLayout = useRemoveControlLayout(protocolId);
   const setOntologyAnnotation = useSetOntologyAnnotation(protocolId);
@@ -133,6 +135,23 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [cdName, setCdName] = useState("");
   const [cdDataType, setCdDataType] = useState("text");
   const [cdUnit, setCdUnit] = useState("");
+  const [editingConditionId, setEditingConditionId] = useState<string | null>(null);
+
+  const openEditCondition = (cdId: string) => {
+    const cd = protocol.condition_definitions.find((c) => c.id === cdId);
+    if (!cd) return;
+    setCdName(cd.name);
+    setCdDataType(cd.data_type);
+    setCdUnit(cd.unit ?? "");
+    setEditingConditionId(cdId);
+  };
+
+  const closeEditCondition = () => {
+    setEditingConditionId(null);
+    setCdName("");
+    setCdDataType("text");
+    setCdUnit("");
+  };
 
   // --- Control layout form fields ---
   const [clFormat, setClFormat] = useState("96");
@@ -391,16 +410,26 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     <TableCell>{cd.unit ?? "\u2014"}</TableCell>
                     {isDraft && (
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() =>
-                            removeConditionDef.mutate(cd.id)
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEditCondition(cd.id)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() =>
+                              removeConditionDef.mutate(cd.id)
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
@@ -848,6 +877,77 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               }}
             >
               {addConditionDef.isPending ? "Adding..." : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Condition Definition Dialog ────────────────────────────── */}
+      <Dialog
+        open={editingConditionId !== null}
+        onOpenChange={(open) => {
+          if (!open) closeEditCondition();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Condition Definition</DialogTitle>
+            <DialogDescription>
+              Update fields on this condition. Only available while the
+              protocol is in draft.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label>Name</Label>
+              <Input
+                value={cdName}
+                onChange={(e) => setCdName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Data Type</Label>
+              <Select value={cdDataType} onValueChange={setCdDataType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="numeric">Numeric</SelectItem>
+                  <SelectItem value="pick_list">Pick List</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Unit</Label>
+              <Input
+                value={cdUnit}
+                onChange={(e) => setCdUnit(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditCondition}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!cdName.trim() || updateConditionDef.isPending}
+              onClick={() => {
+                if (!editingConditionId) return;
+                updateConditionDef.mutate(
+                  {
+                    definitionId: editingConditionId,
+                    data: {
+                      name: cdName.trim(),
+                      data_type: cdDataType,
+                      unit: cdUnit.trim() || null,
+                    },
+                  },
+                  { onSuccess: closeEditCondition },
+                );
+              }}
+            >
+              {updateConditionDef.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

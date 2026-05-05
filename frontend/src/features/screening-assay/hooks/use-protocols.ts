@@ -164,6 +164,30 @@ export function useAddConditionDefinition(protocolId: string) {
   });
 }
 
+export function useUpdateConditionDefinition(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      definitionId,
+      data,
+    }: {
+      definitionId: string;
+      data: {
+        name?: string;
+        data_type?: string;
+        unit?: string | null;
+        pick_list_values?: string[] | null;
+      };
+    }) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${protocolId}/condition-definitions/${definitionId}`,
+        method: "PUT",
+        data,
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Condition definition updated"); },
+  });
+}
+
 export function useRemoveConditionDefinition(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({

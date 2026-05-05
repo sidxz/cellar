@@ -180,6 +180,7 @@ from chem_vault.application.screening.manage_protocol import (
 from chem_vault.application.screening.manage_condition_definitions import (
     AddConditionDefinition,
     RemoveConditionDefinition,
+    UpdateConditionDefinition,
 )
 from chem_vault.application.screening.manage_control_layouts import (
     RemoveControlLayout,
@@ -475,6 +476,7 @@ RemoveReadoutDefinitionDep = Annotated[RemoveReadoutDefinition, Depends(_get_use
 UpdateReadoutDefinitionDep = Annotated[UpdateReadoutDefinition, Depends(_get_use_case(UpdateReadoutDefinition))]
 AddConditionDefinitionDep = Annotated[AddConditionDefinition, Depends(_get_use_case(AddConditionDefinition))]
 RemoveConditionDefinitionDep = Annotated[RemoveConditionDefinition, Depends(_get_use_case(RemoveConditionDefinition))]
+UpdateConditionDefinitionDep = Annotated[UpdateConditionDefinition, Depends(_get_use_case(UpdateConditionDefinition))]
 SetControlLayoutDep = Annotated[SetControlLayout, Depends(_get_use_case(SetControlLayout))]
 RemoveControlLayoutDep = Annotated[RemoveControlLayout, Depends(_get_use_case(RemoveControlLayout))]
 CreateTargetDep = Annotated[CreateTarget, Depends(_get_use_case(CreateTarget))]

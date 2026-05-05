@@ -534,6 +534,51 @@ class Protocol(AggregateRoot):
         self.condition_definitions.pop(idx)
         self.updated_at = datetime.now(UTC)
 
+    def update_condition_definition(
+        self,
+        definition_id: uuid.UUID,
+        *,
+        name: str | None = None,
+        data_type: ConditionDataType | None = None,
+        unit: str | None | _UnsetT = _UNSET,
+        pick_list_values: list[str] | None | _UnsetT = _UNSET,
+    ) -> None:
+        """Update fields on an existing condition definition."""
+        self._guard_draft()
+
+        idx = next(
+            (i for i, d in enumerate(self.condition_definitions) if d.id == definition_id),
+            None,
+        )
+        if idx is None:
+            raise NotFoundError("ConditionDefinition", str(definition_id))
+
+        existing = self.condition_definitions[idx]
+        new_name = (name if name is not None else existing.name).strip()
+        if any(
+            cd.name == new_name and cd.id != definition_id
+            for cd in self.condition_definitions
+        ):
+            raise ConflictError(
+                f"ConditionDefinition with name '{new_name}' already exists"
+            )
+
+        replacement = ConditionDefinition(
+            id=existing.id,
+            protocol_id=existing.protocol_id,
+            name=new_name,
+            data_type=data_type if data_type is not None else existing.data_type,
+            unit=existing.unit if unit is _UNSET else unit,  # type: ignore[arg-type]
+            pick_list_values=(
+                existing.pick_list_values
+                if pick_list_values is _UNSET
+                else pick_list_values  # type: ignore[arg-type]
+            ),
+            created_at=existing.created_at,
+        )
+        self.condition_definitions[idx] = replacement
+        self.updated_at = datetime.now(UTC)
+
     # ------------------------------------------------------------------
     # Control layout management
     # ------------------------------------------------------------------
