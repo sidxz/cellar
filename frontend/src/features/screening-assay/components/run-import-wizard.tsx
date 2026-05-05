@@ -447,7 +447,10 @@ export function RunImportWizard({
           {step === 3 && (
             <Button
               onClick={handleSubmit}
-              disabled={importMutation.isPending}
+              disabled={
+                importMutation.isPending ||
+                (preview?.validation_errors.length ?? 0) > 0
+              }
             >
               {importMutation.isPending ? "Importing…" : "Import"}
             </Button>
@@ -741,7 +744,7 @@ function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
                 <th className="px-3 py-2 text-left font-medium">Format</th>
                 <th className="px-3 py-2 text-right font-medium">Wells</th>
                 <th className="px-3 py-2 text-right font-medium">Samples</th>
-                <th className="px-3 py-2 text-right font-medium">Controls</th>
+                <th className="px-3 py-2 text-right font-medium">Blanks</th>
               </tr>
             </thead>
             <tbody>
@@ -751,13 +754,30 @@ function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
                   <td className="px-3 py-2">{p.plate_format}</td>
                   <td className="px-3 py-2 text-right">{p.well_count}</td>
                   <td className="px-3 py-2 text-right">{p.sample_count}</td>
-                  <td className="px-3 py-2 text-right">{p.control_count}</td>
+                  <td className="px-3 py-2 text-right">{p.blank_count}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {preview.validation_errors.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
+            <AlertCircle className="h-4 w-4" />
+            Cannot import — protocol setup needed
+          </div>
+          <ul className="ml-5 list-disc space-y-1 text-xs text-muted-foreground">
+            {preview.validation_errors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Configure on the protocol&apos;s <span className="font-medium">Design</span> tab → Control Layouts. You&apos;ll need a Plate Template first (Administration → Screening Setup → Plate Templates).
+          </p>
+        </div>
+      )}
 
       {preview.unmatched_batches.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
@@ -827,8 +847,11 @@ function ConfirmStep({
           <p className="font-medium">Import complete</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {result.plates_created} plates · {result.wells_created} wells ·{" "}
-            {result.readouts_created} readouts · {result.controls_inferred}{" "}
-            controls inferred
+            {result.readouts_created} readouts ·{" "}
+            {result.controls_from_template} controls from layout
+            {result.controls_unclassified > 0 && (
+              <> · {result.controls_unclassified} blank wells unclassified</>
+            )}
             {result.unmatched_batches.length > 0 && (
               <>
                 {" "}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -57,11 +58,15 @@ import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
 import {
   CURVE_TYPE_LABELS,
+  HILL_SLOPE_CONSTRAINT_LABELS,
+  NORMALIZATION_SCOPE_LABELS,
   PLATE_FORMAT_LABELS,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
   READOUT_NORMALIZATION_LABELS,
   type CurveType,
+  type HillSlopeConstraint,
+  type NormalizationScope,
   type PlateFormat,
   type Protocol,
   type ProtocolStatus,
@@ -110,6 +115,24 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [rdUnit, setRdUnit] = useState("");
   const [rdAggregation, setRdAggregation] = useState("none");
   const [rdNormalization, setRdNormalization] = useState("none");
+  // Dose-response config sub-fields (only used when rdDataType === "dose_response")
+  const [drCurveType, setDrCurveType] = useState<CurveType>("ic50");
+  const [drXReadout, setDrXReadout] = useState("");
+  const [drYReadout, setDrYReadout] = useState("");
+  const [drHillConstraint, setDrHillConstraint] =
+    useState<HillSlopeConstraint>("unconstrained");
+  const [drNormalizationScope, setDrNormalizationScope] =
+    useState<NormalizationScope>("per_plate");
+  const [drActivityThreshold, setDrActivityThreshold] = useState("");
+
+  const resetDoseResponseFields = () => {
+    setDrCurveType("ic50");
+    setDrXReadout("");
+    setDrYReadout("");
+    setDrHillConstraint("unconstrained");
+    setDrNormalizationScope("per_plate");
+    setDrActivityThreshold("");
+  };
 
   const openEditReadout = (rdId: string) => {
     const rd = protocol.readout_definitions.find((r) => r.id === rdId);
@@ -119,6 +142,20 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdUnit(rd.unit ?? "");
     setRdAggregation(rd.aggregation);
     setRdNormalization(rd.normalization);
+    if (rd.dose_response_config) {
+      setDrCurveType(rd.dose_response_config.curve_type);
+      setDrXReadout(rd.dose_response_config.x_readout_name);
+      setDrYReadout(rd.dose_response_config.y_readout_name);
+      setDrHillConstraint(rd.dose_response_config.hill_slope_constraint);
+      setDrNormalizationScope(rd.dose_response_config.normalization_scope);
+      setDrActivityThreshold(
+        rd.dose_response_config.activity_threshold != null
+          ? String(rd.dose_response_config.activity_threshold)
+          : "",
+      );
+    } else {
+      resetDoseResponseFields();
+    }
     setEditingReadoutId(rdId);
   };
 
@@ -129,6 +166,144 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdUnit("");
     setRdAggregation("none");
     setRdNormalization("none");
+    resetDoseResponseFields();
+  };
+
+  /** Build the dose_response_config payload for add/update mutations. */
+  const buildDoseResponseConfig = (): Record<string, unknown> | null => {
+    if (rdDataType !== "dose_response") return null;
+    if (!drXReadout || !drYReadout) return null;
+    return {
+      curve_type: drCurveType,
+      x_readout_name: drXReadout,
+      y_readout_name: drYReadout,
+      hill_slope_constraint: drHillConstraint,
+      normalization_scope: drNormalizationScope,
+      activity_threshold: drActivityThreshold
+        ? parseFloat(drActivityThreshold)
+        : null,
+      top_constraint: null,
+      bottom_constraint: null,
+    };
+  };
+
+  /** Numeric readouts available as X/Y axis candidates, optionally excluding one. */
+  const axisCandidates = (excludeId: string | null) =>
+    protocol.readout_definitions
+      .filter((rd) => rd.data_type === "numeric" && rd.id !== excludeId)
+      .map((rd) => rd.name);
+
+  const renderDoseResponseFields = (excludeId: string | null) => {
+    if (rdDataType !== "dose_response") return null;
+    const candidates = axisCandidates(excludeId);
+    return (
+      <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+        <p className="text-xs font-medium">Dose-Response Configuration</p>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-1">
+            <Label className="text-xs">Curve Type</Label>
+            <Select
+              value={drCurveType}
+              onValueChange={(v) => setDrCurveType(v as CurveType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(CURVE_TYPE_LABELS).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">X-Axis Readout</Label>
+            <Select value={drXReadout} onValueChange={setDrXReadout}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Y-Axis Readout</Label>
+            <Select value={drYReadout} onValueChange={setDrYReadout}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-1">
+            <Label className="text-xs">Hill Slope</Label>
+            <Select
+              value={drHillConstraint}
+              onValueChange={(v) =>
+                setDrHillConstraint(v as HillSlopeConstraint)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(HILL_SLOPE_CONSTRAINT_LABELS).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Normalization Scope</Label>
+            <Select
+              value={drNormalizationScope}
+              onValueChange={(v) =>
+                setDrNormalizationScope(v as NormalizationScope)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(NORMALIZATION_SCOPE_LABELS).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Activity Threshold (%)</Label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              placeholder="e.g., 30"
+              value={drActivityThreshold}
+              onChange={(e) => setDrActivityThreshold(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // --- Condition form fields ---
@@ -442,11 +617,21 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
       {/* ── 4. Control Layouts ──────────────────────────────────────────── */}
       <Card>
-        <CardHeader>
-          <CardTitle>Control Layouts</CardTitle>
-          <CardDescription>
-            Plate templates for positive/negative controls per plate format.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle>Control Layouts</CardTitle>
+            <CardDescription>
+              Plate templates for positive/negative controls per plate format.
+              Required for runs that use control-based normalization (e.g.,
+              % Inhibition).
+            </CardDescription>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/assays/plate-templates" target="_blank">
+              <ExternalLink className="mr-1 h-3.5 w-3.5" />
+              Manage Templates
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Existing layouts */}
@@ -496,62 +681,88 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
           {/* Add form (draft only) */}
           {isDraft && (
-            <div className="flex items-end gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Format</Label>
-                <Select value={clFormat} onValueChange={setClFormat}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PLATE_FORMAT_LABELS).map(
-                      ([val, label]) => (
-                        <SelectItem key={val} value={val}>
-                          {label}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Template</Label>
-                <Select
-                  value={clTemplateId}
-                  onValueChange={setClTemplateId}
-                >
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Select template..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(plateTemplates ?? []).map((pt) => (
-                      <SelectItem key={pt.id} value={pt.id}>
-                        {pt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                size="sm"
-                disabled={!clTemplateId}
-                onClick={() => {
-                  setControlLayout.mutate(
-                    {
-                      plate_format: clFormat,
-                      template_id: clTemplateId,
-                    },
-                    {
-                      onSuccess: () => {
+            <>
+              {plateTemplates && plateTemplates.length === 0 ? (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  No plate templates exist in this workspace yet. Create one
+                  first — define which wells are positive/negative controls
+                  for each plate format.
+                  <div className="mt-2">
+                    <Button asChild size="sm">
+                      <Link href="/assays/plate-templates">
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Create Plate Template
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-end gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Format</Label>
+                    <Select
+                      value={clFormat}
+                      onValueChange={(v) => {
+                        setClFormat(v);
                         setClTemplateId("");
-                      },
-                    },
-                  );
-                }}
-              >
-                Set Layout
-              </Button>
-            </div>
+                      }}
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(PLATE_FORMAT_LABELS).map(
+                          ([val, label]) => (
+                            <SelectItem key={val} value={val}>
+                              {label}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Template</Label>
+                    <Select
+                      value={clTemplateId}
+                      onValueChange={setClTemplateId}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(plateTemplates ?? [])
+                          .filter((pt) => pt.format === clFormat)
+                          .map((pt) => (
+                            <SelectItem key={pt.id} value={pt.id}>
+                              {pt.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={!clTemplateId}
+                    onClick={() => {
+                      setControlLayout.mutate(
+                        {
+                          plate_format: clFormat,
+                          template_id: clTemplateId,
+                        },
+                        {
+                          onSuccess: () => {
+                            setClTemplateId("");
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    Set Layout
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -657,6 +868,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 </SelectContent>
               </Select>
             </div>
+            {renderDoseResponseFields(null)}
           </div>
           <DialogFooter>
             <Button
@@ -666,7 +878,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               Cancel
             </Button>
             <Button
-              disabled={!rdName.trim() || addReadoutDef.isPending}
+              disabled={
+                !rdName.trim() ||
+                addReadoutDef.isPending ||
+                (rdDataType === "dose_response" &&
+                  (!drXReadout || !drYReadout))
+              }
               onClick={() => {
                 addReadoutDef.mutate(
                   {
@@ -675,6 +892,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     unit: rdUnit.trim() || undefined,
                     aggregation: rdAggregation,
                     normalization: rdNormalization,
+                    dose_response_config: buildDoseResponseConfig(),
                   },
                   {
                     onSuccess: () => {
@@ -683,6 +901,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       setRdUnit("");
                       setRdAggregation("none");
                       setRdNormalization("none");
+                      resetDoseResponseFields();
                       setAddReadoutOpen(false);
                     },
                   },
@@ -779,13 +998,19 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 </SelectContent>
               </Select>
             </div>
+            {renderDoseResponseFields(editingReadoutId)}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeEditReadout}>
               Cancel
             </Button>
             <Button
-              disabled={!rdName.trim() || updateReadoutDef.isPending}
+              disabled={
+                !rdName.trim() ||
+                updateReadoutDef.isPending ||
+                (rdDataType === "dose_response" &&
+                  (!drXReadout || !drYReadout))
+              }
               onClick={() => {
                 if (!editingReadoutId) return;
                 updateReadoutDef.mutate(
@@ -797,6 +1022,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       unit: rdUnit.trim() || null,
                       aggregation: rdAggregation,
                       normalization: rdNormalization,
+                      dose_response_config: buildDoseResponseConfig(),
                     },
                   },
                   { onSuccess: closeEditReadout },

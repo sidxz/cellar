@@ -28,7 +28,7 @@ export interface PlatePreview {
   plate_format: string;
   well_count: number;
   sample_count: number;
-  control_count: number;
+  blank_count: number;
 }
 
 export interface PreviewRunFileResponse {
@@ -41,6 +41,7 @@ export interface PreviewRunFileResponse {
   unmatched_batches: string[];
   total_rows: number;
   expires_in_seconds: number;
+  validation_errors: string[];
 }
 
 export interface ReadoutColumnPayload {
@@ -70,7 +71,8 @@ export interface ImportRunFileResponse {
   wells_created: number;
   readouts_created: number;
   unmatched_batches: string[];
-  controls_inferred: number;
+  controls_from_template: number;
+  controls_unclassified: number;
   skipped_rows: number;
 }
 
