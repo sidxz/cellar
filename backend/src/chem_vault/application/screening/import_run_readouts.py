@@ -1,11 +1,12 @@
-"""ImportRunReadouts — simplified CSV import for runs with wells already set up.
+"""ImportRunReadouts — simplified import for runs with wells already set up.
 
-Imports readout data from a simple CSV where each row maps a well position
-to one or more measured values.  Wells must already exist on the run (created
-by SetUpRunPlate).  batch_id and molecule_id are inherited from the well.
+Imports readout data from a CSV or XLSX file where each row maps a well
+position to one or more measured values.  Wells must already exist on the
+run (created by SetUpRunPlate).  batch_id and molecule_id are inherited
+from the well.
 
-Supported CSV formats
----------------------
+Supported file formats
+----------------------
 Single-value (readout_definition_id supplied in the command):
 
     Well,Value
@@ -21,10 +22,8 @@ Multi-column (column headers matched to readout definition names):
 
 from __future__ import annotations
 
-import csv
-import io
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
@@ -42,6 +41,7 @@ from chem_vault.domain.screening_assay.repository import (
 from chem_vault.domain.shared.enums import Qualifier
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import QualifiedValue
+from chem_vault.infrastructure.parsers.tabular_file import TabularParseError, parse_tabular
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +53,10 @@ from chem_vault.domain.shared.value_objects import QualifiedValue
 class ImportRunReadoutsCommand(Command):
     workspace_id: uuid.UUID
     run_id: uuid.UUID
-    csv_content: bytes
-    # For single-value CSVs (column header "Value") supply the definition id.
+    file_content: bytes
+    # Original filename — used to detect xlsx vs csv. Empty defaults to csv.
+    filename: str = ""
+    # For single-value files (column header "Value") supply the definition id.
     readout_definition_id: uuid.UUID | None = None
 
 
@@ -148,48 +150,38 @@ class ImportRunReadouts:
             f"{w.row}{w.column}": w for w in run.wells
         }
 
-        # 5. Parse CSV -------------------------------------------------------
+        # 5. Parse file ------------------------------------------------------
         try:
-            text = cmd.csv_content.decode("utf-8-sig")  # handle BOM
-        except UnicodeDecodeError:
-            text = cmd.csv_content.decode("latin-1")
-
-        try:
-            rows, headers = _parse_csv(text)
-        except Exception as exc:
-            return Failure(ValidationError(f"CSV parse error: {exc}"))
-
-        if not headers:
-            return Failure(ValidationError("CSV has no headers"))
+            table = parse_tabular(cmd.file_content, cmd.filename)
+        except TabularParseError as exc:
+            return Failure(ValidationError(f"File parse error: {exc}"))
 
         # Normalise headers to lowercase for matching
-        lower_headers = [h.lower() for h in headers]
+        lower_headers = [h.lower() for h in table.headers]
         if "well" not in lower_headers:
-            return Failure(ValidationError("CSV must have a 'Well' column"))
+            return Failure(ValidationError("File must have a 'Well' column"))
 
-        well_col_idx = lower_headers.index("well")
+        well_header = table.headers[lower_headers.index("well")]
 
-        # Identify value columns and map to readout definition ids
+        # Identify value headers and map to readout definition ids.
         # Special case: a column named "value" (case-insensitive) maps to
         # readout_definition_id supplied in the command (single-value mode).
-        col_to_rd_id: dict[int, uuid.UUID] = {}
-        for idx, lower_hdr in enumerate(lower_headers):
-            if idx == well_col_idx:
+        header_to_rd_id: dict[str, uuid.UUID] = {}
+        for header, lower_hdr in zip(table.headers, lower_headers, strict=True):
+            if lower_hdr == "well":
                 continue
             if lower_hdr == "value":
                 if cmd.readout_definition_id is not None:
-                    col_to_rd_id[idx] = cmd.readout_definition_id
-                # else: skip unnamed value column without an explicit id
+                    header_to_rd_id[header] = cmd.readout_definition_id
             else:
                 rd_id = rd_by_name.get(lower_hdr)
                 if rd_id is not None:
-                    col_to_rd_id[idx] = rd_id
-                # Unmatched column headers are silently skipped
+                    header_to_rd_id[header] = rd_id
 
-        if not col_to_rd_id:
+        if not header_to_rd_id:
             return Failure(
                 ValidationError(
-                    "No CSV columns could be matched to readout definitions. "
+                    "No file columns could be matched to readout definitions. "
                     "Column headers must match readout definition names (case-insensitive), "
                     "or use 'Value' with readout_definition_id supplied."
                 )
@@ -202,11 +194,10 @@ class ImportRunReadouts:
 
         entities: list[ReadoutData] = []
 
-        for row in rows:
+        for row in table.iter_rows():
             result.total_rows += 1
 
-            # Get well position from this row
-            raw_pos = row[well_col_idx].strip().upper() if row[well_col_idx] else ""
+            raw_pos = (row.get(well_header) or "").strip().upper()
             if not raw_pos:
                 result.unmatched += 1
                 continue
@@ -235,10 +226,8 @@ class ImportRunReadouts:
                 continue
 
             # Create readout entities for each value column
-            for col_idx, rd_id in col_to_rd_id.items():
-                if col_idx >= len(row):
-                    continue
-                raw_val = row[col_idx].strip() if row[col_idx] else ""
+            for header, rd_id in header_to_rd_id.items():
+                raw_val = (row.get(header) or "").strip()
                 if not raw_val:
                     continue
 
@@ -269,36 +258,3 @@ class ImportRunReadouts:
         if self._dispatcher and events:
             await self._dispatcher.dispatch_all(events)
         return Success(result)
-
-
-# ---------------------------------------------------------------------------
-# CSV helpers
-# ---------------------------------------------------------------------------
-
-
-def _parse_csv(text: str) -> tuple[list[list[str]], list[str]]:
-    """Parse CSV content, auto-detecting delimiter.
-
-    Returns (rows, headers) where rows is a list of string lists
-    (one per data row, NOT including the header) and headers is
-    the first row's fields.
-    """
-    if not text.strip():
-        return [], []
-
-    # Sniff for delimiter; fall back to comma
-    sample = text[:4096]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-    except csv.Error:
-        dialect = csv.excel  # type: ignore[assignment]
-
-    reader = csv.reader(io.StringIO(text), dialect)
-    all_rows = list(reader)
-
-    if not all_rows:
-        return [], []
-
-    headers = [h.strip() for h in all_rows[0]]
-    data_rows = [[cell.strip() for cell in r] for r in all_rows[1:] if any(c.strip() for c in r)]
-    return data_rows, headers

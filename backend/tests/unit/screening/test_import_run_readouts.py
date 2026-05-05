@@ -211,7 +211,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=csv_bytes,
+            file_content=csv_bytes,
             readout_definition_id=rd_id,
         )
 
@@ -257,7 +257,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=csv_bytes,
+            file_content=csv_bytes,
             readout_definition_id=rd_id,
         )
 
@@ -284,7 +284,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=b"Well,Value\nA1,2.3\n",
+            file_content=b"Well,Value\nA1,2.3\n",
             readout_definition_id=uuid.uuid4(),
         )
 
@@ -305,7 +305,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=uuid.uuid4(),
-            csv_content=b"Well,Value\nA1,2.3\n",
+            file_content=b"Well,Value\nA1,2.3\n",
             readout_definition_id=uuid.uuid4(),
         )
 
@@ -341,7 +341,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=csv_bytes,
+            file_content=csv_bytes,
             # No readout_definition_id — columns resolved by name
         )
 
@@ -376,7 +376,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=b"Well,Value\nA1,2.3\n",
+            file_content=b"Well,Value\nA1,2.3\n",
             readout_definition_id=rd_id,
         )
 

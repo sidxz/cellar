@@ -109,20 +109,15 @@ async def parse_plate_map_file(
     file: Annotated[UploadFile, File()],
     uc: ParsePlateMapFileDep,
 ) -> ParsePlateMapResponse:
-    """Upload a plate map CSV and return parsed compound assignments.
+    """Upload a plate map file (CSV or XLSX) and return parsed compound assignments.
 
-    Supported formats:
+    Supported layouts:
     - Well-level: ``Well, Compound`` columns — one row per well.
     - Row-range: ``Compound, Start Row, End Row`` columns — compound assigned
       to all wells in those rows.
     """
     content = await file.read()
-    try:
-        csv_text = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        csv_text = content.decode("latin-1")
-
-    result = await uc(csv_text, auth=auth)
+    result = await uc(content, filename=file.filename or "", auth=auth)
     parsed: ParsedPlateMap = result_to_response(result)
 
     return ParsePlateMapResponse(
@@ -236,13 +231,13 @@ async def import_run_readouts(
     calc_engine: ReadoutCalculationEngineDep,
     readout_definition_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> ImportReadoutsResponse:
-    """Import readout data from a CSV into a run that already has wells set up.
+    """Import readout data from a CSV or XLSX into a run that already has wells set up.
 
     Wells must have been created via the plate-setup endpoint first.
     After import, the readout calculation engine runs automatically to
     normalize, aggregate, and fit dose-response curves.
 
-    Supported CSV formats:
+    Supported layouts:
     - Single-value: ``Well, Value`` columns with ``readout_definition_id`` query param.
     - Multi-column: ``Well, <ReadoutDefName1>, <ReadoutDefName2>, ...`` — headers
       matched case-insensitively to readout definition names.
@@ -252,7 +247,8 @@ async def import_run_readouts(
     cmd = ImportRunReadoutsCommand(
         workspace_id=auth.workspace_id,
         run_id=run_id,
-        csv_content=content,
+        file_content=content,
+        filename=file.filename or "",
         readout_definition_id=readout_definition_id,
     )
     result = await import_uc(cmd, auth=auth)

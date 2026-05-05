@@ -1,9 +1,7 @@
-"""Plate setup use cases — CSV parsing and well creation for screening runs."""
+"""Plate setup use cases — file parsing and well creation for screening runs."""
 
 from __future__ import annotations
 
-import csv
-import io
 import uuid
 from dataclasses import dataclass, field
 
@@ -30,6 +28,11 @@ from chem_vault.domain.shared.errors import (
     ValidationError,
 )
 from chem_vault.domain.shared.value_objects import Concentration
+from chem_vault.infrastructure.parsers.tabular_file import (
+    ParsedTable,
+    TabularParseError,
+    parse_tabular,
+)
 
 # ---------------------------------------------------------------------------
 # Shared data types
@@ -85,9 +88,11 @@ def _normalize_header(h: str) -> str:
 
 
 class ParsePlateMapFile:
-    """Parse a CSV file into compound-to-well assignments.
+    """Parse a plate map file into compound-to-well assignments.
 
-    Supports two CSV formats:
+    Accepts CSV or XLSX content (detected by ``filename`` extension and
+    magic bytes). Supports two layouts:
+
     - **Well-level**: columns ``Well, Compound`` — each row is one well.
     - **Row-range**: columns ``Compound, Start Row, End Row`` — compound
       assigned to all wells in those rows (columns generated later by
@@ -96,50 +101,50 @@ class ParsePlateMapFile:
 
     async def __call__(
         self,
-        csv_content: str,
+        file_content: bytes | str,
+        filename: str = "",
         auth: AuthContext | None = None,
     ) -> Result[ParsedPlateMap, DomainError]:
+        if isinstance(file_content, str):
+            file_content = file_content.encode("utf-8")
+
         try:
-            reader = csv.DictReader(io.StringIO(csv_content))
-            if reader.fieldnames is None:
-                return Failure(ValidationError("CSV file is empty or has no header row"))
+            table = parse_tabular(file_content, filename)
+        except TabularParseError as exc:
+            return Failure(ValidationError(f"File parse error: {exc}"))
 
-            headers = {_normalize_header(h): h for h in reader.fieldnames}
+        headers = {_normalize_header(h): h for h in table.headers}
 
-            if "well" in headers and "compound" in headers:
-                return self._parse_well_level(reader, headers)
-            elif (
-                "compound" in headers
-                and "startrow" in headers
-                and "endrow" in headers
-            ):
-                return self._parse_row_range(reader, headers)
-            else:
-                return Failure(
-                    ValidationError(
-                        "CSV must have either [Well, Compound] or "
-                        "[Compound, Start Row, End Row] columns"
-                    )
-                )
-        except csv.Error as e:
-            return Failure(ValidationError(f"Invalid CSV: {e}"))
+        if "well" in headers and "compound" in headers:
+            return self._parse_well_level(table, headers)
+        if (
+            "compound" in headers
+            and "startrow" in headers
+            and "endrow" in headers
+        ):
+            return self._parse_row_range(table, headers)
+        return Failure(
+            ValidationError(
+                "File must have either [Well, Compound] or "
+                "[Compound, Start Row, End Row] columns"
+            )
+        )
 
     def _parse_well_level(
         self,
-        reader: csv.DictReader,
+        table: ParsedTable,
         headers: dict[str, str],
     ) -> Result[ParsedPlateMap, DomainError]:
         """Parse well-level format: Well, Compound columns."""
         well_col = headers["well"]
         compound_col = headers["compound"]
 
-        # Group wells by compound
         compound_wells: dict[str, list[str]] = {}
         row_count = 0
-        for row in reader:
+        for row in table.iter_rows():
             row_count += 1
-            compound = row.get(compound_col, "").strip()
-            well = row.get(well_col, "").strip().upper()
+            compound = (row.get(compound_col) or "").strip()
+            well = (row.get(well_col) or "").strip().upper()
             if not compound or not well:
                 continue
             compound_wells.setdefault(compound, []).append(well)
@@ -154,7 +159,7 @@ class ParsePlateMapFile:
 
     def _parse_row_range(
         self,
-        reader: csv.DictReader,
+        table: ParsedTable,
         headers: dict[str, str],
     ) -> Result[ParsedPlateMap, DomainError]:
         """Parse row-range format: Compound, Start Row, End Row columns."""
@@ -164,22 +169,18 @@ class ParsePlateMapFile:
 
         assignments: list[CompoundAssignment] = []
         row_count = 0
-        for row in reader:
+        for row in table.iter_rows():
             row_count += 1
-            compound = row.get(compound_col, "").strip()
-            start_row = row.get(start_col, "").strip()
-            end_row = row.get(end_col, "").strip()
+            compound = (row.get(compound_col) or "").strip()
+            start_row = (row.get(start_col) or "").strip()
+            end_row = (row.get(end_col) or "").strip()
             if not compound or not start_row or not end_row:
                 continue
 
-            # Validate row letters
             if not start_row.isalpha() or not end_row.isalpha():
                 continue
 
             rows = _row_range(start_row, end_row)
-            # Well positions are left empty — SetUpRunPlate generates columns
-            # based on the concentration series length.
-            # We store row letters as positions so the use case knows which rows.
             assignments.append(
                 CompoundAssignment(
                     molecule_ref=compound,

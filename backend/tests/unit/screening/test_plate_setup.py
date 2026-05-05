@@ -133,7 +133,8 @@ class TestParsePlateMapFileWellLevel:
         assert isinstance(result, Success)
         parsed = result.unwrap()
         assert len(parsed.assignments) == 2
-        assert parsed.row_count == 3
+        # Blank rows are filtered at the parse layer — only data rows counted.
+        assert parsed.row_count == 2
 
     @pytest.mark.asyncio
     async def test_normalizes_well_uppercase(self):
