@@ -55,12 +55,16 @@ from chem_vault.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
     RemoveReadoutDefinition,
     RemoveReadoutDefinitionCommand,
+    UpdateReadoutDefinition,
+    UpdateReadoutDefinitionCommand,
+    _UNSET as _RD_UNSET,
 )
 from chem_vault.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from chem_vault.interface.dependencies import (
     AddConditionDefinitionDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
+    UpdateReadoutDefinitionDep,
     AuthDep,
     ConditionGroupingServiceDep,
     CreateProtocolDep,
@@ -303,6 +307,22 @@ class AddReadoutDefinitionRequest(BaseModel):
     dose_response_config: dict | None = None
 
 
+class UpdateReadoutDefinitionRequest(BaseModel):
+    """Partial-update payload. Only fields present in the JSON are applied."""
+
+    name: str | None = None
+    data_type: str | None = None
+    unit: str | None = None
+    aggregation: str | None = None
+    precision: int | None = None
+    normalization: str | None = None
+    is_calculated: bool | None = None
+    calculation_formula: str | None = None
+    display_order: int | None = None
+    pick_list_values: list[str] | None = None
+    dose_response_config: dict | None = None
+
+
 class CreateTargetRequest(BaseModel):
     name: str
     target_type: str
@@ -491,6 +511,45 @@ async def add_readout_definition(
         pick_list_values=body.pick_list_values,
         dose_response_config=body.dose_response_config,
     )
+    result = await uc(cmd, auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.put(
+    "/protocols/{protocol_id}/readout-definitions/{definition_id}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def update_readout_definition(
+    protocol_id: uuid.UUID,
+    definition_id: uuid.UUID,
+    body: UpdateReadoutDefinitionRequest,
+    auth: AuthDep,
+    uc: UpdateReadoutDefinitionDep,
+) -> ProtocolResponse:
+    """Edit a readout definition on a DRAFT protocol. Partial-update semantics."""
+    sent = body.model_fields_set
+    cmd_kwargs: dict = {}
+    # Mandatory IDs
+    cmd_kwargs["workspace_id"] = auth.workspace_id
+    cmd_kwargs["protocol_id"] = protocol_id
+    cmd_kwargs["definition_id"] = definition_id
+    # Only forward keys explicitly present in the request body. Otherwise
+    # the use case keeps its sentinel default ("leave unchanged").
+    for key in (
+        "name", "data_type", "aggregation", "normalization",
+        "is_calculated", "display_order",
+    ):
+        if key in sent:
+            cmd_kwargs[key] = getattr(body, key)
+    for key in (
+        "unit", "precision", "calculation_formula",
+        "pick_list_values", "dose_response_config",
+    ):
+        if key in sent:
+            cmd_kwargs[key] = getattr(body, key)
+
+    cmd = UpdateReadoutDefinitionCommand(**cmd_kwargs)
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
 

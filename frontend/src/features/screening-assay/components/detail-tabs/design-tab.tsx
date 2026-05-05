@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -39,6 +39,7 @@ import {
 import {
   useAddReadoutDefinition,
   useRemoveReadoutDefinition,
+  useUpdateReadoutDefinition,
   useAddConditionDefinition,
   useRemoveConditionDefinition,
   useSetControlLayout,
@@ -84,6 +85,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // --- Mutations ---
   const addReadoutDef = useAddReadoutDefinition(protocolId);
   const removeReadoutDef = useRemoveReadoutDefinition(protocolId);
+  const updateReadoutDef = useUpdateReadoutDefinition(protocolId);
   const addConditionDef = useAddConditionDefinition(protocolId);
   const removeConditionDef = useRemoveConditionDefinition(protocolId);
   const setControlLayout = useSetControlLayout(protocolId);
@@ -98,6 +100,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // --- Dialog state ---
   const [addReadoutOpen, setAddReadoutOpen] = useState(false);
   const [addConditionOpen, setAddConditionOpen] = useState(false);
+  const [editingReadoutId, setEditingReadoutId] = useState<string | null>(null);
 
   // --- Readout form fields ---
   const [rdName, setRdName] = useState("");
@@ -105,6 +108,26 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [rdUnit, setRdUnit] = useState("");
   const [rdAggregation, setRdAggregation] = useState("none");
   const [rdNormalization, setRdNormalization] = useState("none");
+
+  const openEditReadout = (rdId: string) => {
+    const rd = protocol.readout_definitions.find((r) => r.id === rdId);
+    if (!rd) return;
+    setRdName(rd.name);
+    setRdDataType(rd.data_type);
+    setRdUnit(rd.unit ?? "");
+    setRdAggregation(rd.aggregation);
+    setRdNormalization(rd.normalization);
+    setEditingReadoutId(rdId);
+  };
+
+  const closeEditReadout = () => {
+    setEditingReadoutId(null);
+    setRdName("");
+    setRdDataType("numeric");
+    setRdUnit("");
+    setRdAggregation("none");
+    setRdNormalization("none");
+  };
 
   // --- Condition form fields ---
   const [cdName, setCdName] = useState("");
@@ -290,19 +313,29 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     </TableCell>
                     {isDraft && (
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          disabled={
-                            protocol.readout_definitions.length <= 1
-                          }
-                          onClick={() =>
-                            removeReadoutDef.mutate(rd.id)
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEditReadout(rd.id)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            disabled={
+                              protocol.readout_definitions.length <= 1
+                            }
+                            onClick={() =>
+                              removeReadoutDef.mutate(rd.id)
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
@@ -628,6 +661,120 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               }}
             >
               {addReadoutDef.isPending ? "Adding..." : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Readout Definition Dialog ──────────────────────────────── */}
+      <Dialog
+        open={editingReadoutId !== null}
+        onOpenChange={(open) => {
+          if (!open) closeEditReadout();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Readout Definition</DialogTitle>
+            <DialogDescription>
+              Update fields on this readout. Only available while the protocol
+              is in draft.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label>Name</Label>
+              <Input
+                value={rdName}
+                onChange={(e) => setRdName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Data Type</Label>
+              <Select value={rdDataType} onValueChange={setRdDataType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(READOUT_DATA_TYPE_LABELS).map(
+                    ([val, label]) => (
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Unit</Label>
+              <Input
+                value={rdUnit}
+                onChange={(e) => setRdUnit(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Aggregation</Label>
+              <Select value={rdAggregation} onValueChange={setRdAggregation}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(READOUT_AGGREGATION_LABELS).map(
+                    ([val, label]) => (
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Normalization</Label>
+              <Select
+                value={rdNormalization}
+                onValueChange={setRdNormalization}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(READOUT_NORMALIZATION_LABELS).map(
+                    ([val, label]) => (
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditReadout}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!rdName.trim() || updateReadoutDef.isPending}
+              onClick={() => {
+                if (!editingReadoutId) return;
+                updateReadoutDef.mutate(
+                  {
+                    definitionId: editingReadoutId,
+                    data: {
+                      name: rdName.trim(),
+                      data_type: rdDataType,
+                      unit: rdUnit.trim() || null,
+                      aggregation: rdAggregation,
+                      normalization: rdNormalization,
+                    },
+                  },
+                  { onSuccess: closeEditReadout },
+                );
+              }}
+            >
+              {updateReadoutDef.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

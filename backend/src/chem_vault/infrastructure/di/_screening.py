@@ -85,6 +85,7 @@ from chem_vault.application.screening.manage_protocol import (
 from chem_vault.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     RemoveReadoutDefinition,
+    UpdateReadoutDefinition,
 )
 from chem_vault.application.screening.manage_run import (
     ApproveRun,
@@ -224,6 +225,14 @@ def register_screening(container: Container) -> None:
 
     container.define(AddReadoutDefinition, _add_readout_def)
     container.define(RemoveReadoutDefinition, _protocol_cmd(RemoveReadoutDefinition))
+
+    def _update_readout_def(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateReadoutDefinition(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], c[FormulaEvaluator]
+        )
+
+    container.define(UpdateReadoutDefinition, _update_readout_def)
 
     container.define(AddConditionDefinition, _protocol_cmd(AddConditionDefinition))
     container.define(RemoveConditionDefinition, _protocol_cmd(RemoveConditionDefinition))

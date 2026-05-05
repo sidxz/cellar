@@ -188,6 +188,7 @@ from chem_vault.application.screening.manage_control_layouts import (
 from chem_vault.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     RemoveReadoutDefinition,
+    UpdateReadoutDefinition,
 )
 from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from chem_vault.application.screening.update_target import UpdateTarget
@@ -471,6 +472,7 @@ UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtoc
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[AddReadoutDefinition, Depends(_get_use_case(AddReadoutDefinition))]
 RemoveReadoutDefinitionDep = Annotated[RemoveReadoutDefinition, Depends(_get_use_case(RemoveReadoutDefinition))]
+UpdateReadoutDefinitionDep = Annotated[UpdateReadoutDefinition, Depends(_get_use_case(UpdateReadoutDefinition))]
 AddConditionDefinitionDep = Annotated[AddConditionDefinition, Depends(_get_use_case(AddConditionDefinition))]
 RemoveConditionDefinitionDep = Annotated[RemoveConditionDefinition, Depends(_get_use_case(RemoveConditionDefinition))]
 SetControlLayoutDep = Annotated[SetControlLayout, Depends(_get_use_case(SetControlLayout))]

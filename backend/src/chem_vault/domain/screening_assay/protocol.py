@@ -29,6 +29,15 @@ from chem_vault.domain.shared.errors import ConflictError, NotFoundError, Valida
 from chem_vault.domain.shared.ontology import OntologyTerm
 
 
+# Sentinel used by partial-update mutators to distinguish "leave unchanged"
+# (default) from "explicitly set to None".
+class _UnsetT:
+    pass
+
+
+_UNSET: _UnsetT = _UnsetT()
+
+
 # ---------------------------------------------------------------------------
 # Protocol state machine
 # ---------------------------------------------------------------------------
@@ -419,6 +428,78 @@ class Protocol(AggregateRoot):
             )
 
         self.readout_definitions.pop(idx)
+        self.updated_at = datetime.now(UTC)
+
+    def update_readout_definition(
+        self,
+        definition_id: uuid.UUID,
+        *,
+        name: str | None = None,
+        data_type: ReadoutDataType | None = None,
+        unit: str | None | _UnsetT = _UNSET,
+        aggregation: ReadoutAggregation | None = None,
+        precision: int | None | _UnsetT = _UNSET,
+        normalization: ReadoutNormalization | None = None,
+        is_calculated: bool | None = None,
+        calculation_formula: str | None | _UnsetT = _UNSET,
+        display_order: int | None = None,
+        pick_list_values: list[str] | None | _UnsetT = _UNSET,
+        dose_response_config: DoseResponseConfig | None | _UnsetT = _UNSET,
+    ) -> None:
+        """Update fields on an existing readout definition.
+
+        Validates the resulting state by reconstructing a ReadoutDefinition
+        in place — same invariants as the constructor (e.g., dose_response
+        requires config, pick_list requires values). Cross-readout name
+        uniqueness is enforced.
+        """
+        self._guard_draft()
+
+        idx = next(
+            (i for i, d in enumerate(self.readout_definitions) if d.id == definition_id),
+            None,
+        )
+        if idx is None:
+            raise NotFoundError("ReadoutDefinition", str(definition_id))
+
+        existing = self.readout_definitions[idx]
+
+        new_name = (name if name is not None else existing.name).strip()
+        if any(
+            rd.name == new_name and rd.id != definition_id
+            for rd in self.readout_definitions
+        ):
+            raise ConflictError(
+                f"ReadoutDefinition with name '{new_name}' already exists"
+            )
+
+        replacement = ReadoutDefinition(
+            id=existing.id,
+            protocol_id=existing.protocol_id,
+            name=new_name,
+            data_type=data_type if data_type is not None else existing.data_type,
+            unit=existing.unit if unit is _UNSET else unit,  # type: ignore[arg-type]
+            aggregation=aggregation if aggregation is not None else existing.aggregation,
+            precision=existing.precision if precision is _UNSET else precision,  # type: ignore[arg-type]
+            normalization=normalization if normalization is not None else existing.normalization,
+            is_calculated=is_calculated if is_calculated is not None else existing.is_calculated,
+            calculation_formula=(
+                existing.calculation_formula
+                if calculation_formula is _UNSET
+                else calculation_formula  # type: ignore[arg-type]
+            ),
+            display_order=display_order if display_order is not None else existing.display_order,
+            pick_list_values=(
+                existing.pick_list_values if pick_list_values is _UNSET else pick_list_values  # type: ignore[arg-type]
+            ),
+            dose_response_config=(
+                existing.dose_response_config
+                if dose_response_config is _UNSET
+                else dose_response_config  # type: ignore[arg-type]
+            ),
+            created_at=existing.created_at,
+        )
+        self.readout_definitions[idx] = replacement
         self.updated_at = datetime.now(UTC)
 
     # ------------------------------------------------------------------

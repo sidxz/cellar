@@ -101,6 +101,37 @@ export function useAddReadoutDefinition(protocolId: string) {
   });
 }
 
+export function useUpdateReadoutDefinition(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      definitionId,
+      data,
+    }: {
+      definitionId: string;
+      data: {
+        name?: string;
+        data_type?: string;
+        unit?: string | null;
+        aggregation?: string;
+        precision?: number | null;
+        normalization?: string;
+        is_calculated?: boolean;
+        calculation_formula?: string | null;
+        display_order?: number;
+        pick_list_values?: string[] | null;
+        dose_response_config?: Record<string, unknown> | null;
+      };
+    }) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
+        method: "PUT",
+        data,
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Readout definition updated"); },
+  });
+}
+
 export function useRemoveReadoutDefinition(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({

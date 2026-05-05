@@ -385,6 +385,49 @@ class TestProtocolDefinitionManagement:
         with pytest.raises(NotFoundError, match="ReadoutDefinition"):
             protocol.remove_readout_definition(uuid.uuid4())
 
+    def test_update_readout_changes_normalization(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        rd = protocol.readout_definitions[0]
+        assert rd.normalization == ReadoutNormalization.NONE
+
+        protocol.update_readout_definition(
+            rd.id, normalization=ReadoutNormalization.PERCENT_INHIBITION
+        )
+        updated = protocol.readout_definitions[0]
+        assert updated.id == rd.id  # same id, replaced object
+        assert updated.normalization == ReadoutNormalization.PERCENT_INHIBITION
+        # other fields preserved
+        assert updated.name == rd.name
+
+    def test_update_readout_rejects_duplicate_name(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        rd1 = _make_readout(name="IC50")
+        rd2 = _make_readout(name="% Inhibition")
+        protocol = _make_protocol(
+            workspace_id, user_id, readout_definitions=[rd1, rd2]
+        )
+        with pytest.raises(ConflictError, match="already exists"):
+            protocol.update_readout_definition(rd1.id, name="% Inhibition")
+
+    def test_update_readout_on_active_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        rd = protocol.readout_definitions[0]
+        protocol.publish()
+        with pytest.raises(ConflictError, match="only DRAFT"):
+            protocol.update_readout_definition(rd.id, name="Renamed")
+
+    def test_update_nonexistent_readout_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        with pytest.raises(NotFoundError, match="ReadoutDefinition"):
+            protocol.update_readout_definition(uuid.uuid4(), name="X")
+
     def test_add_condition_to_draft(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
