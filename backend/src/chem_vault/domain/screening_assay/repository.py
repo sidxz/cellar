@@ -11,6 +11,7 @@ from chem_vault.domain.screening_assay.plate_template import PlateTemplate
 from chem_vault.domain.screening_assay.protocol import Protocol as AssayProtocol
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.screening_assay.run import Run
+from chem_vault.domain.screening_assay.run_import_template import RunImportTemplate
 from chem_vault.domain.screening_assay.target import Target
 
 
@@ -165,3 +166,17 @@ class DoseResponseCurveRepository(Protocol):
     async def save(self, entity: DoseResponseCurve) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
     async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class RunImportTemplateRepository(Protocol):
+    """Repository for RunImportTemplate entities."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> RunImportTemplate | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[RunImportTemplate]: ...
+    async def save(self, entity: RunImportTemplate) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...

@@ -49,6 +49,11 @@ from chem_vault.application.screening.get_protocol_stats import GetProtocolStats
 from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
 from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
+from chem_vault.application.screening.import_run_file import (
+    ImportRunFile,
+    InMemoryPreviewStore,
+    PreviewRunFile,
+)
 from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
 from chem_vault.application.screening.list_compound_flags import ListCompoundFlags
 from chem_vault.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
@@ -102,6 +107,12 @@ from chem_vault.application.screening.protocol_stats_reader import ProtocolStats
 from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from chem_vault.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
 from chem_vault.application.screening.refit_dose_response import RefitDoseResponseCurve
+from chem_vault.application.screening.run_import_templates import (
+    CreateRunImportTemplate,
+    DeleteRunImportTemplate,
+    ListRunImportTemplates,
+    UpdateRunImportTemplate,
+)
 from chem_vault.application.screening.search_ontology import SearchOntology
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.update_target import UpdateTarget
@@ -160,6 +171,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_da
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
     SQLAlchemyReadoutDataRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.run_import_template_repository import (
+    SQLAlchemyRunImportTemplateRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
     SQLAlchemyRunRepository,
@@ -486,6 +500,49 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ImportRunReadouts, _import_run_readouts)
+
+    # --- Run-file import (long format) ---
+    container[InMemoryPreviewStore] = Singleton(lambda: InMemoryPreviewStore())
+
+    def _preview_run_file(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewRunFile(
+            run_repo=SQLAlchemyRunRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            preview_store=c[InMemoryPreviewStore],
+        )
+
+    container.define(PreviewRunFile, _preview_run_file)
+
+    def _import_run_file(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportRunFile(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            preview_store=c[InMemoryPreviewStore],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ImportRunFile, _import_run_file)
+
+    # --- Run import templates (CRUD) ---
+    def _run_import_template_cmd(uc_cls):  # type: ignore[no-untyped-def]
+        def _f(c):  # type: ignore[no-untyped-def]
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyRunImportTemplateRepository(uow), c[EventDispatcher])
+        return _f
+
+    def _list_run_import_templates(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListRunImportTemplates(uow, SQLAlchemyRunImportTemplateRepository(uow))
+
+    container.define(CreateRunImportTemplate, _run_import_template_cmd(CreateRunImportTemplate))
+    container.define(UpdateRunImportTemplate, _run_import_template_cmd(UpdateRunImportTemplate))
+    container.define(DeleteRunImportTemplate, _run_import_template_cmd(DeleteRunImportTemplate))
+    container.define(ListRunImportTemplates, _list_run_import_templates)
 
     def _cross_protocol_resolver(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])

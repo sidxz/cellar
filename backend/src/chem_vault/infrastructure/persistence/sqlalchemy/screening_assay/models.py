@@ -379,3 +379,19 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
         Index("ix_drc_molecule", "molecule_id"),
         Index("ix_drc_protocol", "protocol_id"),
     )
+
+
+class RunImportTemplateModel(Base, EntityModelMixin, WorkspaceIdMixin):
+    """Saved column mapping for long-format run-file imports."""
+
+    __tablename__ = "run_import_templates"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    column_mapping: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    concentration_unit: Mapped[str] = mapped_column(String(20), nullable=False, default="uM")
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        Index("ix_run_import_template_ws", "workspace_id"),
+    )
