@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from chem_vault.application.screening.create_run import CreateRun, CreateRunCommand
+from chem_vault.application.screening.delete_run import DeleteRun, DeleteRunCommand
 from chem_vault.application.screening.get_run import GetRun, GetRunQuery
 from chem_vault.application.screening.list_runs_with_counts import ListRunsWithCounts, ListRunsWithCountsQuery
 from chem_vault.application.screening.lock_run import LockRun, LockRunCommand, UnlockRun, UnlockRunCommand
@@ -29,6 +30,7 @@ from chem_vault.interface.dependencies import (
     AuthDep,
     CompleteRunDep,
     CreateRunDep,
+    DeleteRunDep,
     GetRunDep,
     ListRunsWithCountsDep,
     LockRunDep,
@@ -203,6 +205,20 @@ async def update_run(
     )
     result = await uc(cmd, auth=auth)
     return RunResponse.from_domain(result_to_response(result))
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+async def delete_run(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: DeleteRunDep,
+) -> None:
+    cmd = DeleteRunCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+    )
+    result = await uc(cmd, auth=auth)
+    result_to_response(result)
 
 
 @router.post("/runs/{run_id}/start", response_model=RunResponse)

@@ -138,6 +138,21 @@ export function useUpdateRun() {
   });
 }
 
+export function useDeleteRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      customInstance<void>({
+        url: `/api/v1/runs/${id}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run deleted");
+    },
+  });
+}
+
 interface FitWarning {
   molecule_name?: string | null;
   reason: string;

@@ -62,6 +62,15 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
+    async def delete(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None:
+        """Delete a run by id, scoped to workspace. CASCADE handles plates+wells."""
+        from sqlalchemy import delete as sa_delete
+        stmt = sa_delete(RunModel).where(
+            RunModel.id == run_id,
+            RunModel.workspace_id == workspace_id,
+        )
+        await self._session.execute(stmt)
+
     async def is_locked(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
         """Efficient lock check — selects only the is_locked column."""
         stmt = select(RunModel.is_locked).where(

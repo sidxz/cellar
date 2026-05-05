@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Play,
   CheckCircle2,
@@ -9,9 +10,20 @@ import {
   Lock,
   Unlock,
   FlaskConical,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -39,6 +51,7 @@ import {
   useLockRun,
   useUnlockRun,
   useFitCurves,
+  useDeleteRun,
 } from "../hooks/use-runs";
 import { useProtocol } from "../hooks/use-protocols";
 import {
@@ -53,6 +66,7 @@ interface RunDetailProps {
 }
 
 export function RunDetail({ runId }: RunDetailProps) {
+  const router = useRouter();
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
   const startMutation = useStartRun();
@@ -62,6 +76,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const lockMutation = useLockRun();
   const unlockMutation = useUnlockRun();
   const fitCurvesMutation = useFitCurves();
+  const deleteMutation = useDeleteRun();
 
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -69,6 +84,21 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [lockReason, setLockReason] = useState("");
   const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const handleDelete = () => {
+    const protocolId = query.data?.protocol_id;
+    deleteMutation.mutate(runId, {
+      onSuccess: () => {
+        setDeleteDialogOpen(false);
+        if (protocolId) {
+          router.push(`/assays/protocols/${protocolId}`);
+        } else {
+          router.push("/assays");
+        }
+      },
+    });
+  };
 
   const handleReject = () => {
     rejectMutation.mutate(
@@ -200,6 +230,16 @@ export function RunDetail({ runId }: RunDetailProps) {
                   {fitCurvesMutation.isPending ? "Fitting..." : "Fit Curves"}
                 </Button>
               )}
+              {(status === "draft" || status === "in_progress") && !r.is_locked && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              )}
             </>
           );
         }}
@@ -321,6 +361,29 @@ export function RunDetail({ runId }: RunDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this run?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the run, its plates, wells, readout
+              data, and any fitted curves. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Unlock Dialog */}
       <Dialog open={unlockDialogOpen} onOpenChange={setUnlockDialogOpen}>

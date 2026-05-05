@@ -158,6 +158,7 @@ from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from chem_vault.application.screening.create_readout_data import CreateReadoutData
 from chem_vault.application.screening.create_run import CreateRun
+from chem_vault.application.screening.delete_run import DeleteRun
 from chem_vault.application.screening.create_target import CreateTarget
 from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
 from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
@@ -486,6 +487,7 @@ UpdateTargetDep = Annotated[UpdateTarget, Depends(_get_use_case(UpdateTarget))]
 DeleteTargetDep = Annotated[DeleteTarget, Depends(_get_use_case(DeleteTarget))]
 ConditionGroupingServiceDep = Annotated[ConditionGroupingService, Depends(_get_use_case(ConditionGroupingService))]
 CreateRunDep = Annotated[CreateRun, Depends(_get_use_case(CreateRun))]
+DeleteRunDep = Annotated[DeleteRun, Depends(_get_use_case(DeleteRun))]
 GetRunDep = Annotated[GetRun, Depends(_get_use_case(GetRun))]
 ListRunsByProtocolDep = Annotated[ListRunsByProtocol, Depends(_get_use_case(ListRunsByProtocol))]
 StartRunDep = Annotated[StartRun, Depends(_get_use_case(StartRun))]

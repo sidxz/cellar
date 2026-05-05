@@ -247,6 +247,17 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         return result.rowcount
 
+    async def delete_for_run(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> int:
+        """Delete ALL readout data rows for a run (raw + computed). Returns count."""
+        stmt = delete(ReadoutDataModel).where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.run_id == run_id,
+        )
+        result = await self._uow.session.execute(stmt)
+        return result.rowcount
+
     async def save(self, entity: ReadoutData) -> None:
         existing = await self._uow.session.get(ReadoutDataModel, entity.id)
         if existing is None:

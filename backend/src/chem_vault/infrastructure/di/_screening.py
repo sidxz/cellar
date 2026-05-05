@@ -30,6 +30,7 @@ from chem_vault.application.screening.create_dose_response import CreateDoseResp
 from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.create_readout_data import CreateReadoutData
 from chem_vault.application.screening.create_run import CreateRun
+from chem_vault.application.screening.delete_run import DeleteRun
 from chem_vault.application.screening.create_target import CreateTarget
 from chem_vault.application.screening.cross_protocol_resolver import CrossProtocolResolver
 from chem_vault.application.screening.delete_compound_flag import DeleteCompoundFlag
@@ -303,6 +304,18 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(CreateRun, _create_run)
+
+    def _delete_run(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteRun(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(DeleteRun, _delete_run)
     container.define(GetRun, _run_query(GetRun))
     container.define(ListRunsByProtocol, _run_query(ListRunsByProtocol))
     container.define(StartRun, _run_cmd(StartRun))
