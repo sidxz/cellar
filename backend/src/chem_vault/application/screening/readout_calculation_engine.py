@@ -238,7 +238,13 @@ class ReadoutCalculationEngine:
             if rd.is_calculated:
                 continue
 
-            rd_readouts = [r for r in raw_data if r.readout_definition_id == rd.id]
+            # Per-molecule aggregation is meaningless for control-well readouts
+            # (molecule_id is None on those). Filter them out here so they
+            # don't pollute aggregated_values with a None key.
+            rd_readouts = [
+                r for r in raw_data
+                if r.readout_definition_id == rd.id and r.molecule_id is not None
+            ]
 
             if rd.aggregation != ReadoutAggregation.NONE:
                 try:

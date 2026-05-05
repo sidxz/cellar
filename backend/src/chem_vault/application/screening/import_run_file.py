@@ -520,10 +520,10 @@ class ImportRunFile:
             )
             wells_by_plate[plate.id].append(well)
 
-            if molecule_id is None or batch_id is None:
-                # Control wells get no readouts written (matches existing semantics).
-                continue
-
+            # Write readouts for sample AND control wells. Control wells need
+            # their raw values persisted so plate normalization (% Inhibition,
+            # Z-prime QC) can find them. molecule_id / batch_id are nullable
+            # for non-sample wells.
             for rd_id, value in row.readouts.items():
                 readouts.append(
                     ReadoutData(

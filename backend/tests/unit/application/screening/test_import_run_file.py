@@ -433,13 +433,18 @@ class TestImportRunFile:
         assert out.plates_created == 1
         # Sample wells (A1, A2) + blank (A3) — all 3 wells created
         assert out.wells_created == 3
-        # Readouts only for sample wells with resolved batch
-        assert out.readouts_created == 2
-        assert len(saved) == 2
+        # Readouts written for all wells with values, including the blank
+        # (control wells need raw values for plate normalization).
+        assert out.readouts_created == 3
+        assert len(saved) == 3
         # Protocol has no control layout + normalization is NONE → blank row
         # falls through to SAMPLE; counted as unclassified rather than typed.
         assert out.controls_unclassified == 1
         assert out.controls_from_template == 0
+        # Non-sample readouts have None molecule/batch ids
+        non_sample = [r for r in saved if r.molecule_id is None]
+        assert len(non_sample) == 1
+        assert non_sample[0].batch_id is None
         assert uow.committed
         # Run aggregate state
         assert len(run.plates) == 1
@@ -609,7 +614,9 @@ class TestImportRunFile:
         assert out.unmatched_batches == ["LG-MISSING"]
         # A1 was skipped (unmatched), A2 is a blank — only one well created.
         assert out.wells_created == 1
-        assert out.readouts_created == 0
+        # The blank well still gets its readout written (non-sample readouts
+        # have None molecule/batch and feed plate normalization).
+        assert out.readouts_created == 1
 
     @pytest.mark.asyncio
     async def test_normalization_without_control_layout_fails(self) -> None:
