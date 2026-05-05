@@ -197,7 +197,81 @@ Closing the issue automatically moves it to "Done" on the project board.
 
 ## Current Session Notes
 
-> ### What Was Built (2026-05-05, branch: `fe2`)
+> ### What Was Built (2026-05-05 cont., branch: `fe2`) — long-format run import shipped
+>
+> All eight sessions of the long-format run-file import plan
+> (`docs/planning/run-import-long-format-plan.md`) are now in. Eight commits
+> on top of the prior session's UX/bugfix work, all on `fe2`.
+>
+> **Backend (S1–S5)**
+> 1. `316893d` `feat(parsers): unify csv + xlsx via tabular_file abstraction`
+>    — single `parse_tabular(bytes, filename)` that detects xlsx via magic
+>    bytes / extension; existing `ImportRunReadouts` + `ParsePlateMapFile`
+>    refactored to consume `ParsedTable`. Both endpoints accept .xlsx.
+> 2. `b025e11` `feat(screening): long-format run file normalizer`
+>    — pure-function `infer_mapping()` (synonyms + value-based fallback with
+>    confidence) + `normalize()` (A01↔A1, plate-format inference, control
+>    inference). NadD fixture roundtrip in tests.
+> 3. `7bfdcaa` `feat(screening): ImportRunFile use case + preview/import gate`
+>    — `PreviewRunFile` parses + suggests + dry-resolves batches, stashes
+>    parsed table in TTL `InMemoryPreviewStore`; `ImportRunFile` consumes
+>    `preview_id` + confirmed `ColumnMapping`, builds Plate/Well/ReadoutData.
+>    Locked-run, has-wells, unmatched-batch policies enforced.
+> 4. `0e80a6d` `feat(screening): RunImportTemplate aggregate + CRUD + DI`
+>    — workspace-scoped reusable column mapping. New table
+>    `run_import_templates` (alembic 016). Header-match scoring helper.
+> 5. `8e9e796` `feat(api): REST endpoints for run-file import + templates`
+>    — `POST /runs/{id}/preview-file` (multipart), `POST /runs/{id}/import-file`
+>    (JSON), full CRUD on `/run-import-templates`.
+>
+> **Frontend (S6–S7)**
+> 6. `43a8962` `feat(screening): RunImportWizard + Run Detail entry points`
+>    — 4-step modal (Upload → Mapping → Preview → Confirm) with confidence
+>    badges, auto-applied template banner, save-as-template toggle. Wired
+>    into RunDataPanel: primary "Import Run File" on Plate Map empty state,
+>    secondary toolbar button on Readout Data when no plate map exists.
+>
+> **Test status:** 1514 unit tests pass. Frontend `tsc --noEmit` clean.
+> Integration/API tests skipped — would need Docker Postgres.
+>
+> #### Migrations to apply (in order)
+>
+> 1. `015_add_updated_at_to_compound_flags.py` (committed earlier this
+>    session — `ae6cb87`)
+> 2. `016_add_run_import_templates.py` (this batch — `0e80a6d`)
+>
+> Run `alembic upgrade head` before smoke-testing.
+>
+> #### Manual smoke recipe
+>
+> 1. Start backend + frontend.
+> 2. Create or pick an active protocol with at least one Numeric readout
+>    definition.
+> 3. Click **New Run**, save the empty draft.
+> 4. Open the run, go to **Plate Map** tab, click **Import Run File**.
+> 5. Upload `~/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx`.
+> 6. Mapping step should auto-populate from synonyms (Plate Name, Well,
+>    Concentration, LGCY BATCH NAME, Raw Data, Scientist all "high"
+>    confidence). Pick the readout definition for "Raw Data". Continue.
+> 7. Preview shows two 384-well plates. Most batch refs will be unmatched
+>    (the lab's external batches aren't registered locally) — wells with
+>    refs will be skipped, blank wells will still come through.
+> 8. Click Import. The run gets two plates and the inferred blanks.
+>
+> #### Deferred / known gaps
+>
+> - **L8 — Playwright E2E**: not added. Smoke manually first.
+> - **replace_existing**: command field accepted but the use case currently
+>   fails with `ValidationError("not yet supported in MVP — re-create the
+>   run")`. The wizard does not expose this option. To re-import, delete
+>   the run and re-create.
+> - **Curve-fitting auto-trigger**: out of MVP — readout data is written
+>   but `FitCurvesForRun` is not called by the importer.
+> - **Async/Temporal pipeline**: out of MVP — sync only with a 50K-row cap.
+>
+> ---
+>
+> ### Earlier on 2026-05-05 (branch: `fe2`)
 >
 > Small UX/bugfix session + planning for the next major feature.
 >
