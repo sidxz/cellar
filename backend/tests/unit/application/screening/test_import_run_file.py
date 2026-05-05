@@ -29,10 +29,13 @@ from chem_vault.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
+    ReadoutNormalization,
     WellType,
 )
+from chem_vault.domain.screening_assay.plate_template import PlateTemplate
 from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from chem_vault.domain.screening_assay.run import Run
+from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from chem_vault.domain.shared.events import DomainEvent
 from chem_vault.infrastructure.parsers.tabular_file import parse_tabular
@@ -115,12 +118,19 @@ def _make_run(workspace_id: uuid.UUID, *, with_wells: bool = False, locked: bool
     )
 
 
-def _make_protocol(workspace_id: uuid.UUID, readout_names: list[str]) -> Protocol:
+def _make_protocol(
+    workspace_id: uuid.UUID,
+    readout_names: list[str],
+    *,
+    normalization: ReadoutNormalization = ReadoutNormalization.NONE,
+    control_layouts: dict[str, uuid.UUID] | None = None,
+) -> Protocol:
     rds = [
         ReadoutDefinition(
             protocol_id=uuid.uuid4(),
             name=n,
             data_type=ReadoutDataType.NUMERIC,
+            normalization=normalization,
         )
         for n in readout_names
     ]
@@ -131,7 +141,36 @@ def _make_protocol(workspace_id: uuid.UUID, readout_names: list[str]) -> Protoco
         created_by=uuid.uuid4(),
         status=ProtocolStatus.ACTIVE,
         readout_definitions=rds,
+        control_layouts=control_layouts,
     )
+
+
+def _make_plate_template(
+    workspace_id: uuid.UUID,
+    *,
+    fmt: PlateFormat = PlateFormat.F384,
+    template_map: dict[str, str] | None = None,
+) -> PlateTemplate:
+    return PlateTemplate(
+        workspace_id=workspace_id,
+        name="Test Layout",
+        format=fmt,
+        template_map=template_map or {},
+        created_by=uuid.uuid4(),
+    )
+
+
+def _make_plate_template_repo(
+    templates_by_id: dict[uuid.UUID, PlateTemplate] | None = None,
+) -> AsyncMock:
+    repo = AsyncMock()
+    by_id = templates_by_id or {}
+
+    async def _find(_ws, tmpl_id):
+        return by_id.get(tmpl_id)
+
+    repo.find_by_id_in_workspace = _find
+    return repo
 
 
 def _build_preview_uc(
@@ -140,6 +179,8 @@ def _build_preview_uc(
     batches_by_ref: dict[str, FakeBatch] | None = None,
     molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
     store: InMemoryPreviewStore | None = None,
+    protocol: Protocol | None = None,
+    plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
 ) -> tuple[PreviewRunFile, InMemoryPreviewStore]:
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
@@ -158,6 +199,9 @@ def _build_preview_uc(
 
     molecule_repo.find_by_identifier = _find_mol
 
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+
     store = store or InMemoryPreviewStore(ttl_seconds=60)
     return (
         PreviewRunFile(
@@ -166,6 +210,8 @@ def _build_preview_uc(
             batch_repo=batch_repo,
             molecule_repo=molecule_repo,
             preview_store=store,
+            protocol_repo=protocol_repo,
+            plate_template_repo=_make_plate_template_repo(plate_templates),
         ),
         store,
     )
@@ -179,6 +225,7 @@ def _build_import_uc(
     store: InMemoryPreviewStore,
     save_bulk: list | None = None,
     molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
+    plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
 ) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -219,6 +266,7 @@ def _build_import_uc(
         batch_repo=batch_repo,
         molecule_repo=molecule_repo,
         preview_store=store,
+        plate_template_repo=_make_plate_template_repo(plate_templates),
     )
     return uc, uow, run_repo
 
@@ -274,7 +322,7 @@ class TestPreviewRunFile:
         plate = preview.plates[0]
         assert plate.plate_name == "P1"
         assert plate.sample_count == 2
-        assert plate.control_count == 1
+        assert plate.blank_count == 1
         assert preview.matched_batches == 1
         assert preview.unmatched_batches == ()
         # Cached for follow-up import
@@ -388,7 +436,10 @@ class TestImportRunFile:
         # Readouts only for sample wells with resolved batch
         assert out.readouts_created == 2
         assert len(saved) == 2
-        assert out.controls_inferred == 1
+        # Protocol has no control layout + normalization is NONE → blank row
+        # falls through to SAMPLE; counted as unclassified rather than typed.
+        assert out.controls_unclassified == 1
+        assert out.controls_from_template == 0
         assert uow.committed
         # Run aggregate state
         assert len(run.plates) == 1
@@ -560,6 +611,116 @@ class TestImportRunFile:
         assert out.wells_created == 1
         assert out.readouts_created == 0
 
+    @pytest.mark.asyncio
+    async def test_normalization_without_control_layout_fails(self) -> None:
+        """Percent-inhibition protocol without a configured layout must block."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        )
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=b"Well,Batch,Raw Data\nA1,LG-1,0.5\n",
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref={"LG-1": batch}, store=store
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        err = result.failure()
+        assert isinstance(err, ValidationError)
+        assert "Control Layout" in str(err)
+
+    @pytest.mark.asyncio
+    async def test_template_classifies_positive_control_well(self) -> None:
+        """A configured template overrides the SAMPLE default for blank rows."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        # Plate template: A1 is positive_control, A2 is negative_control.
+        tmpl = _make_plate_template(
+            auth.workspace_id,
+            fmt=PlateFormat.F96,
+            template_map={"A1": "positive_control", "A2": "negative_control"},
+        )
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+            control_layouts={PlateFormat.F96.value: tmpl.id},
+        )
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            # A1 (pos ctrl, no batch), A2 (neg ctrl, no batch), A3 (sample),
+            # H12 corner cell to force 96-well plate-format inference.
+            file_content=(
+                b"Well,Batch,Raw Data\n"
+                b"A1,,0.07\n"
+                b"A2,,0.95\n"
+                b"A3,LG-1,0.5\n"
+                b"H12,LG-1,0.5\n"
+            ),
+            filename="x.csv",
+        )
+        batch = FakeBatch()
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+        assert out.controls_from_template == 2
+        assert out.controls_unclassified == 0
+        # Verify wells got the right types from the template.
+        wells_by_pos = {(w.row, w.column): w for w in run.wells}
+        assert wells_by_pos[("A", 1)].well_type == WellType.POSITIVE_CONTROL
+        assert wells_by_pos[("A", 2)].well_type == WellType.NEGATIVE_CONTROL
+        assert wells_by_pos[("A", 3)].well_type == WellType.SAMPLE
+
 
 # ---------------------------------------------------------------------------
 # NadD fixture end-to-end
@@ -636,7 +797,10 @@ class TestNadDFixtureRoundtrip:
         assert out.plates_created == 2
         # NadD has two plates of 384 wells but not every well has data — assert lower bound
         assert out.wells_created > 600
-        assert out.controls_inferred > 0
+        # Protocol has no Control Layout configured, so blank wells fall through
+        # to SAMPLE and are counted as unclassified.
+        assert out.controls_unclassified > 0
+        assert out.controls_from_template == 0
         assert uow.committed
 
 

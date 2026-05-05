@@ -56,7 +56,7 @@ class PlatePreviewModel(BaseModel):
     plate_format: str
     well_count: int
     sample_count: int
-    control_count: int
+    blank_count: int
 
 
 class PreviewRunFileResponse(BaseModel):
@@ -69,6 +69,7 @@ class PreviewRunFileResponse(BaseModel):
     unmatched_batches: list[str]
     total_rows: int
     expires_in_seconds: int
+    validation_errors: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -118,7 +119,7 @@ async def preview_run_file(
                 plate_format=p.plate_format,
                 well_count=p.well_count,
                 sample_count=p.sample_count,
-                control_count=p.control_count,
+                blank_count=p.blank_count,
             )
             for p in preview.plates
         ],
@@ -126,6 +127,7 @@ async def preview_run_file(
         unmatched_batches=list(preview.unmatched_batches),
         total_rows=preview.total_rows,
         expires_in_seconds=preview.expires_in_seconds,
+        validation_errors=list(preview.validation_errors),
     )
 
 
@@ -161,7 +163,8 @@ class ImportRunFileResponse(BaseModel):
     wells_created: int
     readouts_created: int
     unmatched_batches: list[str]
-    controls_inferred: int
+    controls_from_template: int
+    controls_unclassified: int
     skipped_rows: int
 
 
@@ -204,7 +207,8 @@ async def import_run_file(
         wells_created=out.wells_created,
         readouts_created=out.readouts_created,
         unmatched_batches=out.unmatched_batches,
-        controls_inferred=out.controls_inferred,
+        controls_from_template=out.controls_from_template,
+        controls_unclassified=out.controls_unclassified,
         skipped_rows=out.skipped_rows,
     )
 

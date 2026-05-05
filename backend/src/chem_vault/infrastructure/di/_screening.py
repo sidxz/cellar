@@ -523,6 +523,8 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
         )
 
     container.define(PreviewRunFile, _preview_run_file)
@@ -537,6 +539,7 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
+            plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
             dispatcher=c[EventDispatcher],
             calculation_engine=c[ReadoutCalculationEngine],
         )

@@ -15,7 +15,6 @@ from chem_vault.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
-from chem_vault.domain.screening_assay.enums import WellType
 from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.errors import ValidationError
 from chem_vault.infrastructure.parsers.tabular_file import ParsedTable, parse_tabular
@@ -174,8 +173,8 @@ class TestNormalizePlateFormat:
 # ---------------------------------------------------------------------------
 
 
-class TestNormalizeControlInference:
-    def test_no_batch_no_concentration_is_negative_control(self) -> None:
+class TestNormalizeBlankDetection:
+    def test_no_batch_no_concentration_yields_blank_row(self) -> None:
         rd_id = uuid.uuid4()
         table = _make_table(
             ["Well", "Conc", "Batch", "Raw"],
@@ -188,11 +187,10 @@ class TestNormalizeControlInference:
             readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
         )
         row = normalize(table, mapping).unwrap().rows[0]
-        assert row.inferred_well_type == WellType.NEGATIVE_CONTROL
         assert row.batch_ref is None
         assert row.concentration is None
 
-    def test_with_batch_is_sample(self) -> None:
+    def test_with_batch_is_sample_row(self) -> None:
         rd_id = uuid.uuid4()
         table = _make_table(
             ["Well", "Conc", "Batch", "Raw"],
@@ -205,7 +203,6 @@ class TestNormalizeControlInference:
             readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
         )
         row = normalize(table, mapping).unwrap().rows[0]
-        assert row.inferred_well_type == WellType.SAMPLE
         assert row.batch_ref == "LG-001"
         assert row.concentration == 100.0
 
@@ -295,7 +292,9 @@ class TestNadDFixture:
         for fmt in out.plate_formats.values():
             assert fmt == PlateFormat.F384
 
-    def test_normalize_classifies_blank_wells(self, fixture_table: ParsedTable) -> None:
+    def test_normalize_separates_sample_and_blank_rows(
+        self, fixture_table: ParsedTable
+    ) -> None:
         s = infer_mapping(fixture_table)
         rd_id = uuid.uuid4()
         readout_header = s.first("readout")
@@ -310,13 +309,7 @@ class TestNadDFixture:
             ),
         )
         out = normalize(fixture_table, mapping).unwrap()
-        sample_rows = [r for r in out.rows if r.inferred_well_type == WellType.SAMPLE]
-        neg_ctrl_rows = [r for r in out.rows if r.inferred_well_type == WellType.NEGATIVE_CONTROL]
+        sample_rows = [r for r in out.rows if r.batch_ref]
+        blank_rows = [r for r in out.rows if not r.batch_ref]
         assert len(sample_rows) > 0
-        assert len(neg_ctrl_rows) > 0
-        # First plate, A01: empty conc + empty batch + has Raw Data → NEGATIVE_CONTROL
-        a01_p1 = [
-            r for r in out.rows
-            if r.well == WellPosition(row="A", column=1) and "Plate-1" in r.plate_name
-        ]
-        assert a01_p1 and a01_p1[0].inferred_well_type == WellType.NEGATIVE_CONTROL
+        assert len(blank_rows) > 0

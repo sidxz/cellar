@@ -11,7 +11,10 @@ This module contains no I/O. It does:
      (``normalize``), including:
        - well-position canonicalization (``A01`` ↔ ``A1``)
        - per-plate format inference (96 / 384 / 1536)
-       - control-well inference (``BLANK`` when value present but batch absent)
+
+Well-type classification is NOT done here — the importer derives WellType
+from the protocol's configured ``control_layouts`` (PlateTemplate.template_map)
+since the file format itself can't distinguish positive from negative controls.
 """
 
 from __future__ import annotations
@@ -25,7 +28,6 @@ from typing import Literal
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.domain.screening_assay.enums import WellType
 from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 from chem_vault.infrastructure.parsers.tabular_file import ParsedTable
@@ -122,7 +124,6 @@ class LongFormatRow:
     concentration: float | None
     readouts: dict[uuid.UUID, float]
     scientist: str | None
-    inferred_well_type: WellType
 
 
 @dataclass(frozen=True)
@@ -358,8 +359,6 @@ def normalize(
     - Concentration is parsed as float; missing/invalid → ``None``.
     - Readouts are parsed per ``ReadoutColumn``; non-numeric cells are
       dropped silently from that row's readout dict.
-    - Inferred well type: rows with at least one readout value but no
-      batch_ref AND no concentration ⇒ ``BLANK``; otherwise ``SAMPLE``.
 
     Returns ``Failure(ValidationError)`` if the well column header is not
     present on the table or if no valid rows are produced.
@@ -418,8 +417,6 @@ def normalize(
             if v is not None:
                 readouts[rc.readout_definition_id] = v
 
-        well_type = _infer_well_type(batch_ref, conc, readouts)
-
         rows.append(
             LongFormatRow(
                 plate_name=plate_name,
@@ -428,7 +425,6 @@ def normalize(
                 concentration=conc,
                 readouts=readouts,
                 scientist=scientist,
-                inferred_well_type=well_type,
             )
         )
 
@@ -471,27 +467,6 @@ def _parse_float(raw: object) -> float | None:
         return float(s)
     except ValueError:
         return None
-
-
-def _infer_well_type(
-    batch_ref: str | None,
-    concentration: float | None,
-    readouts: dict[uuid.UUID, float],
-) -> WellType:
-    """Infer the type of a long-format row.
-
-    A row with a batch ref or concentration is a SAMPLE. A row with no batch
-    and no concentration but a readout value is treated as a NEGATIVE_CONTROL
-    (vehicle / DMSO well — the standard 100% activity reference for
-    % Inhibition normalization).  A pure buffer-only blank well is rare in
-    screening files; if a lab needs the distinction they should add an
-    explicit well-type column.
-    """
-    if batch_ref or concentration is not None:
-        return WellType.SAMPLE
-    if readouts:
-        return WellType.NEGATIVE_CONTROL
-    return WellType.SAMPLE
 
 
 def _infer_plate_formats(rows: Iterable[LongFormatRow]) -> dict[str, PlateFormat]:

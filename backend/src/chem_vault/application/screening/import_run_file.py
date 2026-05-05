@@ -34,6 +34,7 @@ from chem_vault.application.screening.long_format_normalizer import (
     NormalizedTable,
     ReadoutColumn,
     SuggestedMapping,
+    WellPosition,
     infer_mapping,
     normalize,
 )
@@ -45,9 +46,12 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository
-from chem_vault.domain.screening_assay.enums import WellType
+from chem_vault.domain.screening_assay.enums import ReadoutNormalization, WellType
+from chem_vault.domain.screening_assay.plate_template import PlateTemplate
+from chem_vault.domain.screening_assay.protocol import Protocol as AssayProtocol
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.screening_assay.repository import (
+    PlateTemplateRepository,
     ProtocolRepository,
     ReadoutDataRepository,
     RunRepository,
@@ -140,7 +144,7 @@ class PlatePreview:
     plate_format: str
     well_count: int
     sample_count: int
-    control_count: int
+    blank_count: int
 
 
 @dataclass(frozen=True)
@@ -154,6 +158,7 @@ class PreviewRunFileResult:
     unmatched_batches: tuple[str, ...]
     total_rows: int
     expires_in_seconds: int
+    validation_errors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -173,7 +178,8 @@ class ImportRunFileResult:
     wells_created: int = 0
     readouts_created: int = 0
     unmatched_batches: list[str] = field(default_factory=list)
-    controls_inferred: int = 0
+    controls_from_template: int = 0
+    controls_unclassified: int = 0
     skipped_rows: int = 0
 
 
@@ -192,12 +198,16 @@ class PreviewRunFile:
         batch_repo: BatchRepository,
         molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
+        protocol_repo: ProtocolRepository,
+        plate_template_repo: PlateTemplateRepository,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
         self._batch_repo = batch_repo
         self._molecule_repo = molecule_repo
         self._store = preview_store
+        self._protocol_repo = protocol_repo
+        self._plate_template_repo = plate_template_repo
 
     async def __call__(
         self,
@@ -239,6 +249,11 @@ class PreviewRunFile:
         plates: tuple[PlatePreview, ...] = ()
         matched = 0
         unmatched_set: set[str] = set()
+        validation_errors: list[str] = []
+
+        protocol = await self._protocol_repo.find_by_id_in_workspace(
+            input.workspace_id, run.protocol_id
+        )
 
         if guessed is not None:
             try:
@@ -259,6 +274,16 @@ class PreviewRunFile:
                     self._batch_repo,
                     self._molecule_repo,
                 )
+                if protocol is not None:
+                    templates_by_format = await _load_templates_by_format(
+                        protocol,
+                        norm.plate_formats,
+                        input.workspace_id,
+                        self._plate_template_repo,
+                    )
+                    validation_errors = _validate_controls_required(
+                        protocol, norm.plate_formats, templates_by_format
+                    )
                 _ = conc_unit  # validated; used by import phase
 
         preview_id = uuid.uuid4()
@@ -289,6 +314,7 @@ class PreviewRunFile:
                 unmatched_batches=tuple(sorted(unmatched_set)),
                 total_rows=table.row_count,
                 expires_in_seconds=int(ttl),
+                validation_errors=tuple(validation_errors),
             )
         )
 
@@ -310,6 +336,7 @@ class ImportRunFile:
         batch_repo: BatchRepository,
         molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
+        plate_template_repo: PlateTemplateRepository,
         dispatcher: EventDispatcherProtocol | None = None,
         calculation_engine: ReadoutCalculationEngine | None = None,
     ) -> None:
@@ -320,6 +347,7 @@ class ImportRunFile:
         self._batch_repo = batch_repo
         self._molecule_repo = molecule_repo
         self._store = preview_store
+        self._plate_template_repo = plate_template_repo
         self._dispatcher = dispatcher
         self._calc_engine = calculation_engine
 
@@ -404,7 +432,22 @@ class ImportRunFile:
                     )
                 )
 
-        # 6. Resolve batch references
+        # 6. Pre-flight: control-layout coverage. If the protocol uses
+        # control-based normalization but lacks a configured layout for any
+        # plate format in the file, fail BEFORE writing anything.
+        templates_by_format = await _load_templates_by_format(
+            protocol,
+            normalized.plate_formats,
+            cmd.workspace_id,
+            self._plate_template_repo,
+        )
+        control_errors = _validate_controls_required(
+            protocol, normalized.plate_formats, templates_by_format
+        )
+        if control_errors:
+            return Failure(ValidationError("; ".join(control_errors)))
+
+        # 7. Resolve batch references
         batch_lookup = await _build_batch_lookup(
             normalized.rows,
             cmd.workspace_id,
@@ -444,9 +487,22 @@ class ImportRunFile:
                     continue
                 batch_id, molecule_id = resolved
 
-            well_type = row.inferred_well_type
-            if well_type != WellType.SAMPLE:
-                result.controls_inferred += 1
+            plate_format = normalized.plate_formats.get(row.plate_name)
+            if row.batch_ref or row.concentration is not None:
+                well_type = WellType.SAMPLE
+            else:
+                per_well = (
+                    templates_by_format.get(plate_format)
+                    if plate_format is not None
+                    else None
+                )
+                tmpl_type = per_well.get(_well_key(row.well)) if per_well else None
+                if tmpl_type is not None:
+                    well_type = tmpl_type
+                    result.controls_from_template += 1
+                else:
+                    well_type = WellType.SAMPLE
+                    result.controls_unclassified += 1
 
             concentration = (
                 Concentration(value=row.concentration, unit=conc_unit)
@@ -556,10 +612,8 @@ def _summarize_plates(
                 plate_name=plate,
                 plate_format=plate_formats.get(plate, PlateFormat.F96).value,
                 well_count=len(plate_rows),
-                sample_count=sum(1 for r in plate_rows if r.inferred_well_type == WellType.SAMPLE),
-                control_count=sum(
-                    1 for r in plate_rows if r.inferred_well_type != WellType.SAMPLE
-                ),
+                sample_count=sum(1 for r in plate_rows if r.batch_ref),
+                blank_count=sum(1 for r in plate_rows if not r.batch_ref),
             )
         )
     return tuple(out)
@@ -649,3 +703,103 @@ async def _build_batch_lookup(
         if resolved is not None:
             out[r.batch_ref] = resolved
     return out
+
+
+# ---------------------------------------------------------------------------
+# Control-layout helpers
+# ---------------------------------------------------------------------------
+
+
+_DESIGNATION_TO_WELL_TYPE: dict[str, WellType] = {
+    "compound": WellType.SAMPLE,
+    "positive_control": WellType.POSITIVE_CONTROL,
+    "negative_control": WellType.NEGATIVE_CONTROL,
+    "blank": WellType.BLANK,
+    # "empty" intentionally absent — falls through to SAMPLE.
+}
+
+
+def _well_key(well: WellPosition) -> str:
+    """Template stores 'A1' (no zero-pad); long-format normalizes 'A01' → 'A1'."""
+    return f"{well.row}{well.column}"
+
+
+def _build_template_lookup(
+    protocol: AssayProtocol,
+    plate_formats: dict[str, PlateFormat],
+    templates_by_id: dict[uuid.UUID, PlateTemplate],
+) -> dict[PlateFormat, dict[str, WellType]]:
+    """Map each plate format used in the file to a {well_key -> WellType} dict.
+
+    Plate formats not covered by ``control_layouts`` are absent from the result.
+    """
+    out: dict[PlateFormat, dict[str, WellType]] = {}
+    for fmt in set(plate_formats.values()):
+        tmpl_id = protocol.control_layouts.get(fmt.value)
+        if tmpl_id is None:
+            continue
+        tmpl = templates_by_id.get(tmpl_id)
+        if tmpl is None:
+            continue
+        per_well: dict[str, WellType] = {}
+        for well_key, designation in (tmpl.template_map or {}).items():
+            wt = _DESIGNATION_TO_WELL_TYPE.get(str(designation))
+            if wt is not None:
+                per_well[str(well_key)] = wt
+        out[fmt] = per_well
+    return out
+
+
+async def _load_templates_by_format(
+    protocol: AssayProtocol,
+    plate_formats: dict[str, PlateFormat],
+    workspace_id: uuid.UUID,
+    plate_template_repo: PlateTemplateRepository,
+) -> dict[PlateFormat, dict[str, WellType]]:
+    used_fmts = set(plate_formats.values())
+    templates_by_id: dict[uuid.UUID, PlateTemplate] = {}
+    for fmt in used_fmts:
+        tmpl_id = protocol.control_layouts.get(fmt.value)
+        if tmpl_id is None or tmpl_id in templates_by_id:
+            continue
+        tmpl = await plate_template_repo.find_by_id_in_workspace(workspace_id, tmpl_id)
+        if tmpl is not None:
+            templates_by_id[tmpl_id] = tmpl
+    return _build_template_lookup(protocol, plate_formats, templates_by_id)
+
+
+def _normalization_requires_controls(rd_normalization: ReadoutNormalization) -> bool:
+    return rd_normalization in (
+        ReadoutNormalization.PERCENT_INHIBITION,
+        ReadoutNormalization.PERCENT_ACTIVATION,
+        ReadoutNormalization.PERCENT_CONTROL,
+        ReadoutNormalization.Z_SCORE,
+    )
+
+
+def _validate_controls_required(
+    protocol: AssayProtocol,
+    plate_formats: dict[str, PlateFormat],
+    templates: dict[PlateFormat, dict[str, WellType]],
+) -> list[str]:
+    """Return error messages for plate formats that need controls but lack a layout."""
+    needs_controls = any(
+        _normalization_requires_controls(rd.normalization)
+        for rd in protocol.readout_definitions
+    )
+    if not needs_controls:
+        return []
+    errors: list[str] = []
+    seen_formats: set[PlateFormat] = set()
+    for fmt in plate_formats.values():
+        if fmt in seen_formats:
+            continue
+        seen_formats.add(fmt)
+        per_well = templates.get(fmt)
+        if not per_well:
+            errors.append(
+                f"Protocol uses control-based normalization but no Control Layout "
+                f"is configured for {fmt.value}-well plates. Configure one on the "
+                f"protocol's Design tab."
+            )
+    return errors
