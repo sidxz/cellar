@@ -197,6 +197,348 @@ Closing the issue automatically moves it to "Done" on the project board.
 
 ## Current Session Notes
 
+> ### Handoff (2026-05-05, branch: `fe2`) — IC50 fitting still broken; four real bugs identified, NOT yet fixed
+>
+> #### ⚠️ Mandate for the next session
+>
+> **Do not take shortcuts. Do not patch over symptoms. Do not write
+> compatibility shims to avoid touching the underlying contract.** Every
+> bug below has a clean root-cause fix that touches the right layer of
+> the architecture. If you find yourself reaching for a "just write a
+> derived field downstream" or "just filter at display time" workaround,
+> stop and fix the actual thing. If a fix requires changing a contract
+> across backend + frontend, change both. If it requires updating tests,
+> update them — don't disable, don't loosen.
+>
+> The user is a real screener trying to get a real IC50 out of a real
+> NadD file. A demo-grade fix that "looks right in this case" but is
+> wrong in the next one is worse than no fix.
+>
+> #### What was shipped this session (4 commits on `fe2`)
+>
+> 1. `b013837` `feat(import): control layouts as canonical well-type source; drop inference`
+>    — `_infer_well_type()` removed entirely. Long-format normalizer is
+>    now pure data shape; classification comes only from
+>    `protocol.control_layouts[plate_format]` →
+>    `PlateTemplate.template_map`. Pre-flight in both Preview and Import:
+>    if any readout uses control-based normalization (% Inhibition,
+>    % Activation, % Control, Z-score) and a plate format in the file
+>    has no Control Layout configured, the import is BLOCKED before any
+>    writes with a clear, actionable message.
+>    `PlatePreview.control_count` → `blank_count`. New result fields:
+>    `controls_from_template`, `controls_unclassified`,
+>    `validation_errors`. ReadoutData domain entity already had nullable
+>    molecule/batch on the DB side; the entity now matches.
+>
+> 2. `082bdae` `feat(screening): X/Y editor for IC50 + Control Layout discoverability + import wizard guards`
+>    — Add/Edit Readout dialogs on protocol Design tab now expose the
+>    Dose-Response Configuration block (curve type, X/Y readout,
+>    Hill slope, normalization scope, activity threshold). Previously
+>    only the initial Create Protocol wizard had it; existing IC50 rows
+>    couldn't be re-pointed. Control Layouts card got "Manage Templates"
+>    header link, an empty-state CTA when the workspace has zero
+>    templates, and template-by-format filtering. Import wizard renders
+>    `validation_errors` as a destructive banner; "Import" button gated
+>    on no errors. "Controls" column in the per-plate preview renamed to
+>    "Blanks".
+>
+> 3. `53dd5bf` `fix(import): write readouts for control wells; unblocks plate normalization`
+>    — `ImportRunFile` no longer skips readouts for non-sample wells.
+>    Control wells (NEG/POS/BLANK) now persist their raw values with
+>    `molecule_id = batch_id = None`. Without this, plate normalization
+>    found zero negative-control values and silently failed via the
+>    swallowed-DomainError path. Calc engine's per-molecule aggregation
+>    step now filters `molecule_id is None` rows so they don't pollute
+>    `aggregated_values[None]`.
+>
+> 4. `00a5fef` `feat(runs): delete run end-to-end (draft + in-progress, unlocked)`
+>    — `DeleteRun` use case (the feature was missing entirely; only
+>    SQL-level cleanup was possible). Editor + workspace guards. Blocks
+>    locked runs and any non-draft / non-in-progress status (terminal
+>    states have audit trails — once approved/rejected, no delete).
+>    Cleanup order: `dose_response_curves` → `readout_data` → `run`.
+>    Plates and wells cascade via existing FK ON DELETE CASCADE.
+>    `DELETE /api/v1/runs/{run_id}` (204). `useDeleteRun` hook +
+>    destructive button on Run detail page, visible only when
+>    `(draft || in_progress) && !is_locked`. Confirm dialog redirects to
+>    the protocol page.
+>
+> All four committed; not pushed. Branch is 24 commits ahead of
+> `origin/fe2`.
+>
+> #### Where the user is in the manual flow
+>
+> The user has:
+> - A **Draft Plate Template** named `NadD 384 — col1 NEG, col24 POS`,
+>   384-well, with col 1 painted as NEGATIVE_CONTROL and col 24 as
+>   POSITIVE_CONTROL. (User got there via Administration → Screening
+>   Setup → Plate Templates after the new in-context CTAs surfaced it.)
+> - The protocol **`NadD-Sumo dose response`** is in some published
+>   state with: `concentration` (Numeric, uM), `raw AU` (Numeric, AU,
+>   Normalization=% Inhibition), `IC50` (Dose-Response, X=concentration,
+>   Y=`raw AU`), `Scientist` (Text). Control Layout for 384 is wired to
+>   the plate template above.
+> - A **Run 2026-05-05** with `In Progress` status, run id
+>   `ba0e6dfe-c73d-4153-bead-6e4fd34a40d8`, imported from
+>   `~/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx`. Import
+>   succeeded with `2 plates · 680 wells · 680 readouts · 64 controls
+>   from layout · 23 blank wells unclassified`.
+>
+> The user can now `Delete` the run (new feature in `00a5fef`) and
+> re-import once the bugs below are fixed.
+>
+> #### Bug 1 — Curves all return 0.000 / Inactive / R²=0 [CRITICAL]
+>
+> File: `backend/src/chem_vault/application/screening/fit_dose_response.py`
+> Lines: ~96–110
+>
+> **Root cause:** `ReadoutCalculationEngine` writes normalized values as
+> new `ReadoutData` rows with `is_computed=True` and the **same
+> `readout_definition_id`** as the raw rows
+> (`readout_calculation_engine.py:181–191`). The fitter (`fit_dose_response.py`)
+> filters by `y_rd.id` only — it never looks at `is_computed`. So per
+> concentration point, the 4PL optimizer is fed two y-values that
+> disagree by orders of magnitude (raw AU ~0.07–0.6 and post-normalization
+> % inhibition 0–100). The Levenberg-Marquardt fit cannot converge and
+> returns degenerate zeros.
+>
+> **Proper fix:** in `fit_dose_response.py`, before the group-by loop,
+> compute `use_computed = y_rd.normalization != ReadoutNormalization.NONE
+> or y_rd.is_calculated`. In the loop, skip rows whose
+> `is_computed != use_computed`. This selects the correct value layer
+> deterministically — post-normalization for normalized readouts, raw
+> for direct readouts, computed for calculated readouts.
+>
+> **Do not** "deduplicate by well_id and prefer is_computed" — that's a
+> patch. The real semantic is: for each readout def, exactly ONE value
+> layer is the canonical fit input, determined by the def's
+> normalization/calculation state.
+>
+> Add unit tests covering: (a) normalized readout fits use only computed
+> values, (b) raw readout fits use only is_computed=False values,
+> (c) calculated readout fits use only computed values.
+>
+> #### Bug 2 — Plate Map UI cannot render multi-plate runs [CRITICAL]
+>
+> Files:
+> - `backend/src/chem_vault/interface/routes/plate_setup.py` (`PlateMapResponse`,
+>   `WellMapEntry`, `get_plate_map`)
+> - `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/plate_map_reader.py`
+> - `backend/src/chem_vault/application/screening/plate_map_reader.py`
+> - `frontend/src/features/screening-assay/types/index.ts` (`PlateMapResponse`,
+>   `PlateMapWell`, `PlateMapSummary`)
+> - `frontend/src/features/screening-assay/components/run-data-panel.tsx`
+> - `frontend/src/features/screening-assay/components/plate-map-viewer.tsx`
+> - `frontend/src/features/screening-assay/components/plate-heatmap.tsx`
+>
+> **Root cause:** the backend response shape and the frontend type
+> contract diverged when multi-plate support was added on the backend.
+> The frontend type was never updated. Both the structural shape AND
+> several field names mismatch:
+>
+> Backend returns:
+> ```json
+> {"run_id": "...", "plates": [{"plate_id": "...", "plate_number": 1, "wells": [...]}]}
+> ```
+> Frontend reads `plateMap?.wells` (top-level), so `hasPlateMap` is
+> always `false` → empty-state grid with "Set Up Plate" buttons. The
+> heatmap has been broken since multi-plate landed.
+>
+> Field-level: backend sends `concentration_value` / `concentration_unit`
+> and no `position` or `batch_number`. Frontend reads `concentration`,
+> `position`, `batch_number`.
+>
+> **Proper fix:** redesign the contract end-to-end as one logical
+> response, not a backwards-compat patch on either side.
+>
+> Backend `PlateMapResponse` becomes:
+> ```python
+> class PlateData(BaseModel):
+>     plate_id: uuid.UUID
+>     plate_number: int
+>     format: str           # plate format per plate (a run can mix formats)
+>     wells: list[PlateMapWellModel]
+>     summary: PlateMapSummaryModel
+>
+> class PlateMapResponse(BaseModel):
+>     run_id: uuid.UUID
+>     plates: list[PlateData]
+> ```
+>
+> `PlateMapWellModel` includes `position` (e.g., "A1" — derive from
+> row+column, no zero-padding to match frontend convention),
+> `concentration` + `concentration_unit` (rename from
+> `concentration_value`), `batch_number` (lookup join through BatchModel
+> in the reader, same pattern as the existing molecule_name lookup).
+>
+> `PlateMapSummary` is computed in the reader: `total_wells`,
+> `sample_wells`, `control_wells`, `compounds`,
+> `concentrations_per_compound`, `replicates`. Reuse domain enums.
+>
+> Frontend `PlateMapResponse` mirrors. `usePlateMap` typing updates.
+> `RunDataPanel`'s plate-map tab renders a tab strip when `plates.length > 1`
+> (one tab per plate, label = "Plate {n}"), one `PlateMapViewer` per
+> tab. `PlateMapViewer` already takes a single-plate input — its props
+> change from `plateMap: PlateMapResponse` to `plate: PlateData`.
+> `hasPlateMap` becomes `plates.length > 0 && plates[0].wells.length > 0`.
+>
+> Also update `PlateHeatmap` (the empty-state placeholder) — it should
+> only render when there are no plates at all, not when wells are
+> wrongly empty due to a contract bug.
+>
+> Tests: backend route test for multi-plate response shape; frontend
+> render test for the tab strip + per-plate heatmap.
+>
+> **Do not** add a `wells` top-level field to the backend response as a
+> backwards-compat shim. Change the frontend.
+>
+> #### Bug 3 — Scientist text vanishes during import [IMPORTANT]
+>
+> Files:
+> - `backend/src/chem_vault/application/screening/long_format_normalizer.py`
+> - `backend/src/chem_vault/application/screening/import_run_file.py`
+> - `frontend/src/features/screening-assay/components/run-import-wizard.tsx`
+>   (mapping step)
+>
+> **Root cause:** the wizard offers two ways to map a column —
+> "Scientist" role or "Readout" with a readout def. Today, only "Readout"
+> mappings result in `ReadoutData` writes (and only numeric ones, because
+> `_parse_float` is in the path). "Scientist" role stores the value on
+> `LongFormatRow.scientist` and **drops it** — `ImportRunFile` never
+> reads that field. Result: the protocol's `Scientist` Text readout def
+> is never populated; the column shows em-dash on the Readout Data
+> table.
+>
+> The deeper issue: the long-format normalizer cannot handle Text
+> readouts at all. `_parse_float` rejects them. The wizard's "Readout"
+> dropdown likely doesn't surface Text readout defs.
+>
+> **Proper fix (not a patch):** add Text readout support end-to-end.
+>
+> 1. `long_format_normalizer.py`: extend `LongFormatRow.readouts` to
+>    `dict[uuid.UUID, float | str]`. The mapping step decides per
+>    readout column whether to parse as float or text based on the
+>    selected readout def's `data_type` (TEXT vs NUMERIC). The wizard
+>    backend route must accept this — extend `ColumnMapping.ReadoutColumn`
+>    if needed, OR parse type-blind and let the writer dispatch. The
+>    type-aware branch is cleaner: extend `ReadoutColumn` with a flag
+>    or look up the def by id at parse time.
+>
+> 2. `import_run_file.py`: when writing `ReadoutData`, dispatch on the
+>    readout def's `data_type`. TEXT → `value=None, value_text=str(v)`;
+>    NUMERIC → `value=QualifiedValue(value=float(v))`.
+>
+> 3. Wizard frontend: list Text readout defs in the readout-column
+>    dropdown alongside Numeric. Synonym matching for Scientist columns
+>    can suggest a TEXT readout def named "Scientist" if one exists.
+>
+> 4. **Drop the Scientist *role*** from the wizard. It exists only to
+>    work around the missing Text-readout support; once Text readouts
+>    work, the role is redundant. Migrating callers: this role isn't
+>    persisted anywhere downstream — confirm with a grep before deleting.
+>    Update tests.
+>
+> If a stakeholder ever wants per-run "operator" info as run metadata
+> (not per-row), use `Run.operator` — that field already exists.
+>
+> #### Bug 4 — `concentration` readout def shows em-dash on Readout Data table [DESIGN]
+>
+> The protocol has `concentration` as a Numeric readout def. But actual
+> concentration values live on `Well.concentration` (set via the
+> Concentration role at import time), not as `ReadoutData` rows. The
+> grouped readout-data view has nothing to put in that column.
+>
+> **Proper fix:** treat this as a domain-modeling issue, not a display
+> hack. The concentration is a property of the well (the dose at which
+> a compound was tested), not a measurement. It must not be a readout
+> def.
+>
+> 1. `Protocol.add_readout_definition` / `update_readout_definition`:
+>    reject readout defs whose name (case-insensitive, normalized)
+>    collides with reserved well-metadata names: `concentration`,
+>    `dose`, `well`, `plate`, `batch`, `compound`. Domain
+>    `ValidationError` with a clear message. This prevents the
+>    confusion at protocol creation time.
+>
+> 2. UI: in the Add/Edit Readout dialogs on Design tab, surface the
+>    same constraint as a real-time validation hint.
+>
+> 3. The user's existing `NadD-Sumo dose response` protocol will need
+>    a New Version with `concentration` removed. The IC50 row's
+>    `x_readout_name` is currently `"concentration"` — that's
+>    documentation only; the fitter pulls X from `well.concentration`
+>    regardless. Either point `x_readout_name` at a different existing
+>    numeric readout (suboptimal — the field then lies) OR — better —
+>    make `x_readout_name` Optional and have the IC50 def represent
+>    "fit against well concentration" implicitly.
+>
+> The cleaner long-term move: `DoseResponseConfig.x_readout_name`
+> becomes `Optional[str]`. When None, X is `well.concentration` (the
+> default and most common case). When set, X is sourced from the named
+> readout def (rare — only meaningful for derived/transformed X axes,
+> e.g., log-concentration computed via a formula readout). This
+> dual-source model needs to be reflected in:
+>
+> - `DoseResponseConfig` domain validation (already enforces
+>   `x_readout_name != y_readout_name` when both set; relax for None).
+> - `Protocol.add_readout_definition` cross-readout-name validation
+>   (only when set).
+> - `fit_dose_response.py` X-axis sourcing (already uses
+>   `well.concentration` — make this explicit when `x_readout_name` is
+>   None).
+> - The Add/Edit Readout dialog (X readout dropdown gets a "(use well
+>   concentration)" None option, and that's the default).
+>
+> Migration: existing `DoseResponseConfig` rows with non-empty
+> `x_readout_name` keep working; document that `concentration` /
+> `dose` etc. are no longer valid x_readout names going forward.
+>
+> #### Don't forget
+>
+> - All four bugs need new tests, not just code changes. Cover the
+>   non-obvious cases (Bug 1: calculated readouts; Bug 2: single-plate
+>   AND multi-plate AND zero-plate; Bug 3: TEXT readout writes; Bug 4:
+>   reserved-name validation + None x_readout_name).
+> - Backend type-check + full unit test suite must pass before each
+>   commit. `uv run pytest backend/tests/unit/` is the canonical command.
+> - Frontend `pnpm tsc --noEmit` must be clean before commit.
+> - Migrations: only Bug 4 might need one (if `x_readout_name` becomes
+>   nullable in the DB — confirm by reading the schema). Bugs 1–3 are
+>   pure application/code fixes.
+> - The user has 24 unpushed commits on `fe2`. Don't push without
+>   asking. After all four bugs are fixed and verified by the user
+>   manually re-running the NadD flow, ask whether to push and whether
+>   to merge `fe2 → main`.
+>
+> #### Manual verification recipe (after each bug is fixed)
+>
+> 1. Restart backend (`docker compose restart backend`).
+> 2. Delete the existing `Run 2026-05-05` (Delete button works now).
+> 3. Click "New Run" on the protocol → pick the plate template → save.
+> 4. Open the run → Plate Map tab → "Import Run File".
+> 5. Upload `~/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx`.
+> 6. Wizard auto-suggests should be all High confidence. Map Raw Data
+>    to `raw AU`. Continue.
+> 7. Preview: 2 plates × 384 wells. **No red validation banner.**
+>    Confirm.
+> 8. After Bug 1 fix: Dose-Response tab → curves have non-zero
+>    parameters; R² in [0, 1]; classes mix of Active/Inactive based on
+>    actual dose-response in the data.
+> 9. After Bug 2 fix: Plate Map tab renders TWO heatmaps (one per
+>    plate, with a tab strip). Col 1 wells are red (NEG), col 24 wells
+>    are green (POS), samples shaded by % inhibition.
+> 10. After Bug 3 fix: Readout Data table shows "Dan Selle" (or
+>     whoever) under the Scientist column for sample rows.
+> 11. After Bug 4 fix: protocol design tab rejects readouts named
+>     `concentration`; existing IC50 row's X axis can be saved with
+>     no readout (uses well concentration implicitly).
+>
+> The smoke is "do all of this on the actual file with the actual
+> protocol the user already has, end-to-end, in a browser." Type-check
+> + tests are necessary but not sufficient.
+>
+> ---
+
 > ### What Was Built (2026-05-05 cont., branch: `fe2`) — long-format run import shipped
 >
 > All eight sessions of the long-format run-file import plan
