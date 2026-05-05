@@ -18,6 +18,7 @@ from chem_vault.application.screening.import_run_file import (
     InMemoryPreviewStore,
     PreviewRunFile,
     PreviewRunFileQuery,
+    _resolve_batch_ref,
 )
 from chem_vault.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -86,6 +87,12 @@ class FakeBatch:
     molecule_id: uuid.UUID = field(default_factory=uuid.uuid4)
 
 
+@dataclass
+class FakeMolecule:
+    id: uuid.UUID = field(default_factory=uuid.uuid4)
+    registration_number: str = "CV-00001"
+
+
 # ---------------------------------------------------------------------------
 # Builders
 # ---------------------------------------------------------------------------
@@ -124,6 +131,7 @@ def _build_preview_uc(
     *,
     run: Run | None,
     batches_by_ref: dict[str, FakeBatch] | None = None,
+    molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
     store: InMemoryPreviewStore | None = None,
 ) -> tuple[PreviewRunFile, InMemoryPreviewStore]:
     run_repo = AsyncMock()
@@ -135,12 +143,21 @@ def _build_preview_uc(
         return (batches_by_ref or {}).get(ref)
 
     batch_repo.find_by_batch_number = _find
+
+    molecule_repo = AsyncMock()
+
+    async def _find_mol(_ws, ident):
+        return (molecules_by_synonym or {}).get(ident)
+
+    molecule_repo.find_by_identifier = _find_mol
+
     store = store or InMemoryPreviewStore(ttl_seconds=60)
     return (
         PreviewRunFile(
             uow=FakeUoW(),
             run_repo=run_repo,
             batch_repo=batch_repo,
+            molecule_repo=molecule_repo,
             preview_store=store,
         ),
         store,
@@ -154,6 +171,7 @@ def _build_import_uc(
     batches_by_ref: dict[str, FakeBatch],
     store: InMemoryPreviewStore,
     save_bulk: list | None = None,
+    molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
 ) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -179,12 +197,20 @@ def _build_import_uc(
 
     batch_repo.find_by_batch_number = _find
 
+    molecule_repo = AsyncMock()
+
+    async def _find_mol(_ws, ident):
+        return (molecules_by_synonym or {}).get(ident)
+
+    molecule_repo.find_by_identifier = _find_mol
+
     uc = ImportRunFile(
         uow=uow,
         run_repo=run_repo,
         protocol_repo=protocol_repo,
         readout_data_repo=readout_data_repo,
         batch_repo=batch_repo,
+        molecule_repo=molecule_repo,
         preview_store=store,
     )
     return uc, uow, run_repo
@@ -605,3 +631,133 @@ class TestNadDFixtureRoundtrip:
         assert out.wells_created > 600
         assert out.controls_inferred > 0
         assert uow.committed
+
+
+# ---------------------------------------------------------------------------
+# _resolve_batch_ref — pattern-split + molecule synonym lookup
+# ---------------------------------------------------------------------------
+
+
+def _make_batch_repo(by_number: dict[str, FakeBatch]) -> AsyncMock:
+    repo = AsyncMock()
+
+    async def _find(_ws, ref):
+        return by_number.get(ref)
+
+    repo.find_by_batch_number = _find
+    return repo
+
+
+def _make_mol_repo(by_synonym: dict[str, FakeMolecule]) -> AsyncMock:
+    repo = AsyncMock()
+
+    async def _find(_ws, ident):
+        return by_synonym.get(ident)
+
+    repo.find_by_identifier = _find
+    return repo
+
+
+class TestResolveBatchRef:
+    @pytest.mark.asyncio
+    async def test_direct_cv_batch_number_hit(self) -> None:
+        ws = uuid.uuid4()
+        batch = FakeBatch()
+        result = await _resolve_batch_ref(
+            "CV-00001-001",
+            ws,
+            _make_batch_repo({"CV-00001-001": batch}),
+            _make_mol_repo({}),
+        )
+        assert result == (batch.id, batch.molecule_id)
+
+    @pytest.mark.asyncio
+    async def test_synonym_prefix_resolves_via_molecule(self) -> None:
+        ws = uuid.uuid4()
+        mol = FakeMolecule(registration_number="CV-00042")
+        cv_batch = FakeBatch(molecule_id=mol.id)
+        result = await _resolve_batch_ref(
+            "LG-0021362-001",
+            ws,
+            _make_batch_repo({"CV-00042-001": cv_batch}),
+            _make_mol_repo({"LG-0021362": mol}),
+        )
+        assert result == (cv_batch.id, mol.id)
+
+    @pytest.mark.asyncio
+    async def test_zero_pads_seq_to_three_digits(self) -> None:
+        ws = uuid.uuid4()
+        mol = FakeMolecule(registration_number="CV-00042")
+        cv_batch = FakeBatch(molecule_id=mol.id)
+        # File seq is "1" but local batch is stored as "001".
+        result = await _resolve_batch_ref(
+            "LG-0021362-1",
+            ws,
+            _make_batch_repo({"CV-00042-001": cv_batch}),
+            _make_mol_repo({"LG-0021362": mol}),
+        )
+        assert result == (cv_batch.id, mol.id)
+
+    @pytest.mark.asyncio
+    async def test_higher_seq_picks_correct_batch(self) -> None:
+        ws = uuid.uuid4()
+        mol = FakeMolecule(registration_number="CV-00042")
+        b1 = FakeBatch(molecule_id=mol.id)
+        b2 = FakeBatch(molecule_id=mol.id)
+        result = await _resolve_batch_ref(
+            "LG-0021362-002",
+            ws,
+            _make_batch_repo({"CV-00042-001": b1, "CV-00042-002": b2}),
+            _make_mol_repo({"LG-0021362": mol}),
+        )
+        assert result == (b2.id, mol.id)
+
+    @pytest.mark.asyncio
+    async def test_no_pattern_match_returns_none(self) -> None:
+        ws = uuid.uuid4()
+        # No trailing -NNN, and not a direct CV match.
+        result = await _resolve_batch_ref(
+            "WEIRD_BATCH_REF",
+            ws,
+            _make_batch_repo({}),
+            _make_mol_repo({}),
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_unknown_molecule_synonym_returns_none(self) -> None:
+        ws = uuid.uuid4()
+        result = await _resolve_batch_ref(
+            "LG-0021362-001",
+            ws,
+            _make_batch_repo({}),
+            _make_mol_repo({}),
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_known_molecule_but_missing_seq_returns_none(self) -> None:
+        ws = uuid.uuid4()
+        mol = FakeMolecule(registration_number="CV-00042")
+        # Molecule exists but its first batch isn't there.
+        result = await _resolve_batch_ref(
+            "LG-0021362-005",
+            ws,
+            _make_batch_repo({"CV-00042-001": FakeBatch(molecule_id=mol.id)}),
+            _make_mol_repo({"LG-0021362": mol}),
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_multi_dash_synonym_splits_on_last_dash(self) -> None:
+        ws = uuid.uuid4()
+        mol = FakeMolecule(registration_number="CV-00042")
+        cv_batch = FakeBatch(molecule_id=mol.id)
+        # Synonym itself contains dashes; only the trailing -NNN is the seq.
+        result = await _resolve_batch_ref(
+            "LG-2200467564-Plate-001",
+            ws,
+            _make_batch_repo({"CV-00042-001": cv_batch}),
+            _make_mol_repo({"LG-2200467564-Plate": mol}),
+        )
+        assert result == (cv_batch.id, mol.id)

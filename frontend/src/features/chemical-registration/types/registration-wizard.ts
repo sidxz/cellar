@@ -46,7 +46,7 @@ export interface BulkRow {
 
 export interface BulkInput {
   file: File | null;
-  fileFormat: "csv" | "sdf";
+  fileFormat: "csv" | "xlsx" | "sdf";
   parsedRows: BulkRow[];
   originatingOrgId: string | null;
 }

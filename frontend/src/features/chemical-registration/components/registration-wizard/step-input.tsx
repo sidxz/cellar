@@ -631,6 +631,8 @@ function BulkInputForm() {
     const map: Record<string, string[]> = {};
     if (bulkInput.fileFormat === "sdf") {
       map["chemical/x-mdl-sdfile"] = [".sdf", ".sd"];
+    } else if (bulkInput.fileFormat === "xlsx") {
+      map["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] = [".xlsx"];
     } else {
       map["text/csv"] = [".csv"];
     }
@@ -682,6 +684,20 @@ function BulkInputForm() {
             <input
               type="radio"
               name="file-format"
+              checked={bulkInput.fileFormat === "xlsx"}
+              onChange={() => {
+                updateBulkInput({ fileFormat: "xlsx", file: null });
+                setPreview(null);
+              }}
+              className="accent-primary"
+            />
+            <FileSpreadsheet className="h-4 w-4" />
+            <span className="text-sm">Excel (.xlsx)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="file-format"
               checked={bulkInput.fileFormat === "sdf"}
               onChange={() => {
                 updateBulkInput({ fileFormat: "sdf", file: null });
@@ -695,11 +711,11 @@ function BulkInputForm() {
         </div>
       </div>
 
-      {/* Template download (CSV only) */}
-      {bulkInput.fileFormat === "csv" && (
+      {/* Template download (CSV / XLSX share the same column layout) */}
+      {(bulkInput.fileFormat === "csv" || bulkInput.fileFormat === "xlsx") && (
         <Button variant="outline" size="sm" onClick={downloadCsvTemplate}>
           <Download className="mr-2 h-3.5 w-3.5" />
-          Download Template
+          Download CSV Template
         </Button>
       )}
 
@@ -750,7 +766,9 @@ function BulkInputForm() {
             <p className="mt-1 text-xs text-muted-foreground/60">
               {bulkInput.fileFormat === "csv"
                 ? "Accepts .csv files"
-                : "Accepts .sdf / .sd files"}
+                : bulkInput.fileFormat === "xlsx"
+                  ? "Accepts .xlsx files"
+                  : "Accepts .sdf / .sd files"}
             </p>
           </>
         )}
@@ -760,7 +778,7 @@ function BulkInputForm() {
       {bulkInput.file && (
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div className="flex items-center gap-2">
-            {bulkInput.fileFormat === "csv" ? (
+            {bulkInput.fileFormat === "csv" || bulkInput.fileFormat === "xlsx" ? (
               <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
             ) : (
               <FileText className="h-5 w-5 text-muted-foreground" />

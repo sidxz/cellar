@@ -17,6 +17,7 @@ are deleted on first consume (idempotency on the import side).
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from collections.abc import Iterable
@@ -39,6 +40,7 @@ from chem_vault.application.screening.long_format_normalizer import (
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.screening_assay.enums import WellType
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
@@ -185,11 +187,13 @@ class PreviewRunFile:
         uow: UnitOfWork,
         run_repo: RunRepository,
         batch_repo: BatchRepository,
+        molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
         self._batch_repo = batch_repo
+        self._molecule_repo = molecule_repo
         self._store = preview_store
 
     async def __call__(
@@ -247,7 +251,10 @@ class PreviewRunFile:
                 norm: NormalizedTable = normalized.unwrap()
                 plates = _summarize_plates(norm.rows, norm.plate_formats)
                 matched, unmatched_set = await _resolve_batches(
-                    norm.rows, input.workspace_id, self._batch_repo
+                    norm.rows,
+                    input.workspace_id,
+                    self._batch_repo,
+                    self._molecule_repo,
                 )
                 _ = conc_unit  # validated; used by import phase
 
@@ -298,6 +305,7 @@ class ImportRunFile:
         protocol_repo: ProtocolRepository,
         readout_data_repo: ReadoutDataRepository,
         batch_repo: BatchRepository,
+        molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
         dispatcher: EventDispatcherProtocol | None = None,
     ) -> None:
@@ -306,6 +314,7 @@ class ImportRunFile:
         self._protocol_repo = protocol_repo
         self._readout_data_repo = readout_data_repo
         self._batch_repo = batch_repo
+        self._molecule_repo = molecule_repo
         self._store = preview_store
         self._dispatcher = dispatcher
 
@@ -392,7 +401,10 @@ class ImportRunFile:
 
         # 6. Resolve batch references
         batch_lookup = await _build_batch_lookup(
-            normalized.rows, cmd.workspace_id, self._batch_repo
+            normalized.rows,
+            cmd.workspace_id,
+            self._batch_repo,
+            self._molecule_repo,
         )
 
         # 7. Build plates + wells + readouts
@@ -535,10 +547,53 @@ def _summarize_plates(
     return tuple(out)
 
 
+# Trailing -NNN (1-3 digits) is treated as the local batch sequence.
+_BATCH_REF_PATTERN = re.compile(r"^(?P<mol>.+)-(?P<seq>\d{1,3})$")
+
+
+async def _resolve_batch_ref(
+    batch_ref: str,
+    workspace_id: uuid.UUID,
+    batch_repo: BatchRepository,
+    molecule_repo: MoleculeRepository,
+) -> tuple[uuid.UUID, uuid.UUID] | None:
+    """Resolve a file batch ref to a local ``(batch_id, molecule_id)``.
+
+    Two-step lookup:
+
+    1. **Direct hit** — file ref matches a local CV-style ``batch_number``.
+    2. **Pattern split** — split off the trailing ``-NNN`` seq and look up
+       the molecule by its prefix as a ``MoleculeIdentifier`` synonym;
+       reconstruct the canonical batch number ``{mol_reg}-{seq:03d}``.
+
+    Returns ``None`` if neither path resolves.
+    """
+    direct = await batch_repo.find_by_batch_number(workspace_id, batch_ref)
+    if direct is not None:
+        return direct.id, direct.molecule_id
+
+    m = _BATCH_REF_PATTERN.match(batch_ref)
+    if m is None:
+        return None
+    mol_synonym = m.group("mol")
+    seq = int(m.group("seq"))
+
+    molecule = await molecule_repo.find_by_identifier(workspace_id, mol_synonym)
+    if molecule is None:
+        return None
+
+    cv_batch_number = f"{molecule.registration_number}-{seq:03d}"
+    batch = await batch_repo.find_by_batch_number(workspace_id, cv_batch_number)
+    if batch is None:
+        return None
+    return batch.id, batch.molecule_id
+
+
 async def _resolve_batches(
     rows: Iterable[LongFormatRow],
     workspace_id: uuid.UUID,
     batch_repo: BatchRepository,
+    molecule_repo: MoleculeRepository,
 ) -> tuple[int, set[str]]:
     matched = 0
     unmatched: set[str] = set()
@@ -547,8 +602,10 @@ async def _resolve_batches(
         if not r.batch_ref or r.batch_ref in seen:
             continue
         seen.add(r.batch_ref)
-        batch = await batch_repo.find_by_batch_number(workspace_id, r.batch_ref)
-        if batch is None:
+        resolved = await _resolve_batch_ref(
+            r.batch_ref, workspace_id, batch_repo, molecule_repo
+        )
+        if resolved is None:
             unmatched.add(r.batch_ref)
         else:
             matched += 1
@@ -559,6 +616,7 @@ async def _build_batch_lookup(
     rows: Iterable[LongFormatRow],
     workspace_id: uuid.UUID,
     batch_repo: BatchRepository,
+    molecule_repo: MoleculeRepository,
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
     """Return ``{batch_ref: (batch_id, molecule_id)}`` for refs that resolve."""
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
@@ -567,7 +625,9 @@ async def _build_batch_lookup(
         if not r.batch_ref or r.batch_ref in seen:
             continue
         seen.add(r.batch_ref)
-        batch = await batch_repo.find_by_batch_number(workspace_id, r.batch_ref)
-        if batch is not None:
-            out[r.batch_ref] = (batch.id, batch.molecule_id)
+        resolved = await _resolve_batch_ref(
+            r.batch_ref, workspace_id, batch_repo, molecule_repo
+        )
+        if resolved is not None:
+            out[r.batch_ref] = resolved
     return out

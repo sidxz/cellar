@@ -510,6 +510,7 @@ def register_screening(container: Container) -> None:
             uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
         )
 
@@ -523,6 +524,7 @@ def register_screening(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
             dispatcher=c[EventDispatcher],
         )

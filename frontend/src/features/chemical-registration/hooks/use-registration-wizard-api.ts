@@ -40,7 +40,7 @@ export function useSubmitRegistration() {
 export interface StartBulkRegistrationInput {
   file: File;
   originating_org_id: string | null;
-  file_format?: "csv" | "sdf";
+  file_format?: "csv" | "xlsx" | "sdf";
 }
 
 /** POST /api/v1/bulk-registrations — multipart/form-data upload. */
