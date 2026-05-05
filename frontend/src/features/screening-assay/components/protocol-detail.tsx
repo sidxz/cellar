@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Paperclip,
   Pencil,
+  Plus,
   RotateCcw,
   Send,
   Settings2,
@@ -144,6 +145,13 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               )}
               {s === "active" && (
                 <>
+                  <Button
+                    size="sm"
+                    onClick={() => setCreateRunOpen(true)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Run
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"

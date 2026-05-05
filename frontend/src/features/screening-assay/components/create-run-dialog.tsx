@@ -59,7 +59,10 @@ export function CreateRunDialog({
         protocol_id: protocolId,
         run_date: runDate,
         plate_format: plateFormat as PlateFormat,
-        plate_template_id: plateTemplateId || null,
+        plate_template_id:
+          plateTemplateId && plateTemplateId !== "__none__"
+            ? plateTemplateId
+            : null,
         notes: notes || null,
       },
       {
@@ -118,7 +121,7 @@ export function CreateRunDialog({
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {plateTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
