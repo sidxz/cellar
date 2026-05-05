@@ -197,6 +197,51 @@ Closing the issue automatically moves it to "Done" on the project board.
 
 ## Current Session Notes
 
+> ### What Was Built (2026-05-05, branch: `fe2`)
+>
+> Small UX/bugfix session + planning for the next major feature.
+>
+> #### Commits
+>
+> 1. `891a32d` fix(search): saved-search load stuck on skeleton — inline mutation
+>    Saved-search useEffect routed through `handleSearch` via a ref, but its
+>    closure captured `readoutExtraColumns`. `loadFromSavedSearch` updated
+>    Zustand inside the same effect that invalidated the render, intermittently
+>    losing the mutation's onSuccess. Inlined `searchMutation.mutate` in the
+>    effect; deps now use stable `runSearch` + `enrichItems` references.
+> 2. (uncommitted) feat(screening): wire "New Run" button + fix Select empty-string
+>    `CreateRunDialog` was mounted but had no trigger. Added "New Run" button to
+>    Protocol Detail actions for active protocols. Fixed Radix Select crash:
+>    `<SelectItem value="">` → `value="__none__"` with mapping back to null on
+>    submit.
+>
+> #### Plan written, ready for next session
+>
+> **Long-format run import + xlsx-everywhere** — see
+> `docs/planning/run-import-long-format-plan.md`. 8 sessions (S1–S8), starting
+> with a tabular file abstraction that makes xlsx a first-class format across
+> all importers. The reference file is
+> `~/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx` (384-well, long
+> format).
+>
+> Key locked decisions:
+> - One file → one run, multi-plate (distinct `Plate Name` values ⇒ separate plates).
+> - xlsx + csv via shared parser; existing CSV importers refactored to consume it.
+> - Preview-then-write hard gate (separate endpoints, short-lived `preview_id`).
+> - Fuzzy header guessing with confidence badges; user verifies in wizard.
+> - Workspace-scoped mapping templates (NOT per-protocol — readout-def mapping is per-protocol).
+> - Run pre-created via existing dialog; "Import Run File" populates wells + readouts.
+>
+> Defaults already chosen (override in next session if needed):
+> - Multi-readout columns supported in MVP.
+> - Unmatched batch ref ⇒ skip + report (not silently treat as control).
+> - Sync only; Temporal deferred.
+>
+> **Next session entry point:** read the plan doc + `import_run_readouts.py` +
+> `plate_setup.py`, then start S1 (tabular file abstraction).
+>
+> ---
+>
 > ### What Was Built (2026-05-03, branch: `fe2`) — ALL COMMITTED + PUSHED
 >
 > **Major backend refactor + Phase A/B wizard work consolidation.** Cleaned up
@@ -269,6 +314,7 @@ Closing the issue automatically moves it to "Done" on the project board.
 > - Run plate import against live vault (2,152 plates)
 > - Export file cleanup (old chunk files never deleted)
 > - Bulk protocol import — Temporal pipeline (single import works)
-> - Import Wizard Phase 2 (runs + readout data) — designed, not built
+> - Import Wizard Phase 2 (runs + readout data) — plan written
+>   (`docs/planning/run-import-long-format-plan.md`), implementation pending
 > - Screening dashboard redesign (`/assays` global views, summary cards)
 > - T10 Custom Fields + Salt Forms (next from Gap Fix Plan)
