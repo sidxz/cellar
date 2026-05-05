@@ -182,10 +182,12 @@ class PreviewRunFile:
 
     def __init__(
         self,
+        uow: UnitOfWork,
         run_repo: RunRepository,
         batch_repo: BatchRepository,
         preview_store: PreviewStore,
     ) -> None:
+        self._uow = uow
         self._run_repo = run_repo
         self._batch_repo = batch_repo
         self._store = preview_store
@@ -200,6 +202,12 @@ class PreviewRunFile:
         except DomainError as exc:
             return Failure(exc)
 
+        async with self._uow:
+            return await self._execute(input)
+
+    async def _execute(
+        self, input: PreviewRunFileQuery
+    ) -> Result[PreviewRunFileResult, DomainError]:
         run = await self._run_repo.find_by_id_in_workspace(
             input.workspace_id, input.run_id
         )

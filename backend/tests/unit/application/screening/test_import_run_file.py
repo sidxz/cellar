@@ -136,7 +136,15 @@ def _build_preview_uc(
 
     batch_repo.find_by_batch_number = _find
     store = store or InMemoryPreviewStore(ttl_seconds=60)
-    return PreviewRunFile(run_repo=run_repo, batch_repo=batch_repo, preview_store=store), store
+    return (
+        PreviewRunFile(
+            uow=FakeUoW(),
+            run_repo=run_repo,
+            batch_repo=batch_repo,
+            preview_store=store,
+        ),
+        store,
+    )
 
 
 def _build_import_uc(

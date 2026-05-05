@@ -507,6 +507,7 @@ def register_screening(container: Container) -> None:
     def _preview_run_file(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return PreviewRunFile(
+            uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             preview_store=c[InMemoryPreviewStore],
