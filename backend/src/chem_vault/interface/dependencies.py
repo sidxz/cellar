@@ -197,6 +197,13 @@ from chem_vault.application.screening.molecule_activity_service import MoleculeA
 from chem_vault.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from chem_vault.application.screening.plate_setup import ParsePlateMapFile, SetUpRunPlate
 from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
+from chem_vault.application.screening.import_run_file import ImportRunFile, PreviewRunFile
+from chem_vault.application.screening.run_import_templates import (
+    CreateRunImportTemplate,
+    DeleteRunImportTemplate,
+    ListRunImportTemplates,
+    UpdateRunImportTemplate,
+)
 from chem_vault.application.screening.get_compound_curves import GetCompoundCurves
 from chem_vault.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from chem_vault.application.screening.get_protocol_stats import GetProtocolStats
@@ -563,6 +570,14 @@ DownloadAttachmentDep = Annotated[DownloadAttachment, Depends(_get_use_case(Down
 ParsePlateMapFileDep = Annotated[ParsePlateMapFile, Depends(_get_use_case(ParsePlateMapFile))]
 SetUpRunPlateDep = Annotated[SetUpRunPlate, Depends(_get_use_case(SetUpRunPlate))]
 ImportRunReadoutsDep = Annotated[ImportRunReadouts, Depends(_get_use_case(ImportRunReadouts))]
+
+# --- Long-format run-file import dependencies ---
+PreviewRunFileDep = Annotated[PreviewRunFile, Depends(_get_use_case(PreviewRunFile))]
+ImportRunFileDep = Annotated[ImportRunFile, Depends(_get_use_case(ImportRunFile))]
+CreateRunImportTemplateDep = Annotated[CreateRunImportTemplate, Depends(_get_use_case(CreateRunImportTemplate))]
+UpdateRunImportTemplateDep = Annotated[UpdateRunImportTemplate, Depends(_get_use_case(UpdateRunImportTemplate))]
+DeleteRunImportTemplateDep = Annotated[DeleteRunImportTemplate, Depends(_get_use_case(DeleteRunImportTemplate))]
+ListRunImportTemplatesDep = Annotated[ListRunImportTemplates, Depends(_get_use_case(ListRunImportTemplates))]
 
 # --- Vault Import dependencies ---
 ListCddProtocolsDep = Annotated[ListCddProtocols, Depends(_get_use_case(ListCddProtocols))]
