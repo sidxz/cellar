@@ -1,0 +1,599 @@
+"""Unit tests for ImportRunFile + PreviewRunFile use cases."""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass, field
+from datetime import date
+from types import TracebackType
+from typing import Self
+from unittest.mock import AsyncMock
+
+import pytest
+from returns.result import Failure, Success
+
+from chem_vault.application.screening.import_run_file import (
+    ImportRunFile,
+    ImportRunFileCommand,
+    InMemoryPreviewStore,
+    PreviewRunFile,
+    PreviewRunFileQuery,
+)
+from chem_vault.application.screening.long_format_normalizer import (
+    ColumnMapping,
+    ReadoutColumn,
+    infer_mapping,
+)
+from chem_vault.domain.screening_assay.enums import (
+    ProtocolStatus,
+    ProtocolType,
+    ReadoutDataType,
+    WellType,
+)
+from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from chem_vault.domain.screening_assay.run import Run
+from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from chem_vault.domain.shared.events import DomainEvent
+from chem_vault.infrastructure.parsers.tabular_file import parse_tabular
+
+
+_NADD_FIXTURE = "/Users/sidx/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx"
+
+
+# ---------------------------------------------------------------------------
+# Fakes
+# ---------------------------------------------------------------------------
+
+
+class FakeUoW:
+    def __init__(self) -> None:
+        self.committed = False
+
+    async def commit(self) -> list[DomainEvent]:
+        self.committed = True
+        return []
+
+    async def rollback(self) -> None:  # pragma: no cover
+        pass
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        return None
+
+
+@dataclass
+class FakeAuth:
+    user_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    workspace_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    workspace_role: str = "editor"
+    is_admin: bool = False
+
+    def has_role(self, minimum_role: str) -> bool:
+        roles = ["viewer", "editor", "admin"]
+        return roles.index(self.workspace_role) >= roles.index(minimum_role)
+
+
+@dataclass
+class FakeBatch:
+    id: uuid.UUID = field(default_factory=uuid.uuid4)
+    molecule_id: uuid.UUID = field(default_factory=uuid.uuid4)
+
+
+# ---------------------------------------------------------------------------
+# Builders
+# ---------------------------------------------------------------------------
+
+
+def _make_run(workspace_id: uuid.UUID, *, with_wells: bool = False, locked: bool = False) -> Run:
+    return Run(
+        workspace_id=workspace_id,
+        protocol_id=uuid.uuid4(),
+        run_date=date(2026, 4, 20),
+        operator=uuid.uuid4(),
+        is_locked=locked,
+    )
+
+
+def _make_protocol(workspace_id: uuid.UUID, readout_names: list[str]) -> Protocol:
+    rds = [
+        ReadoutDefinition(
+            protocol_id=uuid.uuid4(),
+            name=n,
+            data_type=ReadoutDataType.NUMERIC,
+        )
+        for n in readout_names
+    ]
+    return Protocol(
+        workspace_id=workspace_id,
+        name="Test Protocol",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=uuid.uuid4(),
+        status=ProtocolStatus.ACTIVE,
+        readout_definitions=rds,
+    )
+
+
+def _build_preview_uc(
+    *,
+    run: Run | None,
+    batches_by_ref: dict[str, FakeBatch] | None = None,
+    store: InMemoryPreviewStore | None = None,
+) -> tuple[PreviewRunFile, InMemoryPreviewStore]:
+    run_repo = AsyncMock()
+    run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+
+    batch_repo = AsyncMock()
+
+    async def _find(_ws, ref):
+        return (batches_by_ref or {}).get(ref)
+
+    batch_repo.find_by_batch_number = _find
+    store = store or InMemoryPreviewStore(ttl_seconds=60)
+    return PreviewRunFile(run_repo=run_repo, batch_repo=batch_repo, preview_store=store), store
+
+
+def _build_import_uc(
+    *,
+    run: Run,
+    protocol: Protocol,
+    batches_by_ref: dict[str, FakeBatch],
+    store: InMemoryPreviewStore,
+    save_bulk: list | None = None,
+) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
+    uow = FakeUoW()
+
+    run_repo = AsyncMock()
+    run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+    run_repo.save = AsyncMock()
+
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+
+    readout_data_repo = AsyncMock()
+    saved_list = save_bulk if save_bulk is not None else []
+
+    async def _save_bulk(entities):
+        saved_list.extend(entities)
+
+    readout_data_repo.save_bulk = _save_bulk
+
+    batch_repo = AsyncMock()
+
+    async def _find(_ws, ref):
+        return batches_by_ref.get(ref)
+
+    batch_repo.find_by_batch_number = _find
+
+    uc = ImportRunFile(
+        uow=uow,
+        run_repo=run_repo,
+        protocol_repo=protocol_repo,
+        readout_data_repo=readout_data_repo,
+        batch_repo=batch_repo,
+        preview_store=store,
+    )
+    return uc, uow, run_repo
+
+
+# ---------------------------------------------------------------------------
+# PreviewRunFile
+# ---------------------------------------------------------------------------
+
+
+class TestPreviewRunFile:
+    @pytest.mark.asyncio
+    async def test_run_not_found(self) -> None:
+        auth = FakeAuth()
+        uc, _ = _build_preview_uc(run=None)
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=uuid.uuid4(),
+                file_content=b"a,b\n1,2\n",
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), NotFoundError)
+
+    @pytest.mark.asyncio
+    async def test_simple_csv_returns_preview(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        batch = FakeBatch()
+        uc, store = _build_preview_uc(run=run, batches_by_ref={"LG-1": batch})
+
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"P1,A1,100,LG-1,0.5\n"
+            b"P1,A2,50,LG-1,0.4\n"
+            b"P1,A3,,,0.9\n"  # blank
+        )
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        preview = result.unwrap()
+        assert preview.total_rows == 3
+        assert len(preview.plates) == 1
+        plate = preview.plates[0]
+        assert plate.plate_name == "P1"
+        assert plate.sample_count == 2
+        assert plate.blank_count == 1
+        assert preview.matched_batches == 1
+        assert preview.unmatched_batches == ()
+        # Cached for follow-up import
+        assert preview.preview_id in store._items  # noqa: SLF001
+
+    @pytest.mark.asyncio
+    async def test_unmatched_batches_listed(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        uc, _ = _build_preview_uc(run=run, batches_by_ref={})
+        csv = b"Plate Name,Well,Batch,Raw Data\nP1,A1,LG-MISSING,0.5\n"
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        assert preview.unmatched_batches == ("LG-MISSING",)
+        assert preview.matched_batches == 0
+
+
+# ---------------------------------------------------------------------------
+# ImportRunFile
+# ---------------------------------------------------------------------------
+
+
+def _seed_preview(
+    store: InMemoryPreviewStore,
+    *,
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    file_content: bytes,
+    filename: str,
+) -> uuid.UUID:
+    """Helper: parse a file directly and stash it under a fresh preview_id."""
+    import time
+
+    from chem_vault.application.screening.import_run_file import _StoredPreview
+
+    table = parse_tabular(file_content, filename)
+    preview_id = uuid.uuid4()
+    store.save(
+        preview_id,
+        _StoredPreview(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            table=table,
+            expires_at=time.monotonic() + 60,
+        ),
+    )
+    return preview_id
+
+
+class TestImportRunFile:
+    @pytest.mark.asyncio
+    async def test_happy_path_simple_csv(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"P1,A1,100,LG-1,0.5\n"
+            b"P1,A2,50,LG-1,0.4\n"
+            b"P1,A3,,,0.9\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+        )
+
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                ),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+        assert out.plates_created == 1
+        # Sample wells (A1, A2) + blank (A3) — all 3 wells created
+        assert out.wells_created == 3
+        # Readouts only for sample wells with resolved batch
+        assert out.readouts_created == 2
+        assert len(saved) == 2
+        assert out.controls_inferred == 1
+        assert uow.committed
+        # Run aggregate state
+        assert len(run.plates) == 1
+        assert len(run.wells) == 3
+
+    @pytest.mark.asyncio
+    async def test_preview_id_is_single_use(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=b"Well,Batch,Raw Data\nA1,LG-1,0.5\n",
+            filename="x.csv",
+        )
+
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                ),
+            ),
+        )
+        first = await uc(cmd, auth=auth)
+        assert isinstance(first, Success)
+
+        # Second call with same preview_id must fail — NotFoundError.
+        # Need a fresh run aggregate (the previous one now has wells from first call,
+        # so the conflict guard would trigger first); use a different run_id.
+        run2 = _make_run(auth.workspace_id)
+        uc2, _, _ = _build_import_uc(
+            run=run2, protocol=protocol, batches_by_ref={"LG-1": batch}, store=store
+        )
+        cmd2 = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run2.id,
+            preview_id=preview_id,
+            mapping=cmd.mapping,
+        )
+        second = await uc2(cmd2, auth=auth)
+        assert isinstance(second, Failure)
+        assert isinstance(second.failure(), NotFoundError)
+
+    @pytest.mark.asyncio
+    async def test_locked_run_refused(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id, locked=True)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=b"Well,Batch,Raw Data\nA1,LG-1,0.5\n",
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref={}, store=store
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ConflictError)
+
+    @pytest.mark.asyncio
+    async def test_readout_def_not_in_protocol_rejected(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=b"Well,Raw Data\nA1,0.5\n",
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref={}, store=store
+        )
+        wrong_rd = uuid.uuid4()  # not in protocol
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=wrong_rd),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+
+    @pytest.mark.asyncio
+    async def test_unmatched_batches_skipped_and_reported(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=(
+                b"Well,Batch,Raw Data\n"
+                b"A1,LG-MISSING,0.5\n"
+                b"A2,,0.9\n"  # blank — no batch
+            ),
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref={}, store=store
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        out = result.unwrap()
+        assert out.unmatched_batches == ["LG-MISSING"]
+        # A1 was skipped (unmatched), A2 is a blank — only one well created.
+        assert out.wells_created == 1
+        assert out.readouts_created == 0
+
+
+# ---------------------------------------------------------------------------
+# NadD fixture end-to-end
+# ---------------------------------------------------------------------------
+
+
+class TestNadDFixtureRoundtrip:
+    @pytest.fixture
+    def fixture_bytes(self) -> bytes:
+        try:
+            with open(_NADD_FIXTURE, "rb") as fh:
+                return fh.read()
+        except FileNotFoundError:
+            pytest.skip(f"NadD fixture missing at {_NADD_FIXTURE}")
+
+    @pytest.mark.asyncio
+    async def test_imports_two_plates_from_xlsx(self, fixture_bytes: bytes) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=fixture_bytes,
+            filename="NadD.xlsx",
+        )
+        # Resolve only the one batch in the file. All others → unmatched & skipped.
+        from chem_vault.infrastructure.parsers.tabular_file import parse_tabular as _pt
+
+        table = _pt(fixture_bytes, "NadD.xlsx")
+        suggested = infer_mapping(table)
+        # Use suggested headers for column mapping
+        mapping = ColumnMapping(
+            well=suggested.first("well") or "Well",
+            plate_name=suggested.first("plate_name"),
+            concentration=suggested.first("concentration"),
+            batch_ref=suggested.first("batch_ref"),
+            readout_columns=(
+                ReadoutColumn(
+                    header=suggested.first("readout") or "Raw Data",
+                    readout_definition_id=rd_id,
+                ),
+            ),
+        )
+        # Map every distinct batch ref in the file to the same fake batch.
+        # We only need the batches resolver, so we hand-build it from the table.
+        batch_refs = {
+            (r.get(mapping.batch_ref) or "").strip()
+            for r in table.iter_rows()
+            if mapping.batch_ref and r.get(mapping.batch_ref)
+        }
+        batches = {ref: batch for ref in batch_refs if ref}
+
+        uc, uow, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref=batches, store=store
+        )
+
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=mapping,
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+        assert out.plates_created == 2
+        # NadD has two plates of 384 wells but not every well has data — assert lower bound
+        assert out.wells_created > 600
+        assert out.controls_inferred > 0
+        assert uow.committed
