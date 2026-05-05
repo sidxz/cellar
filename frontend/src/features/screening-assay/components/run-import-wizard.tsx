@@ -7,7 +7,7 @@ import {
   ChevronRight,
   Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { useProtocol } from "../hooks/use-protocols";
 import {
@@ -173,6 +173,15 @@ export function RunImportWizard({
 
   const readoutDefs = protocol?.readout_definitions ?? [];
 
+  // TanStack Query returns a fresh mutation object on every render, so
+  // depending on the mutation in a useCallback would re-create reset every
+  // render and (combined with the close-effect below) trip an infinite loop.
+  // Stash them in refs so reset stays stable.
+  const previewMutationRef = useRef(previewMutation);
+  previewMutationRef.current = previewMutation;
+  const importMutationRef = useRef(importMutation);
+  importMutationRef.current = importMutation;
+
   const reset = useCallback(() => {
     setStep(1);
     setFile(null);
@@ -181,10 +190,10 @@ export function RunImportWizard({
     setAppliedTemplate(null);
     setSaveAsTemplate(false);
     setTemplateName("");
-    previewMutation.reset();
-    importMutation.reset();
+    previewMutationRef.current.reset();
+    importMutationRef.current.reset();
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [importMutation, previewMutation]);
+  }, []);
 
   const handleOpenChange = (next: boolean) => {
     if (!next) reset();
@@ -349,10 +358,6 @@ export function RunImportWizard({
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!open) reset();
-  }, [open, reset]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
