@@ -146,8 +146,6 @@ function buildColumnDefs(
     pinned: "left",
     flex: 1,
     minWidth: 160,
-    headerCheckboxSelection: true,
-    checkboxSelection: true,
     cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
       if (!params.data) return null;
       return (
@@ -330,7 +328,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
 
-  // Selection state
+  // Selection state (checkbox-driven, for multi-compound actions)
   const [selectedRows, setSelectedRows] = useState<CompoundActivity[]>([]);
 
   const handleSelectionChanged = useCallback(
@@ -339,6 +337,9 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     },
     []
   );
+
+  // Viewing state (row-click-driven, for single-compound detail sheet)
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   // Sync savedCriteria when protocol updates (e.g. after dialog save)
   const prevSavedRef = JSON.stringify(protocol.recommended_hit_criteria ?? []);
@@ -359,14 +360,18 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     return items;
   }, [activity?.items, activeCriteria, showFlaggedOnly, flagsByMolecule]);
 
-  // Curve navigation (prev/next in single-select mode)
-  const selectedIndex = selectedRows.length === 1
-    ? filteredItems.findIndex((r) => r.molecule_id === selectedRows[0].molecule_id)
+  // Curve navigation (prev/next of the currently viewed compound)
+  const viewing = useMemo(
+    () => filteredItems.find((r) => r.molecule_id === viewingId) ?? null,
+    [filteredItems, viewingId]
+  );
+  const selectedIndex = viewing
+    ? filteredItems.findIndex((r) => r.molecule_id === viewing.molecule_id)
     : -1;
 
   const navigateTo = useCallback((index: number) => {
     const target = filteredItems[index];
-    if (target) setSelectedRows([target]);
+    if (target) setViewingId(target.molecule_id);
   }, [filteredItems]);
 
   const handlePrev = useCallback(() => {
@@ -422,11 +427,8 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   // Compound detail panel
   // ---------------------------------------------------------------------------
 
-  const singleSelectedMoleculeId =
-    selectedRows.length === 1 ? selectedRows[0].molecule_id : null;
-
   const { data: compoundCurves, isLoading: curvesLoading } =
-    useCompoundCurves(protocolId, singleSelectedMoleculeId);
+    useCompoundCurves(protocolId, viewing?.molecule_id ?? null);
 
   // Multi-compound curve overlay (2-5 selected)
   const multiMoleculeIds = useMemo(
@@ -833,8 +835,9 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         columnDefs={columnDefs}
         height="auto"
         domLayout="autoHeight"
-        rowSelection="multiple"
         rowHeight={115}
+        onRowClick={(row) => setViewingId(row.molecule_id)}
+        enableMultiSelect
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`${protocol.name}-activity`}
@@ -848,19 +851,19 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         }
       />
 
-      {/* Compound detail sheet — single select */}
+      {/* Compound detail sheet — driven by row click, independent from selection */}
       <Sheet
-        open={selectedRows.length === 1}
-        onOpenChange={(open) => { if (!open) handleSelectionChanged({ api: { getSelectedRows: () => [] } } as never); }}
+        open={!!viewing}
+        onOpenChange={(open) => { if (!open) setViewingId(null); }}
       >
         <SheetContent side="right" className="w-[55vw] sm:max-w-[55vw] p-0 flex flex-col" showCloseButton>
-          {selectedRows.length === 1 && (
+          {viewing && (
             <>
               <SheetHeader className="px-4 pt-4 pb-2 pr-12 shrink-0 flex flex-row items-center justify-between">
                 <div>
-                  <SheetTitle>{selectedRows[0].registration_number}</SheetTitle>
-                  {selectedRows[0].molecule_name && (
-                    <p className="text-sm text-muted-foreground">{selectedRows[0].molecule_name}</p>
+                  <SheetTitle>{viewing.registration_number}</SheetTitle>
+                  {viewing.molecule_name && (
+                    <p className="text-sm text-muted-foreground">{viewing.molecule_name}</p>
                   )}
                 </div>
                 <CurveNavigator

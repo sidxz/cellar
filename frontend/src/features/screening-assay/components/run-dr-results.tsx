@@ -202,15 +202,13 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
       pinned: "left",
       flex: 1,
       minWidth: 160,
-      headerCheckboxSelection: true,
-      checkboxSelection: true,
+      autoHeight: true,
+      wrapText: true,
+      cellStyle: { lineHeight: "1.3", paddingTop: 6, paddingBottom: 6 },
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;
         const { registration_number, molecule_name, synonyms, batch_number } =
           params.data;
-        // Aliases = molecule_name (if distinct from reg) + custom synonyms.
-        // De-duplicated, capped at 3 to keep the row readable; the rest are
-        // visible on hover via the title attribute.
         const aliases: string[] = [];
         if (molecule_name && molecule_name !== registration_number) {
           aliases.push(molecule_name);
@@ -220,21 +218,16 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
             aliases.push(s);
           }
         }
-        const visible = aliases.slice(0, 3);
-        const overflow = aliases.length - visible.length;
         return (
           <div className="leading-tight">
-            <span className="font-mono font-medium">
-              {registration_number}
-            </span>
-            {visible.length > 0 && (
-              <span
-                className="ml-2 text-xs text-muted-foreground"
+            <div className="font-mono font-medium">{registration_number}</div>
+            {aliases.length > 0 && (
+              <div
+                className="text-xs text-muted-foreground break-words whitespace-normal"
                 title={aliases.join(", ")}
               >
-                {visible.join(" · ")}
-                {overflow > 0 && ` +${overflow}`}
-              </span>
+                {aliases.join(" · ")}
+              </div>
             )}
             {batch_number && (
               <div className="text-[10px] text-muted-foreground">
@@ -276,7 +269,7 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
       headerName: "Fitted Value",
       field: "fitted_value",
       width: 120,
-      sort: "asc",
+      sort: "desc",
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;
         return (
@@ -369,7 +362,7 @@ export function RunDoseResponseResults({
 
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
 
-  // Selection state
+  // Selection state (checkbox-driven, for multi-compound comparison)
   const [selectedRows, setSelectedRows] = useState<CompoundCurveRow[]>([]);
 
   const handleSelectionChanged = useCallback(
@@ -378,6 +371,9 @@ export function RunDoseResponseResults({
     },
     []
   );
+
+  // Viewing state (row-click-driven, for single-compound detail sheet)
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   // Sync savedCriteria when protocol updates
   const prevSavedRef = JSON.stringify(protocol?.recommended_hit_criteria ?? []);
@@ -394,14 +390,18 @@ export function RunDoseResponseResults({
     [allRows, activeCriteria]
   );
 
-  // Curve navigation (prev/next in single-select mode)
-  const selectedIndex = selectedRows.length === 1
-    ? filteredRows.findIndex((r) => r.molecule_id === selectedRows[0].molecule_id)
+  // Curve navigation (prev/next of the currently viewed compound)
+  const viewing = useMemo(
+    () => filteredRows.find((r) => r.molecule_id === viewingId) ?? null,
+    [filteredRows, viewingId]
+  );
+  const selectedIndex = viewing
+    ? filteredRows.findIndex((r) => r.molecule_id === viewing.molecule_id)
     : -1;
 
   const navigateTo = useCallback((index: number) => {
     const target = filteredRows[index];
-    if (target) setSelectedRows([target]);
+    if (target) setViewingId(target.molecule_id);
   }, [filteredRows]);
 
   const handlePrev = useCallback(() => {
@@ -513,9 +513,8 @@ export function RunDoseResponseResults({
     []
   );
 
-  // Detail panel: curves for selected compound
-  const selectedCurves =
-    selectedRows.length === 1 ? selectedRows[0].all_curves : null;
+  // Detail panel: curves for the viewed compound
+  const viewingCurves = viewing?.all_curves ?? null;
 
   // Loading
   if (isLoading) {
@@ -656,8 +655,9 @@ export function RunDoseResponseResults({
         columnDefs={columnDefs}
         height="auto"
         domLayout="autoHeight"
-        rowSelection="multiple"
         rowHeight={115}
+        onRowClick={(row) => setViewingId(row.molecule_id)}
+        enableMultiSelect
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`run-${run.id.slice(0, 8)}-dose-response`}
@@ -671,22 +671,22 @@ export function RunDoseResponseResults({
         }
       />
 
-      {/* Detail sheet — single compound selected */}
+      {/* Detail sheet — driven by row click, independent from selection */}
       <Sheet
-        open={selectedRows.length === 1 && !!selectedCurves}
-        onOpenChange={(open) => { if (!open) handleSelectionChanged({ api: { getSelectedRows: () => [] } } as never); }}
+        open={!!viewing}
+        onOpenChange={(open) => { if (!open) setViewingId(null); }}
       >
         <SheetContent side="right" className="w-[55vw] sm:max-w-[55vw] p-0 flex flex-col">
-          {selectedRows.length === 1 && (
+          {viewing && (
             <>
               <SheetHeader className="px-4 pt-4 pb-2 pr-12 shrink-0 flex flex-row items-center justify-between">
                 <div>
-                  <SheetTitle>{selectedRows[0].registration_number}</SheetTitle>
-                  {selectedRows[0].molecule_name && (
-                    <p className="text-sm text-muted-foreground">{selectedRows[0].molecule_name}</p>
+                  <SheetTitle>{viewing.registration_number}</SheetTitle>
+                  {viewing.molecule_name && (
+                    <p className="text-sm text-muted-foreground">{viewing.molecule_name}</p>
                   )}
-                  {selectedRows[0].batch_number && (
-                    <p className="text-xs text-muted-foreground">Batch: {selectedRows[0].batch_number}</p>
+                  {viewing.batch_number && (
+                    <p className="text-xs text-muted-foreground">Batch: {viewing.batch_number}</p>
                   )}
                 </div>
                 <CurveNavigator
@@ -697,9 +697,9 @@ export function RunDoseResponseResults({
                 />
               </SheetHeader>
               <ScrollArea className="flex-1 min-h-0 px-4 pb-6">
-                {selectedCurves && (
+                {viewingCurves && (
                   <DoseResponseChart
-                    curves={selectedCurves}
+                    curves={viewingCurves}
                     isInteractive={!run.is_locked}
                   />
                 )}

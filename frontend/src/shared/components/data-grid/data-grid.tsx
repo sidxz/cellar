@@ -41,6 +41,10 @@ export interface DataGridProps<TData = unknown>
   /** Render prop for selection toolbar. Shown above grid when rows are selected.
    *  Automatically enables rowSelection="multiple" on the grid. */
   selectionToolbar?: (selectedRows: TData[]) => ReactNode;
+  /** Enable multi-row selection without rendering a built-in toolbar.
+   *  When true, prepends the checkbox column and sets rowSelection="multiple".
+   *  Consumers track selection via onSelectionChanged. */
+  enableMultiSelect?: boolean;
   /** Placeholder for the quick-filter search bar. Set to false to hide. */
   searchPlaceholder?: string | false;
 }
@@ -57,9 +61,17 @@ export function DataGrid<TData = unknown>({
   excelEnhancer,
   preferencesKey,
   selectionToolbar,
+  enableMultiSelect,
   searchPlaceholder = "Filter...",
   ...rest
 }: DataGridProps<TData>) {
+  const selectionEnabled = !!selectionToolbar || !!enableMultiSelect;
+  const {
+    onSelectionChanged: consumerOnSelectionChanged,
+    rowSelection: _rowSelectionFromRest,
+    ...restWithoutSelection
+  } = rest;
+  void _rowSelectionFromRest;
   const gridRef = useRef<AgGridReact<TData>>(null);
   const [quickFilter, setQuickFilter] = useState("");
   const [selectedRows, setSelectedRows] = useState<TData[]>([]);
@@ -75,6 +87,33 @@ export function DataGrid<TData = unknown>({
     }),
     [suppressFilters]
   );
+
+  // Inject header tooltips (so clipped headers show full name on hover) and
+  // prepend the selection checkbox column when a selection toolbar is wired.
+  const finalColumnDefs = useMemo<ColDef<TData>[]>(() => {
+    const withTooltips = columnDefs.map((c) =>
+      c.headerTooltip == null && typeof c.headerName === "string"
+        ? { ...c, headerTooltip: c.headerName }
+        : c
+    );
+    if (!selectionEnabled) return withTooltips;
+    const selectCol: ColDef<TData> = {
+      colId: "__select__",
+      pinned: "left",
+      lockPosition: "left",
+      lockPinned: true,
+      width: 45,
+      maxWidth: 45,
+      minWidth: 45,
+      resizable: false,
+      sortable: false,
+      filter: false,
+      suppressMovable: true,
+      headerCheckboxSelection: true,
+      checkboxSelection: true,
+    };
+    return [selectCol, ...withTooltips];
+  }, [columnDefs, selectionEnabled]);
 
   const handleRowClicked = useCallback(
     (event: RowClickedEvent<TData>) => {
@@ -101,8 +140,9 @@ export function DataGrid<TData = unknown>({
   const handleSelectionChanged = useCallback(
     (event: SelectionChangedEvent<TData>) => {
       setSelectedRows(event.api.getSelectedRows());
+      consumerOnSelectionChanged?.(event);
     },
-    []
+    [consumerOnSelectionChanged]
   );
 
   if (loading) {
@@ -141,7 +181,7 @@ export function DataGrid<TData = unknown>({
           </div>
         </div>
       ) : null}
-      {selectionToolbar && selectedRows.length > 0 ? (
+      {selectionToolbar && !enableMultiSelect && selectedRows.length > 0 ? (
         <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
           {selectionToolbar(selectedRows)}
         </div>
@@ -151,12 +191,14 @@ export function DataGrid<TData = unknown>({
           ref={gridRef}
           theme={chemVaultTheme}
           rowData={rowData ?? []}
-          columnDefs={columnDefs}
+          columnDefs={finalColumnDefs}
           defaultColDef={defaultColDef}
           onRowClicked={onRowClick ? handleRowClicked : undefined}
           onGridReady={handleGridReady}
-          onSelectionChanged={selectionToolbar ? handleSelectionChanged : undefined}
-          rowSelection={selectionToolbar ? "multiple" : undefined}
+          onSelectionChanged={selectionEnabled ? handleSelectionChanged : consumerOnSelectionChanged}
+          rowSelection={selectionEnabled ? "multiple" : undefined}
+          suppressRowClickSelection={selectionEnabled ? true : undefined}
+          tooltipShowDelay={300}
           onColumnResized={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           onColumnMoved={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           onColumnVisible={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
@@ -164,7 +206,7 @@ export function DataGrid<TData = unknown>({
           quickFilterText={quickFilter || undefined}
           suppressCellFocus
           animateRows={false}
-          {...rest}
+          {...restWithoutSelection}
         />
       </div>
     </div>
