@@ -1,7 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import React, { useState, useRef, useCallback } from "react";
+import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { GROUP_PALETTE, CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -36,28 +36,6 @@ import {
   X_AXIS_FLOOR,
   PLOT_MARKER,
 } from "../lib/dose-response-display";
-
-// ─── Dynamic import — Plotly must NOT be SSR'd ─────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Plot = dynamic<any>(
-  () => import("react-plotly.js").then((mod) => mod.default as any),
-  {
-    ssr: false,
-    loading: () => <Skeleton className="h-[350px] w-full" />,
-  }
-) as React.ComponentType<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  layout: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config?: any;
-  style?: React.CSSProperties;
-  useResizeHandler?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onClick?: (event: any) => void;
-}>;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -971,9 +949,7 @@ export function DoseResponseChart({
                 onClick={() => {
                   const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
                   if (plotEl) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const Plotly = (window as any).Plotly;
-                    Plotly?.downloadImage?.(plotEl, {
+                    getPlotlyGlobal()?.downloadImage?.(plotEl, {
                       format: "png",
                       width: 1200,
                       height: 600,
@@ -992,9 +968,7 @@ export function DoseResponseChart({
                 onClick={() => {
                   const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
                   if (plotEl) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const Plotly = (window as any).Plotly;
-                    Plotly?.downloadImage?.(plotEl, {
+                    getPlotlyGlobal()?.downloadImage?.(plotEl, {
                       format: "svg",
                       width: 1200,
                       height: 600,

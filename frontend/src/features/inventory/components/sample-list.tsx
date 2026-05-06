@@ -110,6 +110,7 @@ export function SampleList({ batchId }: SampleListProps) {
                 size="icon"
                 className="h-8 w-8"
                 title="Aliquot"
+                aria-label="Aliquot sample"
                 onClick={() => setAliquotSample(sample)}
               >
                 <Pipette className="h-4 w-4" />
@@ -119,6 +120,7 @@ export function SampleList({ batchId }: SampleListProps) {
                 size="icon"
                 className="h-8 w-8"
                 title="Move"
+                aria-label="Move sample"
                 onClick={() => setMoveSample(sample)}
               >
                 <Move className="h-4 w-4" />
@@ -128,6 +130,7 @@ export function SampleList({ batchId }: SampleListProps) {
                 size="icon"
                 className="h-8 w-8 text-destructive"
                 title="Dispose"
+                aria-label="Dispose sample"
                 onClick={() => setDisposeSample(sample)}
               >
                 <Trash2 className="h-4 w-4" />

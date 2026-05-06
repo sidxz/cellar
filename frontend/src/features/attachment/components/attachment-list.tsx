@@ -54,7 +54,7 @@ interface AttachmentListProps {
 export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
   const { data: attachments, isLoading } = useAttachments(entityType, entityId);
   const deleteMutation = useDeleteAttachment(entityType, entityId);
-  const downloadFn = useDownloadAttachment();
+  const downloadMutation = useDownloadAttachment();
   const [deleteTarget, setDeleteTarget] = useState<AttachmentResponse | null>(
     null
   );
@@ -93,7 +93,14 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => downloadFn(att.id, att.file_name)}
+                  aria-label={`Download ${att.file_name}`}
+                  onClick={() =>
+                    downloadMutation.mutate({
+                      attachmentId: att.id,
+                      fileName: att.file_name,
+                    })
+                  }
+                  disabled={downloadMutation.isPending}
                 >
                   <Download className="h-4 w-4" />
                 </Button>

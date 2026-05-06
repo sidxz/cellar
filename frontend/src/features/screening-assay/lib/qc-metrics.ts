@@ -7,6 +7,24 @@
  * call .toFixed() on a dict.
  */
 
+/** Z' factor quality classification.
+ *
+ * Industry convention (Zhang et al., 1999):
+ *   Z' >= 0.5  → Excellent (large dynamic range, low noise)
+ *   0 <= Z' < 0.5 → Marginal (assay is usable but signal/noise is tight)
+ *   Z' < 0     → Poor (controls overlap; assay does not separate hits)
+ */
+export type ZPrimeQuality = "excellent" | "marginal" | "poor";
+
+export const Z_PRIME_EXCELLENT_THRESHOLD = 0.5;
+export const Z_PRIME_MARGINAL_THRESHOLD = 0;
+
+export function classifyZPrime(value: number): ZPrimeQuality {
+  if (value >= Z_PRIME_EXCELLENT_THRESHOLD) return "excellent";
+  if (value >= Z_PRIME_MARGINAL_THRESHOLD) return "marginal";
+  return "poor";
+}
+
 export interface PlateQcEntry {
   z_prime?: number;
   classification?: string;

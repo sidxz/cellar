@@ -1,24 +1,10 @@
 "use client";
 
 import { memo } from "react";
-import dynamic from "next/dynamic";
 import type { ActivityValue } from "../../types";
 import { generate4PLPoints, COMPACT_4PL, COMPACT_DR_CHART_SIZE } from "../../lib/curve-math";
 import { CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Plot = dynamic<any>(
-  () => import("react-plotly.js").then((mod) => mod.default as any),
-  { ssr: false }
-) as React.ComponentType<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  layout: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config?: any;
-  style?: React.CSSProperties;
-}>;
+import { Plot } from "@/shared/lib/plotly";
 
 interface DoseResponseCellProps {
   value?: ActivityValue;

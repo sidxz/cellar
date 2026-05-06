@@ -8,13 +8,22 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { showSuccess, showError } from "@/shared/lib/toast";
 
 export interface CrudHooksConfig {
   entityName: string;
   baseUrl: string;
   queryKey: string[];
   parentQueryKeys?: string[][];
+  /** Override per-action toast messages. Useful when the default
+   * `${entityName} created` reads awkwardly or when consumers need
+   * domain-specific phrasing. Receives the resolved entityName. */
+  messages?: {
+    created?: (entityName: string) => string;
+    updated?: (entityName: string) => string;
+    deleted?: (entityName: string) => string;
+    actionDefault?: (entityName: string, action: string) => string;
+  };
 }
 
 export function createCrudHooks<
@@ -22,7 +31,12 @@ export function createCrudHooks<
   TCreateInput = Record<string, unknown>,
   TUpdateInput = Record<string, unknown>,
 >(config: CrudHooksConfig) {
-  const { entityName, baseUrl, queryKey, parentQueryKeys = [] } = config;
+  const { entityName, baseUrl, queryKey, parentQueryKeys = [], messages } = config;
+  const createdMsg = messages?.created ?? ((n) => `${n} created`);
+  const updatedMsg = messages?.updated ?? ((n) => `${n} updated`);
+  const deletedMsg = messages?.deleted ?? ((n) => `${n} deleted`);
+  const actionDefaultMsg =
+    messages?.actionDefault ?? ((n, a) => `${n} ${a} complete`);
 
   function invalidateAll(qc: QueryClient) {
     qc.invalidateQueries({ queryKey });
@@ -63,7 +77,10 @@ export function createCrudHooks<
         customInstance<TEntity>({ url: baseUrl, method: "POST", data }),
       onSuccess: () => {
         invalidateAll(qc);
-        showSuccess(`${entityName} created`);
+        showSuccess(createdMsg(entityName));
+      },
+      onError: (err: Error) => {
+        showError(err.message || `Failed to create ${entityName}`);
       },
     });
   }
@@ -79,7 +96,10 @@ export function createCrudHooks<
         }),
       onSuccess: () => {
         invalidateAll(qc);
-        showSuccess(`${entityName} updated`);
+        showSuccess(updatedMsg(entityName));
+      },
+      onError: (err: Error) => {
+        showError(err.message || `Failed to update ${entityName}`);
       },
     });
   }
@@ -91,7 +111,10 @@ export function createCrudHooks<
         customInstance<void>({ url: `${baseUrl}/${id}`, method: "DELETE" }),
       onSuccess: () => {
         invalidateAll(qc);
-        showSuccess(`${entityName} deleted`);
+        showSuccess(deletedMsg(entityName));
+      },
+      onError: (err: Error) => {
+        showError(err.message || `Failed to delete ${entityName}`);
       },
     });
   }
@@ -107,7 +130,10 @@ export function createCrudHooks<
         }),
       onSuccess: () => {
         invalidateAll(qc);
-        showSuccess(successMessage ?? `${entityName} ${action} complete`);
+        showSuccess(successMessage ?? actionDefaultMsg(entityName, action));
+      },
+      onError: (err: Error) => {
+        showError(err.message || `Failed to ${action} ${entityName}`);
       },
     });
   }

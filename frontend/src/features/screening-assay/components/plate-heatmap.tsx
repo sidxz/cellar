@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { cn } from "@/shared/lib/utils";
 import { type PlateFormat, type WellType, WELL_TYPE_LABELS } from "../types";
 import { plateDimensions } from "../lib/plate-dimensions";
@@ -76,10 +77,13 @@ export function PlateHeatmap({
   const labelH = cellSize + 4;
 
   // Build well lookup map: "row,col" -> WellData
-  const wellMap = new Map<string, WellData>();
-  for (const w of wells) {
-    wellMap.set(`${w.row},${w.column}`, w);
-  }
+  const wellMap = useMemo(() => {
+    const m = new Map<string, WellData>();
+    for (const w of wells) {
+      m.set(`${w.row},${w.column}`, w);
+    }
+    return m;
+  }, [wells]);
 
   // SVG total dimensions
   const svgWidth = labelW + cols * cellSize + (cols - 1) * gap + 4;

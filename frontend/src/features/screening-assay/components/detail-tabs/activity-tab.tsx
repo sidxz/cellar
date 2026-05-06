@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import dynamic from "next/dynamic";
+import { Plot } from "@/shared/lib/plotly";
 import { GROUP_PALETTE, CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Eye, Filter, FlaskConical, FolderPlus, RotateCcw, Settings2, Star } from "lucide-react";
 import type {
@@ -46,20 +46,6 @@ import {
   type Protocol,
   type ReadoutDefInfo,
 } from "../../types";
-
-// ---------------------------------------------------------------------------
-// Dynamic Plotly import (no SSR)
-// ---------------------------------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Plot = dynamic<any>(
-  () => import("react-plotly.js").then((mod) => mod.default as any),
-  {
-    ssr: false,
-    loading: () => <Skeleton className="h-[350px] w-full" />,
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-) as React.ComponentType<any>;
 
 // ---------------------------------------------------------------------------
 // Constants

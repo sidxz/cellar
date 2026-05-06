@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
+import { Plot } from "@/shared/lib/plotly";
 import Link from "next/link";
 import { CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import {
@@ -29,23 +29,6 @@ import {
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
 import { generate4PLPoints, DETAIL_4PL } from "../../lib/curve-math";
 import type { ProtocolCurveGroup, CurveDetail } from "../../types";
-
-// ─── Dynamic Plotly import (must NOT be SSR'd) ────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Plot = dynamic<any>(
-  () => import("react-plotly.js").then((mod) => mod.default as any),
-  { ssr: false },
-) as React.ComponentType<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  layout: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config?: any;
-  style?: React.CSSProperties;
-  useResizeHandler?: boolean;
-}>;
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 

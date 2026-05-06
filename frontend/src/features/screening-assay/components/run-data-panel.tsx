@@ -32,7 +32,13 @@ import { PlateSetupDialog } from "./plate-setup-dialog";
 import { ReadoutDataTable } from "./readout-data-table";
 import { RunImportWizard } from "./run-import-wizard";
 import { SimplifiedImportDialog } from "./simplified-import-dialog";
-import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
+import { readPerPlateQc, worstZPrime, classifyZPrime, type ZPrimeQuality } from "../lib/qc-metrics";
+
+const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }> = {
+  excellent: { label: "Excellent", className: "bg-green-500/20 text-green-400 border-green-500/30" },
+  marginal: { label: "Marginal", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+  poor: { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" },
+};
 
 // ─── QC Metrics Panel (inline) ────────────────────────────────────────────────
 
@@ -42,13 +48,7 @@ interface QcMetricsPanelProps {
 
 /** Z' factor quality badge */
 function ZPrimeBadge({ value }: { value: number }) {
-  const { label, className } =
-    value >= 0.5
-      ? { label: "Excellent", className: "bg-green-500/20 text-green-400 border-green-500/30" }
-      : value >= 0
-      ? { label: "Marginal", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" }
-      : { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" };
-
+  const { label, className } = Z_PRIME_BADGE[classifyZPrime(value)];
   return (
     <Badge variant="outline" className={cn("text-xs font-medium", className)}>
       {label}
