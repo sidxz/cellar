@@ -11,6 +11,10 @@ from pydantic import BaseModel
 
 from chem_vault.application.screening.create_run import CreateRun, CreateRunCommand
 from chem_vault.application.screening.delete_run import DeleteRun, DeleteRunCommand
+from chem_vault.application.screening.reset_run_data import (
+    ResetRunData,
+    ResetRunDataCommand,
+)
 from chem_vault.application.screening.get_run import GetRun, GetRunQuery
 from chem_vault.application.screening.list_runs_with_counts import ListRunsWithCounts, ListRunsWithCountsQuery
 from chem_vault.application.screening.lock_run import LockRun, LockRunCommand, UnlockRun, UnlockRunCommand
@@ -31,6 +35,7 @@ from chem_vault.interface.dependencies import (
     CompleteRunDep,
     CreateRunDep,
     DeleteRunDep,
+    ResetRunDataDep,
     GetRunDep,
     ListRunsWithCountsDep,
     LockRunDep,
@@ -219,6 +224,39 @@ async def delete_run(
     )
     result = await uc(cmd, auth=auth)
     result_to_response(result)
+
+
+class ResetRunDataResponse(BaseModel):
+    plates_deleted: int
+    wells_deleted: int
+    readouts_deleted: int
+    curves_deleted: int
+
+
+@router.post("/runs/{run_id}/reset-data", response_model=ResetRunDataResponse)
+async def reset_run_data(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ResetRunDataDep,
+) -> ResetRunDataResponse:
+    """Wipe a run's plates, wells, readouts, dose-response curves, and QC.
+
+    The run row itself, its metadata, and any attached files are kept.
+    Only DRAFT and IN_PROGRESS runs may be reset. Locked or terminal
+    runs are rejected.
+    """
+    cmd = ResetRunDataCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+    )
+    result = await uc(cmd, auth=auth)
+    out = result_to_response(result)
+    return ResetRunDataResponse(
+        plates_deleted=out.plates_deleted,
+        wells_deleted=out.wells_deleted,
+        readouts_deleted=out.readouts_deleted,
+        curves_deleted=out.curves_deleted,
+    )
 
 
 @router.post("/runs/{run_id}/start", response_model=RunResponse)

@@ -181,6 +181,7 @@ def _build_preview_uc(
     store: InMemoryPreviewStore | None = None,
     protocol: Protocol | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
+    existing_readouts: list | None = None,
 ) -> tuple[PreviewRunFile, InMemoryPreviewStore]:
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
@@ -202,11 +203,15 @@ def _build_preview_uc(
     protocol_repo = AsyncMock()
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
+    readout_data_repo = AsyncMock()
+    readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
+
     store = store or InMemoryPreviewStore(ttl_seconds=60)
     return (
         PreviewRunFile(
             uow=FakeUoW(),
             run_repo=run_repo,
+            readout_data_repo=readout_data_repo,
             batch_repo=batch_repo,
             molecule_repo=molecule_repo,
             preview_store=store,
@@ -227,6 +232,8 @@ def _build_import_uc(
     save_bulk: list | None = None,
     molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
+    existing_readouts: list | None = None,
+    upload_attachment=None,
 ) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -238,6 +245,7 @@ def _build_import_uc(
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
     readout_data_repo = AsyncMock()
+    readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
     saved_list = save_bulk if save_bulk is not None else []
 
     async def _save_bulk(entities):
@@ -259,6 +267,19 @@ def _build_import_uc(
 
     molecule_repo.find_by_identifier = _find_mol
 
+    if upload_attachment is None:
+        upload_attachment = AsyncMock()
+        # Return a Success result with a fake attachment.
+        from returns.result import Success as _Success
+
+        class _FakeAttachment:
+            id = uuid.uuid4()
+
+        async def _no_op(*_args, **_kw):
+            return _Success(_FakeAttachment())
+
+        upload_attachment.side_effect = _no_op
+
     uc = ImportRunFile(
         uow=uow,
         run_repo=run_repo,
@@ -268,6 +289,7 @@ def _build_import_uc(
         molecule_repo=molecule_repo,
         preview_store=store,
         plate_template_repo=_make_plate_template_repo(plate_templates),
+        upload_attachment=upload_attachment,
     )
     return uc, uow, run_repo
 
@@ -375,6 +397,9 @@ def _seed_preview(
             workspace_id=workspace_id,
             run_id=run_id,
             table=table,
+            raw_bytes=file_content,
+            filename=filename,
+            content_type="text/csv",
             expires_at=time.monotonic() + 60,
         ),
     )
@@ -1084,3 +1109,422 @@ class TestResolveBatchRef:
             _make_mol_repo({"LG-2200467564-Plate": mol}),
         )
         assert result == (cv_batch.id, mol.id)
+
+
+# ---------------------------------------------------------------------------
+# Conflict-aware re-import: skip-and-report
+# ---------------------------------------------------------------------------
+
+
+class TestConflictAwareReimport:
+    """Re-imports must never silently overwrite existing data.
+
+    Conflict unit is per-cell: ``(plate, well, readout_def)`` for readouts
+    and ``(plate, well)`` for well metadata. Skipped cells/wells are
+    reported on the result.
+    """
+
+    @pytest.mark.asyncio
+    async def test_existing_readout_cell_skipped_with_conflict(self) -> None:
+        """A re-imported readout cell that already has a value is left alone."""
+        from chem_vault.domain.screening_assay.readout_data import ReadoutData
+        from chem_vault.domain.screening_assay.run import Plate, Well
+        from chem_vault.domain.shared.value_objects import QualifiedValue
+        from chem_vault.domain.shared.enums import Qualifier
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        # Pre-populate one well with one readout already on the run.
+        existing_plate = Plate(
+            run_id=run.id,
+            plate_number=1,
+            format=PlateFormat.F384,
+            plate_map={"name": "P1"},
+        )
+        existing_well = Well(
+            plate_id=existing_plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.SAMPLE,
+            batch_id=batch.id,
+            dose=100.0,
+        )
+        run.plates.append(existing_plate)
+        run.wells.append(existing_well)
+        existing_readout = ReadoutData(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            well_id=existing_well.id,
+            molecule_id=batch.molecule_id,
+            batch_id=batch.id,
+            readout_definition_id=rd_id,
+            value=QualifiedValue(value=0.123, qualifier=Qualifier.EQUAL),
+        )
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"P1,A1,100,LG-1,0.999\n"  # would overwrite if not skipped
+            b"P1,A2,100,LG-1,0.5\n"  # new well — should write
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="re-import.csv",
+        )
+
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+            existing_readouts=[existing_readout],
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                ),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+
+        # No new plate; one new well (A2); one new readout (A2's Raw Data);
+        # one readout conflict reported (A1's Raw Data).
+        assert out.plates_created == 0
+        assert out.wells_created == 1
+        assert out.readouts_created == 1
+        assert len(saved) == 1
+        assert len(out.conflicts_readout) == 1
+        c = out.conflicts_readout[0]
+        assert c.plate_name == "P1"
+        assert c.well_position == "A1"
+        assert c.readout_definition_id == rd_id
+        # Existing readout was NOT overwritten.
+        assert existing_readout.value.value == 0.123
+
+    @pytest.mark.asyncio
+    async def test_well_metadata_mismatch_skips_row(self) -> None:
+        """A row whose well metadata disagrees with the existing well is skipped entirely."""
+        from chem_vault.domain.screening_assay.run import Plate, Well
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        existing_plate = Plate(
+            run_id=run.id,
+            plate_number=1,
+            format=PlateFormat.F384,
+            plate_map={"name": "P1"},
+        )
+        # Existing dose is 10 µM
+        existing_well = Well(
+            plate_id=existing_plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.SAMPLE,
+            batch_id=batch.id,
+            dose=10.0,
+        )
+        run.plates.append(existing_plate)
+        run.wells.append(existing_well)
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        # File claims 1 µM for A1 — mismatch.
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"P1,A1,1,LG-1,0.5\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                ),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+
+        # Whole row skipped — no readout written, no well created.
+        assert out.wells_created == 0
+        assert out.readouts_created == 0
+        assert len(saved) == 0
+        assert len(out.conflicts_well_metadata) == 1
+        wc = out.conflicts_well_metadata[0]
+        assert wc.plate_name == "P1"
+        assert wc.well_position == "A1"
+        assert "dose" in wc.reason
+
+    @pytest.mark.asyncio
+    async def test_new_plate_appends_cleanly(self) -> None:
+        """A file with a brand-new plate name on a run that already has one
+        plate creates the new plate and leaves the existing untouched."""
+        from chem_vault.domain.screening_assay.run import Plate, Well
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        existing_plate = Plate(
+            run_id=run.id,
+            plate_number=1,
+            format=PlateFormat.F384,
+            plate_map={"name": "P1"},
+        )
+        existing_well = Well(
+            plate_id=existing_plate.id,
+            row="A",
+            column=1,
+            batch_id=batch.id,
+            dose=10.0,
+        )
+        run.plates.append(existing_plate)
+        run.wells.append(existing_well)
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"P2,A1,10,LG-1,0.7\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                ),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+
+        assert out.plates_created == 1
+        assert out.wells_created == 1
+        assert out.readouts_created == 1
+        # Run aggregate now has both plates
+        assert len(run.plates) == 2
+        plate_names = {(p.plate_map or {}).get("name") for p in run.plates}
+        assert plate_names == {"P1", "P2"}
+
+    @pytest.mark.asyncio
+    async def test_text_readout_writes_when_numeric_already_present(self) -> None:
+        """Same well, same plate — different readout def. The new one writes."""
+        from chem_vault.domain.screening_assay.readout_data import ReadoutData
+        from chem_vault.domain.screening_assay.run import Plate, Well
+        from chem_vault.domain.shared.value_objects import QualifiedValue
+        from chem_vault.domain.shared.enums import Qualifier
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data", "Scientist"])
+        # Make Scientist a TEXT readout def
+        protocol.readout_definitions[1].data_type = ReadoutDataType.TEXT
+        raw_rd_id = protocol.readout_definitions[0].id
+        scientist_rd_id = protocol.readout_definitions[1].id
+        batch = FakeBatch()
+
+        existing_plate = Plate(
+            run_id=run.id,
+            plate_number=1,
+            format=PlateFormat.F384,
+            plate_map={"name": "P1"},
+        )
+        existing_well = Well(
+            plate_id=existing_plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.SAMPLE,
+            batch_id=batch.id,
+            dose=10.0,
+        )
+        run.plates.append(existing_plate)
+        run.wells.append(existing_well)
+        existing_readout = ReadoutData(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            well_id=existing_well.id,
+            molecule_id=batch.molecule_id,
+            batch_id=batch.id,
+            readout_definition_id=raw_rd_id,
+            value=QualifiedValue(value=0.123, qualifier=Qualifier.EQUAL),
+        )
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data,Scientist\n"
+            b"P1,A1,10,LG-1,0.5,Dan\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+            existing_readouts=[existing_readout],
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=raw_rd_id),
+                    ReadoutColumn(header="Scientist", readout_definition_id=scientist_rd_id),
+                ),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+
+        # Raw Data conflict; Scientist writes.
+        assert out.readouts_created == 1
+        assert len(out.conflicts_readout) == 1
+        assert out.conflicts_readout[0].readout_definition_id == raw_rd_id
+        # The one saved row is the Scientist text readout.
+        assert len(saved) == 1
+        assert saved[0].readout_definition_id == scientist_rd_id
+        assert saved[0].value_text == "Dan"
+
+    @pytest.mark.asyncio
+    async def test_attaches_raw_file_on_success(self) -> None:
+        """The raw upload bytes land as a Run attachment after a successful import."""
+        from returns.result import Success as _Success
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        batch = FakeBatch()
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = b"Well,Batch,Raw Data\nA1,LG-1,0.5\n"
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="run-data.csv",
+        )
+
+        # Capture the upload command for inspection.
+        seen_cmds: list = []
+
+        class _FakeAttachment:
+            id = uuid.uuid4()
+
+        async def _fake_upload(upload_cmd, auth=None):
+            seen_cmds.append(upload_cmd)
+            return _Success(_FakeAttachment())
+
+        upload_mock = AsyncMock(side_effect=_fake_upload)
+
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            upload_attachment=upload_mock,
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        assert len(seen_cmds) == 1
+        upload_cmd = seen_cmds[0]
+        assert upload_cmd.file_data == csv
+        assert upload_cmd.file_name == "run-data.csv"
+        assert upload_cmd.attachable_id == run.id
+        assert result.unwrap().attachment_id is not None

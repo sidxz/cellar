@@ -367,6 +367,38 @@ class Run(AggregateRoot):
             self.wells.append(well)
         self.updated_at = datetime.now(UTC)
 
+    def reset_data(self, *, readouts_deleted: int, curves_deleted: int) -> None:
+        """Wipe plates, wells, and QC metrics on this run.
+
+        Cascades plates → wells via the FK relationship at persistence
+        time. Readouts and curves are owned by separate repositories;
+        their deletion happens in the use case before this method is
+        called, and the counts are passed in for the emitted event.
+
+        Blocked on locked runs. Run row, run metadata, and attachments
+        are preserved.
+        """
+        from chem_vault.domain.screening_assay.events import RunDataReset
+
+        self._guard_not_locked()
+        plates_deleted = len(self.plates)
+        wells_deleted = len(self.wells)
+        self.plates = []
+        self.wells = []
+        self.qc_metrics = {}
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunDataReset(
+                workspace_id=self.workspace_id,
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                plates_deleted=plates_deleted,
+                wells_deleted=wells_deleted,
+                readouts_deleted=readouts_deleted,
+                curves_deleted=curves_deleted,
+            )
+        )
+
     # ------------------------------------------------------------------
     # Locking
     # ------------------------------------------------------------------

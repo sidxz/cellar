@@ -74,3 +74,19 @@ class RunLocked(DomainEvent):
 class RunUnlocked(DomainEvent):
     unlocked_by: uuid.UUID
     reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunDataReset(DomainEvent):
+    """Emitted when a run's plates/wells/readouts/curves/QC are wiped.
+
+    The run row, its metadata, and any uploaded file attachments are
+    preserved — this is the destructive escape hatch for a chemist who
+    needs to redo an import from scratch without losing the run audit
+    history.
+    """
+
+    plates_deleted: int
+    wells_deleted: int
+    readouts_deleted: int
+    curves_deleted: int

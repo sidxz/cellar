@@ -8,6 +8,7 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from chem_vault.application.attachment.upload_attachment import UploadAttachment
 from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
 from chem_vault.application.inventory.plate_read_model import PlateReadModelService
 from chem_vault.application.inventory.registered_plates import (
@@ -31,6 +32,7 @@ from chem_vault.application.screening.create_protocol import CreateProtocol
 from chem_vault.application.screening.create_readout_data import CreateReadoutData
 from chem_vault.application.screening.create_run import CreateRun
 from chem_vault.application.screening.delete_run import DeleteRun
+from chem_vault.application.screening.reset_run_data import ResetRunData
 from chem_vault.application.screening.create_target import CreateTarget
 from chem_vault.application.screening.cross_protocol_resolver import CrossProtocolResolver
 from chem_vault.application.screening.delete_compound_flag import DeleteCompoundFlag
@@ -320,6 +322,19 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(DeleteRun, _delete_run)
+
+    def _reset_run_data(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResetRunData(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ResetRunData, _reset_run_data)
+
     container.define(GetRun, _run_query(GetRun))
     container.define(ListRunsByProtocol, _run_query(ListRunsByProtocol))
     container.define(StartRun, _run_cmd(StartRun))
@@ -542,6 +557,7 @@ def register_screening(container: Container) -> None:
         return PreviewRunFile(
             uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
@@ -563,6 +579,7 @@ def register_screening(container: Container) -> None:
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             preview_store=c[InMemoryPreviewStore],
             plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
+            upload_attachment=c[UploadAttachment],
             dispatcher=c[EventDispatcher],
             calculation_engine=c[ReadoutCalculationEngine],
         )

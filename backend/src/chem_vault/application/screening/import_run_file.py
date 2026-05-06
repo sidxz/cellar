@@ -4,15 +4,19 @@ Two use cases:
 
 - ``PreviewRunFile`` (read-only): parse the uploaded file, suggest a column
   mapping, dry-resolve batch references, summarize plates and controls,
-  and stash the parsed table in a short-lived in-memory store keyed by
+  scan for conflicts against existing run state, and stash the parsed
+  table + raw bytes in a short-lived in-memory store keyed by
   ``preview_id``. The wizard surfaces the result for user confirmation.
 
-- ``ImportRunFile`` (write): consume a ``preview_id`` plus the user-confirmed
-  ``ColumnMapping``, normalize the cached table, and write ``Plate`` / ``Well``
-  / ``ReadoutData`` aggregates to the run.
+- ``ImportRunFile`` (write): consume a ``preview_id`` plus the
+  user-confirmed ``ColumnMapping``. Re-runs the conflict scan as the
+  source of truth, then writes only the non-conflicting plates, wells,
+  and readouts. Conflicts are returned for reporting; nothing existing
+  is overwritten. The raw uploaded bytes are persisted as a Run
+  attachment on success so the file is part of the audit trail.
 
-The preview store is in-memory only — preview payloads expire after 60s and
-are deleted on first consume (idempotency on the import side).
+The preview store is in-memory only — preview payloads expire after 60s
+and are deleted on first consume (idempotency on the import side).
 """
 
 from __future__ import annotations
@@ -26,6 +30,10 @@ from typing import Protocol, runtime_checkable
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.attachment.upload_attachment import (
+    UploadAttachment,
+    UploadAttachmentCommand,
+)
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -43,7 +51,13 @@ from chem_vault.application.screening.readout_calculation_engine import (
 )
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
+from chem_vault.application.shared.parsers import (
+    ParsedTable,
+    TabularParseError,
+    TabularParser,
+)
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.attachment.enums import AttachableType
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.screening_assay.enums import (
@@ -60,7 +74,7 @@ from chem_vault.domain.screening_assay.repository import (
     ReadoutDataRepository,
     RunRepository,
 )
-from chem_vault.domain.screening_assay.run import Plate, Well
+from chem_vault.domain.screening_assay.run import Plate, Run, Well
 from chem_vault.domain.shared.enums import PlateFormat, Qualifier
 from chem_vault.domain.shared.errors import (
     ConflictError,
@@ -69,11 +83,6 @@ from chem_vault.domain.shared.errors import (
     ValidationError,
 )
 from chem_vault.domain.shared.value_objects import QualifiedValue
-from chem_vault.application.shared.parsers import (
-    ParsedTable,
-    TabularParseError,
-    TabularParser,
-)
 
 # Hard cap from the plan: sync-only MVP.
 _MAX_ROWS = 50_000
@@ -86,11 +95,19 @@ _MAX_ROWS = 50_000
 
 @dataclass(frozen=True)
 class _StoredPreview:
-    """Cached parsed file + metadata bound to a preview_id."""
+    """Cached parsed file + raw bytes bound to a preview_id.
+
+    Raw bytes are kept so the importer can persist the original upload
+    as a Run attachment after a successful write — the Files tab is
+    the canonical audit log of what was uploaded for the run.
+    """
 
     workspace_id: uuid.UUID
     run_id: uuid.UUID
     table: ParsedTable
+    raw_bytes: bytes
+    filename: str
+    content_type: str
     expires_at: float
 
 
@@ -129,6 +146,39 @@ class InMemoryPreviewStore:
 
 
 # ---------------------------------------------------------------------------
+# Conflict reporting
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WellConflict:
+    """A row from the file refers to an existing well whose metadata
+    (well_type, batch_ref, dose) differs from what the file declares.
+
+    The whole row is skipped — neither the well nor any of its readout
+    columns are written.
+    """
+
+    plate_name: str
+    well_position: str  # e.g. "A12"
+    reason: str  # human-readable diff
+
+
+@dataclass(frozen=True)
+class ReadoutConflict:
+    """A specific (well, readout_def) cell already has a value persisted.
+
+    The cell is left untouched. Other readout columns on the same row
+    that don't conflict still write.
+    """
+
+    plate_name: str
+    well_position: str
+    readout_definition_id: uuid.UUID
+    readout_name: str  # for display
+
+
+# ---------------------------------------------------------------------------
 # DTOs
 # ---------------------------------------------------------------------------
 
@@ -139,6 +189,7 @@ class PreviewRunFileQuery(Command):
     run_id: uuid.UUID
     file_content: bytes
     filename: str = ""
+    content_type: str = ""
 
 
 @dataclass(frozen=True)
@@ -162,6 +213,11 @@ class PreviewRunFileResult:
     total_rows: int
     expires_in_seconds: int
     validation_errors: tuple[str, ...] = ()
+    will_create_plates: int = 0
+    will_create_wells: int = 0
+    will_create_readouts: int = 0
+    will_skip_wells: tuple[WellConflict, ...] = ()
+    will_skip_readouts: tuple[ReadoutConflict, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -170,7 +226,6 @@ class ImportRunFileCommand(Command):
     run_id: uuid.UUID
     preview_id: uuid.UUID
     mapping: ColumnMapping
-    replace_existing: bool = False
 
 
 @dataclass
@@ -183,10 +238,15 @@ class ImportRunFileResult:
     controls_from_template: int = 0
     controls_unclassified: int = 0
     skipped_rows: int = 0
-    # Non-fatal warning emitted when the post-import normalization /
-    # aggregation pipeline fails (e.g., missing controls). The import itself
-    # still succeeds; the user should treat this as a diagnostic prompt.
+    conflicts_well_metadata: list[WellConflict] = field(default_factory=list)
+    conflicts_readout: list[ReadoutConflict] = field(default_factory=list)
+    attachment_id: uuid.UUID | None = None
+    # Non-fatal warnings. ``compute_warning`` covers normalization /
+    # aggregation failures (e.g. missing controls). ``attachment_warning``
+    # covers attachment persistence failures — the import itself still
+    # succeeded.
     compute_warning: str | None = None
+    attachment_warning: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -195,12 +255,13 @@ class ImportRunFileResult:
 
 
 class PreviewRunFile:
-    """Parse + suggest mapping + dry-resolve batches; cache for import."""
+    """Parse + suggest mapping + dry-resolve batches + scan conflicts."""
 
     def __init__(
         self,
         uow: UnitOfWork,
         run_repo: RunRepository,
+        readout_data_repo: ReadoutDataRepository,
         batch_repo: BatchRepository,
         molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
@@ -210,6 +271,7 @@ class PreviewRunFile:
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
+        self._readout_data_repo = readout_data_repo
         self._batch_repo = batch_repo
         self._molecule_repo = molecule_repo
         self._store = preview_store
@@ -258,6 +320,11 @@ class PreviewRunFile:
         matched = 0
         unmatched_set: set[str] = set()
         validation_errors: list[str] = []
+        will_create_plates = 0
+        will_create_wells = 0
+        will_create_readouts = 0
+        well_conflicts: list[WellConflict] = []
+        readout_conflicts: list[ReadoutConflict] = []
 
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             input.workspace_id, run.protocol_id
@@ -285,6 +352,28 @@ class PreviewRunFile:
                         protocol, norm.plate_formats, templates_by_format
                     )
 
+                    # Conflict scan against existing run state. Uses a
+                    # best-guess readout-def binding (each readout column
+                    # maps to a fresh UUID in the guessed mapping, which
+                    # is fine for plate/well-level counts; the readout
+                    # cell-level scan is approximate at preview time and
+                    # gets re-run authoritatively at import time once the
+                    # user has bound real readout-def IDs).
+                    existing_readouts = await self._readout_data_repo.find_by_run(
+                        input.workspace_id, run.id
+                    )
+                    plan = _scan_conflicts(
+                        norm,
+                        run,
+                        existing_readouts,
+                        templates_by_format,
+                    )
+                    will_create_plates = plan.create_plate_count
+                    will_create_wells = plan.create_well_count
+                    will_create_readouts = plan.create_readout_count
+                    well_conflicts = plan.well_conflicts
+                    readout_conflicts = plan.readout_conflicts
+
         preview_id = uuid.uuid4()
         ttl = getattr(self._store, "ttl_seconds", 60.0)
         self._store.save(
@@ -293,6 +382,9 @@ class PreviewRunFile:
                 workspace_id=input.workspace_id,
                 run_id=input.run_id,
                 table=table,
+                raw_bytes=input.file_content,
+                filename=input.filename,
+                content_type=input.content_type or _guess_content_type(input.filename),
                 expires_at=time.monotonic() + ttl,
             ),
         )
@@ -314,6 +406,11 @@ class PreviewRunFile:
                 total_rows=table.row_count,
                 expires_in_seconds=int(ttl),
                 validation_errors=tuple(validation_errors),
+                will_create_plates=will_create_plates,
+                will_create_wells=will_create_wells,
+                will_create_readouts=will_create_readouts,
+                will_skip_wells=tuple(well_conflicts),
+                will_skip_readouts=tuple(readout_conflicts),
             )
         )
 
@@ -324,7 +421,13 @@ class PreviewRunFile:
 
 
 class ImportRunFile:
-    """Persist a previously-previewed long-format file to the run."""
+    """Persist a previously-previewed long-format file to the run.
+
+    Re-imports are non-destructive: existing plates are reused by name,
+    existing wells are reused by `(plate, row, column)` if their metadata
+    matches the file, and existing `(well, readout_def)` cells are never
+    overwritten. Conflicts at any layer are skipped and reported.
+    """
 
     def __init__(
         self,
@@ -336,6 +439,7 @@ class ImportRunFile:
         molecule_repo: MoleculeRepository,
         preview_store: PreviewStore,
         plate_template_repo: PlateTemplateRepository,
+        upload_attachment: UploadAttachment,
         dispatcher: EventDispatcherProtocol | None = None,
         calculation_engine: ReadoutCalculationEngine | None = None,
     ) -> None:
@@ -347,6 +451,7 @@ class ImportRunFile:
         self._molecule_repo = molecule_repo
         self._store = preview_store
         self._plate_template_repo = plate_template_repo
+        self._upload_attachment = upload_attachment
         self._dispatcher = dispatcher
         self._calc_engine = calculation_engine
 
@@ -360,24 +465,35 @@ class ImportRunFile:
         except DomainError as exc:
             return Failure(exc)
 
-        async with self._uow:
-            return await self._execute(input)
-
-    async def _execute(
-        self, cmd: ImportRunFileCommand
-    ) -> Result[ImportRunFileResult, DomainError]:
-        # 1. Pull and validate preview
-        preview = self._store.consume(cmd.preview_id)
+        # Pull the preview here; the rest happens inside the UoW.
+        preview = self._store.consume(input.preview_id)
         if preview is None:
-            return Failure(
-                NotFoundError("Preview", str(cmd.preview_id))
-            )
-        if preview.workspace_id != cmd.workspace_id or preview.run_id != cmd.run_id:
+            return Failure(NotFoundError("Preview", str(input.preview_id)))
+        if preview.workspace_id != input.workspace_id or preview.run_id != input.run_id:
             return Failure(
                 ValidationError("preview_id does not match this workspace + run")
             )
 
-        # 2. Load run
+        async with self._uow:
+            result = await self._execute(input, preview, auth)
+
+        # Attachment + calc engine run in their own UoWs after the import
+        # transaction commits. Both are best-effort — the import itself
+        # has already succeeded if we got here.
+        if isinstance(result, Success):
+            unwrapped = result.unwrap()
+            if unwrapped.readouts_created > 0 or unwrapped.wells_created > 0:
+                await self._maybe_run_calc_engine(input, unwrapped)
+            await self._maybe_attach_raw_file(input, preview, unwrapped, auth)
+        return result
+
+    async def _execute(
+        self,
+        cmd: ImportRunFileCommand,
+        preview: _StoredPreview,
+        auth: AuthContext | None,
+    ) -> Result[ImportRunFileResult, DomainError]:
+        # 1. Load the run with existing plates + wells.
         run = await self._run_repo.find_by_id_in_workspace(
             cmd.workspace_id, cmd.run_id
         )
@@ -385,31 +501,17 @@ class ImportRunFile:
             return Failure(NotFoundError("Run", str(cmd.run_id)))
         if run.is_locked:
             return Failure(ConflictError("Cannot import into a locked run"))
-        if run.wells and not cmd.replace_existing:
-            return Failure(
-                ConflictError(
-                    "Run already has wells — pass replace_existing to overwrite"
-                )
-            )
-        if run.wells and cmd.replace_existing:
-            return Failure(
-                ValidationError(
-                    "replace_existing is not yet supported in MVP — re-create the run"
-                )
-            )
 
-        # 3. Load the protocol — its dose_unit is the canonical unit for all
-        # well doses and IC50 fits. The wizard does not pick a unit anymore.
+        # 2. Load protocol — its dose_unit is the canonical unit.
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             cmd.workspace_id, run.protocol_id
         )
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
-        # 4. Validate readout-def ids belong to this run's protocol AND rebuild
-        # the readout columns with data_type sourced from the protocol so the
-        # normalizer parses each column with the right value kind.
-
+        # 3. Validate readout-def ids belong to this protocol; rebuild
+        # readout columns with data_type so the normalizer parses each
+        # column with the right value kind.
         rd_by_id = {rd.id: rd for rd in protocol.readout_definitions}
         typed_readouts: list[ReadoutColumn] = []
         for rc in cmd.mapping.readout_columns:
@@ -429,7 +531,6 @@ class ImportRunFile:
                     data_type=kind,
                 )
             )
-
         typed_mapping = ColumnMapping(
             well=cmd.mapping.well,
             plate_name=cmd.mapping.plate_name,
@@ -438,15 +539,13 @@ class ImportRunFile:
             readout_columns=tuple(typed_readouts),
         )
 
-        # 5. Normalize with the type-aware mapping
+        # 4. Normalize.
         normalized_result = normalize(preview.table, typed_mapping)
         if isinstance(normalized_result, Failure):
             return normalized_result
         normalized: NormalizedTable = normalized_result.unwrap()
 
-        # 6. Pre-flight: control-layout coverage. If the protocol uses
-        # control-based normalization but lacks a configured layout for any
-        # plate format in the file, fail BEFORE writing anything.
+        # 5. Pre-flight: control-layout coverage.
         templates_by_format = await _load_templates_by_format(
             protocol,
             normalized.plate_formats,
@@ -459,7 +558,7 @@ class ImportRunFile:
         if control_errors:
             return Failure(ValidationError("; ".join(control_errors)))
 
-        # 7. Resolve batch references
+        # 6. Resolve batch references.
         batch_lookup = await _build_batch_lookup(
             normalized.rows,
             cmd.workspace_id,
@@ -467,144 +566,385 @@ class ImportRunFile:
             self._molecule_repo,
         )
 
-        # 7. Build plates + wells + readouts
-        plates_by_name: dict[str, Plate] = {}
-        readouts: list[ReadoutData] = []
+        # 7. Load existing readouts for the run; build the conflict scan.
+        existing_readouts = await self._readout_data_repo.find_by_run(
+            cmd.workspace_id, run.id
+        )
+        rd_name_by_id = {rd.id: rd.name for rd in protocol.readout_definitions}
+        plan = _scan_conflicts(
+            normalized,
+            run,
+            existing_readouts,
+            templates_by_format,
+            batch_lookup=batch_lookup,
+            rd_name_by_id=rd_name_by_id,
+        )
+
+        # 8. Apply plan: create new plates, attach new wells, write new
+        # readouts. Existing entities are reused as-is.
         result = ImportRunFileResult(
             rows_total=len(normalized.rows),
             skipped_rows=normalized.skipped_rows,
+            conflicts_well_metadata=list(plan.well_conflicts),
+            conflicts_readout=list(plan.readout_conflicts),
+            controls_from_template=plan.controls_from_template,
+            controls_unclassified=plan.controls_unclassified,
+            unmatched_batches=sorted(plan.unmatched_batches),
         )
-        unmatched: set[str] = set()
 
-        for plate_name, plate_format in normalized.plate_formats.items():
-            plates_by_name[plate_name] = Plate(
-                run_id=run.id,
-                plate_number=len(plates_by_name) + 1,
-                format=plate_format,
-                plate_map={"name": plate_name},
+        # Track new plates first so we can emit creation counters.
+        for new_plate in plan.new_plates:
+            new_plate.wells = plan.wells_for_new_plate.get(  # type: ignore[attr-defined]
+                new_plate.id, []
+            )
+            run.add_plate(new_plate)
+            result.plates_created += 1
+            result.wells_created += len(plan.wells_for_new_plate.get(new_plate.id, []))
+
+        # Wells appended to existing plates: add directly to run.wells.
+        for w in plan.new_wells_for_existing_plates:
+            run.wells.append(w)
+            result.wells_created += 1
+
+        # Resolve molecule_id for each new readout from the well's
+        # batch -> molecule lookup. Wells can be brand new (so we use
+        # batch_lookup directly) or existing (we read the well's
+        # batch_id and look up the molecule via the existing batch).
+        new_readouts: list[ReadoutData] = []
+        for rd_write in plan.new_readouts:
+            new_readouts.append(
+                ReadoutData(
+                    workspace_id=cmd.workspace_id,
+                    run_id=run.id,
+                    well_id=rd_write.well_id,
+                    molecule_id=rd_write.molecule_id,
+                    batch_id=rd_write.batch_id,
+                    readout_definition_id=rd_write.readout_definition_id,
+                    value=rd_write.value,
+                    value_text=rd_write.value_text,
+                )
             )
 
-        wells_by_plate: dict[uuid.UUID, list[Well]] = {p.id: [] for p in plates_by_name.values()}
+        await self._run_repo.save(run)
+        if new_readouts:
+            await self._readout_data_repo.save_bulk(new_readouts)
+            result.readouts_created = len(new_readouts)
 
-        for row in normalized.rows:
-            plate = plates_by_name[row.plate_name]
+        await self._uow.commit()
+        return Success(result)
 
-            # 1. Classify well type. The plate template is the canonical source
-            # — if it has an entry for this position, that wins regardless of
-            # what data the row carries. (A POS control may legitimately have
-            # an inhibitor concentration listed; an unmapped buffer well may
-            # carry a batch ref. Neither should override the template.)
-            plate_format = normalized.plate_formats.get(row.plate_name)
-            per_well = (
-                templates_by_format.get(plate_format)
-                if plate_format is not None
-                else None
-            )
-            tmpl_type = per_well.get(_well_key(row.well)) if per_well else None
+    async def _maybe_run_calc_engine(
+        self, cmd: ImportRunFileCommand, result: ImportRunFileResult
+    ) -> None:
+        if self._calc_engine is None:
+            return
+        compute_result = await self._calc_engine.compute_for_run(
+            run_id=cmd.run_id, workspace_id=cmd.workspace_id
+        )
+        if isinstance(compute_result, Failure):
+            result.compute_warning = str(compute_result.failure())
 
-            if tmpl_type is not None:
-                well_type = tmpl_type
-                if tmpl_type != WellType.SAMPLE:
-                    result.controls_from_template += 1
-            elif row.batch_ref or row.concentration is not None:
-                well_type = WellType.SAMPLE
+    async def _maybe_attach_raw_file(
+        self,
+        cmd: ImportRunFileCommand,
+        preview: _StoredPreview,
+        result: ImportRunFileResult,
+        auth: AuthContext | None,
+    ) -> None:
+        """Persist the raw uploaded file as a Run attachment.
+
+        The Files tab is the audit log of what was uploaded for the run.
+        We attach on every successful import — including the no-op case
+        where the file was fully redundant — because the chemist's
+        intent ("this file represents this run's source data") is
+        independent of how many cells actually changed.
+        """
+        if auth is None:
+            result.attachment_warning = "no auth context — skipped"
+            return
+        upload_cmd = UploadAttachmentCommand(
+            workspace_id=cmd.workspace_id,
+            attachable_type=AttachableType.RUN,
+            attachable_id=cmd.run_id,
+            uploaded_by=auth.user_id,
+            file_name=preview.filename or f"run-import-{cmd.preview_id}.bin",
+            mime_type=preview.content_type,
+            file_data=preview.raw_bytes,
+        )
+        try:
+            attach_result = await self._upload_attachment(upload_cmd, auth=auth)
+        except Exception as exc:  # noqa: BLE001 — attachment is best-effort
+            result.attachment_warning = f"attachment failed: {exc}"
+            return
+        if isinstance(attach_result, Failure):
+            result.attachment_warning = str(attach_result.failure())
+        else:
+            result.attachment_id = attach_result.unwrap().id
+
+
+# ---------------------------------------------------------------------------
+# Conflict scanning
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _ReadoutWrite:
+    """One readout cell to be persisted."""
+
+    well_id: uuid.UUID
+    molecule_id: uuid.UUID | None
+    batch_id: uuid.UUID | None
+    readout_definition_id: uuid.UUID
+    value: QualifiedValue | None
+    value_text: str | None
+
+
+@dataclass
+class _ImportPlan:
+    """Output of _scan_conflicts — what to write and what to skip."""
+
+    new_plates: list[Plate] = field(default_factory=list)
+    wells_for_new_plate: dict[uuid.UUID, list[Well]] = field(default_factory=dict)
+    new_wells_for_existing_plates: list[Well] = field(default_factory=list)
+    new_readouts: list[_ReadoutWrite] = field(default_factory=list)
+    well_conflicts: list[WellConflict] = field(default_factory=list)
+    readout_conflicts: list[ReadoutConflict] = field(default_factory=list)
+    unmatched_batches: set[str] = field(default_factory=set)
+    controls_from_template: int = 0
+    controls_unclassified: int = 0
+    create_plate_count: int = 0
+    create_well_count: int = 0
+    create_readout_count: int = 0
+
+
+def _scan_conflicts(
+    normalized: NormalizedTable,
+    run: Run,
+    existing_readouts: list[ReadoutData],
+    templates_by_format: dict[PlateFormat, dict[str, WellType]],
+    *,
+    batch_lookup: dict[str, tuple[uuid.UUID, uuid.UUID]] | None = None,
+    rd_name_by_id: dict[uuid.UUID, str] | None = None,
+) -> _ImportPlan:
+    """Scan a normalized file against existing run state.
+
+    The plan is computed but no I/O happens here. Caller is responsible
+    for resolving batches before calling this when actually writing
+    (the preview-time scan can pass an empty/None batch_lookup; sample
+    rows with unresolved refs are skipped either way).
+    """
+    plan = _ImportPlan()
+    batch_lookup = batch_lookup or {}
+    rd_name_by_id = rd_name_by_id or {}
+
+    # Index existing run state.
+    plates_by_name: dict[str, Plate] = {}
+    for p in run.plates:
+        name = (p.plate_map or {}).get("name") if p.plate_map else None
+        if isinstance(name, str):
+            plates_by_name[name] = p
+
+    wells_by_plate_pos: dict[tuple[uuid.UUID, str, int], Well] = {
+        (w.plate_id, w.row, w.column): w for w in run.wells
+    }
+
+    existing_readout_keys: set[tuple[uuid.UUID, uuid.UUID]] = {
+        (r.well_id, r.readout_definition_id) for r in existing_readouts
+    }
+
+    next_plate_number = (
+        max((p.plate_number for p in run.plates), default=0) + 1
+    )
+
+    # Build/reuse plates.
+    for plate_name, plate_format in normalized.plate_formats.items():
+        if plate_name in plates_by_name:
+            continue
+        new_plate = Plate(
+            run_id=run.id,
+            plate_number=next_plate_number,
+            format=plate_format,
+            plate_map={"name": plate_name},
+        )
+        next_plate_number += 1
+        plates_by_name[plate_name] = new_plate
+        plan.new_plates.append(new_plate)
+        plan.wells_for_new_plate[new_plate.id] = []
+        plan.create_plate_count += 1
+
+    # Walk rows.
+    for row in normalized.rows:
+        plate = plates_by_name.get(row.plate_name)
+        if plate is None:
+            continue  # defensive; plate_formats covered all names
+        plate_format = normalized.plate_formats.get(row.plate_name)
+
+        # Classify well type from template (canonical) else from data.
+        per_well = (
+            templates_by_format.get(plate_format)
+            if plate_format is not None
+            else None
+        )
+        tmpl_type = per_well.get(_well_key(row.well)) if per_well else None
+        if tmpl_type is not None:
+            file_well_type = tmpl_type
+            if tmpl_type != WellType.SAMPLE:
+                plan.controls_from_template += 1
+        elif row.batch_ref or row.concentration is not None:
+            file_well_type = WellType.SAMPLE
+        else:
+            file_well_type = WellType.SAMPLE
+            plan.controls_unclassified += 1
+
+        # Resolve batch_ref to (batch_id, molecule_id).
+        file_batch_id: uuid.UUID | None = None
+        file_molecule_id: uuid.UUID | None = None
+        if row.batch_ref:
+            resolved = batch_lookup.get(row.batch_ref)
+            if resolved is not None:
+                file_batch_id, file_molecule_id = resolved
             else:
-                well_type = WellType.SAMPLE
-                result.controls_unclassified += 1
+                plan.unmatched_batches.add(row.batch_ref)
+                if file_well_type == WellType.SAMPLE:
+                    continue
 
-            # 2. Resolve batch ref. Sample wells with unresolved refs are
-            # skipped per the locked policy. Control wells keep batch_id=None
-            # — the well still has to exist for normalization to find it.
-            batch_id: uuid.UUID | None = None
-            molecule_id: uuid.UUID | None = None
-            if row.batch_ref:
-                resolved = batch_lookup.get(row.batch_ref)
-                if resolved is not None:
-                    batch_id, molecule_id = resolved
-                else:
-                    unmatched.add(row.batch_ref)
-                    if well_type == WellType.SAMPLE:
-                        continue
+        # Look up existing well at this position.
+        well_pos_key = (plate.id, row.well.row, row.well.column)
+        existing_well = wells_by_plate_pos.get(well_pos_key)
 
-            well = Well(
+        if existing_well is None:
+            # Fresh well — create.
+            new_well = Well(
                 plate_id=plate.id,
                 row=row.well.row,
                 column=row.well.column,
-                well_type=well_type,
-                batch_id=batch_id,
+                well_type=file_well_type,
+                batch_id=file_batch_id,
                 dose=row.concentration,
             )
-            wells_by_plate[plate.id].append(well)
+            wells_by_plate_pos[well_pos_key] = new_well
+            target_well = new_well
+            target_molecule_id = file_molecule_id
+            target_batch_id = file_batch_id
 
-            # Write readouts for sample AND control wells. Control wells need
-            # their raw values persisted so plate normalization (% Inhibition,
-            # Z-prime QC) can find them. molecule_id / batch_id are nullable
-            # for non-sample wells. Text readouts go to value_text instead of
-            # the qualified-numeric value.
-            for rd_id, value in row.readouts.items():
-                if isinstance(value, str):
-                    readouts.append(
-                        ReadoutData(
-                            workspace_id=cmd.workspace_id,
-                            run_id=run.id,
-                            well_id=well.id,
-                            molecule_id=molecule_id,
-                            batch_id=batch_id,
-                            readout_definition_id=rd_id,
-                            value=None,
-                            value_text=value,
-                        )
-                    )
-                else:
-                    readouts.append(
-                        ReadoutData(
-                            workspace_id=cmd.workspace_id,
-                            run_id=run.id,
-                            well_id=well.id,
-                            molecule_id=molecule_id,
-                            batch_id=batch_id,
-                            readout_definition_id=rd_id,
-                            value=QualifiedValue(
-                                value=value, qualifier=Qualifier.EQUAL
-                            ),
-                        )
-                    )
-
-        # 8. Attach plates + wells to the run
-        for plate in plates_by_name.values():
-            plate.wells = wells_by_plate[plate.id]  # type: ignore[attr-defined]
-            run.add_plate(plate)
-            result.plates_created += 1
-            result.wells_created += len(wells_by_plate[plate.id])
-
-        await self._run_repo.save(run)
-        if readouts:
-            await self._readout_data_repo.save_bulk(readouts)
-            result.readouts_created = len(readouts)
-
-        events = await self._uow.commit()
-
-        # Trigger normalization (% inhibition / % activation / etc.) after
-        # readouts are persisted. Engine runs in its own UoW. Failures here
-        # (e.g. protocol missing controls) are non-fatal — the import is done
-        # — but the failure is surfaced on the result so the user sees why
-        # downstream curves / QC are empty.
-        if self._calc_engine is not None and result.readouts_created > 0:
-            compute_result = await self._calc_engine.compute_for_run(
-                run_id=run.id, workspace_id=cmd.workspace_id
+            if plate in plan.new_plates:
+                plan.wells_for_new_plate[plate.id].append(new_well)
+            else:
+                plan.new_wells_for_existing_plates.append(new_well)
+            plan.create_well_count += 1
+        else:
+            # Well already exists — must agree with the file.
+            mismatch = _well_metadata_mismatch(
+                existing_well,
+                file_well_type=file_well_type,
+                file_batch_id=file_batch_id,
+                file_dose=row.concentration,
             )
-            if isinstance(compute_result, Failure):
-                result.compute_warning = str(compute_result.failure())
-        if self._dispatcher and events:
-            await self._dispatcher.dispatch_all(events)
+            if mismatch is not None:
+                plan.well_conflicts.append(
+                    WellConflict(
+                        plate_name=row.plate_name,
+                        well_position=_well_key(row.well),
+                        reason=mismatch,
+                    )
+                )
+                continue
+            target_well = existing_well
+            target_batch_id = existing_well.batch_id
+            target_molecule_id = file_molecule_id  # already validated to match
 
-        result.unmatched_batches = sorted(unmatched)
-        return Success(result)
+        # Per-readout cell scan.
+        for rd_id, value in row.readouts.items():
+            cell_key = (target_well.id, rd_id)
+            if cell_key in existing_readout_keys:
+                plan.readout_conflicts.append(
+                    ReadoutConflict(
+                        plate_name=row.plate_name,
+                        well_position=_well_key(row.well),
+                        readout_definition_id=rd_id,
+                        readout_name=rd_name_by_id.get(rd_id, ""),
+                    )
+                )
+                continue
+
+            if isinstance(value, str):
+                plan.new_readouts.append(
+                    _ReadoutWrite(
+                        well_id=target_well.id,
+                        molecule_id=target_molecule_id,
+                        batch_id=target_batch_id,
+                        readout_definition_id=rd_id,
+                        value=None,
+                        value_text=value,
+                    )
+                )
+            else:
+                plan.new_readouts.append(
+                    _ReadoutWrite(
+                        well_id=target_well.id,
+                        molecule_id=target_molecule_id,
+                        batch_id=target_batch_id,
+                        readout_definition_id=rd_id,
+                        value=QualifiedValue(value=value, qualifier=Qualifier.EQUAL),
+                        value_text=None,
+                    )
+                )
+            existing_readout_keys.add(cell_key)
+            plan.create_readout_count += 1
+
+    return plan
+
+
+def _well_metadata_mismatch(
+    existing: Well,
+    *,
+    file_well_type: WellType,
+    file_batch_id: uuid.UUID | None,
+    file_dose: float | None,
+) -> str | None:
+    """Return a human-readable mismatch description, or None if compatible.
+
+    A None value on the file side is treated as "no opinion" — only
+    explicit value disagreements count as a mismatch. This keeps imports
+    additive when the chemist's second file omits already-set fields.
+    """
+    diffs: list[str] = []
+    if existing.well_type != file_well_type:
+        diffs.append(
+            f"well_type {existing.well_type.value} vs file {file_well_type.value}"
+        )
+    if file_batch_id is not None and existing.batch_id != file_batch_id:
+        diffs.append("batch_ref differs")
+    if file_dose is not None and existing.dose is not None:
+        # Tolerant float compare — same dose at different precision is fine.
+        if abs(existing.dose - file_dose) > 1e-9:
+            diffs.append(f"dose {existing.dose} vs file {file_dose}")
+    if not diffs:
+        return None
+    return "; ".join(diffs)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers (parser + batch resolution + control layouts)
 # ---------------------------------------------------------------------------
+
+
+_CONTENT_TYPE_BY_EXT: dict[str, str] = {
+    ".csv": "text/csv",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".tsv": "text/tab-separated-values",
+}
+
+
+def _guess_content_type(filename: str) -> str:
+    if not filename:
+        return "application/octet-stream"
+    lower = filename.lower()
+    for ext, ct in _CONTENT_TYPE_BY_EXT.items():
+        if lower.endswith(ext):
+            return ct
+    return "application/octet-stream"
 
 
 def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
@@ -662,17 +1002,6 @@ async def _resolve_batch_ref(
     batch_repo: BatchRepository,
     molecule_repo: MoleculeRepository,
 ) -> tuple[uuid.UUID, uuid.UUID] | None:
-    """Resolve a file batch ref to a local ``(batch_id, molecule_id)``.
-
-    Two-step lookup:
-
-    1. **Direct hit** — file ref matches a local CV-style ``batch_number``.
-    2. **Pattern split** — split off the trailing ``-NNN`` seq and look up
-       the molecule by its prefix as a ``MoleculeIdentifier`` synonym;
-       reconstruct the canonical batch number ``{mol_reg}-{seq:03d}``.
-
-    Returns ``None`` if neither path resolves.
-    """
     direct = await batch_repo.find_by_batch_number(workspace_id, batch_ref)
     if direct is not None:
         return direct.id, direct.molecule_id
@@ -723,7 +1052,6 @@ async def _build_batch_lookup(
     batch_repo: BatchRepository,
     molecule_repo: MoleculeRepository,
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
-    """Return ``{batch_ref: (batch_id, molecule_id)}`` for refs that resolve."""
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
     seen: set[str] = set()
     for r in rows:
@@ -748,12 +1076,10 @@ _DESIGNATION_TO_WELL_TYPE: dict[str, WellType] = {
     "positive_control": WellType.POSITIVE_CONTROL,
     "negative_control": WellType.NEGATIVE_CONTROL,
     "blank": WellType.BLANK,
-    # "empty" intentionally absent — falls through to SAMPLE.
 }
 
 
 def _well_key(well: WellPosition) -> str:
-    """Template stores 'A1' (no zero-pad); long-format normalizes 'A01' → 'A1'."""
     return f"{well.row}{well.column}"
 
 
@@ -762,10 +1088,6 @@ def _build_template_lookup(
     plate_formats: dict[str, PlateFormat],
     templates_by_id: dict[uuid.UUID, PlateTemplate],
 ) -> dict[PlateFormat, dict[str, WellType]]:
-    """Map each plate format used in the file to a {well_key -> WellType} dict.
-
-    Plate formats not covered by ``control_layouts`` are absent from the result.
-    """
     out: dict[PlateFormat, dict[str, WellType]] = {}
     for fmt in set(plate_formats.values()):
         tmpl_id = protocol.control_layouts.get(fmt.value)
@@ -815,7 +1137,6 @@ def _validate_controls_required(
     plate_formats: dict[str, PlateFormat],
     templates: dict[PlateFormat, dict[str, WellType]],
 ) -> list[str]:
-    """Return error messages for plate formats that need controls but lack a layout."""
     needs_controls = any(
         _normalization_requires_controls(rd.normalization)
         for rd in protocol.readout_definitions

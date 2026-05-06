@@ -59,6 +59,19 @@ class PlatePreviewModel(BaseModel):
     blank_count: int
 
 
+class WellConflictModel(BaseModel):
+    plate_name: str
+    well_position: str
+    reason: str
+
+
+class ReadoutConflictModel(BaseModel):
+    plate_name: str
+    well_position: str
+    readout_definition_id: uuid.UUID
+    readout_name: str = ""
+
+
 class PreviewRunFileResponse(BaseModel):
     preview_id: uuid.UUID
     headers: list[str]
@@ -70,6 +83,11 @@ class PreviewRunFileResponse(BaseModel):
     total_rows: int
     expires_in_seconds: int
     validation_errors: list[str] = Field(default_factory=list)
+    will_create_plates: int = 0
+    will_create_wells: int = 0
+    will_create_readouts: int = 0
+    will_skip_wells: list[WellConflictModel] = Field(default_factory=list)
+    will_skip_readouts: list[ReadoutConflictModel] = Field(default_factory=list)
 
 
 @router.post(
@@ -99,6 +117,7 @@ async def preview_run_file(
         run_id=run_id,
         file_content=content,
         filename=file.filename or "",
+        content_type=file.content_type or "",
     )
     result = await uc(query, auth=auth)
     preview: PreviewRunFileResult = result_to_response(result)
@@ -130,6 +149,26 @@ async def preview_run_file(
         total_rows=preview.total_rows,
         expires_in_seconds=preview.expires_in_seconds,
         validation_errors=list(preview.validation_errors),
+        will_create_plates=preview.will_create_plates,
+        will_create_wells=preview.will_create_wells,
+        will_create_readouts=preview.will_create_readouts,
+        will_skip_wells=[
+            WellConflictModel(
+                plate_name=c.plate_name,
+                well_position=c.well_position,
+                reason=c.reason,
+            )
+            for c in preview.will_skip_wells
+        ],
+        will_skip_readouts=[
+            ReadoutConflictModel(
+                plate_name=c.plate_name,
+                well_position=c.well_position,
+                readout_definition_id=c.readout_definition_id,
+                readout_name=c.readout_name,
+            )
+            for c in preview.will_skip_readouts
+        ],
     )
 
 
@@ -154,7 +193,6 @@ class ColumnMappingRequest(BaseModel):
 class ImportRunFileRequest(BaseModel):
     preview_id: uuid.UUID
     mapping: ColumnMappingRequest
-    replace_existing: bool = False
 
 
 class ImportRunFileResponse(BaseModel):
@@ -166,7 +204,11 @@ class ImportRunFileResponse(BaseModel):
     controls_from_template: int
     controls_unclassified: int
     skipped_rows: int
+    conflicts_well_metadata: list[WellConflictModel] = Field(default_factory=list)
+    conflicts_readout: list[ReadoutConflictModel] = Field(default_factory=list)
+    attachment_id: uuid.UUID | None = None
     compute_warning: str | None = None
+    attachment_warning: str | None = None
 
 
 @router.post(
@@ -196,7 +238,6 @@ async def import_run_file(
         run_id=run_id,
         preview_id=body.preview_id,
         mapping=mapping,
-        replace_existing=body.replace_existing,
     )
     result = await uc(cmd, auth=auth)
     out: ImportRunFileResult = result_to_response(result)
@@ -209,7 +250,26 @@ async def import_run_file(
         controls_from_template=out.controls_from_template,
         controls_unclassified=out.controls_unclassified,
         skipped_rows=out.skipped_rows,
+        conflicts_well_metadata=[
+            WellConflictModel(
+                plate_name=c.plate_name,
+                well_position=c.well_position,
+                reason=c.reason,
+            )
+            for c in out.conflicts_well_metadata
+        ],
+        conflicts_readout=[
+            ReadoutConflictModel(
+                plate_name=c.plate_name,
+                well_position=c.well_position,
+                readout_definition_id=c.readout_definition_id,
+                readout_name=c.readout_name,
+            )
+            for c in out.conflicts_readout
+        ],
+        attachment_id=out.attachment_id,
         compute_warning=out.compute_warning,
+        attachment_warning=out.attachment_warning,
     )
 
 
