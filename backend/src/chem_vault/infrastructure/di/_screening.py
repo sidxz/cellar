@@ -40,7 +40,6 @@ from chem_vault.application.screening.delete_target import DeleteTarget
 from chem_vault.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
-from chem_vault.application.screening.fit_curves_for_run import FitCurvesForRun
 from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 from chem_vault.application.screening.get_compound_curves import GetCompoundCurves
 from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
@@ -473,18 +472,6 @@ def register_screening(container: Container) -> None:
         return GetPlateMap(reader=c[PlateMapReader])
 
     container.define(GetPlateMap, _get_plate_map)
-
-    def _fit_curves_for_run(c):  # type: ignore[no-untyped-def]
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return FitCurvesForRun(
-            uow=uow,
-            run_repo=SQLAlchemyRunRepository(uow),
-            protocol_repo=SQLAlchemyProtocolRepository(uow),
-            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
-            fit_dose_response=c[FitDoseResponseCurves],
-        )
-
-    container.define(FitCurvesForRun, _fit_curves_for_run)
 
     # --- Plate Templates ---
     def _pt_cmd(uc_cls):  # type: ignore[no-untyped-def]

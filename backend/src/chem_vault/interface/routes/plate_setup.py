@@ -8,7 +8,6 @@ from typing import Annotated
 from fastapi import APIRouter, File, Query, UploadFile
 from pydantic import BaseModel
 
-from chem_vault.application.screening.fit_curves_for_run import FitCurvesForRun, FitCurvesForRunQuery
 from chem_vault.application.screening.get_plate_map import GetPlateMap, GetPlateMapQuery
 from chem_vault.application.screening.import_run_readouts import (
     ImportRunReadouts,
@@ -26,7 +25,6 @@ from chem_vault.application.screening.readout_calculation_engine import ReadoutC
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.interface.dependencies import (
     AuthDep,
-    FitCurvesForRunDep,
     GetPlateMapDep,
     ImportRunReadoutsDep,
     ParsePlateMapFileDep,
@@ -310,44 +308,32 @@ async def import_run_readouts(
 
 
 # ---------------------------------------------------------------------------
-# Compute / re-fit dose-response curves
+# Recompute readouts (re-runs normalization + replicate aggregation +
+# calculated readouts + dose-response fitting against existing raw data)
 # ---------------------------------------------------------------------------
 
 
-class FitWarning(BaseModel):
-    molecule_name: str | None = None
-    reason: str
-
-
-class FitCurvesResponse(BaseModel):
-    curves_fitted: int
-    warnings: list[FitWarning] = []
+class RecomputeRunResponse(BaseModel):
+    computed_readouts: int
 
 
 @router.post(
-    "/runs/{run_id}/fit-curves",
-    response_model=FitCurvesResponse,
+    "/runs/{run_id}/recompute",
+    response_model=RecomputeRunResponse,
     tags=["screening-runs"],
 )
-async def fit_curves_for_run(
+async def recompute_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    uc: FitCurvesForRunDep,
-) -> FitCurvesResponse:
-    """Trigger dose-response curve fitting for a run.
+    engine: ReadoutCalculationEngineDep,
+) -> RecomputeRunResponse:
+    """Re-run the readout calculation pipeline on a run's existing raw data.
 
-    Loads run (with wells), protocol, and readout data, then fits 4PL
-    curves.  Idempotent: deletes previous curves before re-fitting.
+    Idempotent: the engine deletes previously-computed readouts and
+    dose-response curves before recomputing. Useful when a normalization
+    formula or computed readout definition has changed and the persisted
+    computed values need to be regenerated without re-importing the file.
     """
-    try:
-        result = await uc(
-            FitCurvesForRunQuery(workspace_id=auth.workspace_id, run_id=run_id),
-            auth=auth,
-        )
-        curves = result_to_response(result)
-        return FitCurvesResponse(curves_fitted=len(curves))
-    except DomainError as exc:
-        return FitCurvesResponse(
-            curves_fitted=0,
-            warnings=[FitWarning(reason=str(exc))],
-        )
+    result = await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+    computed = result_to_response(result)
+    return RecomputeRunResponse(computed_readouts=len(computed))

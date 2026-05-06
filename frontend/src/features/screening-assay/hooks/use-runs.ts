@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess, showWarning } from "@/shared/lib/toast";
+import { showSuccess } from "@/shared/lib/toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateRunInput, Run } from "../types";
 
@@ -153,35 +153,27 @@ export function useDeleteRun() {
   });
 }
 
-interface FitWarning {
-  molecule_name?: string | null;
-  reason: string;
+interface RecomputeResponse {
+  computed_readouts: number;
 }
 
-interface FitCurvesResponse {
-  curves_fitted: number;
-  warnings?: FitWarning[];
-}
-
-export function useFitCurves() {
+export function useRecomputeRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) =>
-      customInstance<FitCurvesResponse>({
-        url: `/api/v1/runs/${runId}/fit-curves`,
+      customInstance<RecomputeResponse>({
+        url: `/api/v1/runs/${runId}/recompute`,
         method: "POST",
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
+      qc.invalidateQueries({ queryKey: ["readout-data"] });
+      qc.invalidateQueries({ queryKey: ["plate-map"] });
       qc.invalidateQueries({ queryKey: ["compound-curves"] });
       qc.invalidateQueries({ queryKey: ["protocol-activity"] });
-      if (data.warnings && data.warnings.length > 0) {
-        showWarning(`Fit completed with ${data.warnings.length} warning(s)`, {
-          description: data.warnings.map((w: FitWarning) => w.reason).join("; "),
-        });
-      } else {
-        showSuccess(`Fitted ${data.curves_fitted} dose-response curves`);
-      }
+      showSuccess(
+        `Recomputed ${data.computed_readouts} readouts and refit curves`,
+      );
     },
   });
 }

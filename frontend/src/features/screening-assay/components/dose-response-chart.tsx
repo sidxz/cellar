@@ -55,6 +55,21 @@ interface CurveConstraints {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * A curve has no meaningful sigmoid to draw when it's classified Inactive
+ * or when the fit failed (degenerate parameters). In those cases we render
+ * data points only — drawing a horizontal mid-line implies a fit that isn't
+ * there.
+ */
+function isDegenerateFit(curve: DoseResponseCurve): boolean {
+  return (
+    curve.curve_class === "inactive" ||
+    !Number.isFinite(curve.fitted_value) ||
+    curve.fitted_value <= 0 ||
+    curve.hill_slope === 0
+  );
+}
+
 /** Generate 100-point 4PL sigmoid on log scale between min/max concentration */
 function generate4PLCurve(
   curve: DoseResponseCurve,
@@ -707,22 +722,26 @@ export function DoseResponseChart({
       });
     }
 
-    // Fitted 4PL sigmoid line (non-clickable)
-    const { x: lineX, y: lineY } = generate4PLCurve(curve, xMin, xMax);
-    traces.push({
-      type: "scatter",
-      mode: "lines",
-      name: `${label} fit`,
-      legendgroup: group,
-      x: lineX,
-      y: lineY,
-      line: { color, width: 2 },
-      showlegend: includedX.length === 0,
-      hoverinfo: "skip",
-    });
+    // Fitted 4PL sigmoid line (non-clickable). Skip for inactive / failed
+    // fits — there's no meaningful sigmoid to draw, just data points.
+    const skipFitLine = isDegenerateFit(curve);
+    if (!skipFitLine) {
+      const { x: lineX, y: lineY } = generate4PLCurve(curve, xMin, xMax);
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: `${label} fit`,
+        legendgroup: group,
+        x: lineX,
+        y: lineY,
+        line: { color, width: 2 },
+        showlegend: includedX.length === 0,
+        hoverinfo: "skip",
+      });
+    }
 
     // Confidence interval band (shaded area between CI low/high EC50 curves)
-    if (showCI && curve.confidence_interval_low && curve.confidence_interval_high) {
+    if (!skipFitLine && showCI && curve.confidence_interval_low && curve.confidence_interval_high) {
       const ciLowCurve = { ...curve, fitted_value: curve.confidence_interval_low };
       const ciHighCurve = { ...curve, fitted_value: curve.confidence_interval_high };
       const { x: ciX, y: ciLowY } = generate4PLCurve(ciLowCurve, xMin, xMax);
@@ -824,9 +843,11 @@ export function DoseResponseChart({
     const midY = (curve.top + curve.bottom) / 2;
     const ec50 = curve.fitted_value;
     const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
+    const degenerate = isDegenerateFit(curve);
 
-    // Cross-hair: dotted lines + marker + label at (EC50, midpoint)
-    if (showCrossHair) {
+    // Cross-hair: dotted lines + marker + label at (EC50, midpoint).
+    // Suppress for inactive/degenerate fits — the EC50 isn't meaningful.
+    if (showCrossHair && !degenerate) {
       shapes.push({
         type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
         line: { color, width: 1, dash: "dot" }, opacity: 0.4,
@@ -850,7 +871,7 @@ export function DoseResponseChart({
     }
 
     // Plateau lines: horizontal dashed at top and bottom asymptotes
-    if (showPlateaus) {
+    if (showPlateaus && !degenerate) {
       shapes.push({
         type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.top, y1: curve.top,
         line: { color, width: 1, dash: "dash" }, opacity: 0.3,

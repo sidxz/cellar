@@ -72,124 +72,149 @@ class TestNoneNormalization:
 
 
 class TestPercentInhibition:
-    """100 * (1 - (sample - blank_mean) / (neg_ctrl_mean - blank_mean))."""
+    """100 * (pos_ctrl_mean - sample) / (pos_ctrl_mean - neg_ctrl_mean).
 
-    def test_basic_calculation_no_blank(self) -> None:
-        """With blank=0, formula simplifies to 100 * (1 - sample / neg_ctrl_mean)."""
+    Convention (consistent with PERCENT_ACTIVATION): POS anchors max signal
+    (0% inhibition), NEG anchors min signal (100% inhibition).
+    """
+
+    def test_basic_calculation(self) -> None:
+        """POS=100 (uninhibited), NEG=0 (inhibited), sample=50 → 50% inhibition."""
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         n = _neg_ctrl("B", 1)
-        raw = {s.id: 50.0, n.id: 100.0}
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 50.0, n.id: 0.0, p.id: 100.0}
 
-        values = normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
         assert len(values) == 1
-        # 100 * (1 - (50 - 0) / (100 - 0)) = 100 * (1 - 0.5) = 50.0
+        # 100 * (100 - 50) / (100 - 0) = 50.0
         assert values[0].normalized_value == pytest.approx(50.0)
         assert values[0].original_value == 50.0
 
-    def test_basic_calculation_with_blank(self) -> None:
+    def test_realistic_nadd_setup(self) -> None:
+        """NadD-Sumo: POS=0.652 (DMSO/uninhibited), NEG=0.067 (reference inhibitor)."""
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         n = _neg_ctrl("B", 1)
-        b = _blank("D", 1)
-        # blank=10, neg_ctrl=110, sample=60
-        # 100 * (1 - (60 - 10) / (110 - 10)) = 100 * (1 - 50/100) = 50.0
-        raw = {s.id: 60.0, n.id: 110.0, b.id: 10.0}
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 0.3595, n.id: 0.067, p.id: 0.652}
 
-        values = normalizer.normalize([s, n, b], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
-        assert len(values) == 1
+        # 100 * (0.652 - 0.3595) / (0.652 - 0.067) = 100 * 0.2925/0.585 = 50.0
         assert values[0].normalized_value == pytest.approx(50.0)
 
-    def test_multiple_neg_ctrls_averaged(self) -> None:
+    def test_zero_inhibition_at_pos_control(self) -> None:
+        """Sample == POS control (max signal/uninhibited) → 0% inhibition."""
+        normalizer = PlateNormalizer()
+        s = _sample("A", 1)
+        n = _neg_ctrl("B", 1)
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 100.0, n.id: 0.0, p.id: 100.0}
+
+        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
+
+        assert values[0].normalized_value == pytest.approx(0.0)
+
+    def test_full_inhibition_at_neg_control(self) -> None:
+        """Sample == NEG control (min signal/inhibited) → 100% inhibition."""
+        normalizer = PlateNormalizer()
+        s = _sample("A", 1)
+        n = _neg_ctrl("B", 1)
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 0.0, n.id: 0.0, p.id: 100.0}
+
+        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
+
+        assert values[0].normalized_value == pytest.approx(100.0)
+
+    def test_multiple_controls_averaged(self) -> None:
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         n1 = _neg_ctrl("B", 1)
         n2 = _neg_ctrl("B", 2)
-        # neg_ctrl_mean = (80 + 120) / 2 = 100
-        # 100 * (1 - 40 / 100) = 60.0
-        raw = {s.id: 40.0, n1.id: 80.0, n2.id: 120.0}
+        p1 = _pos_ctrl("C", 1)
+        p2 = _pos_ctrl("C", 2)
+        # pos_mean = 100, neg_mean = 0, sample = 40 → 100*(100-40)/(100-0) = 60
+        raw = {s.id: 40.0, n1.id: -10.0, n2.id: 10.0, p1.id: 80.0, p2.id: 120.0}
 
-        values = normalizer.normalize([s, n1, n2], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize(
+            [s, n1, n2, p1, p2], raw, ReadoutNormalization.PERCENT_INHIBITION
+        )
 
         assert len(values) == 1
         assert values[0].normalized_value == pytest.approx(60.0)
-
-    def test_full_inhibition(self) -> None:
-        """Sample == blank → 100% inhibition."""
-        normalizer = PlateNormalizer()
-        s = _sample("A", 1)
-        n = _neg_ctrl("B", 1)
-        raw = {s.id: 0.0, n.id: 100.0}
-
-        values = normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
-
-        assert values[0].normalized_value == pytest.approx(100.0)
-
-    def test_zero_inhibition(self) -> None:
-        """Sample == neg_ctrl → 0% inhibition."""
-        normalizer = PlateNormalizer()
-        s = _sample("A", 1)
-        n = _neg_ctrl("B", 1)
-        raw = {s.id: 100.0, n.id: 100.0}
-
-        values = normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
-
-        assert values[0].normalized_value == pytest.approx(0.0)
 
     def test_multiple_samples(self) -> None:
         normalizer = PlateNormalizer()
         s1 = _sample("A", 1)
         s2 = _sample("A", 2)
         n = _neg_ctrl("B", 1)
-        raw = {s1.id: 25.0, s2.id: 75.0, n.id: 100.0}
+        p = _pos_ctrl("C", 1)
+        # POS=100, NEG=0
+        raw = {s1.id: 25.0, s2.id: 75.0, n.id: 0.0, p.id: 100.0}
 
-        values = normalizer.normalize([s1, s2, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize(
+            [s1, s2, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION
+        )
 
         assert len(values) == 2
         normalized = {v.well_id: v.normalized_value for v in values}
-        assert normalized[s1.id] == pytest.approx(75.0)  # 100*(1 - 25/100)
-        assert normalized[s2.id] == pytest.approx(25.0)  # 100*(1 - 75/100)
+        # 100 * (100-25)/100 = 75; 100 * (100-75)/100 = 25
+        assert normalized[s1.id] == pytest.approx(75.0)
+        assert normalized[s2.id] == pytest.approx(25.0)
 
     def test_missing_neg_ctrl_raises(self) -> None:
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
-        raw = {s.id: 50.0}
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 50.0, p.id: 0.0}
 
         with pytest.raises(ValidationError):
-            normalizer.normalize([s], raw, ReadoutNormalization.PERCENT_INHIBITION)
+            normalizer.normalize([s, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
+
+    def test_missing_pos_ctrl_raises(self) -> None:
+        normalizer = PlateNormalizer()
+        s = _sample("A", 1)
+        n = _neg_ctrl("B", 1)
+        raw = {s.id: 50.0, n.id: 100.0}
+
+        with pytest.raises(ValidationError):
+            normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
     def test_neg_ctrl_not_in_raw_values_raises(self) -> None:
         """Well exists but has no raw value entry."""
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         n = _neg_ctrl("B", 1)
-        raw = {s.id: 50.0}  # n.id intentionally absent
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 50.0, p.id: 0.0}  # n.id intentionally absent
 
         with pytest.raises(ValidationError):
-            normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
+            normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
     def test_zero_denominator_raises(self) -> None:
-        """neg_ctrl_mean == blank_mean → division by zero."""
+        """neg_ctrl_mean == pos_ctrl_mean → division by zero."""
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         n = _neg_ctrl("B", 1)
-        b = _blank("D", 1)
-        # blank == neg_ctrl → denominator = 0
-        raw = {s.id: 50.0, n.id: 100.0, b.id: 100.0}
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 50.0, n.id: 100.0, p.id: 100.0}
 
         with pytest.raises(ValidationError):
-            normalizer.normalize([s, n, b], raw, ReadoutNormalization.PERCENT_INHIBITION)
+            normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
     def test_batch_id_propagated(self) -> None:
         normalizer = PlateNormalizer()
         batch_id = uuid.uuid4()
         s = _sample("A", 1, batch_id=batch_id)
         n = _neg_ctrl("B", 1)
-        raw = {s.id: 50.0, n.id: 100.0}
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 50.0, n.id: 100.0, p.id: 0.0}
 
-        values = normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
         assert values[0].batch_id == batch_id
 
@@ -197,12 +222,14 @@ class TestPercentInhibition:
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         n = _neg_ctrl("B", 1)
-        raw = {s.id: 50.0, n.id: 100.0}
+        p = _pos_ctrl("C", 1)
+        raw = {s.id: 50.0, n.id: 100.0, p.id: 0.0}
 
-        values = normalizer.normalize([s, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
         well_ids = {v.well_id for v in values}
         assert n.id not in well_ids
+        assert p.id not in well_ids
 
 
 # ---------------------------------------------------------------------------

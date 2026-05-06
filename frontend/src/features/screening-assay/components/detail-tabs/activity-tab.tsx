@@ -135,34 +135,60 @@ function criterionLabel(rule: HitCriterion): string {
 // ---------------------------------------------------------------------------
 
 function buildColumnDefs(
-  readoutDefs: ReadoutDefInfo[]
+  readoutDefs: ReadoutDefInfo[],
+  flagsByMolecule: Map<string, CompoundFlagType>,
+  onToggleFlag: (moleculeId: string, existingFlagId: string | null) => void,
 ): ColDef<CompoundActivity>[] {
   const cols: ColDef<CompoundActivity>[] = [];
 
-  // Fixed left: Compound
+  // Fixed left: Compound — also hosts the multi-select checkbox AND the
+  // star/flag toggle. Three left-anchored columns collapsed into one to
+  // reclaim ~90px of horizontal space.
   cols.push({
     headerName: "Compound",
     field: "registration_number",
     pinned: "left",
     flex: 1,
-    minWidth: 160,
+    minWidth: 230,
+    checkboxSelection: true,
+    headerCheckboxSelection: true,
     cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
       if (!params.data) return null;
+      const flag = flagsByMolecule.get(params.data.molecule_id);
       return (
-        <div className="leading-tight">
-          <span className="font-medium">
-            {params.data.registration_number}
-          </span>
-          {params.data.molecule_name && (
-            <span className="ml-2 text-xs text-muted-foreground">
-              {params.data.molecule_name}
+        <div className="flex items-start gap-2 leading-tight">
+          <button
+            type="button"
+            className="mt-0.5 flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFlag(params.data!.molecule_id, flag?.id ?? null);
+            }}
+            aria-label={flag ? "Unflag compound" : "Flag compound"}
+          >
+            <Star
+              className={`h-4 w-4 transition-colors ${
+                flag
+                  ? "fill-yellow-400 text-yellow-400"
+                  : "text-muted-foreground/30 hover:text-yellow-400/50"
+              }`}
+            />
+          </button>
+          <div className="min-w-0">
+            <span className="font-medium">
+              {params.data.registration_number}
             </span>
-          )}
-          {params.data.batch_number && (
-            <div className="text-[10px] text-muted-foreground">
-              Batch: {params.data.batch_number}
-            </div>
-          )}
+            {params.data.molecule_name && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {params.data.molecule_name}
+              </span>
+            )}
+            {params.data.batch_number && (
+              <div className="text-[10px] text-muted-foreground">
+                Batch: {params.data.batch_number}
+              </div>
+            )}
+          </div>
         </div>
       );
     },
@@ -384,44 +410,23 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     navigateTo(newIdx);
   }, [selectedIndex, filteredItems.length, navigateTo]);
 
-  // AG Grid columns (dynamic from readout definitions + star column)
-  const columnDefs = useMemo<ColDef<CompoundActivity>[]>(() => {
-    const starCol: ColDef<CompoundActivity> = {
-      headerName: "",
-      colId: "star",
-      width: 45,
-      pinned: "left" as const,
-      sortable: false,
-      cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-        const data = params.data;
-        if (!data) return null;
-        const flag = flagsByMolecule.get(data.molecule_id);
-        return (
-          <button
-            type="button"
-            className="flex items-center justify-center w-full h-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (flag) {
-                deleteFlag.mutate(flag.id);
-              } else {
-                createFlag.mutate({ molecule_id: data.molecule_id });
-              }
-            }}
-          >
-            <Star
-              className={`h-4 w-4 transition-colors ${
-                flag
-                  ? "fill-yellow-400 text-yellow-400"
-                  : "text-muted-foreground/30 hover:text-yellow-400/50"
-              }`}
-            />
-          </button>
-        );
-      },
-    };
-    return [starCol, ...buildColumnDefs(readoutDefs)];
-  }, [readoutDefs, flagsByMolecule, createFlag, deleteFlag]);
+  // AG Grid columns (dynamic from readout definitions). The Compound column
+  // hosts the checkbox + star toggle; no standalone star column.
+  const handleToggleFlag = useCallback(
+    (moleculeId: string, existingFlagId: string | null) => {
+      if (existingFlagId) {
+        deleteFlag.mutate(existingFlagId);
+      } else {
+        createFlag.mutate({ molecule_id: moleculeId });
+      }
+    },
+    [createFlag, deleteFlag],
+  );
+
+  const columnDefs = useMemo<ColDef<CompoundActivity>[]>(
+    () => buildColumnDefs(readoutDefs, flagsByMolecule, handleToggleFlag),
+    [readoutDefs, flagsByMolecule, handleToggleFlag],
+  );
 
   // ---------------------------------------------------------------------------
   // Compound detail panel
@@ -838,6 +843,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         rowHeight={115}
         onRowClick={(row) => setViewingId(row.molecule_id)}
         enableMultiSelect
+        suppressSelectColumn
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
         exportFilename={`${protocol.name}-activity`}

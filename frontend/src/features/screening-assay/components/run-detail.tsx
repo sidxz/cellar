@@ -9,7 +9,7 @@ import {
   ThumbsDown,
   Lock,
   Unlock,
-  FlaskConical,
+  Calculator,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -51,7 +51,7 @@ import {
   useRejectRun,
   useLockRun,
   useUnlockRun,
-  useFitCurves,
+  useRecomputeRun,
   useDeleteRun,
 } from "../hooks/use-runs";
 import { useProtocol } from "../hooks/use-protocols";
@@ -77,7 +77,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const rejectMutation = useRejectRun();
   const lockMutation = useLockRun();
   const unlockMutation = useUnlockRun();
-  const fitCurvesMutation = useFitCurves();
+  const recomputeMutation = useRecomputeRun();
   const deleteMutation = useDeleteRun();
 
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -222,15 +222,16 @@ export function RunDetail({ runId }: RunDetailProps) {
                   Unlock
                 </Button>
               )}
-              {status !== "draft" && (
+              {!r.is_locked && r.plate_count > 0 && (
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => fitCurvesMutation.mutate(runId)}
-                  disabled={fitCurvesMutation.isPending}
+                  onClick={() => recomputeMutation.mutate(runId)}
+                  disabled={recomputeMutation.isPending}
+                  title="Re-run normalization, replicate aggregation, calculated readouts, and dose-response fitting on existing raw data"
                 >
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  {fitCurvesMutation.isPending ? "Fitting..." : "Fit Curves"}
+                  <Calculator className="mr-2 h-4 w-4" />
+                  {recomputeMutation.isPending ? "Recomputing..." : "Recompute"}
                 </Button>
               )}
               {(status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0 && (

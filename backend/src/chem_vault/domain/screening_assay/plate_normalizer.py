@@ -111,31 +111,45 @@ class PlateNormalizer:
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
     ) -> list[NormalizedValue]:
-        """100 * (1 - (sample - blank_mean) / (neg_ctrl_mean - blank_mean)).
+        """100 * (pos_ctrl_mean - sample) / (pos_ctrl_mean - neg_ctrl_mean).
 
-        Requires: negative_control wells.
-        Optional: blank wells (default blank_mean = 0.0).
+        Convention (consistent with PERCENT_ACTIVATION):
+        - POS control anchors the "max signal / max activity" reference (0% inhibition)
+        - NEG control anchors the "min signal / blank" reference (100% inhibition)
+        - % inhibition is the complement of % activation: how far sample falls below POS
+
+        Setup guidance: place the uninhibited / DMSO / max-activity wells as
+        POSITIVE_CONTROL and the inhibited / reference-inhibitor / min-activity
+        wells as NEGATIVE_CONTROL. This matches the convention used by CDD's
+        "% inhibition" readouts in HTS workflows.
+
+        Requires: both negative_control AND positive_control wells.
         """
         neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
+        pos_vals = self._values_for_type(wells, raw_values, WellType.POSITIVE_CONTROL)
+
         if not neg_vals:
             raise ValidationError(
                 "PERCENT_INHIBITION requires at least one negative control well with data"
             )
+        if not pos_vals:
+            raise ValidationError(
+                "PERCENT_INHIBITION requires at least one positive control well with data"
+            )
 
-        blank_vals = self._values_for_type(wells, raw_values, WellType.BLANK)
-        blank_mean = statistics.mean(blank_vals) if blank_vals else 0.0
         neg_ctrl_mean = statistics.mean(neg_vals)
+        pos_ctrl_mean = statistics.mean(pos_vals)
 
-        denominator = neg_ctrl_mean - blank_mean
+        denominator = pos_ctrl_mean - neg_ctrl_mean
         if denominator == 0.0:
             raise ValidationError(
-                "PERCENT_INHIBITION: denominator (neg_ctrl_mean - blank_mean) is zero"
+                "PERCENT_INHIBITION: denominator (pos_ctrl_mean - neg_ctrl_mean) is zero"
             )
 
         results: list[NormalizedValue] = []
         for w in self._sample_wells(wells, raw_values):
             sample = raw_values[w.id]
-            normalized = 100.0 * (1.0 - (sample - blank_mean) / denominator)
+            normalized = 100.0 * (pos_ctrl_mean - sample) / denominator
             results.append(
                 NormalizedValue(
                     well_id=w.id,

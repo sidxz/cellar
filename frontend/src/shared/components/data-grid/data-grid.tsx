@@ -45,6 +45,11 @@ export interface DataGridProps<TData = unknown>
    *  When true, prepends the checkbox column and sets rowSelection="multiple".
    *  Consumers track selection via onSelectionChanged. */
   enableMultiSelect?: boolean;
+  /** When true, multi-select is enabled (rowSelection="multiple") but the
+   *  auto-prepended checkbox column is not rendered. Use when you want to
+   *  host the checkbox inside an existing column via
+   *  `checkboxSelection: true` / `headerCheckboxSelection: true`. */
+  suppressSelectColumn?: boolean;
   /** Placeholder for the quick-filter search bar. Set to false to hide. */
   searchPlaceholder?: string | false;
 }
@@ -62,6 +67,7 @@ export function DataGrid<TData = unknown>({
   preferencesKey,
   selectionToolbar,
   enableMultiSelect,
+  suppressSelectColumn,
   searchPlaceholder = "Filter...",
   ...rest
 }: DataGridProps<TData>) {
@@ -96,7 +102,7 @@ export function DataGrid<TData = unknown>({
         ? { ...c, headerTooltip: c.headerName }
         : c
     );
-    if (!selectionEnabled) return withTooltips;
+    if (!selectionEnabled || suppressSelectColumn) return withTooltips;
     const selectCol: ColDef<TData> = {
       colId: "__select__",
       pinned: "left",
@@ -113,7 +119,7 @@ export function DataGrid<TData = unknown>({
       checkboxSelection: true,
     };
     return [selectCol, ...withTooltips];
-  }, [columnDefs, selectionEnabled]);
+  }, [columnDefs, selectionEnabled, suppressSelectColumn]);
 
   const handleRowClicked = useCallback(
     (event: RowClickedEvent<TData>) => {

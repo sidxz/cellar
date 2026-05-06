@@ -535,8 +535,6 @@ from chem_vault.application.screening.list_dose_response_enriched import ListDos
 ListDoseResponseEnrichedDep = Annotated[ListDoseResponseEnriched, Depends(_get_use_case(ListDoseResponseEnriched))]
 from chem_vault.application.screening.get_plate_map import GetPlateMap
 GetPlateMapDep = Annotated[GetPlateMap, Depends(_get_use_case(GetPlateMap))]
-from chem_vault.application.screening.fit_curves_for_run import FitCurvesForRun
-FitCurvesForRunDep = Annotated[FitCurvesForRun, Depends(_get_use_case(FitCurvesForRun))]
 
 # --- Compound Flag dependencies ---
 ListCompoundFlagsDep = Annotated[ListCompoundFlags, Depends(_get_use_case(ListCompoundFlags))]
