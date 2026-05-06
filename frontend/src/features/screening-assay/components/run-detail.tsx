@@ -10,6 +10,7 @@ import {
   Lock,
   Unlock,
   FlaskConical,
+  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
@@ -60,6 +61,7 @@ import {
   type RunStatus,
 } from "../types";
 import { RunDataPanel } from "./run-data-panel";
+import { ResetRunDataDialog } from "./reset-run-data-dialog";
 
 interface RunDetailProps {
   runId: string;
@@ -85,6 +87,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const handleDelete = () => {
     const protocolId = query.data?.protocol_id;
@@ -230,6 +233,17 @@ export function RunDetail({ runId }: RunDetailProps) {
                   {fitCurvesMutation.isPending ? "Fitting..." : "Fit Curves"}
                 </Button>
               )}
+              {(status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setResetDialogOpen(true)}
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset Data
+                </Button>
+              )}
               {(status === "draft" || status === "in_progress") && !r.is_locked && (
                 <Button
                   size="sm"
@@ -361,6 +375,14 @@ export function RunDetail({ runId }: RunDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Reset Run Data Dialog */}
+      <ResetRunDataDialog
+        runId={runId}
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        plateCount={query.data?.plate_count ?? 0}
+      />
 
       {/* Delete Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

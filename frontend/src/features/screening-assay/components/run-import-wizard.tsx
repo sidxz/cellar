@@ -367,7 +367,6 @@ export function RunImportWizard({
       {
         preview_id: preview.preview_id,
         mapping,
-        replace_existing: false,
       },
       {
         onSuccess: (data) => {
@@ -487,7 +486,14 @@ export function RunImportWizard({
                 (preview?.validation_errors.length ?? 0) > 0
               }
             >
-              {importMutation.isPending ? "Importing…" : "Import"}
+              {importMutation.isPending
+                ? "Importing…"
+                : (preview?.will_create_plates ?? 0) +
+                    (preview?.will_create_wells ?? 0) +
+                    (preview?.will_create_readouts ?? 0) ===
+                  0
+                ? "Attach file"
+                : "Import"}
             </Button>
           )}
           {step === 4 && (
@@ -741,19 +747,60 @@ function MappingStep({
 // ─── Step 3 ────────────────────────────────────────────────────────────────
 
 function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
+  const willCreateTotal =
+    preview.will_create_plates +
+    preview.will_create_wells +
+    preview.will_create_readouts;
+  const willSkipTotal =
+    preview.will_skip_wells.length + preview.will_skip_readouts.length;
+
   return (
     <div className="space-y-4 py-2">
       <div className="grid grid-cols-3 gap-3">
-        <SummaryCard label="Total rows" value={preview.total_rows} />
-        <SummaryCard label="Plates" value={preview.plates.length} />
         <SummaryCard
-          label="Matched batches"
-          value={preview.matched_batches}
-          accent={
-            preview.unmatched_batches.length > 0 ? "warn" : "ok"
-          }
+          label="Will create"
+          value={willCreateTotal}
+          accent={willCreateTotal > 0 ? "ok" : undefined}
+        />
+        <SummaryCard
+          label="Will skip"
+          value={willSkipTotal}
+          accent={willSkipTotal > 0 ? "warn" : undefined}
+        />
+        <SummaryCard
+          label="Will fail"
+          value={preview.validation_errors.length}
+          accent={preview.validation_errors.length > 0 ? "fail" : undefined}
         />
       </div>
+
+      {willCreateTotal > 0 && (
+        <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3 text-xs text-muted-foreground">
+          <span className="font-medium text-green-300">Will create: </span>
+          {preview.will_create_plates > 0 && (
+            <>{preview.will_create_plates} plate{preview.will_create_plates === 1 ? "" : "s"}, </>
+          )}
+          {preview.will_create_wells} well{preview.will_create_wells === 1 ? "" : "s"},{" "}
+          {preview.will_create_readouts} readout cell
+          {preview.will_create_readouts === 1 ? "" : "s"}
+        </div>
+      )}
+
+      {willCreateTotal === 0 && preview.validation_errors.length === 0 && (
+        <div className="rounded-md border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">
+          Nothing new to import — this file is fully redundant with what&apos;s
+          already on the run. The file will still be saved to the Files tab as
+          an audit artifact. Use <span className="font-medium">Reset Run Data</span>{" "}
+          on the run header if you want to wipe and re-import.
+        </div>
+      )}
+
+      {willSkipTotal > 0 && (
+        <ConflictPanel
+          wells={preview.will_skip_wells}
+          readouts={preview.will_skip_readouts}
+        />
+      )}
 
       <div>
         <p className="mb-2 text-xs font-medium text-muted-foreground">
@@ -822,6 +869,74 @@ function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
   );
 }
 
+function ConflictPanel({
+  wells,
+  readouts,
+}: {
+  wells: import("../hooks/use-run-import").WellConflict[];
+  readouts: import("../hooks/use-run-import").ReadoutConflict[];
+}) {
+  const SAMPLE = 10;
+  return (
+    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+      <div className="mb-2 flex items-center gap-2 font-medium text-amber-300">
+        <AlertCircle className="h-4 w-4" />
+        Will skip: {wells.length} well metadata mismatch
+        {wells.length === 1 ? "" : "es"}, {readouts.length} readout cell
+        {readouts.length === 1 ? "" : "s"} already populated
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Existing values are never overwritten. New plates, new wells, and
+        empty readout cells will still write.
+      </p>
+      {wells.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-medium text-amber-200/90">
+            Well metadata conflicts ({wells.length})
+          </summary>
+          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
+            {wells.slice(0, SAMPLE).map((w, i) => (
+              <li key={i}>
+                <span className="text-foreground">{w.plate_name} {w.well_position}</span>
+                <span className="ml-2 text-muted-foreground">— {w.reason}</span>
+              </li>
+            ))}
+            {wells.length > SAMPLE && (
+              <li className="text-muted-foreground">
+                …and {wells.length - SAMPLE} more
+              </li>
+            )}
+          </ul>
+        </details>
+      )}
+      {readouts.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-medium text-amber-200/90">
+            Readout cells already populated ({readouts.length})
+          </summary>
+          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
+            {readouts.slice(0, SAMPLE).map((r, i) => (
+              <li key={i}>
+                <span className="text-foreground">
+                  {r.plate_name} {r.well_position}
+                </span>
+                <span className="ml-2 text-muted-foreground">
+                  — {r.readout_name || "readout"}
+                </span>
+              </li>
+            ))}
+            {readouts.length > SAMPLE && (
+              <li className="text-muted-foreground">
+                …and {readouts.length - SAMPLE} more
+              </li>
+            )}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function SummaryCard({
   label,
   value,
@@ -829,7 +944,7 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  accent?: "ok" | "warn";
+  accent?: "ok" | "warn" | "fail";
 }) {
   return (
     <div
@@ -837,6 +952,7 @@ function SummaryCard({
         "rounded-md border p-3",
         accent === "warn" && "border-amber-500/30 bg-amber-500/5",
         accent === "ok" && "border-green-500/30 bg-green-500/5",
+        accent === "fail" && "border-destructive/40 bg-destructive/5",
       )}
     >
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -875,6 +991,20 @@ function ConfirmStep({
             {result.controls_unclassified > 0 && (
               <> · {result.controls_unclassified} blank wells unclassified</>
             )}
+            {result.conflicts_well_metadata.length > 0 && (
+              <>
+                {" "}· {result.conflicts_well_metadata.length} well metadata
+                conflict
+                {result.conflicts_well_metadata.length === 1 ? "" : "s"} skipped
+              </>
+            )}
+            {result.conflicts_readout.length > 0 && (
+              <>
+                {" "}· {result.conflicts_readout.length} readout cell
+                {result.conflicts_readout.length === 1 ? "" : "s"} skipped
+                (already present)
+              </>
+            )}
             {result.unmatched_batches.length > 0 && (
               <>
                 {" "}
@@ -883,6 +1013,16 @@ function ConfirmStep({
               </>
             )}
           </p>
+          {result.attachment_id && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Source file saved to the run&apos;s Files tab.
+            </p>
+          )}
+          {result.attachment_warning && (
+            <p className="mt-1 text-xs text-amber-300/90">
+              File attachment failed: {result.attachment_warning}
+            </p>
+          )}
         </div>
       </div>
 

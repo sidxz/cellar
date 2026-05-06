@@ -23,7 +23,6 @@ import { usePlateMap } from "../hooks/use-plate-setup";
 import { type Run, type PlateFormat } from "../types";
 import { AddDoseResponseDialog } from "./add-dose-response-dialog";
 import { AddReadoutDataDialog } from "./add-readout-data-dialog";
-import { BulkReadoutImportDialog } from "./bulk-readout-import-dialog";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { PlateHeatmap } from "./plate-heatmap";
@@ -31,7 +30,6 @@ import { PlateMapViewer } from "./plate-map-viewer";
 import { PlateSetupDialog } from "./plate-setup-dialog";
 import { ReadoutDataTable } from "./readout-data-table";
 import { RunImportWizard } from "./run-import-wizard";
-import { SimplifiedImportDialog } from "./simplified-import-dialog";
 import { readPerPlateQc, worstZPrime, classifyZPrime, type ZPrimeQuality } from "../lib/qc-metrics";
 
 const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }> = {
@@ -197,8 +195,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const { data: plateMap } = usePlateMap(run.id);
 
   const [addReadoutOpen, setAddReadoutOpen] = useState(false);
-  const [bulkImportOpen, setBulkImportOpen] = useState(false);
-  const [importReadoutsOpen, setImportReadoutsOpen] = useState(false);
   const [addDoseResponseOpen, setAddDoseResponseOpen] = useState(false);
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [plateSetupOpen, setPlateSetupOpen] = useState(false);
@@ -255,22 +251,21 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setBulkImportOpen(true)}
+                onClick={() => setRunImportWizardOpen(true)}
                 disabled={run.is_locked}
               >
-                <Upload className="mr-2 h-4 w-4" /> Import CSV
+                <Upload className="mr-2 h-4 w-4" /> Import Run File
               </Button>
-              {hasPlateMap && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setImportReadoutsOpen(true)}
-                  disabled={run.is_locked}
-                >
-                  <Upload className="mr-2 h-4 w-4" /> Import Readouts
-                </Button>
-              )}
-              {!hasPlateMap && (
+            </div>
+            <ReadoutDataTable runId={run.id} protocolId={run.protocol_id} />
+          </div>
+        </TabsContent>
+
+        {/* Plate Map */}
+        <TabsContent value="plate-map">
+          <div className="mt-4 space-y-4">
+            {hasPlateMap && (
+              <div className="flex gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -279,15 +274,8 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                 >
                   <Upload className="mr-2 h-4 w-4" /> Import Run File
                 </Button>
-              )}
-            </div>
-            <ReadoutDataTable runId={run.id} protocolId={run.protocol_id} />
-          </div>
-        </TabsContent>
-
-        {/* Plate Map */}
-        <TabsContent value="plate-map">
-          <div className="mt-4">
+              </div>
+            )}
             {hasPlateMap ? (
               plates.length > 1 ? (
                 <Tabs defaultValue={plates[0].plate_id}>
@@ -407,16 +395,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         protocolId={run.protocol_id}
         open={addReadoutOpen}
         onOpenChange={setAddReadoutOpen}
-      />
-      <BulkReadoutImportDialog
-        runId={run.id}
-        open={bulkImportOpen}
-        onOpenChange={setBulkImportOpen}
-      />
-      <SimplifiedImportDialog
-        runId={run.id}
-        open={importReadoutsOpen}
-        onOpenChange={setImportReadoutsOpen}
       />
       <AddDoseResponseDialog
         runId={run.id}

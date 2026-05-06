@@ -30,6 +30,19 @@ export interface PlatePreview {
   blank_count: number;
 }
 
+export interface WellConflict {
+  plate_name: string;
+  well_position: string;
+  reason: string;
+}
+
+export interface ReadoutConflict {
+  plate_name: string;
+  well_position: string;
+  readout_definition_id: string;
+  readout_name: string;
+}
+
 export interface PreviewRunFileResponse {
   preview_id: string;
   headers: string[];
@@ -41,6 +54,11 @@ export interface PreviewRunFileResponse {
   total_rows: number;
   expires_in_seconds: number;
   validation_errors: string[];
+  will_create_plates: number;
+  will_create_wells: number;
+  will_create_readouts: number;
+  will_skip_wells: WellConflict[];
+  will_skip_readouts: ReadoutConflict[];
 }
 
 export interface ReadoutColumnPayload {
@@ -59,7 +77,6 @@ export interface ColumnMappingPayload {
 export interface ImportRunFilePayload {
   preview_id: string;
   mapping: ColumnMappingPayload;
-  replace_existing: boolean;
 }
 
 export interface ImportRunFileResponse {
@@ -71,8 +88,12 @@ export interface ImportRunFileResponse {
   controls_from_template: number;
   controls_unclassified: number;
   skipped_rows: number;
+  conflicts_well_metadata: WellConflict[];
+  conflicts_readout: ReadoutConflict[];
+  attachment_id: string | null;
   /** Non-fatal warning when post-import normalization fails (missing controls etc). */
   compute_warning: string | null;
+  attachment_warning: string | null;
 }
 
 export interface RunImportTemplate {
@@ -116,6 +137,32 @@ export function useImportRunFile(runId: string) {
       qc.invalidateQueries({ queryKey: ["readout-data"] });
       qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
       qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: ["attachments", "run", runId] });
+    },
+  });
+}
+
+export interface ResetRunDataResponse {
+  plates_deleted: number;
+  wells_deleted: number;
+  readouts_deleted: number;
+  curves_deleted: number;
+}
+
+export function useResetRunData(runId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      customInstance<ResetRunDataResponse>({
+        url: `/api/v1/runs/${runId}/reset-data`,
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plate-map", runId] });
+      qc.invalidateQueries({ queryKey: ["readout-data"] });
+      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: ["run", runId] });
     },
   });
 }
