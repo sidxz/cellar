@@ -6,10 +6,10 @@ workflow in S49 for production-grade async execution with progress tracking.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass, field
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
@@ -29,7 +29,10 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
-from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from chem_vault.domain.chemical_registration.enums import (
+    BulkRegistrationFileFormat,
+    BulkRegistrationItemAction,
+)
 from chem_vault.domain.chemical_registration.repository import (
     BulkRegistrationRepository,
     MoleculeRepository,
@@ -37,7 +40,7 @@ from chem_vault.domain.chemical_registration.repository import (
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -187,9 +190,20 @@ class BulkRegistrationService:
             structure_processor=self._structure_processor,
         )
 
+        # Pending per-row outcomes — recorded onto the aggregate inside the
+        # final "complete" UoW block so all writes commit atomically and we
+        # don't nest UoWs across RegisterMolecule's own transaction.
+        pending: list[dict] = []
+
         for item in items:
             if item.error:
-                bulk_reg.record_error()
+                pending.append(
+                    {
+                        "row_index": item.row_index,
+                        "action": BulkRegistrationItemAction.ERROR,
+                        "error": item.error,
+                    }
+                )
                 results.append(
                     BulkRegistrationItemResult(
                         row_index=item.row_index,
@@ -220,8 +234,14 @@ class BulkRegistrationService:
             result = await register_uc(cmd)
 
             if isinstance(result, Failure):
-                bulk_reg.record_error()
                 err = result.failure()
+                pending.append(
+                    {
+                        "row_index": item.row_index,
+                        "action": BulkRegistrationItemAction.ERROR,
+                        "error": str(err),
+                    }
+                )
                 results.append(
                     BulkRegistrationItemResult(
                         row_index=item.row_index,
@@ -231,10 +251,11 @@ class BulkRegistrationService:
                 )
             else:
                 outcome = result.unwrap()
-                if outcome.is_new:
-                    bulk_reg.record_registered()
-                else:
-                    bulk_reg.record_duplicate()
+                action = (
+                    BulkRegistrationItemAction.REGISTERED
+                    if outcome.is_new
+                    else BulkRegistrationItemAction.DEDUPLICATED
+                )
 
                 # Create a batch for the registered molecule
                 batch_id, batch_number, salt_matched = await self._create_batch_for_item(
@@ -242,6 +263,20 @@ class BulkRegistrationService:
                     reg_outcome=outcome,
                     workspace_id=workspace_id,
                     submitted_by=submitted_by,
+                )
+
+                pending.append(
+                    {
+                        "row_index": item.row_index,
+                        "action": action,
+                        "molecule_id": outcome.molecule.id,
+                        "molecule_name": outcome.molecule.name,
+                        "registration_number": outcome.molecule.registration_number.value
+                        if outcome.molecule.registration_number
+                        else None,
+                        "batch_id": batch_id,
+                        "batch_number": batch_number,
+                    }
                 )
 
                 results.append(
@@ -255,6 +290,11 @@ class BulkRegistrationService:
                         salt_matched=salt_matched,
                     )
                 )
+
+        # Stash on the aggregate so the caller's "complete" UoW block flushes
+        # them alongside the final aggregate save.
+        for entry in pending:
+            bulk_reg.record_item(**entry)
 
         return results
 

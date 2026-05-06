@@ -2,8 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { CloudDownload, Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
+import { Download, FlaskConical, ListPlus, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
@@ -22,13 +21,11 @@ import {
   type MoleculeType,
 } from "../types";
 import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
-import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import { CompoundSearchBar } from "./compound-search-bar";
 
 export function MoleculeList() {
   const router = useRouter();
   const { data: molecules, isLoading, error } = useMolecules();
-  const { enabled: cddEnabled } = useCddEnabled();
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
   const { exportSdf } = useSdfExport();
@@ -153,18 +150,6 @@ export function MoleculeList() {
         <Button variant="outline" size="sm" onClick={handleSdfExport} disabled={!molecules?.length}>
           <Download className="h-4 w-4" />
           Export SDF
-        </Button>
-        {cddEnabled && (
-          <Button variant="outline" asChild>
-            <Link href="/admin/data-import/cdd">
-              <CloudDownload className="mr-2 h-4 w-4" />
-              Import from CDD
-            </Link>
-          </Button>
-        )}
-        <Button variant="outline" onClick={() => router.push("/compounds/register?mode=bulk")}>
-          <Upload className="mr-2 h-4 w-4" />
-          Bulk Upload
         </Button>
         <Button onClick={() => router.push("/compounds/register")}>
           <Plus className="mr-2 h-4 w-4" />

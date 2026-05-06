@@ -8,9 +8,9 @@ Run as::
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 
+import structlog
 from temporalio.worker import Worker
 
 from chem_vault.infrastructure.di.container import create_container
@@ -18,7 +18,7 @@ from chem_vault.infrastructure.logging import configure_logging
 from chem_vault.infrastructure.temporal.client import create_temporal_client
 from chem_vault.infrastructure.temporal.settings import TemporalSettings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def run_worker() -> None:
@@ -38,24 +38,49 @@ async def run_worker() -> None:
 
     client = await create_temporal_client(settings)
 
-    # DI container gives access to DB, repos, event dispatcher — same as FastAPI
+    # DI container gives access to DB, repos, event dispatcher — same as FastAPI.
+    # Resolve concrete dependencies once and pass them into the activity classes
+    # explicitly — activities never reach back into the container at task time.
     container = create_container()
 
-    # Instantiate activity classes with the container
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from chem_vault.application.chemical_registration.merge_side_effect_registry import (
+        MergeSideEffectRegistry,
+    )
+    from chem_vault.application.chemical_registration.protocols import (
+        StructureProcessorProtocol,
+    )
+    from chem_vault.domain.shared.secret_provider import SecretProvider
+    from chem_vault.infrastructure.cdd.client import CddVaultClient
+    from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
     from chem_vault.infrastructure.temporal.activities.bulk_tracking import BulkTrackingActivities
     from chem_vault.infrastructure.temporal.activities.cdd_fetch import CddFetchActivities
     from chem_vault.infrastructure.temporal.activities.file_parsing import FileParsingActivities
+    from chem_vault.infrastructure.temporal.activities.plate_registration import (
+        PlateRegistrationActivities,
+    )
     from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
-    from chem_vault.infrastructure.temporal.activities.plate_registration import PlateRegistrationActivities
-    from chem_vault.infrastructure.temporal.workflows.bulk_registration import BulkRegistrationWorkflow
+    from chem_vault.infrastructure.temporal.workflows.bulk_registration import (
+        BulkRegistrationWorkflow,
+    )
     from chem_vault.infrastructure.temporal.workflows.cdd_plate_import import CddPlateImportWorkflow
     from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import CddVaultImportWorkflow
 
-    tracking = BulkTrackingActivities(container)
-    cdd_fetch = CddFetchActivities(container)
+    session_factory = container[async_sessionmaker]
+    dispatcher = container[EventDispatcher]
+    secret_provider = container[SecretProvider]
+    cdd_client = container[CddVaultClient]
+    structure_processor = container[StructureProcessorProtocol]
+    side_effect_registry = container[MergeSideEffectRegistry]
+
+    tracking = BulkTrackingActivities(session_factory, dispatcher)
+    cdd_fetch = CddFetchActivities(session_factory, secret_provider, cdd_client)
     file_parsing = FileParsingActivities()
-    registration = RegistrationActivities(container)
-    plate_registration = PlateRegistrationActivities(container)
+    registration = RegistrationActivities(
+        session_factory, dispatcher, structure_processor, side_effect_registry
+    )
+    plate_registration = PlateRegistrationActivities(session_factory, dispatcher)
 
     worker = Worker(
         client,
@@ -65,6 +90,7 @@ async def run_worker() -> None:
             # BulkRegistration tracking
             tracking.create_bulk_registration,
             tracking.update_bulk_reg_progress,
+            tracking.persist_chunk_items,
             tracking.complete_bulk_registration,
             # CDD molecule import tracking
             tracking.create_cdd_import,

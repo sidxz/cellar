@@ -102,6 +102,20 @@ class CreateBulkRegInput:
     file_format: str
     submitted_by: str
     total_count: int
+    workflow_id: str | None = None
+
+
+@dataclass
+class PersistChunkItemsInput:
+    """Input for persisting per-row outcomes of a processed chunk.
+
+    Carries the chunk's full ChunkItemResult set across the activity boundary
+    so the activity can record items + roll up counters in one transaction.
+    """
+
+    workspace_id: str
+    bulk_reg_id: str
+    items: list[dict] = field(default_factory=list)  # serialized ChunkItemResult dicts
 
 
 @dataclass

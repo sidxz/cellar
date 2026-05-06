@@ -7,7 +7,9 @@ import type { RegisterMoleculeInput, RegistrationResponse } from "../types";
 import type {
   BulkProgress,
   ConfirmMergesResponse,
+  ListBulkRegItemsResponse,
   MergeDecision,
+  PreviewBulkRegistrationResponse,
 } from "../types/registration-wizard";
 
 import { MOLECULES_KEY } from "./query-keys";
@@ -32,6 +34,52 @@ export function useSubmitRegistration() {
     onError: (err: Error) => {
       showError(err.message ?? "Registration failed");
     },
+  });
+}
+
+// ─── Bulk Registration: Preview ────────────────────────────────────────────
+
+/** POST /api/v1/bulk-registrations/preview — multipart upload, returns parsed items. */
+export function usePreviewBulkRegistration() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return customInstance<PreviewBulkRegistrationResponse>({
+        url: "/api/v1/bulk-registrations/preview",
+        method: "POST",
+        data: formData,
+      });
+    },
+    onError: (err: Error) => {
+      showError(err.message ?? "Failed to preview file");
+    },
+  });
+}
+
+// ─── Bulk Registration: Per-row Items ──────────────────────────────────────
+
+/** GET /api/v1/bulk-registrations/{workflowId}/items?action=&limit=&offset= */
+export function useBulkRegistrationItems(
+  workflowId: string | null,
+  action: string | null,
+  limit: number,
+  offset: number,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [...BULK_REG_KEY, workflowId, "items", action, limit, offset],
+    queryFn: () =>
+      customInstance<ListBulkRegItemsResponse>({
+        url: `/api/v1/bulk-registrations/${workflowId}/items`,
+        method: "GET",
+        params: {
+          ...(action ? { action } : {}),
+          limit: String(limit),
+          offset: String(offset),
+        },
+      }),
+    enabled: enabled && !!workflowId,
   });
 }
 

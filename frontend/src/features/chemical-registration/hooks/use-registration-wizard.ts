@@ -7,6 +7,7 @@ import type {
   BulkInput,
   BulkProgress,
   MergeCandidateRef,
+  PreviewBulkRegistrationResponse,
 } from "../types/registration-wizard";
 import type { RegistrationResponse } from "../types/index";
 
@@ -57,6 +58,9 @@ interface RegistrationWizardState {
   bulkInput: BulkInput;
   batchInput: WizardBatchInput | null;
 
+  // Bulk preview (parse-only result before processing starts)
+  bulkPreview: PreviewBulkRegistrationResponse | null;
+
   // Job tracking
   workflowId: string | null;
   progress: BulkProgress | null;
@@ -76,6 +80,7 @@ interface RegistrationWizardState {
   updateSingleInput: (patch: Partial<SingleInput>) => void;
   updateBulkInput: (patch: Partial<BulkInput>) => void;
 
+  setBulkPreview: (preview: PreviewBulkRegistrationResponse | null) => void;
   setWorkflowId: (id: string | null) => void;
   setProgress: (progress: BulkProgress | null) => void;
   setSingleResult: (result: RegistrationResponse | null) => void;
@@ -107,6 +112,7 @@ export const useRegistrationWizard = create<RegistrationWizardState>()(
     singleInput: DEFAULT_SINGLE_INPUT,
     bulkInput: DEFAULT_BULK_INPUT,
     batchInput: null,
+    bulkPreview: null,
     workflowId: null,
     progress: null,
     singleResult: null,
@@ -125,6 +131,9 @@ export const useRegistrationWizard = create<RegistrationWizardState>()(
       set((s) => ({ singleInput: { ...s.singleInput, ...patch } })),
     updateBulkInput: (patch) =>
       set((s) => ({ bulkInput: { ...s.bulkInput, ...patch } })),
+
+    // Bulk preview
+    setBulkPreview: (bulkPreview) => set({ bulkPreview }),
 
     // Job tracking
     setWorkflowId: (workflowId) => set({ workflowId }),
@@ -171,6 +180,7 @@ export const useRegistrationWizard = create<RegistrationWizardState>()(
         singleInput: DEFAULT_SINGLE_INPUT,
         bulkInput: DEFAULT_BULK_INPUT,
         batchInput: null,
+        bulkPreview: null,
         workflowId: null,
         progress: null,
         singleResult: null,

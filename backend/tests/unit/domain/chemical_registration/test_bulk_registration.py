@@ -330,3 +330,121 @@ class TestBulkRegistrationProgress:
         after_record = br.updated_at
         br.complete()
         assert br.updated_at >= after_record
+
+
+# ---------------------------------------------------------------------------
+# Per-row item recording (record_item)
+# ---------------------------------------------------------------------------
+
+
+class TestRecordItem:
+    def test_record_item_increments_correct_counter_and_appends_pending(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        from chem_vault.domain.chemical_registration.enums import (
+            BulkRegistrationItemAction,
+        )
+
+        br = _make(workspace_id, user_id, total_count=4)
+
+        m1 = uuid.uuid4()
+        m2 = uuid.uuid4()
+        br.record_item(
+            row_index=0,
+            action=BulkRegistrationItemAction.REGISTERED,
+            molecule_id=m1,
+            molecule_name="Aspirin",
+            registration_number="CV-000001",
+        )
+        br.record_item(
+            row_index=1,
+            action=BulkRegistrationItemAction.DEDUPLICATED,
+            molecule_id=m2,
+        )
+        br.record_item(
+            row_index=2,
+            action=BulkRegistrationItemAction.MERGE_CANDIDATE,
+            molecule_id=uuid.uuid4(),
+        )
+        br.record_item(
+            row_index=3,
+            action=BulkRegistrationItemAction.ERROR,
+            error="invalid SMILES",
+        )
+
+        assert br.registered_count == 1
+        assert br.duplicate_count == 2  # deduplicated + merge_candidate
+        assert br.error_count == 1
+        assert br.processed_count == br.total_count
+
+        items = br.collect_pending_items()
+        assert len(items) == 4
+        assert items[0].action == BulkRegistrationItemAction.REGISTERED
+        assert items[0].molecule_id == m1
+        assert items[3].action == BulkRegistrationItemAction.ERROR
+        assert items[3].error == "invalid SMILES"
+        # Second collect drains the queue
+        assert br.collect_pending_items() == []
+
+    def test_record_item_rejects_when_not_processing(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        from chem_vault.domain.chemical_registration.enums import (
+            BulkRegistrationItemAction,
+        )
+
+        # Create directly so we can hit a non-PROCESSING state.
+        br = BulkRegistration.create(
+            workspace_id=workspace_id,
+            source_file="x.csv",
+            file_format=BulkRegistrationFileFormat.CSV,
+            submitted_by=user_id,
+            total_count=1,
+        )
+        # PENDING — no record_item allowed
+        with pytest.raises(ValidationError):
+            br.record_item(
+                row_index=0,
+                action=BulkRegistrationItemAction.REGISTERED,
+                molecule_id=uuid.uuid4(),
+            )
+
+    def test_record_item_validates_action_error_pairing(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        from chem_vault.domain.chemical_registration.bulk_registration import (
+            BulkRegistrationItem,
+        )
+        from chem_vault.domain.chemical_registration.enums import (
+            BulkRegistrationItemAction,
+        )
+
+        # action=ERROR with success=True is invalid
+        with pytest.raises(ValidationError):
+            BulkRegistrationItem(
+                bulk_registration_id=uuid.uuid4(),
+                workspace_id=workspace_id,
+                row_index=0,
+                action=BulkRegistrationItemAction.ERROR,
+                success=True,
+                error="x",
+            )
+        # action=REGISTERED with success=False is invalid
+        with pytest.raises(ValidationError):
+            BulkRegistrationItem(
+                bulk_registration_id=uuid.uuid4(),
+                workspace_id=workspace_id,
+                row_index=0,
+                action=BulkRegistrationItemAction.REGISTERED,
+                success=False,
+            )
+        # action=ERROR requires error string
+        with pytest.raises(ValidationError):
+            BulkRegistrationItem(
+                bulk_registration_id=uuid.uuid4(),
+                workspace_id=workspace_id,
+                row_index=0,
+                action=BulkRegistrationItemAction.ERROR,
+                success=False,
+                error=None,
+            )

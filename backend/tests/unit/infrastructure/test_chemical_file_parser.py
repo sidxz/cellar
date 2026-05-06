@@ -182,7 +182,10 @@ class TestTabularParser:
         items = parser.parse(csv_bytes, "compounds.csv")
 
         assert len(items) == 1
-        assert items[0].name == "Compound-1"
+        # No name column → parser leaves name None. The application layer
+        # supplies a placeholder display name without promoting it as an
+        # identifier.
+        assert items[0].name is None
         assert items[0].smiles == "CC(=O)Oc1ccccc1C(=O)O"
 
     def test_parse_molecule_type(self) -> None:

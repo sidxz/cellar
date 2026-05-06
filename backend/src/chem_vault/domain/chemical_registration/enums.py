@@ -227,3 +227,19 @@ class RegistrationAction(StrEnum):
     DISCLOSED = "disclosed"
     MERGE_CANDIDATE = "merge_candidate"
     CONFLICT = "conflict"
+
+
+class BulkRegistrationItemAction(StrEnum):
+    """Per-row outcome of a bulk registration. Persisted on BulkRegistrationItem.
+
+    Mirrors RegistrationAction plus an explicit ERROR terminal value so the
+    summary tabs (errors / dedup / merge / conflicts) have a single key to
+    filter on.
+    """
+
+    REGISTERED = "registered"
+    DEDUPLICATED = "deduplicated"
+    DISCLOSED = "disclosed"
+    MERGE_CANDIDATE = "merge_candidate"
+    CONFLICT = "conflict"
+    ERROR = "error"

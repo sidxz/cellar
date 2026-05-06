@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import {
+  CloudDownload,
   FlaskConical,
   Upload,
   Pencil,
@@ -13,6 +14,9 @@ import {
   FileText,
   Info,
 } from "lucide-react";
+import Link from "next/link";
+import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
+import type { BulkInput } from "../../types/registration-wizard";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
@@ -27,7 +31,6 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Switch } from "@/shared/components/ui/switch";
 import { Separator } from "@/shared/components/ui/separator";
-import { Badge } from "@/shared/components/ui/badge";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
@@ -100,32 +103,6 @@ function downloadCsvTemplate() {
   URL.revokeObjectURL(url);
 }
 
-// ─── Simple CSV parser for preview ──────────────────────────────────────────
-
-function parseCsvPreview(text: string, maxRows = 10): string[][] {
-  const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  const rows: string[][] = [];
-  for (let i = 0; i < Math.min(lines.length, maxRows + 1); i++) {
-    // Simple split — handles basic CSV without quoted commas in values
-    const cells: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (const ch of lines[i]) {
-      if (ch === '"') {
-        inQuotes = !inQuotes;
-      } else if (ch === "," && !inQuotes) {
-        cells.push(current.trim());
-        current = "";
-      } else {
-        current += ch;
-      }
-    }
-    cells.push(current.trim());
-    rows.push(cells);
-  }
-  return rows;
-}
-
 // ─── Identifier type options ────────────────────────────────────────────────
 
 const IDENTIFIER_TYPES = [
@@ -139,8 +116,12 @@ const IDENTIFIER_TYPES = [
 // ─── Mode Selection ─────────────────────────────────────────────────────────
 
 function ModeSelection({ onSelect }: { onSelect: (mode: "single" | "bulk") => void }) {
+  const { enabled: cddEnabled } = useCddEnabled();
+  const cols = cddEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2";
+  const maxW = cddEnabled ? "max-w-4xl" : "max-w-2xl";
+
   return (
-    <div className="grid gap-6 sm:grid-cols-2 max-w-2xl mx-auto py-8">
+    <div className={`grid gap-6 ${cols} ${maxW} mx-auto py-8`}>
       <Card
         className="cursor-pointer transition-all hover:border-primary hover:shadow-md"
         onClick={() => onSelect("single")}
@@ -167,11 +148,31 @@ function ModeSelection({ onSelect }: { onSelect: (mode: "single" | "bulk") => vo
         </CardHeader>
         <CardContent>
           <CardDescription className="text-center">
-            Upload a CSV or SDF file to register multiple compounds in a single
-            batch operation.
+            Upload a CSV, XLSX, or SDF file to register multiple compounds in
+            a single batch operation.
           </CardDescription>
         </CardContent>
       </Card>
+
+      {cddEnabled && (
+        <Link
+          href="/admin/data-import/cdd"
+          className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+        >
+          <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-md h-full">
+            <CardHeader className="text-center pb-2">
+              <CloudDownload className="mx-auto h-10 w-10 text-primary mb-2" />
+              <CardTitle className="text-lg">Import from CDD</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription className="text-center">
+                Sync compounds from the configured CDD vault — full vault
+                import or modified-since sync.
+              </CardDescription>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
     </div>
   );
 }
@@ -592,6 +593,14 @@ function SingleInputForm() {
 
 // ─── Bulk mode form ─────────────────────────────────────────────────────────
 
+function detectFileFormat(filename: string): BulkInput["fileFormat"] | null {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".csv")) return "csv";
+  if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) return "xlsx";
+  if (lower.endsWith(".sdf") || lower.endsWith(".sd")) return "sdf";
+  return null;
+}
+
 function BulkInputForm() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
   const updateBulkInput = useRegistrationWizard((s) => s.updateBulkInput);
@@ -599,49 +608,32 @@ function BulkInputForm() {
 
   const { data: orgs } = useOrganizations();
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string[][] | null>(null);
 
   const onDrop = useCallback(
     (accepted: File[]) => {
       const file = accepted[0];
       if (!file) return;
 
-      updateBulkInput({ file });
-
-      // Parse CSV preview
-      if (file.name.endsWith(".csv") || bulkInput.fileFormat === "csv") {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const text = e.target?.result;
-          if (typeof text === "string") {
-            const rows = parseCsvPreview(text, 10);
-            setPreview(rows);
-          }
-        };
-        reader.readAsText(file);
-      } else {
-        // SDF — no preview for now
-        setPreview(null);
+      const fmt = detectFileFormat(file.name);
+      if (!fmt) {
+        setError(
+          `Unsupported file type. Use .csv, .xlsx, .sdf or .sd — got "${file.name}".`
+        );
+        return;
       }
+      setError(null);
+      updateBulkInput({ file, fileFormat: fmt });
     },
-    [bulkInput.fileFormat, updateBulkInput]
+    [updateBulkInput]
   );
-
-  const accept = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    if (bulkInput.fileFormat === "sdf") {
-      map["chemical/x-mdl-sdfile"] = [".sdf", ".sd"];
-    } else if (bulkInput.fileFormat === "xlsx") {
-      map["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] = [".xlsx"];
-    } else {
-      map["text/csv"] = [".csv"];
-    }
-    return map;
-  }, [bulkInput.fileFormat]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept,
+    accept: {
+      "text/csv": [".csv"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "chemical/x-mdl-sdfile": [".sdf", ".sd"],
+    },
     maxFiles: 1,
     multiple: false,
   });
@@ -660,59 +652,13 @@ function BulkInputForm() {
     nextStep();
   };
 
+  const isSdf = bulkInput.fileFormat === "sdf";
+
   return (
     <div className="max-w-2xl space-y-6">
-      {/* File format selector */}
-      <div className="grid gap-2">
-        <Label>File Format</Label>
-        <div className="flex gap-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="file-format"
-              checked={bulkInput.fileFormat === "csv"}
-              onChange={() => {
-                updateBulkInput({ fileFormat: "csv", file: null });
-                setPreview(null);
-              }}
-              className="accent-primary"
-            />
-            <FileSpreadsheet className="h-4 w-4" />
-            <span className="text-sm">CSV</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="file-format"
-              checked={bulkInput.fileFormat === "xlsx"}
-              onChange={() => {
-                updateBulkInput({ fileFormat: "xlsx", file: null });
-                setPreview(null);
-              }}
-              className="accent-primary"
-            />
-            <FileSpreadsheet className="h-4 w-4" />
-            <span className="text-sm">Excel (.xlsx)</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="file-format"
-              checked={bulkInput.fileFormat === "sdf"}
-              onChange={() => {
-                updateBulkInput({ fileFormat: "sdf", file: null });
-                setPreview(null);
-              }}
-              className="accent-primary"
-            />
-            <FileText className="h-4 w-4" />
-            <span className="text-sm">SDF</span>
-          </label>
-        </div>
-      </div>
-
-      {/* Template download (CSV / XLSX share the same column layout) */}
-      {(bulkInput.fileFormat === "csv" || bulkInput.fileFormat === "xlsx") && (
+      {/* Template download (CSV / XLSX share the same column layout). Also shown
+          when no file is selected yet so users can grab the template up-front. */}
+      {!isSdf && (
         <Button variant="outline" size="sm" onClick={downloadCsvTemplate}>
           <Download className="mr-2 h-3.5 w-3.5" />
           Download CSV Template
@@ -760,15 +706,10 @@ function BulkInputForm() {
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              Drag &amp; drop a {bulkInput.fileFormat.toUpperCase()} file here, or click
-              to browse
+              Drag &amp; drop a file here, or click to browse
             </p>
             <p className="mt-1 text-xs text-muted-foreground/60">
-              {bulkInput.fileFormat === "csv"
-                ? "Accepts .csv files"
-                : bulkInput.fileFormat === "xlsx"
-                  ? "Accepts .xlsx files"
-                  : "Accepts .sdf / .sd files"}
+              Accepts .csv, .xlsx, .sdf, .sd — format detected automatically
             </p>
           </>
         )}
@@ -778,70 +719,26 @@ function BulkInputForm() {
       {bulkInput.file && (
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div className="flex items-center gap-2">
-            {bulkInput.fileFormat === "csv" || bulkInput.fileFormat === "xlsx" ? (
-              <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-            ) : (
+            {isSdf ? (
               <FileText className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
             )}
             <div>
               <p className="text-sm font-medium">{bulkInput.file.name}</p>
               <p className="text-xs text-muted-foreground">
                 {(bulkInput.file.size / 1024).toFixed(1)} KB
+                <span className="ml-2 uppercase">{bulkInput.fileFormat}</span>
               </p>
             </div>
           </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              updateBulkInput({ file: null });
-              setPreview(null);
-            }}
+            onClick={() => updateBulkInput({ file: null })}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-        </div>
-      )}
-
-      {/* CSV preview table */}
-      {preview && preview.length > 1 && (
-        <div className="grid gap-2">
-          <div className="flex items-center gap-2">
-            <Label>Preview</Label>
-            <Badge variant="secondary" className="text-xs">
-              {preview.length - 1} row{preview.length - 1 !== 1 ? "s" : ""} shown
-            </Badge>
-          </div>
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  {preview[0].map((header, i) => (
-                    <th
-                      key={i}
-                      className="whitespace-nowrap px-3 py-2 text-left font-medium"
-                    >
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {preview.slice(1).map((row, rowIdx) => (
-                  <tr key={rowIdx} className="border-b last:border-b-0">
-                    {row.map((cell, cellIdx) => (
-                      <td
-                        key={cellIdx}
-                        className="whitespace-nowrap px-3 py-1.5 text-muted-foreground"
-                      >
-                        {cell || "\u2014"}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       )}
 

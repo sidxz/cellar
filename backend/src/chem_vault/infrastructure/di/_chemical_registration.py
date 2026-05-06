@@ -8,8 +8,18 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from chem_vault.application.chemical_registration.bulk_registration_item_reader import (
+    BulkRegistrationItemReader,
+)
 from chem_vault.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationService,
+)
+from chem_vault.application.chemical_registration.list_bulk_registration_items import (
+    ListBulkRegistrationItems,
+)
+from chem_vault.application.chemical_registration.preview_bulk_registration_file import (
+    BulkFileParserProtocol,
+    PreviewBulkRegistrationFile,
 )
 from chem_vault.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
@@ -45,6 +55,7 @@ from chem_vault.application.chemical_registration.reject_disclosure import Rejec
 from chem_vault.application.chemical_registration.resolve_disclosure_conflict import (
     ResolveDisclosureConflict,
 )
+from chem_vault.application.chemical_registration.molecule_reader import MoleculeReader
 from chem_vault.application.chemical_registration.search_molecules import SearchMolecules
 from chem_vault.application.chemical_registration.synthesis_routes import (
     AddReactionStep,
@@ -77,6 +88,10 @@ from chem_vault.infrastructure.messaging.merge_handlers import (
 from chem_vault.infrastructure.persistence.sqlalchemy.attachment.attachment_merge_side_effect import (
     AttachmentMergeSideEffect,
 )
+from chem_vault.infrastructure.parsers.chemical_file_parser import BulkFileParserAdapter
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_item_reader import (
+    SQLAlchemyBulkRegistrationItemReader,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
     SQLAlchemyBulkRegistrationRepository,
 )
@@ -91,6 +106,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.merg
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_relationship_repository import (
     SQLAlchemyMoleculeRelationshipRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+    SQLAlchemyMoleculeReader,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
@@ -185,8 +203,18 @@ def register_chemical_registration(container: Container) -> None:
 
     def _search_molecules(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return SearchMolecules(uow, SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
+        return SearchMolecules(
+            uow,
+            SQLAlchemyMoleculeRepository(uow),
+            c[MoleculeReader],
+            c[StructureProcessorProtocol],
+        )
 
+    container.define(
+        SQLAlchemyMoleculeReader,
+        Singleton(lambda c: SQLAlchemyMoleculeReader(c[async_sessionmaker])),
+    )
+    container.define(MoleculeReader, lambda c: c[SQLAlchemyMoleculeReader])
     container.define(SearchMolecules, _search_molecules)
 
     def _export_sdf(c):  # type: ignore[no-untyped-def]
@@ -391,6 +419,27 @@ def register_chemical_registration(container: Container) -> None:
         )
 
     container.define(BulkRegistrationService, _bulk_registration_service)
+
+    # Preview + items list (Change 2/3 of bulk wizard rework)
+    container.define(BulkFileParserProtocol, lambda c: BulkFileParserAdapter())
+    container.define(
+        BulkRegistrationItemReader,
+        lambda c: SQLAlchemyBulkRegistrationItemReader(c[async_sessionmaker]),
+    )
+    container.define(
+        PreviewBulkRegistrationFile,
+        lambda c: PreviewBulkRegistrationFile(parser=c[BulkFileParserProtocol]),
+    )
+
+    def _list_bulk_reg_items(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListBulkRegistrationItems(
+            uow=uow,
+            repo=SQLAlchemyBulkRegistrationRepository(uow),
+            reader=c[BulkRegistrationItemReader],
+        )
+
+    container.define(ListBulkRegistrationItems, _list_bulk_reg_items)
 
     # --- Synthesis Routes ---
     def _synth_route_cmd(uc_cls):  # type: ignore[no-untyped-def]

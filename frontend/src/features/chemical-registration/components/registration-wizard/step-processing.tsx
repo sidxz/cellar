@@ -299,9 +299,9 @@ function BulkProcessing() {
         setMergeCandidates(progress.merge_candidates);
         nextStep();
       } else {
-        // Skip results step, jump to summary
-        // Bulk steps: 0=Input, 1=Processing, 2=Results, 3=Summary
-        setCurrentStep(3);
+        // Skip results step, jump to summary.
+        // Bulk steps: 0=Input, 1=Preview, 2=Processing, 3=Results, 4=Summary
+        setCurrentStep(4);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

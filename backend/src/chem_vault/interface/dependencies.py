@@ -26,6 +26,12 @@ from chem_vault.application.attachment.upload_attachment import UploadAttachment
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
+from chem_vault.application.chemical_registration.list_bulk_registration_items import (
+    ListBulkRegistrationItems,
+)
+from chem_vault.application.chemical_registration.preview_bulk_registration_file import (
+    PreviewBulkRegistrationFile,
+)
 from chem_vault.application.chemical_registration.export_sdf import ExportMoleculesSDF
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
@@ -426,6 +432,12 @@ ConfirmDisclosureDep = Annotated[ConfirmDisclosure, Depends(_get_use_case(Confir
 RejectDisclosureDep = Annotated[RejectDisclosure, Depends(_get_use_case(RejectDisclosure))]
 GetMergeImpactDep = Annotated[GetMergeImpact, Depends(_get_use_case(GetMergeImpact))]
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]
+PreviewBulkRegistrationFileDep = Annotated[
+    PreviewBulkRegistrationFile, Depends(_get_use_case(PreviewBulkRegistrationFile))
+]
+ListBulkRegistrationItemsDep = Annotated[
+    ListBulkRegistrationItems, Depends(_get_use_case(ListBulkRegistrationItems))
+]
 
 # --- Inventory dependencies ---
 CreateBatchDep = Annotated[CreateBatch, Depends(_get_use_case(CreateBatch))]

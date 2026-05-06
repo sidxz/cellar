@@ -146,7 +146,9 @@ class SDFParser:
             items.append(
                 ParsedMoleculeItem(
                     row_index=idx,
-                    name=name or f"Compound-{idx + 1}",
+                    # Leave None when the SDF molecule has no _Name property —
+                    # see the matching comment in TabularParser.
+                    name=name,
                     smiles=smiles,
                     external_ids=external_ids,
                     amount_value=amount_value,
@@ -261,10 +263,16 @@ class TabularParser:
                 )
                 continue
 
+            # Leave name as None when the file has no name column (or the cell
+            # is empty). The application layer falls back to "Compound-{idx+1}"
+            # for a placeholder display name AND keeps promote_name_as_identifier
+            # off — auto-generated names must never be promoted as identifiers,
+            # otherwise re-importing any file without a name column collides on
+            # "Compound-1", "Compound-2", ... in the workspace.
             items.append(
                 ParsedMoleculeItem(
                     row_index=int(idx),  # type: ignore[arg-type]
-                    name=name or f"Compound-{int(idx) + 1}",  # type: ignore[arg-type]
+                    name=name,
                     smiles=smiles,
                     molecule_type=mol_type or "small_molecule",
                     external_ids=external_ids,
@@ -320,3 +328,49 @@ def get_parser(file_format: BulkRegistrationFileFormat) -> ChemicalFileParser:
     if file_format == BulkRegistrationFileFormat.SDF:
         return SDFParser()  # type: ignore[return-value]
     return TabularParser()  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Application-port adapter
+# ---------------------------------------------------------------------------
+
+
+class BulkFileParserAdapter:
+    """Adapter that satisfies the application BulkFileParserProtocol.
+
+    Bridges the infra ``ChemicalFileParser`` factory and the application
+    ``ParsedItemDTO``. Lives in infrastructure so the application layer never
+    imports infra modules.
+    """
+
+    def parse(
+        self,
+        *,
+        content: bytes,
+        filename: str,
+        file_format: BulkRegistrationFileFormat,
+    ) -> list:
+        from chem_vault.application.chemical_registration.preview_bulk_registration_file import (
+            ParsedItemDTO,
+        )
+
+        parser = get_parser(file_format)
+        items = parser.parse(content, filename)
+        return [
+            ParsedItemDTO(
+                row_index=i.row_index,
+                name=i.name,
+                smiles=i.smiles,
+                molecule_type=i.molecule_type,
+                external_ids=list(i.external_ids),
+                amount_value=i.amount_value,
+                amount_unit=i.amount_unit,
+                salt_code=i.salt_code,
+                salt_stoichiometry=i.salt_stoichiometry,
+                purity=i.purity,
+                batch_source=i.batch_source,
+                appearance=i.appearance,
+                error=i.error,
+            )
+            for i in items
+        ]

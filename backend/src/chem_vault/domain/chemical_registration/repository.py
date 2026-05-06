@@ -6,7 +6,10 @@ import uuid
 from typing import Any, Protocol, runtime_checkable
 
 from chem_vault.domain.chemical_registration.bulk_disclosure import BulkDisclosure
-from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
+from chem_vault.domain.chemical_registration.bulk_registration import (
+    BulkRegistration,
+    BulkRegistrationItem,
+)
 from chem_vault.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
 from chem_vault.domain.chemical_registration.merge_event import MergeEvent
@@ -69,33 +72,6 @@ class MoleculeRepository(Protocol):
         self, workspace_id: uuid.UUID
     ) -> RegistrationNumber: ...
 
-    async def search_substructure(
-        self, workspace_id: uuid.UUID, smarts: str
-    ) -> list[Molecule]: ...
-
-    async def search_similarity(
-        self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
-    ) -> list[tuple[Molecule, float]]: ...
-
-    async def search_by_query(
-        self,
-        workspace_id: uuid.UUID,
-        query: dict[str, Any],
-        *,
-        cursor_id: uuid.UUID | None = None,
-        limit: int | None = None,
-        sort_by: str | None = None,
-        sort_dir: str | None = None,
-    ) -> list[Molecule]: ...
-
-    async def count_by_query(
-        self,
-        workspace_id: uuid.UUID,
-        query: dict[str, Any],
-        *,
-        project_ids: list[uuid.UUID] | None = None,
-    ) -> int: ...
-
     async def save(self, aggregate: Molecule) -> None: ...
 
 
@@ -153,13 +129,28 @@ class MergeEventRepository(Protocol):
 
 @runtime_checkable
 class BulkRegistrationRepository(Protocol):
-    """Repository for BulkRegistration aggregates."""
+    """Repository for BulkRegistration aggregates.
+
+    save() is responsible for persisting both the aggregate counters and any
+    pending per-row items collected via BulkRegistration.record_item(...).
+    """
 
     async def find_by_id(self, id: uuid.UUID) -> BulkRegistration | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> BulkRegistration | None: ...
+    async def find_by_workflow_id_in_workspace(
+        self, workspace_id: uuid.UUID, workflow_id: str
+    ) -> BulkRegistration | None: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID
     ) -> list[BulkRegistration]: ...
     async def save(self, aggregate: BulkRegistration) -> None: ...
+    async def insert_items(
+        self, items: list[BulkRegistrationItem]
+    ) -> None:
+        """Bulk-insert per-row items. Idempotent on (bulk_registration_id, row_index)."""
+        ...
 
 
 @runtime_checkable

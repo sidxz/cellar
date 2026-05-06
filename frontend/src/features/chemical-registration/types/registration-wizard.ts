@@ -51,6 +51,59 @@ export interface BulkInput {
   originatingOrgId: string | null;
 }
 
+// ─── Preview (parse-only) result returned by /preview ───────────────────────
+
+export interface PreviewItem {
+  row_index: number;
+  name: string | null;
+  smiles: string | null;
+  molecule_type: string;
+  external_ids: { identifier: string; identifier_type: string }[];
+  amount_value: number | null;
+  amount_unit: string;
+  salt_code: string | null;
+  salt_stoichiometry: number;
+  purity: number | null;
+  batch_source: string;
+  appearance: string | null;
+  error: string | null;
+}
+
+export interface PreviewBulkRegistrationResponse {
+  total_count: number;
+  error_count: number;
+  items: PreviewItem[];
+}
+
+// ─── Per-row results returned by /{wf}/items ────────────────────────────────
+
+export type BulkRegItemAction =
+  | "registered"
+  | "deduplicated"
+  | "disclosed"
+  | "merge_candidate"
+  | "conflict"
+  | "error";
+
+export interface BulkRegItemRow {
+  row_index: number;
+  action: BulkRegItemAction;
+  success: boolean;
+  molecule_id: string | null;
+  molecule_name: string | null;
+  registration_number: string | null;
+  batch_id: string | null;
+  batch_number: string | null;
+  error: string | null;
+}
+
+export interface ListBulkRegItemsResponse {
+  rows: BulkRegItemRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type JobStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface BulkProgress {

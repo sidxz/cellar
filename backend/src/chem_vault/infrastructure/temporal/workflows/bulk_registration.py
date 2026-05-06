@@ -25,7 +25,7 @@ with workflow.unsafe.imports_passed_through():
         ChunkItem,
         CompleteBulkRegInput,
         CreateBulkRegInput,
-        UpdateBulkRegProgressInput,
+        PersistChunkItemsInput,
     )
     from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
 
@@ -136,6 +136,7 @@ class BulkRegistrationWorkflow:
                     file_format=input.file_format,
                     submitted_by=input.submitted_by,
                     total_count=parse_result.total_count,
+                    workflow_id=workflow.info().workflow_id,
                 ),
                 start_to_close_timeout=timedelta(seconds=30),
             )
@@ -171,17 +172,28 @@ class BulkRegistrationWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             )
 
-            # Update tracking aggregate
+            # Persist per-row outcomes AND roll up counters in one transaction.
+            # The activity handles BulkRegistrationItem inserts (idempotent on
+            # row_index) plus aggregate counter increments via record_item().
             await workflow.execute_activity(
-                BulkTrackingActivities.update_bulk_reg_progress,
-                UpdateBulkRegProgressInput(
+                BulkTrackingActivities.persist_chunk_items,
+                PersistChunkItemsInput(
                     workspace_id=input.workspace_id,
                     bulk_reg_id=bulk_reg_id,
-                    registered=chunk_result.registered,
-                    duplicate=chunk_result.duplicate,
-                    error=chunk_result.error,
+                    items=[
+                        {
+                            "row_index": r.row_index,
+                            "success": r.success,
+                            "action": r.action,
+                            "molecule_id": r.molecule_id,
+                            "batch_id": r.batch_id,
+                            "batch_number": r.batch_number,
+                            "error": r.error,
+                        }
+                        for r in chunk_result.results
+                    ],
                 ),
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(minutes=2),
             )
 
             self._progress.registered_count += chunk_result.registered

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from returns.result import Failure
@@ -21,6 +21,12 @@ from chem_vault.application.chemical_registration.confirm_disclosure import (
     ConfirmDisclosure,
     ConfirmDisclosureCommand,
 )
+from chem_vault.application.chemical_registration.list_bulk_registration_items import (
+    ListBulkRegistrationItemsQuery,
+)
+from chem_vault.application.chemical_registration.preview_bulk_registration_file import (
+    PreviewBulkRegistrationFileQuery,
+)
 from chem_vault.application.chemical_registration.reject_disclosure import (
     RejectDisclosure,
     RejectDisclosureCommand,
@@ -31,6 +37,8 @@ from chem_vault.interface.dependencies import (
     AuthDep,
     BulkRegistrationServiceDep,
     ConfirmDisclosureDep,
+    ListBulkRegistrationItemsDep,
+    PreviewBulkRegistrationFileDep,
     RejectDisclosureDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
@@ -360,6 +368,169 @@ async def confirm_merges(
         confirmed_count=confirmed_count,
         rejected_count=rejected_count,
         error_count=error_count,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Preview endpoint — parse-only, no persistence
+# ---------------------------------------------------------------------------
+
+
+class PreviewItem(BaseModel):
+    row_index: int
+    name: str | None = None
+    smiles: str | None = None
+    molecule_type: str = "small_molecule"
+    external_ids: list[dict[str, str]] = []
+    amount_value: float | None = None
+    amount_unit: str = "mg"
+    salt_code: str | None = None
+    salt_stoichiometry: int = 1
+    purity: float | None = None
+    batch_source: str = "synthesized"
+    appearance: str | None = None
+    error: str | None = None
+
+
+class PreviewBulkRegistrationResponse(BaseModel):
+    total_count: int
+    error_count: int
+    items: list[PreviewItem]
+
+
+def _detect_file_format(filename: str) -> BulkRegistrationFileFormat:
+    lower = filename.lower()
+    if lower.endswith(".csv"):
+        return BulkRegistrationFileFormat.CSV
+    if lower.endswith((".xlsx", ".xls")):
+        return BulkRegistrationFileFormat.XLSX
+    if lower.endswith((".sdf", ".sd")):
+        return BulkRegistrationFileFormat.SDF
+    raise HTTPException(
+        status_code=422,
+        detail=f"Unsupported file extension on {filename!r} — use .csv, .xlsx, .sdf or .sd",
+    )
+
+
+@router.post("/preview", response_model=PreviewBulkRegistrationResponse)
+async def preview_bulk_registration(
+    auth: AuthDep,
+    preview_uc: PreviewBulkRegistrationFileDep,
+    file: UploadFile = File(...),
+) -> PreviewBulkRegistrationResponse:
+    """Parse a bulk-registration file without persisting anything.
+
+    The wizard's Preview step uses this to show users what was parsed before
+    they kick off the durable Temporal workflow. The same file gets uploaded
+    again to ``POST /api/v1/bulk-registrations`` on confirm — the preview
+    endpoint stores nothing.
+    """
+    filename = file.filename or "upload"
+    fmt = _detect_file_format(filename)
+    content = await file.read()
+
+    query = PreviewBulkRegistrationFileQuery(
+        workspace_id=auth.workspace_id,
+        filename=filename,
+        content=content,
+        file_format=fmt,
+    )
+    result = await preview_uc(query, auth=auth)
+    outcome = result_to_response(result)
+
+    return PreviewBulkRegistrationResponse(
+        total_count=outcome.total_count,
+        error_count=outcome.error_count,
+        items=[
+            PreviewItem(
+                row_index=i.row_index,
+                name=i.name,
+                smiles=i.smiles,
+                molecule_type=i.molecule_type,
+                external_ids=i.external_ids,
+                amount_value=i.amount_value,
+                amount_unit=i.amount_unit,
+                salt_code=i.salt_code,
+                salt_stoichiometry=i.salt_stoichiometry,
+                purity=i.purity,
+                batch_source=i.batch_source,
+                appearance=i.appearance,
+                error=i.error,
+            )
+            for i in outcome.items
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-row items endpoint — drives the Summary tab
+# ---------------------------------------------------------------------------
+
+
+class BulkRegItemRowResponse(BaseModel):
+    row_index: int
+    action: str
+    success: bool
+    molecule_id: uuid.UUID | None = None
+    molecule_name: str | None = None
+    registration_number: str | None = None
+    batch_id: uuid.UUID | None = None
+    batch_number: str | None = None
+    error: str | None = None
+
+
+class ListBulkRegItemsResponse(BaseModel):
+    rows: list[BulkRegItemRowResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+@router.get("/{workflow_id}/items", response_model=ListBulkRegItemsResponse)
+async def list_bulk_registration_items(
+    auth: AuthDep,
+    list_uc: ListBulkRegistrationItemsDep,
+    workflow_id: str,
+    action: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListBulkRegItemsResponse:
+    """Paged per-row outcomes for a bulk registration job.
+
+    Filterable by action (registered / deduplicated / disclosed /
+    merge_candidate / conflict / error) so the Summary tabs can drill into
+    each bucket.
+    """
+    _verify_workspace_prefix(workflow_id, auth.workspace_id)
+
+    query = ListBulkRegistrationItemsQuery(
+        workspace_id=auth.workspace_id,
+        workflow_id=workflow_id,
+        action=action,
+        limit=limit,
+        offset=offset,
+    )
+    result = await list_uc(query, auth=auth)
+    page = result_to_response(result)
+
+    return ListBulkRegItemsResponse(
+        rows=[
+            BulkRegItemRowResponse(
+                row_index=r.row_index,
+                action=r.action,
+                success=r.success,
+                molecule_id=r.molecule_id,
+                molecule_name=r.molecule_name,
+                registration_number=r.registration_number,
+                batch_id=r.batch_id,
+                batch_number=r.batch_number,
+                error=r.error,
+            )
+            for r in page.rows
+        ],
+        total=page.total,
+        limit=limit,
+        offset=offset,
     )
 
 

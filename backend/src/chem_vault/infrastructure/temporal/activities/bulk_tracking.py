@@ -8,18 +8,22 @@ from __future__ import annotations
 
 import uuid
 
-from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
+
+from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 
 from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
 from chem_vault.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
 from chem_vault.domain.chemical_registration.enums import (
     BulkRegistrationFileFormat,
+    BulkRegistrationItemAction,
     CddImportMode,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+    SQLAlchemyMoleculeRepository,
+)
 from chem_vault.domain.inventory.cdd_plate_import import CddPlateImport
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
     SQLAlchemyBulkRegistrationRepository,
 )
@@ -46,6 +50,7 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
     CreateCddPlateImportInput,
     FailCddImportInput,
     FailCddPlateImportInput,
+    PersistChunkItemsInput,
     RecordPlateSyncMappingsInput,
     RecordSyncMappingsInput,
     UpdateBulkRegProgressInput,
@@ -57,22 +62,23 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
 class BulkTrackingActivities:
     """Temporal activities for managing import tracking aggregates."""
 
-    def __init__(self, container: Container) -> None:
-        self._container = container
+    def __init__(
+        self,
+        session_factory: async_sessionmaker,
+        dispatcher: EventDispatcher,
+    ) -> None:
+        self._session_factory = session_factory
+        self._dispatcher = dispatcher
 
     def _make_cdd_deps(self):
-        session_factory = self._container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
+        uow = AsyncUnitOfWork(self._session_factory)
         repo = SQLAlchemyCddMoleculeImportRepository(uow)
-        dispatcher = self._container[EventDispatcher]
-        return uow, repo, dispatcher
+        return uow, repo, self._dispatcher
 
     def _make_bulk_reg_deps(self):
-        session_factory = self._container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
+        uow = AsyncUnitOfWork(self._session_factory)
         repo = SQLAlchemyBulkRegistrationRepository(uow)
-        dispatcher = self._container[EventDispatcher]
-        return uow, repo, dispatcher
+        return uow, repo, self._dispatcher
 
     # ------------------------------------------------------------------
     # BulkRegistration (file import) tracking
@@ -89,6 +95,7 @@ class BulkTrackingActivities:
                 file_format=BulkRegistrationFileFormat(input.file_format),
                 submitted_by=uuid.UUID(input.submitted_by),
                 total_count=input.total_count,
+                workflow_id=input.workflow_id,
             )
             bulk_reg.start_processing()
             await repo.save(bulk_reg)
@@ -98,7 +105,12 @@ class BulkTrackingActivities:
 
     @activity.defn
     async def update_bulk_reg_progress(self, input: UpdateBulkRegProgressInput) -> None:
-        """Update BulkRegistration counters after a chunk."""
+        """Update BulkRegistration counters after a chunk.
+
+        Legacy entry point kept for backward compatibility — for new flows the
+        workflow should call ``persist_chunk_items`` instead, which records both
+        per-row provenance AND counters in one transaction.
+        """
         uow, repo, _ = self._make_bulk_reg_deps()
         ws_id = uuid.UUID(input.workspace_id)
         async with uow:
@@ -111,6 +123,85 @@ class BulkTrackingActivities:
                 bulk_reg.record_duplicate()
             for _ in range(input.error):
                 bulk_reg.record_error()
+            await repo.save(bulk_reg)
+            await uow.commit()
+
+    @activity.defn
+    async def persist_chunk_items(self, input: PersistChunkItemsInput) -> None:
+        """Persist a chunk's per-row outcomes and roll up the aggregate counters.
+
+        Replaces ``update_bulk_reg_progress`` for the bulk-registration import
+        flow. Each ChunkItemResult dict produces one BulkRegistrationItem and
+        increments the corresponding aggregate counter.
+
+        Idempotent: the underlying ``insert_items`` uses
+        ``ON CONFLICT (bulk_registration_id, row_index) DO NOTHING`` so a
+        retried activity won't double-write. Counters are NOT idempotent on
+        retry — Temporal's at-most-once activity semantics rely on
+        successful completion of the activity setting last_completed_result;
+        a redelivery before the activity commit is the only retry path, and
+        commit happens atomically with the row inserts.
+        """
+        uow, repo, _ = self._make_bulk_reg_deps()
+        ws_id = uuid.UUID(input.workspace_id)
+        async with uow:
+            bulk_reg = await repo.find_by_id_in_workspace(
+                ws_id, uuid.UUID(input.bulk_reg_id)
+            )
+            if bulk_reg is None:
+                raise ValueError(f"BulkRegistration {input.bulk_reg_id} not found")
+
+            # Resolve molecule names for display once per molecule.
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            mol_ids = {
+                uuid.UUID(it["molecule_id"])
+                for it in input.items
+                if it.get("molecule_id")
+            }
+            molecules = (
+                await mol_repo.find_by_ids(ws_id, list(mol_ids)) if mol_ids else []
+            )
+            mol_lookup: dict[uuid.UUID, tuple[str, str]] = {
+                m.id: (m.name, m.registration_number.value) for m in molecules
+            }
+
+            for raw in input.items:
+                row_index = int(raw["row_index"])
+                success = bool(raw.get("success", False))
+                action_str = raw.get("action") or ""
+                err = raw.get("error")
+
+                if not success:
+                    action = BulkRegistrationItemAction.ERROR
+                else:
+                    try:
+                        action = BulkRegistrationItemAction(action_str)
+                    except ValueError:
+                        action = BulkRegistrationItemAction.REGISTERED
+
+                molecule_id_str = raw.get("molecule_id")
+                molecule_id = (
+                    uuid.UUID(molecule_id_str) if molecule_id_str else None
+                )
+                mol_name: str | None = None
+                reg_number: str | None = None
+                if molecule_id and molecule_id in mol_lookup:
+                    mol_name, reg_number = mol_lookup[molecule_id]
+
+                batch_id_str = raw.get("batch_id")
+                batch_id = uuid.UUID(batch_id_str) if batch_id_str else None
+
+                bulk_reg.record_item(
+                    row_index=row_index,
+                    action=action,
+                    molecule_id=molecule_id,
+                    molecule_name=mol_name,
+                    registration_number=reg_number,
+                    batch_id=batch_id,
+                    batch_number=raw.get("batch_number"),
+                    error=err,
+                )
+
             await repo.save(bulk_reg)
             await uow.commit()
 
@@ -220,11 +311,9 @@ class BulkTrackingActivities:
     # ------------------------------------------------------------------
 
     def _make_plate_import_deps(self):
-        session_factory = self._container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
+        uow = AsyncUnitOfWork(self._session_factory)
         repo = SQLAlchemyCddPlateImportRepository(uow)
-        dispatcher = self._container[EventDispatcher]
-        return uow, repo, dispatcher
+        return uow, repo, self._dispatcher
 
     @activity.defn
     async def create_cdd_plate_import(self, input: CreateCddPlateImportInput) -> str:
@@ -309,8 +398,7 @@ class BulkTrackingActivities:
     @activity.defn
     async def record_plate_sync_mappings(self, input: RecordPlateSyncMappingsInput) -> None:
         """Record CDD->internal plate mappings after successful registration."""
-        session_factory = self._container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
+        uow = AsyncUnitOfWork(self._session_factory)
         sync_repo = CddPlateSyncRepository(uow)
         async with uow:
             mappings = [
@@ -331,8 +419,7 @@ class BulkTrackingActivities:
     @activity.defn
     async def record_sync_mappings(self, input: RecordSyncMappingsInput) -> None:
         """Record CDD→internal molecule mappings after successful registration."""
-        session_factory = self._container[async_sessionmaker]
-        uow = AsyncUnitOfWork(session_factory)
+        uow = AsyncUnitOfWork(self._session_factory)
         sync_repo = CddMoleculeSyncRepository(uow)
         async with uow:
             mappings = [
