@@ -24,11 +24,11 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar";
 import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { fetchStructureImages } from "@/shared/lib/export/structure-image";
-import { useMolecules } from "@/features/chemical-registration/hooks/use-molecules";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
 import { CurveNavigator } from "./curve-navigator";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DoseResponseChart } from "./dose-response-chart";
+import { worstZPrime } from "../lib/qc-metrics";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
 import { ComparisonTable } from "./comparison-table";
 import { useProtocol } from "../hooks/use-protocols";
@@ -51,6 +51,7 @@ interface CompoundCurveRow {
   molecule_id: string;
   molecule_name: string;
   registration_number: string;
+  synonyms: string[];
   smiles: string | null;
   batch_number: string | null;
   curve_type: string;
@@ -79,20 +80,32 @@ function curveClassBadge(cc: CurveClass | null) {
       </Badge>
     );
   }
+  // All classes use the same `border-x/40 bg-x/10 text-x` pattern so the
+  // visual weight stays consistent. variant="outline" clears the default
+  // primary fill — without it, "inactive" rendered as solid blue (no bg
+  // class to override the default) with hard-to-read text.
   const styles: Record<CurveClass, string> = {
     full: "border-success/40 bg-success/10 text-success",
     partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
     bell_shaped: "border-primary/40 bg-primary/10 text-primary",
-    inactive: "border-muted text-muted-foreground",
+    inactive:
+      "border-muted-foreground/30 bg-muted/50 text-muted-foreground",
   };
-  return <Badge className={styles[cc]}>{CURVE_CLASS_LABELS[cc]}</Badge>;
+  return (
+    <Badge variant="outline" className={styles[cc]}>
+      {CURVE_CLASS_LABELS[cc]}
+    </Badge>
+  );
 }
 
-/** Group curves by molecule, pick best (lowest fitted_value for IC50-type) */
-function buildCompoundRows(
-  curves: DoseResponseCurve[],
-  molMap: Map<string, { registration_number: string; smiles: string | null; synonyms: string[] }>,
-): CompoundCurveRow[] {
+/** Group curves by molecule, pick best (lowest fitted_value for IC50-type).
+ *
+ * The enrichment reader pre-populates `registration_number`, `synonyms`,
+ * and `smiles` on each curve, so this no longer depends on a separate
+ * paginated `useMolecules()` lookup (which hid structure for any compound
+ * past the first page).
+ */
+function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow[] {
   const byMolecule = new Map<string, DoseResponseCurve[]>();
   for (const c of curves) {
     const mid = c.molecule_id;
@@ -124,9 +137,11 @@ function buildCompoundRows(
 
     rows.push({
       molecule_id: best.molecule_id,
-      molecule_name: best.molecule_name ?? best.molecule_id.slice(0, 8),
-      registration_number: molMap.get(best.molecule_id)?.registration_number ?? best.molecule_id.slice(0, 8),
-      smiles: molMap.get(best.molecule_id)?.smiles ?? null,
+      molecule_name: best.molecule_name ?? "",
+      registration_number:
+        best.registration_number ?? best.molecule_id.slice(0, 8),
+      synonyms: best.synonyms ?? [],
+      smiles: best.smiles,
       batch_number: best.batch_number,
       curve_type: best.curve_type,
       fitted_value: best.fitted_value,
@@ -195,17 +210,39 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
       checkboxSelection: true,
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;
+        const { registration_number, molecule_name, synonyms, batch_number } =
+          params.data;
+        // Aliases = molecule_name (if distinct from reg) + custom synonyms.
+        // De-duplicated, capped at 3 to keep the row readable; the rest are
+        // visible on hover via the title attribute.
+        const aliases: string[] = [];
+        if (molecule_name && molecule_name !== registration_number) {
+          aliases.push(molecule_name);
+        }
+        for (const s of synonyms) {
+          if (s && s !== registration_number && !aliases.includes(s)) {
+            aliases.push(s);
+          }
+        }
+        const visible = aliases.slice(0, 3);
+        const overflow = aliases.length - visible.length;
         return (
           <div className="leading-tight">
-            <span className="font-medium">{params.data.registration_number}</span>
-            {params.data.molecule_name && (
-              <span className="ml-2 text-xs text-muted-foreground">
-                {params.data.molecule_name}
+            <span className="font-mono font-medium">
+              {registration_number}
+            </span>
+            {visible.length > 0 && (
+              <span
+                className="ml-2 text-xs text-muted-foreground"
+                title={aliases.join(", ")}
+              >
+                {visible.join(" · ")}
+                {overflow > 0 && ` +${overflow}`}
               </span>
             )}
-            {params.data.batch_number && (
+            {batch_number && (
               <div className="text-[10px] text-muted-foreground">
-                Batch: {params.data.batch_number}
+                Batch: {batch_number}
               </div>
             )}
           </div>
@@ -325,21 +362,6 @@ export function RunDoseResponseResults({
   isLoading,
 }: RunDoseResponseResultsProps) {
   const { data: protocol } = useProtocol(run.protocol_id);
-  const { data: molecules } = useMolecules();
-
-  const molMap = useMemo(() => {
-    const m = new Map<string, { registration_number: string; smiles: string | null; synonyms: string[] }>();
-    for (const mol of molecules ?? []) {
-      m.set(mol.id, {
-        registration_number: mol.registration_number,
-        smiles: mol.structure?.smiles ?? null,
-        synonyms: mol.identifiers
-          ?.filter((id) => id.identifier_type === "custom")
-          .map((id) => id.identifier) ?? [],
-      });
-    }
-    return m;
-  }, [molecules]);
 
   // Hit criteria state
   const savedCriteria: HitCriterion[] =
@@ -369,8 +391,8 @@ export function RunDoseResponseResults({
     setLastSynced(prevSavedRef);
   }
 
-  // Build rows from curves
-  const allRows = useMemo(() => buildCompoundRows(curves, molMap), [curves, molMap]);
+  // Build rows from curves (already enriched with reg#, smiles, synonyms)
+  const allRows = useMemo(() => buildCompoundRows(curves), [curves]);
   const filteredRows = useMemo(
     () => applyHitFilter(allRows, activeCriteria),
     [allRows, activeCriteria]
@@ -412,8 +434,8 @@ export function RunDoseResponseResults({
 
       // Batch-fetch structure images from backend
       const allSmiles = rows
-        .map((r) => molMap.get(r.molecule_id)?.smiles)
-        .filter(Boolean) as string[];
+        .map((r) => r.smiles)
+        .filter((s): s is string => !!s);
       const structImages = await fetchStructureImages(allSmiles, 150, 100);
 
       // Fill existing "Structure" column with images
@@ -421,7 +443,7 @@ export function RunDoseResponseResults({
       if (structColIdx >= 0) {
         worksheet.getColumn(structColIdx + 1).width = 22;
         for (let r = 0; r < rows.length; r++) {
-          const smiles = molMap.get(rows[r].molecule_id)?.smiles;
+          const smiles = rows[r].smiles;
           if (smiles && structImages[smiles]) {
             const imgId = workbook.addImage({ base64: structImages[smiles], extension: "png" });
             worksheet.addImage(imgId, {
@@ -463,23 +485,27 @@ export function RunDoseResponseResults({
       worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
       worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
       for (let r = 0; r < rows.length; r++) {
-        const mol = molMap.get(rows[r].molecule_id);
-        worksheet.getRow(r + 2).getCell(smilesCol).value = mol?.smiles ?? "";
+        const row = rows[r];
+        worksheet.getRow(r + 2).getCell(smilesCol).value = row.smiles ?? "";
         worksheet.getRow(r + 2).getCell(synonymsCol).value =
-          (mol?.synonyms ?? []).join("; ");
+          row.synonyms.join("; ");
       }
       worksheet.getColumn(smilesCol).width = 40;
       worksheet.getColumn(synonymsCol).width = 30;
 
-      // Raw data points sheet
+      // Raw data points sheet — exports use the canonical reg id as the
+      // compound label for analyst consistency.
       const rawSheet = workbook.addWorksheet("Raw Data Points");
       rawSheet.addRow(["Compound", "SMILES", "Concentration", "Response"]);
       for (const row of rows) {
-        const name = row.molecule_name || row.molecule_id;
-        const mol = molMap.get(row.molecule_id);
         if (row.data_points) {
           for (const pt of row.data_points) {
-            rawSheet.addRow([name, mol?.smiles ?? "", pt.x, pt.y]);
+            rawSheet.addRow([
+              row.registration_number,
+              row.smiles ?? "",
+              pt.x,
+              pt.y,
+            ]);
           }
         }
       }
@@ -529,8 +555,9 @@ export function RunDoseResponseResults({
             {filteredRows.length} hit{filteredRows.length !== 1 ? "s" : ""}
           </Badge>
         )}
-        {run.qc_metrics?.z_prime != null && (() => {
-          const zp = run.qc_metrics!.z_prime as number;
+        {(() => {
+          const zp = worstZPrime(run.qc_metrics);
+          if (zp === null) return null;
           const label = zp >= 0.5 ? "Excellent" : zp >= 0 ? "Marginal" : "Poor";
           const cls = zp >= 0.5
             ? "border-success/40 text-success"
@@ -539,7 +566,7 @@ export function RunDoseResponseResults({
             : "border-destructive/40 text-destructive";
           return (
             <Badge variant="outline" className={cls}>
-              Z&prime; = {zp.toFixed(2)} &mdash; {label}
+              Worst Z&prime; = {zp.toFixed(2)} &mdash; {label}
             </Badge>
           );
         })()}

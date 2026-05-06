@@ -216,7 +216,10 @@ function CurveControls({
           onClick={() => setOpen((v) => !v)}
         >
           <span>{open ? "▾" : "▸"}</span>
-          {curve.molecule_name ?? "Curve"} — Fit Constraints
+          <span className="font-mono">
+            {curve.registration_number ?? curve.molecule_name ?? "Curve"}
+          </span>{" "}
+          — Fit Constraints
           {isPending && (
             <span className="ml-1 h-2 w-2 rounded-full bg-primary animate-pulse inline-block" />
           )}
@@ -340,8 +343,11 @@ function SummaryCard({
   return (
     <Card key={curve.id} className="py-4">
       <CardHeader className="pb-0">
-        <CardTitle className="text-sm">
-          {curve.molecule_name ?? CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
+        <CardTitle className="text-sm font-mono">
+          {curve.registration_number ??
+            curve.molecule_name ??
+            CURVE_TYPE_LABELS[curve.curve_type as CurveType] ??
+            curve.curve_type}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-2 space-y-1">
@@ -538,8 +544,13 @@ export function DoseResponseChart({
     const color = TRACE_COLORS[i % TRACE_COLORS.length];
     const group = `curve-${curve.id}`;
     const curveTypeLabel = CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type;
-    const label = curve.molecule_name
-      ? `${curve.molecule_name} (${curveTypeLabel})`
+    // Prefer the canonical registration number (CV-NNNNN) for trace labels
+    // — analysts identify compounds by reg id, not free-text name. Fall back
+    // to the molecule name only when the curve carries no reg id.
+    const compoundLabel =
+      curve.registration_number ?? curve.molecule_name ?? null;
+    const label = compoundLabel
+      ? `${compoundLabel} (${curveTypeLabel})`
       : curveTypeLabel;
 
     // Merge server excluded_points back into raw_data for interactive mode:

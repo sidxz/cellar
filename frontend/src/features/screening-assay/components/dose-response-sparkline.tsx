@@ -73,6 +73,21 @@ export function DoseResponseSparkline({
   const { hill_slope, top, bottom, fitted_value, r_squared } = params;
   const color = CURVE_COLORS[curveClass ?? ""] ?? DEFAULT_COLOR;
 
+  // Inactive / unfit curves carry fitted_value = 0 and degenerate
+  // hill/top/bottom; rendering a log-scale plot around 0 produces NaN
+  // for every coordinate (log(0) = -Infinity). Show a flat "Inactive"
+  // placeholder instead — the same visual signal the table already uses.
+  if (!Number.isFinite(fitted_value) || fitted_value <= 0) {
+    return (
+      <div
+        className="inline-flex items-center justify-center text-[10px] text-muted-foreground italic"
+        style={{ width, height }}
+      >
+        {curveClass === "inactive" ? "inactive" : "no fit"}
+      </div>
+    );
+  }
+
   const ml = 18;
   const mr = 4;
   const mt = 4;

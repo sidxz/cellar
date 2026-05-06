@@ -32,6 +32,7 @@ import { PlateSetupDialog } from "./plate-setup-dialog";
 import { ReadoutDataTable } from "./readout-data-table";
 import { RunImportWizard } from "./run-import-wizard";
 import { SimplifiedImportDialog } from "./simplified-import-dialog";
+import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 
 // ─── QC Metrics Panel (inline) ────────────────────────────────────────────────
 
@@ -64,103 +65,103 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
     );
   }
 
-  // Detect Z' factor and control stats for special rendering
-  const zPrime = typeof qcMetrics["z_prime"] === "number" ? (qcMetrics["z_prime"] as number) : null;
-  const sbRatio = typeof qcMetrics["signal_to_background"] === "number"
-    ? (qcMetrics["signal_to_background"] as number)
-    : null;
-  const posMean = typeof qcMetrics["positive_control_mean"] === "number"
-    ? (qcMetrics["positive_control_mean"] as number)
-    : null;
-  const posSd = typeof qcMetrics["positive_control_sd"] === "number"
-    ? (qcMetrics["positive_control_sd"] as number)
-    : null;
-  const negMean = typeof qcMetrics["negative_control_mean"] === "number"
-    ? (qcMetrics["negative_control_mean"] as number)
-    : null;
-  const negSd = typeof qcMetrics["negative_control_sd"] === "number"
-    ? (qcMetrics["negative_control_sd"] as number)
-    : null;
+  const perPlate = readPerPlateQc(qcMetrics);
+  const plateIds = Object.keys(perPlate);
+  const worstZp = worstZPrime(qcMetrics);
 
-  // Z' featured section
-  const hasZPrime = zPrime !== null;
-
-  // Remaining generic metrics (exclude fields already shown in featured section)
-  const featuredKeys = new Set([
-    "z_prime",
-    "signal_to_background",
-    "positive_control_mean",
-    "positive_control_sd",
-    "negative_control_mean",
-    "negative_control_sd",
-  ]);
+  // Anything else on qc_metrics that isn't the per-plate z_prime block.
   const genericEntries = Object.entries(qcMetrics).filter(
-    ([key]) => !featuredKeys.has(key)
+    ([k]) => k !== "z_prime"
   );
 
   return (
     <div className="space-y-4">
-      {/* Z' factor + control stats featured section */}
-      {hasZPrime && (
+      {worstZp !== null && (
         <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
           <div className="flex items-center gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                Z&apos; Factor
+                Worst Z&apos; (across {plateIds.length} plate
+                {plateIds.length === 1 ? "" : "s"})
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-2xl font-bold tabular-nums">
-                  {zPrime!.toFixed(3)}
+                  {worstZp.toFixed(3)}
                 </span>
-                <ZPrimeBadge value={zPrime!} />
+                <ZPrimeBadge value={worstZp} />
               </div>
             </div>
-            {sbRatio !== null && (
-              <div className="ml-6">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                  S/B Ratio
-                </p>
-                <span className="text-2xl font-bold tabular-nums">
-                  {sbRatio.toFixed(2)}
-                </span>
-              </div>
-            )}
           </div>
-
-          {(posMean !== null || negMean !== null) && (
-            <div className="grid grid-cols-2 gap-3 pt-1 text-sm">
-              {posMean !== null && (
-                <div className="rounded-md bg-green-500/10 px-3 py-2">
-                  <p className="text-xs text-muted-foreground mb-0.5">Pos Control</p>
-                  <p className="font-medium tabular-nums">
-                    {posMean.toFixed(3)}
-                    {posSd !== null && (
-                      <span className="text-xs text-muted-foreground ml-1">
-                        ± {posSd.toFixed(3)}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              )}
-              {negMean !== null && (
-                <div className="rounded-md bg-destructive/10 px-3 py-2">
-                  <p className="text-xs text-muted-foreground mb-0.5">Neg Control</p>
-                  <p className="font-medium tabular-nums">
-                    {negMean.toFixed(3)}
-                    {negSd !== null && (
-                      <span className="text-xs text-muted-foreground ml-1">
-                        ± {negSd.toFixed(3)}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Generic metrics grid */}
+      {plateIds.length > 0 && (
+        <div className="rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30">
+              <tr className="border-b text-xs text-muted-foreground">
+                <th className="px-3 py-2 text-left font-medium">Plate</th>
+                <th className="px-3 py-2 text-right font-medium">Z&apos;</th>
+                <th className="px-3 py-2 text-right font-medium">S/B</th>
+                <th className="px-3 py-2 text-right font-medium">
+                  POS mean ± SD
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  NEG mean ± SD
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  Classification
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {plateIds.map((pid, i) => {
+                const q = perPlate[pid] || {};
+                return (
+                  <tr key={pid} className="border-b last:border-b-0">
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {i + 1}
+                      <span className="ml-2 font-mono text-[10px]">
+                        {pid.slice(0, 8)}…
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {typeof q.z_prime === "number"
+                        ? q.z_prime.toFixed(3)
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {typeof q.s2b === "number" ? q.s2b.toFixed(2) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {typeof q.pos_mean === "number"
+                        ? `${q.pos_mean.toFixed(3)}${
+                            typeof q.pos_sd === "number"
+                              ? ` ± ${q.pos_sd.toFixed(3)}`
+                              : ""
+                          }`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {typeof q.neg_mean === "number"
+                        ? `${q.neg_mean.toFixed(3)}${
+                            typeof q.neg_sd === "number"
+                              ? ` ± ${q.neg_sd.toFixed(3)}`
+                              : ""
+                          }`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs capitalize">
+                      {q.classification ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {genericEntries.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {genericEntries.map(([key, value]) => (
@@ -203,7 +204,9 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const [plateSetupOpen, setPlateSetupOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
 
-  const hasPlateMap = !!plateMap?.wells && plateMap.wells.length > 0;
+  const plates = plateMap?.plates ?? [];
+  const doseUnit = plateMap?.dose_unit ?? "uM";
+  const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
 
   const validTabs = ["readout", "plate-map", "dose-response", "qc", "files"];
   const [activeTab, setActiveTab] = useState("readout");
@@ -286,7 +289,26 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         <TabsContent value="plate-map">
           <div className="mt-4">
             {hasPlateMap ? (
-              <PlateMapViewer plateMap={plateMap} />
+              plates.length > 1 ? (
+                <Tabs defaultValue={plates[0].plate_id}>
+                  <TabsList>
+                    {plates.map((p) => (
+                      <TabsTrigger key={p.plate_id} value={p.plate_id}>
+                        Plate {p.plate_number}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  {plates.map((p) => (
+                    <TabsContent key={p.plate_id} value={p.plate_id}>
+                      <div className="mt-4">
+                        <PlateMapViewer plate={p} doseUnit={doseUnit} />
+                      </div>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              ) : (
+                <PlateMapViewer plate={plates[0]} doseUnit={doseUnit} />
+              )
             ) : run.plate_format ? (
               <div className="space-y-4">
                 <PlateHeatmap format={run.plate_format as PlateFormat} />

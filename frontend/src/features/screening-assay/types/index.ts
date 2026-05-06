@@ -191,7 +191,8 @@ export const NORMALIZATION_SCOPE_LABELS: Record<NormalizationScope, string> = {
 
 export interface DoseResponseConfig {
   curve_type: CurveType;
-  x_readout_name: string;
+  /** null means "use the well's concentration as the X-axis" (default). */
+  x_readout_name: string | null;
   y_readout_name: string;
   hill_slope_constraint: HillSlopeConstraint;
   activity_threshold: number | null;
@@ -237,6 +238,15 @@ export interface OntologyAnnotation {
   terms: OntologyAnnotationTerm[];
 }
 
+export type DoseUnit = "uM" | "nM" | "mM" | "mg/mL";
+
+export const DOSE_UNIT_LABELS: Record<DoseUnit, string> = {
+  uM: "µM",
+  nM: "nM",
+  mM: "mM",
+  "mg/mL": "mg/mL",
+};
+
 export interface Protocol {
   id: string;
   workspace_id: string;
@@ -249,6 +259,8 @@ export interface Protocol {
   parent_protocol_id: string | null;
   status: ProtocolStatus;
   created_by: string;
+  /** Canonical dose unit for all wells + IC50 fits of this protocol's runs. */
+  dose_unit: DoseUnit;
   readout_definitions: ReadoutDefinition[];
   condition_definitions: ConditionDefinition[];
   control_layouts: Record<string, string> | null;
@@ -298,6 +310,11 @@ export interface ReadoutData {
   well_id: string | null;
   molecule_id: string | null;
   registration_number: string | null;
+  /** Molecule.name (free-text label). May equal registration_number for
+   * compounds registered without a meaningful name. */
+  molecule_name: string | null;
+  /** Custom-type identifiers (synonyms / common names) for the molecule. */
+  synonyms: string[];
   batch_id: string | null;
   batch_number: string | null;
   readout_definition_id: string;
@@ -312,7 +329,12 @@ export interface DoseResponseCurve {
   id: string;
   workspace_id: string;
   molecule_id: string;
+  /** Canonical reg ID (e.g. "CV-00602") — primary label in DR table. */
+  registration_number: string | null;
   molecule_name: string | null;
+  /** Vendor / external aliases — shown next to the reg id. */
+  synonyms: string[];
+  smiles: string | null;
   batch_id: string;
   batch_number: string | null;
   protocol_id: string;
@@ -400,6 +422,7 @@ export interface CreateProtocolInput {
   description?: string | null;
   target_id?: string | null;
   category?: string | null;
+  dose_unit?: DoseUnit;
   readout_definitions?: CreateReadoutDefinitionInput[];
   condition_definitions?: CreateConditionDefinitionInput[];
 }
@@ -519,10 +542,12 @@ export interface PlateMapWell {
   well_type: string;
   molecule_id: string | null;
   molecule_name: string | null;
+  synonyms: string[];
+  smiles: string | null;
   batch_id: string | null;
   batch_number: string | null;
-  concentration: number | null;
-  concentration_unit: string | null;
+  /** Dose value in the protocol's dose_unit (carried at the response root). */
+  dose: number | null;
 }
 
 export interface PlateMapSummary {
@@ -534,11 +559,19 @@ export interface PlateMapSummary {
   replicates: number;
 }
 
-export interface PlateMapResponse {
+export interface PlateData {
+  plate_id: string;
   plate_number: number;
   format: string;
   wells: PlateMapWell[];
   summary: PlateMapSummary;
+}
+
+export interface PlateMapResponse {
+  run_id: string;
+  /** Protocol's dose_unit. All `wells[].dose` values are in this unit. */
+  dose_unit: DoseUnit;
+  plates: PlateData[];
 }
 
 export interface CompoundAssignment {

@@ -7,7 +7,7 @@ import {
   ChevronRight,
   Upload,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useProtocol } from "../hooks/use-protocols";
 import {
@@ -51,12 +51,9 @@ const ROLE_OPTIONS: Array<{ value: ImportRole | "ignore"; label: string }> = [
   { value: "plate_name", label: "Plate Name" },
   { value: "concentration", label: "Concentration" },
   { value: "batch_ref", label: "Batch Ref" },
-  { value: "scientist", label: "Scientist" },
   { value: "readout", label: "Readout" },
   { value: "ignore", label: "Ignore" },
 ];
-
-const CONC_UNITS = ["uM", "nM", "mM", "mg/mL"] as const;
 
 interface RunImportWizardProps {
   runId: string;
@@ -70,7 +67,6 @@ interface MappingDraft {
   roles: Record<string, ImportRole | null>;
   // header → readout_definition_id, only for headers with role=readout
   readoutDefByHeader: Record<string, string>;
-  concentrationUnit: string;
   acknowledgedLowConfidence: boolean;
 }
 
@@ -78,7 +74,6 @@ function emptyDraft(): MappingDraft {
   return {
     roles: {},
     readoutDefByHeader: {},
-    concentrationUnit: "uM",
     acknowledgedLowConfidence: false,
   };
 }
@@ -93,9 +88,43 @@ function suggestionToInitialDraft(
   return {
     roles,
     readoutDefByHeader: {},
-    concentrationUnit: "uM",
     acknowledgedLowConfidence: false,
   };
+}
+
+/** Auto-bind unclaimed headers to readout defs whose name matches.
+ *
+ * Synonym matches (well/plate_name/concentration/batch_ref) win — only
+ * headers without a non-readout role are eligible. This is what restores
+ * frictionless mapping for protocol-defined Text columns like "Scientist"
+ * (which used to be a hard-coded role, now lives as a Text readout def).
+ */
+function autoBindReadoutDefs(
+  draft: MappingDraft,
+  headers: string[],
+  defs: { id: string; name: string; data_type: string }[],
+): MappingDraft {
+  const bindable = defs.filter(
+    (d) => d.data_type === "text" || d.data_type === "numeric",
+  );
+  if (bindable.length === 0) return draft;
+  const defByNorm = new Map(bindable.map((d) => [normalize(d.name), d]));
+  const next: MappingDraft = {
+    ...draft,
+    roles: { ...draft.roles },
+    readoutDefByHeader: { ...draft.readoutDefByHeader },
+  };
+  for (const h of headers) {
+    const def = defByNorm.get(normalize(h));
+    if (!def) continue;
+    const currentRole = next.roles[h] ?? null;
+    if (currentRole !== null && currentRole !== "readout") continue;
+    next.roles[h] = "readout";
+    if (!next.readoutDefByHeader[h]) {
+      next.readoutDefByHeader[h] = def.id;
+    }
+  }
+  return next;
 }
 
 function applyTemplateToDraft(
@@ -106,7 +135,6 @@ function applyTemplateToDraft(
   const next: MappingDraft = {
     ...draft,
     roles: { ...draft.roles },
-    concentrationUnit: template.concentration_unit || draft.concentrationUnit,
   };
   const mapping = template.column_mapping as Record<string, unknown>;
   const setIfPresent = (header: unknown, role: ImportRole) => {
@@ -118,7 +146,6 @@ function applyTemplateToDraft(
   setIfPresent(mapping.plate_name, "plate_name");
   setIfPresent(mapping.concentration, "concentration");
   setIfPresent(mapping.batch_ref, "batch_ref");
-  setIfPresent(mapping.scientist, "scientist");
   if (Array.isArray(mapping.readout_headers)) {
     for (const h of mapping.readout_headers) {
       if (typeof h === "string" && headers.includes(h)) {
@@ -224,6 +251,20 @@ export function RunImportWizard({
     [previewMutation, templates],
   );
 
+  // Run readout-def auto-bind once the preview AND the protocol's readout
+  // defs are both available. Doing this in an effect (rather than inside
+  // the preview onSuccess callback) avoids a race where a fast file parse
+  // resolves before the protocol query — under which `readoutDefs` was an
+  // empty array and Scientist / etc. silently failed to auto-bind.
+  const autoBoundForPreviewIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!preview) return;
+    if (readoutDefs.length === 0) return;
+    if (autoBoundForPreviewIdRef.current === preview.preview_id) return;
+    autoBoundForPreviewIdRef.current = preview.preview_id;
+    setDraft((d) => autoBindReadoutDefs(d, preview.headers, readoutDefs));
+  }, [preview, readoutDefs]);
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -267,8 +308,8 @@ export function RunImportWizard({
   const handleSetRole = (header: string, role: ImportRole | "ignore") => {
     setDraft((d) => {
       const nextRoles = { ...d.roles };
-      // well, plate_name, concentration, batch_ref, scientist are unique — clear any existing.
-      const unique: ImportRole[] = ["well", "plate_name", "concentration", "batch_ref", "scientist"];
+      // well, plate_name, concentration, batch_ref are unique — clear any existing.
+      const unique: ImportRole[] = ["well", "plate_name", "concentration", "batch_ref"];
       const r: ImportRole | null = role === "ignore" ? null : role;
       if (r && unique.includes(r)) {
         for (const [h, existing] of Object.entries(nextRoles)) {
@@ -311,7 +352,6 @@ export function RunImportWizard({
       plate_name: find("plate_name"),
       concentration: find("concentration"),
       batch_ref: find("batch_ref"),
-      scientist: find("scientist"),
       readout_columns,
     };
   };
@@ -327,7 +367,6 @@ export function RunImportWizard({
       {
         preview_id: preview.preview_id,
         mapping,
-        concentration_unit: draft.concentrationUnit,
         replace_existing: false,
       },
       {
@@ -341,13 +380,11 @@ export function RunImportWizard({
               plate_name: mapping.plate_name,
               concentration: mapping.concentration,
               batch_ref: mapping.batch_ref,
-              scientist: mapping.scientist,
               readout_headers: mapping.readout_columns.map((rc) => rc.header),
             };
             createTemplate.mutate({
               name: templateName.trim(),
               column_mapping,
-              concentration_unit: draft.concentrationUnit,
             });
           }
           setStep(4);
@@ -389,13 +426,11 @@ export function RunImportWizard({
             preview={preview}
             draft={draft}
             readoutDefs={readoutDefs}
+            doseUnit={protocol?.dose_unit ?? "uM"}
             appliedTemplate={appliedTemplate}
             onClearTemplate={() => setAppliedTemplate(null)}
             onSetRole={handleSetRole}
             onSetReadoutDef={handleSetReadoutDef}
-            onSetConcentrationUnit={(u) =>
-              setDraft((d) => ({ ...d, concentrationUnit: u }))
-            }
             onAckLowConfidence={(v) =>
               setDraft((d) => ({ ...d, acknowledgedLowConfidence: v }))
             }
@@ -576,18 +611,18 @@ function MappingStep({
   onClearTemplate,
   onSetRole,
   onSetReadoutDef,
-  onSetConcentrationUnit,
+  doseUnit,
   onAckLowConfidence,
   lowConfidenceHeaders,
 }: {
   preview: PreviewRunFileResponse;
   draft: MappingDraft;
   readoutDefs: { id: string; name: string }[];
+  doseUnit: string;
   appliedTemplate: RunImportTemplate | null;
   onClearTemplate: () => void;
   onSetRole: (h: string, r: ImportRole | "ignore") => void;
   onSetReadoutDef: (h: string, defId: string) => void;
-  onSetConcentrationUnit: (u: string) => void;
   onAckLowConfidence: (v: boolean) => void;
   lowConfidenceHeaders: string[];
 }) {
@@ -679,23 +714,11 @@ function MappingStep({
         </table>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Label className="text-sm">Concentration unit</Label>
-        <Select
-          value={draft.concentrationUnit}
-          onValueChange={onSetConcentrationUnit}
-        >
-          <SelectTrigger className="h-8 w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CONC_UNITS.map((u) => (
-              <SelectItem key={u} value={u}>
-                {u}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        Dose values in this file are interpreted as{" "}
+        <span className="font-mono font-medium text-foreground">{doseUnit}</span>{" "}
+        (per protocol). To change the unit, edit the protocol&apos;s Dose Unit
+        on the Design tab.
       </div>
 
       {lowConfidenceHeaders.length > 0 && (
@@ -862,6 +885,22 @@ function ConfirmStep({
           </p>
         </div>
       </div>
+
+      {result.compute_warning && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          <div className="mb-1 flex items-center gap-2 font-medium text-amber-300">
+            <AlertCircle className="h-4 w-4" />
+            Post-import calculation failed
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Normalization / aggregation did not run. Dose-response curves and
+            QC metrics will be empty until this is resolved.
+          </p>
+          <p className="mt-2 break-words font-mono text-xs">
+            {result.compute_warning}
+          </p>
+        </div>
+      )}
 
       <div className="rounded-md border p-3">
         <label className="flex items-center gap-2 text-sm">

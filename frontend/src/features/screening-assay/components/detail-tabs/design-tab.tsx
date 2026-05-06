@@ -75,6 +75,25 @@ import {
   type ReadoutNormalization,
 } from "../../types";
 
+// Reserved readout-definition names that collide with built-in well metadata.
+// Kept in sync with backend domain.screening_assay.protocol._RESERVED_READOUT_NAMES.
+const RESERVED_READOUT_NAMES: ReadonlySet<string> = new Set([
+  "concentration",
+  "dose",
+  "well",
+  "plate",
+  "batch",
+  "compound",
+]);
+
+function isReservedReadoutName(name: string): boolean {
+  return RESERVED_READOUT_NAMES.has(name.trim().toLowerCase());
+}
+
+// Sentinel for the X-axis dropdown that means "use the well's concentration"
+// (mapped to x_readout_name=null in the payload).
+const WELL_CONC_X = "__well_concentration__";
+
 // ---------------------------------------------------------------------------
 // DesignTab
 // ---------------------------------------------------------------------------
@@ -115,9 +134,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [rdUnit, setRdUnit] = useState("");
   const [rdAggregation, setRdAggregation] = useState("none");
   const [rdNormalization, setRdNormalization] = useState("none");
-  // Dose-response config sub-fields (only used when rdDataType === "dose_response")
+  // Dose-response config sub-fields (only used when rdDataType === "dose_response").
+  // X-axis sentinel: when drXReadout === WELL_CONC_X, the curve fits against the
+  // well's own concentration (the default and most common case). Mapped to
+  // x_readout_name=null in the payload.
   const [drCurveType, setDrCurveType] = useState<CurveType>("ic50");
-  const [drXReadout, setDrXReadout] = useState("");
+  const [drXReadout, setDrXReadout] = useState<string>(WELL_CONC_X);
   const [drYReadout, setDrYReadout] = useState("");
   const [drHillConstraint, setDrHillConstraint] =
     useState<HillSlopeConstraint>("unconstrained");
@@ -127,7 +149,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
   const resetDoseResponseFields = () => {
     setDrCurveType("ic50");
-    setDrXReadout("");
+    setDrXReadout(WELL_CONC_X);
     setDrYReadout("");
     setDrHillConstraint("unconstrained");
     setDrNormalizationScope("per_plate");
@@ -144,7 +166,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdNormalization(rd.normalization);
     if (rd.dose_response_config) {
       setDrCurveType(rd.dose_response_config.curve_type);
-      setDrXReadout(rd.dose_response_config.x_readout_name);
+      setDrXReadout(rd.dose_response_config.x_readout_name ?? WELL_CONC_X);
       setDrYReadout(rd.dose_response_config.y_readout_name);
       setDrHillConstraint(rd.dose_response_config.hill_slope_constraint);
       setDrNormalizationScope(rd.dose_response_config.normalization_scope);
@@ -172,10 +194,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   /** Build the dose_response_config payload for add/update mutations. */
   const buildDoseResponseConfig = (): Record<string, unknown> | null => {
     if (rdDataType !== "dose_response") return null;
-    if (!drXReadout || !drYReadout) return null;
+    if (!drYReadout) return null;
     return {
       curve_type: drCurveType,
-      x_readout_name: drXReadout,
+      x_readout_name: drXReadout === WELL_CONC_X ? null : drXReadout,
       y_readout_name: drYReadout,
       hill_slope_constraint: drHillConstraint,
       normalization_scope: drNormalizationScope,
@@ -222,9 +244,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <Label className="text-xs">X-Axis Readout</Label>
             <Select value={drXReadout} onValueChange={setDrXReadout}>
               <SelectTrigger>
-                <SelectValue placeholder="Select..." />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={WELL_CONC_X}>
+                  (use well concentration)
+                </SelectItem>
                 {candidates.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
@@ -458,8 +483,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                                 .curve_type as CurveType
                             ]
                           }
-                          : {rd.dose_response_config.x_readout_name} vs{" "}
-                          {rd.dose_response_config.y_readout_name})
+                          :{" "}
+                          {rd.dose_response_config.x_readout_name ??
+                            "well concentration"}{" "}
+                          vs {rd.dose_response_config.y_readout_name})
                         </span>
                       )}
                       {rd.pick_list_values &&
@@ -802,6 +829,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 onChange={(e) => setRdName(e.target.value)}
                 placeholder="e.g. % Inhibition"
               />
+              {isReservedReadoutName(rdName) && (
+                <p className="text-xs text-destructive">
+                  &lsquo;{rdName.trim()}&rsquo; is a reserved well-metadata name
+                  and cannot be used as a readout. The well&apos;s concentration,
+                  batch, and compound are tracked on the well itself, not as
+                  readouts.
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Data Type</Label>
@@ -880,9 +915,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <Button
               disabled={
                 !rdName.trim() ||
+                isReservedReadoutName(rdName) ||
                 addReadoutDef.isPending ||
-                (rdDataType === "dose_response" &&
-                  (!drXReadout || !drYReadout))
+                (rdDataType === "dose_response" && !drYReadout)
               }
               onClick={() => {
                 addReadoutDef.mutate(
@@ -936,6 +971,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 value={rdName}
                 onChange={(e) => setRdName(e.target.value)}
               />
+              {isReservedReadoutName(rdName) && (
+                <p className="text-xs text-destructive">
+                  &lsquo;{rdName.trim()}&rsquo; is a reserved well-metadata name
+                  and cannot be used as a readout.
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Data Type</Label>
@@ -1007,9 +1048,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <Button
               disabled={
                 !rdName.trim() ||
+                isReservedReadoutName(rdName) ||
                 updateReadoutDef.isPending ||
-                (rdDataType === "dose_response" &&
-                  (!drXReadout || !drYReadout))
+                (rdDataType === "dose_response" && !drYReadout)
               }
               onClick={() => {
                 if (!editingReadoutId) return;

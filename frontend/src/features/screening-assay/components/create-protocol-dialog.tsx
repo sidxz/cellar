@@ -41,6 +41,7 @@ import { useCreateProtocol } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
 import {
   CURVE_TYPE_LABELS,
+  DOSE_UNIT_LABELS,
   HILL_SLOPE_CONSTRAINT_LABELS,
   NORMALIZATION_SCOPE_LABELS,
   PROTOCOL_TYPE_LABELS,
@@ -48,8 +49,28 @@ import {
   READOUT_DATA_TYPE_LABELS,
   READOUT_NORMALIZATION_LABELS,
   type CreateReadoutDefinitionInput,
+  type DoseUnit,
   type ProtocolType,
 } from "../types";
+
+// Sentinel for the X-axis dropdown that means "use the well's concentration"
+// (mapped to x_readout_name=null in the payload).
+const WELL_CONC_X = "__well_concentration__";
+
+// Reserved readout-definition names that collide with built-in well metadata.
+// Kept in sync with backend domain.screening_assay.protocol._RESERVED_READOUT_NAMES.
+const RESERVED_READOUT_NAMES: ReadonlySet<string> = new Set([
+  "concentration",
+  "dose",
+  "well",
+  "plate",
+  "batch",
+  "compound",
+]);
+
+function isReservedReadoutName(name: string): boolean {
+  return RESERVED_READOUT_NAMES.has(name.trim().toLowerCase());
+}
 
 interface CreateProtocolDialogProps {
   open: boolean;
@@ -95,7 +116,7 @@ function emptyReadoutDef(order: number): ReadoutDefState {
     display_order: order,
     pick_list_values: "",
     dr_curve_type: "ic50",
-    dr_x_readout: "",
+    dr_x_readout: WELL_CONC_X,
     dr_y_readout: "",
     dr_hill_constraint: "unconstrained",
     dr_normalization_scope: "per_plate",
@@ -127,6 +148,7 @@ export function CreateProtocolDialog({
   const [targetId, setTargetId] = useState<string>("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [doseUnit, setDoseUnit] = useState<DoseUnit>("uM");
   const [readoutDefs, setReadoutDefs] = useState<ReadoutDefState[]>([
     emptyReadoutDef(1),
   ]);
@@ -143,6 +165,7 @@ export function CreateProtocolDialog({
     setTargetId("");
     setCategory("");
     setDescription("");
+    setDoseUnit("uM");
     setProjectId(defaultProjectId ?? null);
     setReadoutDefs([emptyReadoutDef(1)]);
     setConditionDefs([]);
@@ -214,8 +237,14 @@ export function CreateProtocolDialog({
   };
 
   const validReadouts = readoutDefs.filter((rd) => rd.name.trim());
+  const hasReservedReadoutName = validReadouts.some((rd) =>
+    isReservedReadoutName(rd.name)
+  );
   const canSubmit =
-    name.trim() && validReadouts.length > 0 && !createMutation.isPending;
+    name.trim() &&
+    validReadouts.length > 0 &&
+    !hasReservedReadoutName &&
+    !createMutation.isPending;
 
   const handleSubmit = () => {
     const readout_definitions: CreateReadoutDefinitionInput[] =
@@ -237,10 +266,13 @@ export function CreateProtocolDialog({
         if (rd.data_type === "pick_list" && rd.pick_list_values.trim()) {
           base.pick_list_values = rd.pick_list_values.split(",").map((v) => v.trim()).filter(Boolean);
         }
-        if (rd.data_type === "dose_response" && rd.dr_x_readout && rd.dr_y_readout) {
+        if (rd.data_type === "dose_response" && rd.dr_y_readout) {
           base.dose_response_config = {
             curve_type: rd.dr_curve_type,
-            x_readout_name: rd.dr_x_readout,
+            x_readout_name:
+              rd.dr_x_readout === WELL_CONC_X || !rd.dr_x_readout
+                ? null
+                : rd.dr_x_readout,
             y_readout_name: rd.dr_y_readout,
             hill_slope_constraint: rd.dr_hill_constraint,
             activity_threshold: rd.dr_activity_threshold ? parseFloat(rd.dr_activity_threshold) : null,
@@ -267,6 +299,7 @@ export function CreateProtocolDialog({
         target_id: targetId || null,
         category: category || null,
         description: description || null,
+        dose_unit: doseUnit,
         readout_definitions,
         condition_definitions: condition_definitions.length > 0 ? condition_definitions : undefined,
       },
@@ -374,6 +407,29 @@ export function CreateProtocolDialog({
                 searchPlaceholder="Search targets..."
               />
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Dose Unit</Label>
+            <Select
+              value={doseUnit}
+              onValueChange={(v) => setDoseUnit(v as DoseUnit)}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(DOSE_UNIT_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Canonical unit for all wells and IC50 fits of runs of this
+              protocol. Picked once at protocol design time.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -484,6 +540,14 @@ export function CreateProtocolDialog({
                               updateReadout(index, "name", e.target.value)
                             }
                           />
+                          {isReservedReadoutName(rd.name) && (
+                            <p className="text-[11px] text-destructive">
+                              Reserved well-metadata name — pick a different
+                              readout name (well concentration, batch, and
+                              compound are tracked on the well, not as
+                              readouts).
+                            </p>
+                          )}
                         </div>
                         <div className="grid gap-1">
                           <Label className="text-xs">Data Type</Label>
@@ -637,8 +701,11 @@ export function CreateProtocolDialog({
                                 value={rd.dr_x_readout}
                                 onValueChange={(v) => updateReadout(index, "dr_x_readout", v)}
                               >
-                                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value={WELL_CONC_X}>
+                                    (use well concentration)
+                                  </SelectItem>
                                   {readoutDefs
                                     .filter((other, i) => i !== index && other.name.trim() && other.data_type === "numeric")
                                     .map((other) => (

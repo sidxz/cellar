@@ -25,6 +25,7 @@ import {
 } from "../../types";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { worstZPrime } from "../../lib/qc-metrics";
 
 interface RunsTabProps {
   protocol: Protocol;
@@ -32,7 +33,7 @@ interface RunsTabProps {
 }
 
 function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
-  const zp = qcMetrics?.z_prime as number | undefined;
+  const zp = worstZPrime(qcMetrics);
   if (zp == null) return <span className="text-muted-foreground">&mdash;</span>;
   if (zp >= 0.5)
     return (

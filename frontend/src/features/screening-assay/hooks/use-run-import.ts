@@ -11,7 +11,6 @@ export type ImportRole =
   | "plate_name"
   | "concentration"
   | "batch_ref"
-  | "scientist"
   | "readout";
 
 export type ImportConfidence = "high" | "medium" | "low";
@@ -54,14 +53,12 @@ export interface ColumnMappingPayload {
   plate_name: string | null;
   concentration: string | null;
   batch_ref: string | null;
-  scientist: string | null;
   readout_columns: ReadoutColumnPayload[];
 }
 
 export interface ImportRunFilePayload {
   preview_id: string;
   mapping: ColumnMappingPayload;
-  concentration_unit: string;
   replace_existing: boolean;
 }
 
@@ -74,6 +71,8 @@ export interface ImportRunFileResponse {
   controls_from_template: number;
   controls_unclassified: number;
   skipped_rows: number;
+  /** Non-fatal warning when post-import normalization fails (missing controls etc). */
+  compute_warning: string | null;
 }
 
 export interface RunImportTemplate {
@@ -82,7 +81,6 @@ export interface RunImportTemplate {
   name: string;
   description: string | null;
   column_mapping: Record<string, unknown>;
-  concentration_unit: string;
   created_by: string;
   created_at: string;
   updated_at: string | null;
@@ -92,16 +90,9 @@ export interface RunImportTemplate {
 
 export function usePreviewRunFile(runId: string) {
   return useMutation({
-    mutationFn: async ({
-      file,
-      concentrationUnit = "uM",
-    }: {
-      file: File;
-      concentrationUnit?: string;
-    }) => {
+    mutationFn: async ({ file }: { file: File }) => {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("concentration_unit", concentrationUnit);
       return customInstance<PreviewRunFileResponse>({
         url: `/api/v1/runs/${runId}/preview-file`,
         method: "POST",
@@ -147,7 +138,6 @@ export function useCreateRunImportTemplate() {
       name: string;
       description?: string;
       column_mapping: Record<string, unknown>;
-      concentration_unit?: string;
     }) =>
       customInstance<RunImportTemplate>({
         url: `/api/v1/run-import-templates`,
