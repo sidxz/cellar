@@ -55,7 +55,6 @@ class SQLAlchemyRunImportTemplateRepository:
             existing.name = entity.name
             existing.description = entity.description
             existing.column_mapping = entity.column_mapping
-            existing.concentration_unit = entity.concentration_unit
         else:
             self._uow.session.add(self._to_model(entity))
 
@@ -72,7 +71,6 @@ class SQLAlchemyRunImportTemplateRepository:
             name=model.name,
             description=model.description,
             column_mapping=model.column_mapping,
-            concentration_unit=model.concentration_unit,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -86,6 +84,5 @@ class SQLAlchemyRunImportTemplateRepository:
             name=entity.name,
             description=entity.description,
             column_mapping=entity.column_mapping,
-            concentration_unit=entity.concentration_unit,
             created_by=entity.created_by,
         )

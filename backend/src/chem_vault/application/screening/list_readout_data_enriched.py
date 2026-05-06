@@ -28,6 +28,8 @@ class ListReadoutDataEnrichedQuery(Query):
 class EnrichedReadoutData:
     readout: ReadoutData
     registration_number: str | None
+    molecule_name: str | None
+    synonyms: list[str]
     batch_number: str | None
 
 
@@ -59,13 +61,27 @@ class ListReadoutDataEnriched:
             mol_ids = list({rd.molecule_id for rd in data if rd.molecule_id})
             batch_ids = list({rd.batch_id for rd in data if rd.batch_id})
 
-            mol_map = await self._reader.resolve_molecule_registration_numbers(mol_ids)
+            mol_info = await self._reader.resolve_molecules(mol_ids)
             batch_map = await self._reader.resolve_batch_numbers(batch_ids)
 
             return Success([
                 EnrichedReadoutData(
                     readout=rd,
-                    registration_number=mol_map.get(rd.molecule_id) if rd.molecule_id else None,
+                    registration_number=(
+                        mol_info[rd.molecule_id].registration_number
+                        if rd.molecule_id and rd.molecule_id in mol_info
+                        else None
+                    ),
+                    molecule_name=(
+                        mol_info[rd.molecule_id].name
+                        if rd.molecule_id and rd.molecule_id in mol_info
+                        else None
+                    ),
+                    synonyms=(
+                        mol_info[rd.molecule_id].synonyms
+                        if rd.molecule_id and rd.molecule_id in mol_info
+                        else []
+                    ),
                     batch_number=batch_map.get(rd.batch_id) if rd.batch_id else None,
                 )
                 for rd in data

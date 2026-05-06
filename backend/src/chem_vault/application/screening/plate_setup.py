@@ -20,14 +20,12 @@ from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.screening_assay.enums import ReadoutDataType, WellType
 from chem_vault.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from chem_vault.domain.screening_assay.run import Plate, Well
-from chem_vault.domain.shared.enums import ConcentrationUnit
 from chem_vault.domain.shared.errors import (
     AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.value_objects import Concentration
 from chem_vault.infrastructure.parsers.tabular_file import (
     ParsedTable,
     TabularParseError,
@@ -204,8 +202,9 @@ class SetUpRunPlateCommand(Command):
     run_id: uuid.UUID
     plate_number: int = 1
     compound_assignments: list[CompoundAssignment]
-    concentration_series: list[float] | None = None  # nM, highest first
-    concentration_unit: str = "nM"
+    # Dose values in the protocol's dose_unit. The unit is NOT specified per
+    # request — it lives on Protocol.dose_unit (single source of truth).
+    concentration_series: list[float] | None = None
 
 
 class SetUpRunPlate:
@@ -264,16 +263,6 @@ class SetUpRunPlate:
             if conc_series is None:
                 conc_series = list(_DEFAULT_DOSE_SERIES)
 
-            # Parse concentration unit
-            try:
-                conc_unit = ConcentrationUnit(input.concentration_unit)
-            except ValueError:
-                return Failure(
-                    ValidationError(
-                        f"Invalid concentration unit: '{input.concentration_unit}'"
-                    )
-                )
-
             # 3. Resolve molecules
             refs = [
                 MoleculeReference(
@@ -326,9 +315,7 @@ class SetUpRunPlate:
                             column=column,
                             well_type=WellType.SAMPLE,
                             batch_id=batch_id,
-                            concentration=Concentration(
-                                value=conc_value, unit=conc_unit
-                            ),
+                            dose=conc_value,
                         )
                     )
 

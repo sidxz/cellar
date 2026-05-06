@@ -405,7 +405,11 @@ def register_screening(container: Container) -> None:
     def _dose_response_enriched(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListDoseResponseEnriched(
-            uow, SQLAlchemyDoseResponseCurveRepository(uow), c[DoseResponseEnrichedReader]
+            uow,
+            SQLAlchemyDoseResponseCurveRepository(uow),
+            c[DoseResponseEnrichedReader],
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
         )
 
     container.define(ListDoseResponseEnriched, _dose_response_enriched)
@@ -652,10 +656,15 @@ def register_screening(container: Container) -> None:
         CompoundCurvesReader,
         lambda c: SQLAlchemyCompoundCurvesReader(c[async_sessionmaker]),
     )
-    container.define(
-        GetCompoundCurves,
-        lambda c: GetCompoundCurves(reader=c[CompoundCurvesReader]),
-    )
+    def _get_compound_curves(c):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetCompoundCurves(
+            reader=c[CompoundCurvesReader],
+            uow=uow,
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
+
+    container.define(GetCompoundCurves, _get_compound_curves)
 
     container.define(
         ProtocolStatsReader,

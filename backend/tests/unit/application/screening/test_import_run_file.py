@@ -729,6 +729,150 @@ class TestImportRunFile:
         assert wells_by_pos[("A", 3)].well_type == WellType.SAMPLE
 
 
+    @pytest.mark.asyncio
+    async def test_template_wins_over_row_concentration(self) -> None:
+        """A control well with a concentration value MUST stay classified by
+        the template — the template is the canonical source of well type.
+
+        Regression: prior logic forced WellType.SAMPLE whenever the row had
+        a concentration or batch_ref, skipping the template and silently
+        breaking %-Inhibition normalization (no POS controls -> no curves).
+        """
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        # A1 = positive_control per template. The file lists a concentration
+        # for A1 (e.g. the inhibitor's fixed dose) — must NOT mis-classify.
+        tmpl = _make_plate_template(
+            auth.workspace_id,
+            fmt=PlateFormat.F96,
+            template_map={"A1": "positive_control", "A2": "negative_control"},
+        )
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+            control_layouts={PlateFormat.F96.value: tmpl.id},
+        )
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=(
+                b"Well,Concentration,Batch,Raw Data\n"
+                b"A1,100,,0.07\n"   # POS control with inhibitor concentration
+                b"A2,,,0.95\n"      # NEG control, blank conc
+                b"A3,33.3,LG-1,0.5\n"  # SAMPLE
+                b"H12,33.3,LG-1,0.5\n"  # corner -> 96-well inferred
+            ),
+            filename="x.csv",
+        )
+        batch = FakeBatch()
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    concentration="Concentration",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        wells_by_pos = {(w.row, w.column): w for w in run.wells}
+        # Critical assertions — template wins over row data.
+        assert wells_by_pos[("A", 1)].well_type == WellType.POSITIVE_CONTROL
+        assert wells_by_pos[("A", 2)].well_type == WellType.NEGATIVE_CONTROL
+        assert wells_by_pos[("A", 3)].well_type == WellType.SAMPLE
+        # POS well preserves its dose (didn't get dropped).
+        assert wells_by_pos[("A", 1)].dose == 100
+
+    @pytest.mark.asyncio
+    async def test_control_well_with_unresolved_batch_not_dropped(self) -> None:
+        """A control well classified by template stays even if its row has an
+        unresolved batch_ref. Only SAMPLE wells with unresolved batches skip.
+        """
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        tmpl = _make_plate_template(
+            auth.workspace_id,
+            fmt=PlateFormat.F96,
+            template_map={"A1": "positive_control"},
+        )
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+            control_layouts={PlateFormat.F96.value: tmpl.id},
+        )
+        # Need at least one well that's NEGATIVE_CONTROL for normalization
+        # not to fail at calc time. Add A2 with NEG.
+        tmpl.template_map["A2"] = "negative_control"
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=(
+                b"Well,Batch,Raw Data\n"
+                b"A1,LG-MISSING,0.07\n"  # POS w/ unresolved batch — keep
+                b"A2,,0.95\n"             # NEG, blank
+                b"A3,LG-MISSING,0.5\n"   # SAMPLE w/ unresolved — skip
+                b"H12,,0.5\n"             # corner — 96-well
+            ),
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={},
+            store=store,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        wells_by_pos = {(w.row, w.column): w for w in run.wells}
+        # POS control persisted with batch_id=None (unresolved kept anyway).
+        assert ("A", 1) in wells_by_pos
+        assert wells_by_pos[("A", 1)].well_type == WellType.POSITIVE_CONTROL
+        assert wells_by_pos[("A", 1)].batch_id is None
+        # NEG control persisted.
+        assert ("A", 2) in wells_by_pos
+        # SAMPLE A3 with unresolved batch was skipped.
+        assert ("A", 3) not in wells_by_pos
+        # Corner H12 is a SAMPLE with no batch (template silent for H12) — kept.
+        assert ("H", 12) in wells_by_pos
+
+
 # ---------------------------------------------------------------------------
 # NadD fixture end-to-end
 # ---------------------------------------------------------------------------

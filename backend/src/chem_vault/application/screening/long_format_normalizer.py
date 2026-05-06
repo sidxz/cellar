@@ -41,11 +41,12 @@ Role = Literal[
     "plate_name",
     "concentration",
     "batch_ref",
-    "scientist",
     "readout",
 ]
 
 Confidence = Literal["high", "medium", "low"]
+
+ReadoutValueKind = Literal["numeric", "text"]
 
 
 # ---------------------------------------------------------------------------
@@ -55,10 +56,15 @@ Confidence = Literal["high", "medium", "low"]
 
 @dataclass(frozen=True)
 class ReadoutColumn:
-    """A header that produces readout values bound to a readout definition."""
+    """A header that produces readout values bound to a readout definition.
+
+    ``data_type`` controls how cells are parsed: ``"numeric"`` runs the
+    standard float parse; ``"text"`` keeps the stripped raw string.
+    """
 
     header: str
     readout_definition_id: uuid.UUID
+    data_type: ReadoutValueKind = "numeric"
 
 
 @dataclass(frozen=True)
@@ -69,7 +75,6 @@ class ColumnMapping:
     plate_name: str | None = None
     concentration: str | None = None
     batch_ref: str | None = None
-    scientist: str | None = None
     readout_columns: tuple[ReadoutColumn, ...] = ()
 
 
@@ -122,8 +127,7 @@ class LongFormatRow:
     well: WellPosition
     batch_ref: str | None
     concentration: float | None
-    readouts: dict[uuid.UUID, float]
-    scientist: str | None
+    readouts: dict[uuid.UUID, float | str]
 
 
 @dataclass(frozen=True)
@@ -188,18 +192,6 @@ _SYNONYMS: dict[Role, frozenset[str]] = {
                 "sample id",
                 "compound id",
                 "lgcy batch name",
-            )
-        ]
-    ),
-    "scientist": frozenset(
-        [
-            _norm(x)
-            for x in (
-                "scientist",
-                "operator",
-                "user",
-                "performed by",
-                "analyst",
             )
         ]
     ),
@@ -367,7 +359,7 @@ def normalize(
         return Failure(
             ValidationError(f"Well column '{mapping.well}' not found in file headers")
         )
-    for col in (mapping.plate_name, mapping.concentration, mapping.batch_ref, mapping.scientist):
+    for col in (mapping.plate_name, mapping.concentration, mapping.batch_ref):
         if col is not None and col not in table.headers:
             return Failure(
                 ValidationError(f"Column '{col}' not found in file headers")
@@ -405,17 +397,20 @@ def normalize(
 
         conc = _parse_float(raw.get(mapping.concentration)) if mapping.concentration else None
 
-        scientist = (
-            (raw.get(mapping.scientist) or "").strip()
-            if mapping.scientist
-            else None
-        ) or None
-
-        readouts: dict[uuid.UUID, float] = {}
+        readouts: dict[uuid.UUID, float | str] = {}
         for rc in mapping.readout_columns:
-            v = _parse_float(raw.get(rc.header))
-            if v is not None:
-                readouts[rc.readout_definition_id] = v
+            cell = raw.get(rc.header)
+            if rc.data_type == "text":
+                if cell is None:
+                    continue
+                text = str(cell).strip()
+                if not text:
+                    continue
+                readouts[rc.readout_definition_id] = text
+            else:
+                v = _parse_float(cell)
+                if v is not None:
+                    readouts[rc.readout_definition_id] = v
 
         rows.append(
             LongFormatRow(
@@ -424,7 +419,6 @@ def normalize(
                 batch_ref=batch_ref,
                 concentration=conc,
                 readouts=readouts,
-                scientist=scientist,
             )
         )
 

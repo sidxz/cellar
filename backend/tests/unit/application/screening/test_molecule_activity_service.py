@@ -45,7 +45,6 @@ def _make_curve(
     protocol_id: uuid.UUID = PROTO_ID,
     curve_type: CurveType = CurveType.IC50,
     fitted_value: float = 5.2,
-    fitted_unit: str = "uM",
     hill_slope: float = -1.1,
     top: float = 100.0,
     bottom: float = 0.5,
@@ -64,7 +63,6 @@ def _make_curve(
         run_id=uuid.uuid4(),
         curve_type=curve_type,
         fitted_value=fitted_value,
-        fitted_unit=fitted_unit,
         hill_slope=hill_slope,
         top=top,
         bottom=bottom,
@@ -78,11 +76,15 @@ def _make_curve(
 
 
 def _make_service(curve_repo=None) -> MoleculeActivityService:
+    protocol_repo = AsyncMock()
+    # find_by_ids returns [] by default — service falls back to "uM" for
+    # IC50 unit decoration. Tests that need a specific unit should override.
+    protocol_repo.find_by_ids = AsyncMock(return_value=[])
     return MoleculeActivityService(
         uow=_FakeUoW(),
         readout_repo=AsyncMock(),
         curve_repo=curve_repo or AsyncMock(),
-        protocol_repo=AsyncMock(),
+        protocol_repo=protocol_repo,
     )
 
 

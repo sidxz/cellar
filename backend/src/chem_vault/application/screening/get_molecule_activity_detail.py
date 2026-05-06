@@ -49,7 +49,7 @@ class CurveDetail:
     batch_id: uuid.UUID
     curve_type: str
     fitted_value: float
-    fitted_unit: str
+    fitted_unit: str  # protocol's dose_unit, set by caller from the protocol
     hill_slope: float
     r_squared: float
     curve_class: str | None
@@ -61,14 +61,16 @@ class CurveDetail:
     raw_data: list[dict[str, Any]]
 
     @classmethod
-    def from_domain(cls, curve: DoseResponseCurve) -> CurveDetail:
+    def from_domain(
+        cls, curve: DoseResponseCurve, *, dose_unit: str
+    ) -> CurveDetail:
         return cls(
             curve_id=curve.id,
             run_id=curve.run_id,
             batch_id=curve.batch_id,
             curve_type=curve.curve_type.value,
             fitted_value=curve.fitted_value,
-            fitted_unit=curve.fitted_unit,
+            fitted_unit=dose_unit,
             hill_slope=curve.hill_slope,
             r_squared=curve.r_squared,
             curve_class=curve.curve_class.value if curve.curve_class else None,
@@ -150,13 +152,17 @@ class GetMoleculeActivityDetail:
                 sorted_curves = sorted(
                     protocol_curves, key=lambda c: c.r_squared, reverse=True
                 )
+                dose_unit = proto.dose_unit.value if proto else "uM"
                 groups.append(
                     ProtocolCurveGroup(
                         protocol_id=protocol_id,
                         protocol_name=proto.name if proto else "Unknown",
                         protocol_type=proto.protocol_type.value if proto else "unknown",
                         target_id=proto.target_id if proto else None,
-                        curves=[CurveDetail.from_domain(c) for c in sorted_curves],
+                        curves=[
+                            CurveDetail.from_domain(c, dose_unit=dose_unit)
+                            for c in sorted_curves
+                        ],
                     )
                 )
 

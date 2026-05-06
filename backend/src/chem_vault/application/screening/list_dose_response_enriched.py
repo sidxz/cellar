@@ -14,7 +14,11 @@ from chem_vault.application.screening.dose_response_enriched_reader import (
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.repository import DoseResponseCurveRepository
+from chem_vault.domain.screening_assay.repository import (
+    DoseResponseCurveRepository,
+    ProtocolRepository,
+    RunRepository,
+)
 from chem_vault.domain.shared.errors import DomainError
 
 
@@ -27,8 +31,13 @@ class ListDoseResponseEnrichedQuery(Query):
 @dataclass(frozen=True)
 class EnrichedDoseResponseCurve:
     curve: DoseResponseCurve
+    registration_number: str | None
     molecule_name: str | None
     batch_number: str | None
+    smiles: str | None
+    synonyms: list[str]
+    # The owning protocol's dose_unit. Used to label IC50 in callers.
+    dose_unit: str
 
 
 class ListDoseResponseEnriched:
@@ -42,10 +51,14 @@ class ListDoseResponseEnriched:
         uow: UnitOfWork,
         repo: DoseResponseCurveRepository,
         reader: DoseResponseEnrichedReader,
+        run_repo: RunRepository,
+        protocol_repo: ProtocolRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._reader = reader
+        self._run_repo = run_repo
+        self._protocol_repo = protocol_repo
 
     async def __call__(
         self,
@@ -59,14 +72,45 @@ class ListDoseResponseEnriched:
             mol_ids = list({c.molecule_id for c in curves})
             batch_ids = list({c.batch_id for c in curves})
 
-            mol_names = await self._reader.resolve_molecule_names(mol_ids)
+            mol_info = await self._reader.resolve_molecules(mol_ids)
             batch_numbers = await self._reader.resolve_batch_numbers(batch_ids)
+
+            run = await self._run_repo.find_by_id_in_workspace(
+                input.workspace_id, input.run_id
+            )
+            dose_unit = "uM"
+            if run is not None:
+                protocol = await self._protocol_repo.find_by_id_in_workspace(
+                    input.workspace_id, run.protocol_id
+                )
+                if protocol is not None:
+                    dose_unit = protocol.dose_unit.value
 
             return Success([
                 EnrichedDoseResponseCurve(
                     curve=c,
-                    molecule_name=mol_names.get(c.molecule_id),
+                    registration_number=(
+                        mol_info[c.molecule_id].registration_number
+                        if c.molecule_id in mol_info
+                        else None
+                    ),
+                    molecule_name=(
+                        mol_info[c.molecule_id].name
+                        if c.molecule_id in mol_info
+                        else None
+                    ),
                     batch_number=batch_numbers.get(c.batch_id),
+                    smiles=(
+                        mol_info[c.molecule_id].smiles
+                        if c.molecule_id in mol_info
+                        else None
+                    ),
+                    synonyms=(
+                        mol_info[c.molecule_id].synonyms
+                        if c.molecule_id in mol_info
+                        else []
+                    ),
+                    dose_unit=dose_unit,
                 )
                 for c in curves
             ])

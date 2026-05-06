@@ -23,7 +23,6 @@ class CurveRow:
     run_id: uuid.UUID
     curve_type: str | None
     fitted_value: float | None
-    fitted_unit: str | None
     hill_slope: float | None
     top: float | None
     bottom: float | None

@@ -12,6 +12,8 @@ from chem_vault.application.screening.compound_curves_reader import (
     CompoundCurvesReader,
 )
 from chem_vault.application.shared.query import Query
+from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.domain.screening_assay.repository import ProtocolRepository
 from chem_vault.domain.shared.errors import DomainError
 
 
@@ -23,12 +25,26 @@ class GetCompoundCurvesQuery(Query):
 
 
 class GetCompoundCurves:
-    def __init__(self, reader: CompoundCurvesReader) -> None:
+    def __init__(
+        self,
+        reader: CompoundCurvesReader,
+        uow: UnitOfWork,
+        protocol_repo: ProtocolRepository,
+    ) -> None:
         self._reader = reader
+        self._uow = uow
+        self._protocol_repo = protocol_repo
 
     async def __call__(
         self, input: GetCompoundCurvesQuery, auth: AuthContext | None = None
     ) -> Result[list[dict], DomainError]:
+        # IC50 unit comes from the protocol — single source of truth.
+        async with self._uow:
+            protocol = await self._protocol_repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+        dose_unit = protocol.dose_unit.value if protocol else "uM"
+
         rows = await self._reader.get_curves(
             workspace_id=input.workspace_id,
             protocol_id=input.protocol_id,
@@ -48,7 +64,7 @@ class GetCompoundCurves:
                     "run_id": str(r.run_id),
                     "curve_type": r.curve_type,
                     "fitted_value": r.fitted_value,
-                    "fitted_unit": r.fitted_unit,
+                    "fitted_unit": dose_unit,
                     "hill_slope": r.hill_slope,
                     "top": r.top,
                     "bottom": r.bottom,

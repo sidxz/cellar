@@ -27,9 +27,11 @@ class RunImportTemplate(Entity):
             "plate_name": "Plate Name",
             "concentration": "Concentration",
             "batch_ref": "LGCY BATCH NAME",
-            "scientist": "Scientist",
             "readout_headers": ["Raw Data"]
         }
+
+    Concentration unit is NOT stored on the template — it lives on the
+    target Protocol's ``dose_unit`` (single source of truth).
     """
 
     def __init__(
@@ -40,7 +42,6 @@ class RunImportTemplate(Entity):
         name: str,
         description: str | None = None,
         column_mapping: dict[str, Any],
-        concentration_unit: str = "uM",
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -53,7 +54,6 @@ class RunImportTemplate(Entity):
         self.name = name.strip()
         self.description = description
         self.column_mapping = column_mapping
-        self.concentration_unit = concentration_unit
         self.created_by = created_by
 
     @classmethod
@@ -63,7 +63,6 @@ class RunImportTemplate(Entity):
         workspace_id: uuid.UUID,
         name: str,
         column_mapping: dict[str, Any],
-        concentration_unit: str = "uM",
         description: str | None = None,
         created_by: uuid.UUID,
     ) -> RunImportTemplate:
@@ -72,7 +71,6 @@ class RunImportTemplate(Entity):
             name=name,
             description=description,
             column_mapping=column_mapping,
-            concentration_unit=concentration_unit,
             created_by=created_by,
         )
 
@@ -82,7 +80,6 @@ class RunImportTemplate(Entity):
         name: str | None = None,
         description: Any = _UNSET,
         column_mapping: dict[str, Any] | None = None,
-        concentration_unit: str | None = None,
     ) -> None:
         if name is not None:
             self._validate_name(name)
@@ -92,8 +89,6 @@ class RunImportTemplate(Entity):
         if column_mapping is not None:
             self._validate_mapping(column_mapping)
             self.column_mapping = column_mapping
-        if concentration_unit is not None:
-            self.concentration_unit = concentration_unit
         self.updated_at = datetime.now(UTC)
 
     @staticmethod

@@ -60,16 +60,30 @@ class MoleculeActivityService:
         proto_ids: set[uuid.UUID] = set()
         for curve in curves:
             proto_ids.add(curve.protocol_id)
-            # Condense raw_data to [{x, y}] for sparkline rendering
+
+        # Fetch protocol metadata (single query) — used for both display
+        # name/type and dose_unit lookup for IC50 unit decoration.
+        protocols_by_id: dict[uuid.UUID, tuple[str, str, str]] = {}
+        if proto_ids:
+            protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
+            for proto in protos:
+                protocols_by_id[proto.id] = (
+                    proto.name,
+                    proto.protocol_type.value,
+                    proto.dose_unit.value,
+                )
+
+        for curve in curves:
             data_points = None
             if curve.raw_data and isinstance(curve.raw_data, list):
                 data_points = _condense_raw_data(curve.raw_data)
 
+            unit = protocols_by_id.get(curve.protocol_id, ("", "", "uM"))[2]
             curves_by_proto.setdefault(curve.protocol_id, []).append(
                 {
                     "curve_type": curve.curve_type.value,
                     "fitted_value": curve.fitted_value,
-                    "fitted_unit": curve.fitted_unit,
+                    "fitted_unit": unit,
                     "r_squared": curve.r_squared,
                     "hill_slope": curve.hill_slope,
                     "top": curve.top,
@@ -80,16 +94,9 @@ class MoleculeActivityService:
                 }
             )
 
-        # Fetch protocol metadata (single query)
-        protocols_by_id: dict[uuid.UUID, tuple[str, str]] = {}
-        if proto_ids:
-            protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
-            for proto in protos:
-                protocols_by_id[proto.id] = (proto.name, proto.protocol_type.value)
-
         summaries: list[ProtocolActivitySummary] = []
         for pid in sorted(proto_ids):
-            name, ptype = protocols_by_id.get(pid, ("Unknown", "unknown"))
+            name, ptype, _unit = protocols_by_id.get(pid, ("Unknown", "unknown", "uM"))
             summaries.append(
                 ProtocolActivitySummary(
                     protocol_id=pid,
@@ -152,10 +159,15 @@ class MoleculeActivityService:
         # Fetch best curves
         curve_proto_ids = list({spec[0] for spec in drc_specs})
         curve_data: dict[uuid.UUID, dict[uuid.UUID, object]] = {}
+        proto_dose_unit: dict[uuid.UUID, str] = {}
         if curve_proto_ids:
             curve_data = await self._curve_repo.find_best_curves_for_molecules(
                 workspace_id, molecule_ids, curve_proto_ids
             )
+            # Resolve dose_unit for each protocol once — IC50 unit decoration
+            # is sourced from the protocol, not denormalized on each curve.
+            protos = await self._protocol_repo.find_by_ids(workspace_id, curve_proto_ids)
+            proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
 
         # Build result
         result: dict[uuid.UUID, dict[str, ActivityValue]] = {}
@@ -190,7 +202,7 @@ class MoleculeActivityService:
                     mol_activity[col_key] = ActivityValue(
                         value=curve.fitted_value,
                         qualifier=None,
-                        unit=curve.fitted_unit,
+                        unit=proto_dose_unit.get(proto_id, "uM"),
                         source="dose_response",
                         curve_type=curve.curve_type.value,
                         r_squared=curve.r_squared,

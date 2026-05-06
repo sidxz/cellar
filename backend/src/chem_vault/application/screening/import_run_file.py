@@ -46,7 +46,11 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository
-from chem_vault.domain.screening_assay.enums import ReadoutNormalization, WellType
+from chem_vault.domain.screening_assay.enums import (
+    ReadoutDataType,
+    ReadoutNormalization,
+    WellType,
+)
 from chem_vault.domain.screening_assay.plate_template import PlateTemplate
 from chem_vault.domain.screening_assay.protocol import Protocol as AssayProtocol
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
@@ -57,14 +61,14 @@ from chem_vault.domain.screening_assay.repository import (
     RunRepository,
 )
 from chem_vault.domain.screening_assay.run import Plate, Well
-from chem_vault.domain.shared.enums import ConcentrationUnit, PlateFormat, Qualifier
+from chem_vault.domain.shared.enums import PlateFormat, Qualifier
 from chem_vault.domain.shared.errors import (
     ConflictError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.value_objects import Concentration, QualifiedValue
+from chem_vault.domain.shared.value_objects import QualifiedValue
 from chem_vault.infrastructure.parsers.tabular_file import (
     ParsedTable,
     TabularParseError,
@@ -135,7 +139,6 @@ class PreviewRunFileQuery(Command):
     run_id: uuid.UUID
     file_content: bytes
     filename: str = ""
-    concentration_unit: str = "uM"
 
 
 @dataclass(frozen=True)
@@ -167,7 +170,6 @@ class ImportRunFileCommand(Command):
     run_id: uuid.UUID
     preview_id: uuid.UUID
     mapping: ColumnMapping
-    concentration_unit: str = "uM"
     replace_existing: bool = False
 
 
@@ -181,6 +183,10 @@ class ImportRunFileResult:
     controls_from_template: int = 0
     controls_unclassified: int = 0
     skipped_rows: int = 0
+    # Non-fatal warning emitted when the post-import normalization /
+    # aggregation pipeline fails (e.g., missing controls). The import itself
+    # still succeeds; the user should treat this as a diagnostic prompt.
+    compute_warning: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -256,14 +262,6 @@ class PreviewRunFile:
         )
 
         if guessed is not None:
-            try:
-                conc_unit = ConcentrationUnit(input.concentration_unit)
-            except ValueError:
-                return Failure(
-                    ValidationError(
-                        f"Invalid concentration unit: '{input.concentration_unit}'"
-                    )
-                )
             normalized = normalize(table, guessed)
             if isinstance(normalized, Success):
                 norm: NormalizedTable = normalized.unwrap()
@@ -284,7 +282,6 @@ class PreviewRunFile:
                     validation_errors = _validate_controls_required(
                         protocol, norm.plate_formats, templates_by_format
                     )
-                _ = conc_unit  # validated; used by import phase
 
         preview_id = uuid.uuid4()
         ttl = getattr(self._store, "ttl_seconds", 60.0)
@@ -399,38 +396,51 @@ class ImportRunFile:
                 )
             )
 
-        # 3. Concentration unit
-        try:
-            conc_unit = ConcentrationUnit(cmd.concentration_unit)
-        except ValueError:
-            return Failure(
-                ValidationError(
-                    f"Invalid concentration unit: '{cmd.concentration_unit}'"
-                )
-            )
-
-        # 4. Normalize with confirmed mapping
-        normalized_result = normalize(preview.table, cmd.mapping)
-        if isinstance(normalized_result, Failure):
-            return normalized_result
-        normalized: NormalizedTable = normalized_result.unwrap()
-
-        # 5. Validate readout-def ids belong to this run's protocol
+        # 3. Load the protocol — its dose_unit is the canonical unit for all
+        # well doses and IC50 fits. The wizard does not pick a unit anymore.
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             cmd.workspace_id, run.protocol_id
         )
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
-        protocol_rd_ids = {rd.id for rd in protocol.readout_definitions}
+        # 4. Validate readout-def ids belong to this run's protocol AND rebuild
+        # the readout columns with data_type sourced from the protocol so the
+        # normalizer parses each column with the right value kind.
+
+        rd_by_id = {rd.id: rd for rd in protocol.readout_definitions}
+        typed_readouts: list[ReadoutColumn] = []
         for rc in cmd.mapping.readout_columns:
-            if rc.readout_definition_id not in protocol_rd_ids:
+            rd = rd_by_id.get(rc.readout_definition_id)
+            if rd is None:
                 return Failure(
                     ValidationError(
                         f"readout_definition_id {rc.readout_definition_id} "
                         "does not belong to this run's protocol"
                     )
                 )
+            kind = "text" if rd.data_type == ReadoutDataType.TEXT else "numeric"
+            typed_readouts.append(
+                ReadoutColumn(
+                    header=rc.header,
+                    readout_definition_id=rc.readout_definition_id,
+                    data_type=kind,
+                )
+            )
+
+        typed_mapping = ColumnMapping(
+            well=cmd.mapping.well,
+            plate_name=cmd.mapping.plate_name,
+            concentration=cmd.mapping.concentration,
+            batch_ref=cmd.mapping.batch_ref,
+            readout_columns=tuple(typed_readouts),
+        )
+
+        # 5. Normalize with the type-aware mapping
+        normalized_result = normalize(preview.table, typed_mapping)
+        if isinstance(normalized_result, Failure):
+            return normalized_result
+        normalized: NormalizedTable = normalized_result.unwrap()
 
         # 6. Pre-flight: control-layout coverage. If the protocol uses
         # control-based normalization but lacks a configured layout for any
@@ -477,38 +487,42 @@ class ImportRunFile:
         for row in normalized.rows:
             plate = plates_by_name[row.plate_name]
 
+            # 1. Classify well type. The plate template is the canonical source
+            # — if it has an entry for this position, that wins regardless of
+            # what data the row carries. (A POS control may legitimately have
+            # an inhibitor concentration listed; an unmapped buffer well may
+            # carry a batch ref. Neither should override the template.)
+            plate_format = normalized.plate_formats.get(row.plate_name)
+            per_well = (
+                templates_by_format.get(plate_format)
+                if plate_format is not None
+                else None
+            )
+            tmpl_type = per_well.get(_well_key(row.well)) if per_well else None
+
+            if tmpl_type is not None:
+                well_type = tmpl_type
+                if tmpl_type != WellType.SAMPLE:
+                    result.controls_from_template += 1
+            elif row.batch_ref or row.concentration is not None:
+                well_type = WellType.SAMPLE
+            else:
+                well_type = WellType.SAMPLE
+                result.controls_unclassified += 1
+
+            # 2. Resolve batch ref. Sample wells with unresolved refs are
+            # skipped per the locked policy. Control wells keep batch_id=None
+            # — the well still has to exist for normalization to find it.
             batch_id: uuid.UUID | None = None
             molecule_id: uuid.UUID | None = None
             if row.batch_ref:
                 resolved = batch_lookup.get(row.batch_ref)
-                if resolved is None:
-                    unmatched.add(row.batch_ref)
-                    # Skip the well entirely — the plan locks unmatched=skip+report.
-                    continue
-                batch_id, molecule_id = resolved
-
-            plate_format = normalized.plate_formats.get(row.plate_name)
-            if row.batch_ref or row.concentration is not None:
-                well_type = WellType.SAMPLE
-            else:
-                per_well = (
-                    templates_by_format.get(plate_format)
-                    if plate_format is not None
-                    else None
-                )
-                tmpl_type = per_well.get(_well_key(row.well)) if per_well else None
-                if tmpl_type is not None:
-                    well_type = tmpl_type
-                    result.controls_from_template += 1
+                if resolved is not None:
+                    batch_id, molecule_id = resolved
                 else:
-                    well_type = WellType.SAMPLE
-                    result.controls_unclassified += 1
-
-            concentration = (
-                Concentration(value=row.concentration, unit=conc_unit)
-                if row.concentration is not None
-                else None
-            )
+                    unmatched.add(row.batch_ref)
+                    if well_type == WellType.SAMPLE:
+                        continue
 
             well = Well(
                 plate_id=plate.id,
@@ -516,26 +530,43 @@ class ImportRunFile:
                 column=row.well.column,
                 well_type=well_type,
                 batch_id=batch_id,
-                concentration=concentration,
+                dose=row.concentration,
             )
             wells_by_plate[plate.id].append(well)
 
             # Write readouts for sample AND control wells. Control wells need
             # their raw values persisted so plate normalization (% Inhibition,
             # Z-prime QC) can find them. molecule_id / batch_id are nullable
-            # for non-sample wells.
+            # for non-sample wells. Text readouts go to value_text instead of
+            # the qualified-numeric value.
             for rd_id, value in row.readouts.items():
-                readouts.append(
-                    ReadoutData(
-                        workspace_id=cmd.workspace_id,
-                        run_id=run.id,
-                        well_id=well.id,
-                        molecule_id=molecule_id,
-                        batch_id=batch_id,
-                        readout_definition_id=rd_id,
-                        value=QualifiedValue(value=value, qualifier=Qualifier.EQUAL),
+                if isinstance(value, str):
+                    readouts.append(
+                        ReadoutData(
+                            workspace_id=cmd.workspace_id,
+                            run_id=run.id,
+                            well_id=well.id,
+                            molecule_id=molecule_id,
+                            batch_id=batch_id,
+                            readout_definition_id=rd_id,
+                            value=None,
+                            value_text=value,
+                        )
                     )
-                )
+                else:
+                    readouts.append(
+                        ReadoutData(
+                            workspace_id=cmd.workspace_id,
+                            run_id=run.id,
+                            well_id=well.id,
+                            molecule_id=molecule_id,
+                            batch_id=batch_id,
+                            readout_definition_id=rd_id,
+                            value=QualifiedValue(
+                                value=value, qualifier=Qualifier.EQUAL
+                            ),
+                        )
+                    )
 
         # 8. Attach plates + wells to the run
         for plate in plates_by_name.values():
@@ -553,14 +584,15 @@ class ImportRunFile:
 
         # Trigger normalization (% inhibition / % activation / etc.) after
         # readouts are persisted. Engine runs in its own UoW. Failures here
-        # (e.g. protocol missing controls) are non-fatal — the import is done.
+        # (e.g. protocol missing controls) are non-fatal — the import is done
+        # — but the failure is surfaced on the result so the user sees why
+        # downstream curves / QC are empty.
         if self._calc_engine is not None and result.readouts_created > 0:
-            try:
-                await self._calc_engine.compute_for_run(
-                    run_id=run.id, workspace_id=cmd.workspace_id
-                )
-            except DomainError:
-                pass
+            compute_result = await self._calc_engine.compute_for_run(
+                run_id=run.id, workspace_id=cmd.workspace_id
+            )
+            if isinstance(compute_result, Failure):
+                result.compute_warning = str(compute_result.failure())
         if self._dispatcher and events:
             await self._dispatcher.dispatch_all(events)
 
@@ -589,7 +621,6 @@ def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
         plate_name=suggested.first("plate_name"),
         concentration=suggested.first("concentration"),
         batch_ref=suggested.first("batch_ref"),
-        scientist=suggested.first("scientist"),
         readout_columns=tuple(
             ReadoutColumn(header=s.header, readout_definition_id=uuid.uuid4())
             for s in readouts

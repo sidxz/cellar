@@ -51,7 +51,9 @@ class TestInferMappingSynonyms:
         assert roles["Concentration"] == ("concentration", "high")
         assert roles["LGCY BATCH NAME"] == ("batch_ref", "high")
         assert roles["Raw Data"] == ("readout", "high")
-        assert roles["Scientist"] == ("scientist", "high")
+        # "Scientist" is no longer a top-level role — it falls through to no
+        # synonym match. The user maps it to a Text readout def in the wizard.
+        assert roles["Scientist"][0] is None
 
     def test_synonyms_are_case_and_space_insensitive(self) -> None:
         table = _make_table(["plate_name", "WELL", "% Inhibition"], [])
@@ -207,6 +209,53 @@ class TestNormalizeBlankDetection:
         assert row.concentration == 100.0
 
 
+class TestNormalizeTextReadouts:
+    def test_text_readout_keeps_string_values(self) -> None:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Scientist"],
+            [
+                {"Well": "A1", "Scientist": "Dan Selle"},
+                {"Well": "A2", "Scientist": " "},  # whitespace → dropped
+                {"Well": "A3", "Scientist": ""},
+            ],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            readout_columns=(
+                ReadoutColumn(
+                    header="Scientist",
+                    readout_definition_id=rd_id,
+                    data_type="text",
+                ),
+            ),
+        )
+        out = normalize(table, mapping).unwrap()
+        readouts = [r.readouts.get(rd_id) for r in out.rows]
+        assert readouts[0] == "Dan Selle"
+        assert readouts[1] is None
+        assert readouts[2] is None
+
+    def test_numeric_default_drops_text_cells(self) -> None:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Raw"],
+            [
+                {"Well": "A1", "Raw": "0.5"},
+                {"Well": "A2", "Raw": "not a number"},
+            ],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            readout_columns=(
+                ReadoutColumn(header="Raw", readout_definition_id=rd_id),
+            ),
+        )
+        out = normalize(table, mapping).unwrap()
+        assert out.rows[0].readouts[rd_id] == 0.5
+        assert rd_id not in out.rows[1].readouts
+
+
 class TestNormalizeMultiPlate:
     def test_two_plates_grouped_separately(self) -> None:
         rd_id = uuid.uuid4()
@@ -267,10 +316,10 @@ class TestNadDFixture:
         except FileNotFoundError:
             pytest.skip(f"NadD fixture missing at {_NADD_FIXTURE}")
 
-    def test_infer_mapping_finds_all_six_roles(self, fixture_table: ParsedTable) -> None:
+    def test_infer_mapping_finds_core_roles(self, fixture_table: ParsedTable) -> None:
         s = infer_mapping(fixture_table)
         roles_present = {x.role for x in s.suggestions if x.role is not None}
-        assert {"plate_name", "well", "concentration", "batch_ref", "readout", "scientist"} <= roles_present
+        assert {"plate_name", "well", "concentration", "batch_ref", "readout"} <= roles_present
 
     def test_normalize_produces_two_plates(self, fixture_table: ParsedTable) -> None:
         s = infer_mapping(fixture_table)
@@ -282,7 +331,6 @@ class TestNadDFixture:
             plate_name=s.first("plate_name"),
             concentration=s.first("concentration"),
             batch_ref=s.first("batch_ref"),
-            scientist=s.first("scientist"),
             readout_columns=(
                 ReadoutColumn(header=readout_header, readout_definition_id=rd_id),
             ),

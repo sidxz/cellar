@@ -82,13 +82,16 @@ async def preview_run_file(
     auth: AuthDep,
     file: Annotated[UploadFile, File()],
     uc: PreviewRunFileDep,
-    concentration_unit: Annotated[str, Form()] = "uM",
 ) -> PreviewRunFileResponse:
     """Parse a long-format run file and return a preview + ``preview_id``.
 
     Accepts ``.xlsx`` or ``.csv`` uploads. The returned ``preview_id`` is
     valid for ~60 seconds and must be passed to ``POST /import-file`` to
     actually persist the data.
+
+    The dose unit is sourced from the run's protocol (``protocol.dose_unit``)
+    — the wizard does not need to ask. Wells in the file are interpreted in
+    that unit.
     """
     content = await file.read()
     query = PreviewRunFileQuery(
@@ -96,7 +99,6 @@ async def preview_run_file(
         run_id=run_id,
         file_content=content,
         filename=file.filename or "",
-        concentration_unit=concentration_unit,
     )
     result = await uc(query, auth=auth)
     preview: PreviewRunFileResult = result_to_response(result)
@@ -146,14 +148,12 @@ class ColumnMappingRequest(BaseModel):
     plate_name: str | None = None
     concentration: str | None = None
     batch_ref: str | None = None
-    scientist: str | None = None
     readout_columns: list[ReadoutColumnRequest] = Field(default_factory=list)
 
 
 class ImportRunFileRequest(BaseModel):
     preview_id: uuid.UUID
     mapping: ColumnMappingRequest
-    concentration_unit: str = "uM"
     replace_existing: bool = False
 
 
@@ -166,6 +166,7 @@ class ImportRunFileResponse(BaseModel):
     controls_from_template: int
     controls_unclassified: int
     skipped_rows: int
+    compute_warning: str | None = None
 
 
 @router.post(
@@ -185,7 +186,6 @@ async def import_run_file(
         plate_name=body.mapping.plate_name,
         concentration=body.mapping.concentration,
         batch_ref=body.mapping.batch_ref,
-        scientist=body.mapping.scientist,
         readout_columns=tuple(
             ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
             for rc in body.mapping.readout_columns
@@ -196,7 +196,6 @@ async def import_run_file(
         run_id=run_id,
         preview_id=body.preview_id,
         mapping=mapping,
-        concentration_unit=body.concentration_unit,
         replace_existing=body.replace_existing,
     )
     result = await uc(cmd, auth=auth)
@@ -210,6 +209,7 @@ async def import_run_file(
         controls_from_template=out.controls_from_template,
         controls_unclassified=out.controls_unclassified,
         skipped_rows=out.skipped_rows,
+        compute_warning=out.compute_warning,
     )
 
 
@@ -224,7 +224,6 @@ class RunImportTemplateResponse(BaseModel):
     name: str
     description: str | None
     column_mapping: dict[str, Any]
-    concentration_unit: str
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime | None
@@ -234,14 +233,12 @@ class CreateRunImportTemplateRequest(BaseModel):
     name: str
     description: str | None = None
     column_mapping: dict[str, Any]
-    concentration_unit: str = "uM"
 
 
 class UpdateRunImportTemplateRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     column_mapping: dict[str, Any] | None = None
-    concentration_unit: str | None = None
 
 
 def _to_response(template) -> RunImportTemplateResponse:  # type: ignore[no-untyped-def]
@@ -251,7 +248,6 @@ def _to_response(template) -> RunImportTemplateResponse:  # type: ignore[no-unty
         name=template.name,
         description=template.description,
         column_mapping=template.column_mapping,
-        concentration_unit=template.concentration_unit,
         created_by=template.created_by,
         created_at=template.created_at,
         updated_at=template.updated_at,
@@ -285,7 +281,6 @@ async def create_run_import_template(
         name=body.name,
         description=body.description,
         column_mapping=body.column_mapping,
-        concentration_unit=body.concentration_unit,
         created_by=auth.user_id,
     )
     result = await uc(cmd, auth=auth)
@@ -305,7 +300,6 @@ async def update_run_import_template(
         name=body.name,
         description=body.description,
         column_mapping=body.column_mapping,
-        concentration_unit=body.concentration_unit,
     )
     result = await uc(cmd, auth=auth)
     return _to_response(result_to_response(result))

@@ -122,7 +122,7 @@ class AddReadoutDefinition:
                 cfg = input.dose_response_config
                 dr_config = DoseResponseConfig(
                     curve_type=CurveType(cfg["curve_type"]),
-                    x_readout_name=cfg["x_readout_name"],
+                    x_readout_name=cfg.get("x_readout_name"),
                     y_readout_name=cfg["y_readout_name"],
                     hill_slope_constraint=HillSlopeConstraint(
                         cfg.get("hill_slope_constraint", "unconstrained")
@@ -243,7 +243,7 @@ class UpdateReadoutDefinition:
                     cfg_dict = cfg  # type: ignore[assignment]
                     kwargs["dose_response_config"] = DoseResponseConfig(
                         curve_type=CurveType(cfg_dict["curve_type"]),
-                        x_readout_name=cfg_dict["x_readout_name"],
+                        x_readout_name=cfg_dict.get("x_readout_name"),
                         y_readout_name=cfg_dict["y_readout_name"],
                         hill_slope_constraint=HillSlopeConstraint(
                             cfg_dict.get("hill_slope_constraint", "unconstrained")

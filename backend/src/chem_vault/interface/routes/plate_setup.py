@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile
 from pydantic import BaseModel
@@ -58,8 +58,8 @@ class ParsePlateMapResponse(BaseModel):
 class SetUpRunPlateRequest(BaseModel):
     plate_number: int = 1
     compound_assignments: list[CompoundAssignmentResponse]
+    # Doses are interpreted in the run's protocol.dose_unit — no per-request unit.
     concentration_series: list[float] | None = None
-    concentration_unit: str = "nM"
 
 
 class SetUpRunPlateResponse(BaseModel):
@@ -69,21 +69,45 @@ class SetUpRunPlateResponse(BaseModel):
     unresolved: list[str]
 
 
-class WellMapEntry(BaseModel):
+class PlateMapWellModel(BaseModel):
     well_id: uuid.UUID
+    position: str
     row: str
     column: int
     well_type: str
     batch_id: uuid.UUID | None = None
+    batch_number: str | None = None
     molecule_id: uuid.UUID | None = None
     molecule_name: str | None = None
-    concentration_value: float | None = None
-    concentration_unit: str | None = None
+    synonyms: list[str] = []
+    smiles: str | None = None
+    # Dose value in the protocol's dose_unit (carried at the response level
+    # so the client does not need to look up the protocol separately).
+    dose: float | None = None
+
+
+class PlateMapSummaryModel(BaseModel):
+    total_wells: int
+    sample_wells: int
+    control_wells: int
+    compounds: int
+    concentrations_per_compound: int
+    replicates: int
+
+
+class PlateData(BaseModel):
+    plate_id: uuid.UUID
+    plate_number: int
+    format: str
+    wells: list[PlateMapWellModel]
+    summary: PlateMapSummaryModel
 
 
 class PlateMapResponse(BaseModel):
     run_id: uuid.UUID
-    plates: list[dict[str, Any]]
+    # The protocol's dose_unit. All `wells[].dose` values are in this unit.
+    dose_unit: str
+    plates: list[PlateData]
 
 
 class ImportReadoutsResponse(BaseModel):
@@ -161,7 +185,6 @@ async def set_up_run_plate(
         plate_number=body.plate_number,
         compound_assignments=assignments,
         concentration_series=body.concentration_series,
-        concentration_unit=body.concentration_unit,
     )
     result = await uc(cmd, auth=auth)
     data = result_to_response(result)
@@ -191,31 +214,48 @@ async def get_plate_map(
     )
     data = result_to_response(result)
 
-    plates_data = []
+    plates_data: list[PlateData] = []
     for plate in data.plates:
         well_entries = [
-            WellMapEntry(
+            PlateMapWellModel(
                 well_id=w.well_id,
+                position=w.position,
                 row=w.row,
                 column=w.column,
                 well_type=w.well_type,
                 batch_id=w.batch_id,
+                batch_number=w.batch_number,
                 molecule_id=w.molecule_id,
                 molecule_name=w.molecule_name,
-                concentration_value=w.concentration_value,
-                concentration_unit=w.concentration_unit,
-            ).model_dump()
+                synonyms=list(w.synonyms),
+                smiles=w.smiles,
+                dose=w.dose,
+            )
             for w in plate.wells
         ]
+        summary = plate.summary
         plates_data.append(
-            {
-                "plate_id": str(plate.plate_id),
-                "plate_number": plate.plate_number,
-                "wells": well_entries,
-            }
+            PlateData(
+                plate_id=plate.plate_id,
+                plate_number=plate.plate_number,
+                format=plate.format,
+                wells=well_entries,
+                summary=PlateMapSummaryModel(
+                    total_wells=summary.total_wells if summary else 0,
+                    sample_wells=summary.sample_wells if summary else 0,
+                    control_wells=summary.control_wells if summary else 0,
+                    compounds=summary.compounds if summary else 0,
+                    concentrations_per_compound=(
+                        summary.concentrations_per_compound if summary else 0
+                    ),
+                    replicates=summary.replicates if summary else 0,
+                ),
+            )
         )
 
-    return PlateMapResponse(run_id=run_id, plates=plates_data)
+    return PlateMapResponse(
+        run_id=run_id, dose_unit=data.dose_unit, plates=plates_data
+    )
 
 
 @router.post(

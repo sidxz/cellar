@@ -15,6 +15,7 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
+from chem_vault.domain.shared.enums import ConcentrationUnit
 from chem_vault.domain.screening_assay.hit_criterion import (
     HitCriterion,
     validate_hit_criteria,
@@ -49,6 +50,19 @@ _PROTOCOL_TRANSITIONS: dict[ProtocolStatus, set[ProtocolStatus]] = {
 }
 
 _TERMINAL_STATES = {ProtocolStatus.RETIRED}
+
+
+# Names that collide with built-in well metadata. Using these as a readout
+# definition name confuses the data model (e.g. a "concentration" readout
+# row vs. the well's own concentration property) and is rejected at protocol
+# design time — see Bug 4.
+_RESERVED_READOUT_NAMES: frozenset[str] = frozenset(
+    {"concentration", "dose", "well", "plate", "batch", "compound"}
+)
+
+
+def _is_reserved_readout_name(name: str) -> bool:
+    return name.strip().lower() in _RESERVED_READOUT_NAMES
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +212,7 @@ class Protocol(AggregateRoot):
         parent_protocol_id: uuid.UUID | None = None,
         status: ProtocolStatus = ProtocolStatus.DRAFT,
         created_by: uuid.UUID,
+        dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
         control_layouts: dict[str, uuid.UUID] | None = None,
@@ -222,6 +237,9 @@ class Protocol(AggregateRoot):
         self.parent_protocol_id = parent_protocol_id
         self.status = status
         self.created_by = created_by
+        # The canonical concentration unit for this assay's well doses (and IC50
+        # fits). Single source of truth — every well of every run inherits this.
+        self.dose_unit = dose_unit
         self.readout_definitions: list[ReadoutDefinition] = readout_definitions or []
         self.condition_definitions: list[ConditionDefinition] = condition_definitions or []
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
@@ -268,6 +286,7 @@ class Protocol(AggregateRoot):
         description: str | None = None,
         target_id: uuid.UUID | None = None,
         category: str | None = None,
+        dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
     ) -> Protocol:
@@ -284,6 +303,7 @@ class Protocol(AggregateRoot):
             target_id=target_id,
             category=category,
             created_by=created_by,
+            dose_unit=dose_unit,
             readout_definitions=readout_definitions,
             condition_definitions=condition_definitions,
         )
@@ -380,19 +400,26 @@ class Protocol(AggregateRoot):
     def add_readout_definition(self, definition: ReadoutDefinition) -> None:
         """Add a readout definition to this protocol."""
         self._guard_draft()
+        if _is_reserved_readout_name(definition.name):
+            raise ValidationError(
+                f"ReadoutDefinition name '{definition.name}' collides with a "
+                f"reserved well-metadata name. Reserved: "
+                f"{sorted(_RESERVED_READOUT_NAMES)}."
+            )
         if any(rd.name == definition.name for rd in self.readout_definitions):
             raise ConflictError(
                 f"ReadoutDefinition with name '{definition.name}' already exists"
             )
 
-        # Cross-readout validation for dose_response type
+        # Cross-readout validation for dose_response type. x_readout_name is
+        # optional — None means "use the well's concentration as X".
         if (
             definition.data_type == ReadoutDataType.DOSE_RESPONSE
             and definition.dose_response_config is not None
         ):
             existing_names = {rd.name for rd in self.readout_definitions}
             cfg = definition.dose_response_config
-            if cfg.x_readout_name not in existing_names:
+            if cfg.x_readout_name is not None and cfg.x_readout_name not in existing_names:
                 raise ValidationError(
                     f"Dose-response X-axis readout '{cfg.x_readout_name}' "
                     "not found among existing readout definitions"
@@ -465,6 +492,12 @@ class Protocol(AggregateRoot):
         existing = self.readout_definitions[idx]
 
         new_name = (name if name is not None else existing.name).strip()
+        if _is_reserved_readout_name(new_name):
+            raise ValidationError(
+                f"ReadoutDefinition name '{new_name}' collides with a "
+                f"reserved well-metadata name. Reserved: "
+                f"{sorted(_RESERVED_READOUT_NAMES)}."
+            )
         if any(
             rd.name == new_name and rd.id != definition_id
             for rd in self.readout_definitions

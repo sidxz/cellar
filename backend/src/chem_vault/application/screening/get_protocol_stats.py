@@ -91,11 +91,25 @@ class GetProtocolStats:
 
         latest_run: LatestRunInfo | None = None
         if data.latest_run is not None:
-            # Z-prime from qc_metrics JSONB
+            # qc_metrics.z_prime is a per-plate dict
+            # ({plate_id: {z_prime, classification, ...}}). For protocol-stats
+            # display we surface the worst Z' across plates so a degraded
+            # plate isn't masked by a good one. Tolerates a scalar fallback
+            # for any future / legacy run that stored it flat.
             z_prime: float | None = None
             qc_metrics = data.latest_run.qc_metrics
             if qc_metrics and isinstance(qc_metrics, dict):
-                z_prime = qc_metrics.get("z_prime")
+                raw = qc_metrics.get("z_prime")
+                if isinstance(raw, (int, float)):
+                    z_prime = float(raw)
+                elif isinstance(raw, dict):
+                    plate_zps = [
+                        v["z_prime"]
+                        for v in raw.values()
+                        if isinstance(v, dict)
+                        and isinstance(v.get("z_prime"), (int, float))
+                    ]
+                    z_prime = min(plate_zps) if plate_zps else None
 
             latest_run = LatestRunInfo(
                 id=data.latest_run.id,

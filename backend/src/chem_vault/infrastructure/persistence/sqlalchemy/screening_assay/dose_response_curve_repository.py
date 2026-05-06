@@ -144,7 +144,6 @@ class SQLAlchemyDoseResponseCurveRepository:
         model.run_id = entity.run_id
         model.curve_type = entity.curve_type.value
         model.fitted_value = entity.fitted_value
-        model.fitted_unit = entity.fitted_unit
         model.hill_slope = entity.hill_slope
         model.top = entity.top
         model.bottom = entity.bottom
@@ -185,7 +184,6 @@ class SQLAlchemyDoseResponseCurveRepository:
             run_id=model.run_id,
             curve_type=CurveType(model.curve_type),
             fitted_value=model.fitted_value,
-            fitted_unit=model.fitted_unit,
             hill_slope=model.hill_slope,
             top=model.top,
             bottom=model.bottom,
@@ -211,7 +209,6 @@ class SQLAlchemyDoseResponseCurveRepository:
             run_id=entity.run_id,
             curve_type=entity.curve_type.value,
             fitted_value=entity.fitted_value,
-            fitted_unit=entity.fitted_unit,
             hill_slope=entity.hill_slope,
             top=entity.top,
             bottom=entity.bottom,

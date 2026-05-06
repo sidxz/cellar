@@ -107,6 +107,22 @@ class TestDoseResponseConfig:
                 bottom_constraint=50.0,
             )
 
+    def test_x_readout_name_none_is_valid(self):
+        """None x_readout_name means 'use the well's concentration as X'."""
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            y_readout_name="response",
+        )
+        assert cfg.x_readout_name is None
+
+    def test_x_readout_name_none_does_not_collide_with_y(self):
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name=None,
+            y_readout_name="response",
+        )
+        assert cfg.x_readout_name is None
+
     def test_equality(self):
         cfg1 = DoseResponseConfig(
             curve_type=CurveType.IC50,

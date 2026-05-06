@@ -22,7 +22,7 @@ from chem_vault.domain.screening_assay.events import (
 )
 from chem_vault.domain.shared.entity import AggregateRoot, Entity
 from chem_vault.domain.shared.errors import ConflictError, ValidationError
-from chem_vault.domain.shared.value_objects import Barcode, Concentration
+from chem_vault.domain.shared.value_objects import Barcode
 
 # ---------------------------------------------------------------------------
 # Run state machine
@@ -100,7 +100,7 @@ class Well(Entity):
         column: int,
         well_type: WellType = WellType.SAMPLE,
         batch_id: uuid.UUID | None = None,
-        concentration: Concentration | None = None,
+        dose: float | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -114,13 +114,17 @@ class Well(Entity):
             )
         if column < 1:
             raise ValidationError("Well column must be >= 1")
+        if dose is not None and dose < 0:
+            raise ValidationError("Well dose must be >= 0")
 
         self.plate_id = plate_id
         self.row = row
         self.column = column
         self.well_type = well_type
         self.batch_id = batch_id
-        self.concentration = concentration
+        # Dose value only — unit is the owning protocol's dose_unit. Not
+        # carried per-well to avoid duplication and inconsistency.
+        self.dose = dose
 
 
 # ---------------------------------------------------------------------------

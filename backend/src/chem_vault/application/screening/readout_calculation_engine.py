@@ -86,9 +86,16 @@ class ReadoutCalculationEngine:
             Failure(DomainError) — if run/protocol not found or a computation fails.
         """
         if self._uow.is_active:
+            # Caller owns the transaction; they will commit.
             return await self._execute(run_id, workspace_id=workspace_id)
         async with self._uow:
-            return await self._execute(run_id, workspace_id=workspace_id)
+            result = await self._execute(run_id, workspace_id=workspace_id)
+            # Computed readouts and qc_metrics live in the session until we
+            # commit. Without this commit they were silently rolled back on
+            # context exit.
+            if isinstance(result, Success):
+                await self._uow.commit()
+            return result
 
     async def _execute(
         self, run_id: uuid.UUID, *, workspace_id: uuid.UUID
@@ -226,8 +233,10 @@ class ReadoutCalculationEngine:
                     }
 
             if z_prime_results:
-                run.qc_metrics = run.qc_metrics or {}
-                run.qc_metrics["z_prime"] = z_prime_results
+                # Re-bind to a fresh dict so SQLAlchemy detects the change
+                # (in-place mutation on a JSONB column is not auto-tracked).
+                run.qc_metrics = {**(run.qc_metrics or {}), "z_prime": z_prime_results}
+                await self._run_repo.save(run)
 
         # ------------------------------------------------------------------
         # 5. Aggregate replicates (in-memory)

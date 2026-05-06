@@ -29,6 +29,7 @@ from chem_vault.domain.screening_assay.protocol import (
     ReadoutDefinition,
 )
 from chem_vault.domain.screening_assay.repository import ProtocolRepository
+from chem_vault.domain.shared.enums import ConcentrationUnit
 from chem_vault.domain.shared.errors import AuthorizationError, DomainError
 
 
@@ -40,6 +41,7 @@ class CreateProtocolCommand(Command):
     protocol_type: str
     target_id: uuid.UUID | None = None
     category: str | None = None
+    dose_unit: str = "uM"
     readout_definitions: list[dict[str, Any]] = field(default_factory=list)
     condition_definitions: list[dict[str, Any]] = field(default_factory=list)
 
@@ -73,7 +75,7 @@ class CreateProtocol:
                 cfg = rd["dose_response_config"]
                 dr_config = DoseResponseConfig(
                     curve_type=CurveType(cfg["curve_type"]),
-                    x_readout_name=cfg["x_readout_name"],
+                    x_readout_name=cfg.get("x_readout_name"),
                     y_readout_name=cfg["y_readout_name"],
                     hill_slope_constraint=HillSlopeConstraint(
                         cfg.get("hill_slope_constraint", "unconstrained")
@@ -123,6 +125,7 @@ class CreateProtocol:
                 target_id=input.target_id,
                 category=input.category,
                 created_by=auth.user_id,
+                dose_unit=ConcentrationUnit(input.dose_unit),
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs or None,
             )

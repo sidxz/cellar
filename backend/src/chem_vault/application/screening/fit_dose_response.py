@@ -13,7 +13,7 @@ from chem_vault.domain.screening_assay.curve_fitting import (
     CurveFittingService,
 )
 from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import ReadoutDataType
+from chem_vault.domain.screening_assay.enums import ReadoutDataType, ReadoutNormalization
 from chem_vault.domain.screening_assay.protocol import Protocol
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.screening_assay.repository import DoseResponseCurveRepository
@@ -90,21 +90,31 @@ class FitDoseResponseCurves:
             if y_rd is None:
                 continue
 
+            # Per readout def, exactly one value layer is the canonical fit input:
+            # post-normalization for normalized readouts, the formula output for
+            # calculated readouts, otherwise the raw values.
+            use_computed = (
+                y_rd.normalization != ReadoutNormalization.NONE
+                or y_rd.is_calculated
+            )
+
             # Group readout data by (molecule_id, batch_id)
             groups: dict[tuple[uuid.UUID, uuid.UUID], list[ConcentrationResponsePoint]] = defaultdict(list)
 
             for rd in readout_data:
                 if rd.readout_definition_id != y_rd.id:
                     continue
+                if rd.is_computed != use_computed:
+                    continue
                 if rd.value is None or rd.well_id is None:
                     continue
                 well = well_map.get(rd.well_id)
-                if well is None or well.concentration is None:
+                if well is None or well.dose is None:
                     continue
                 key = (rd.molecule_id, rd.batch_id)
                 groups[key].append(
                     ConcentrationResponsePoint(
-                        concentration=well.concentration.value,
+                        concentration=well.dose,
                         response=rd.value.value,
                     )
                 )
@@ -126,7 +136,6 @@ class FitDoseResponseCurves:
                     run_id=run.id,
                     curve_type=config.curve_type,
                     fitted_value=fitted.fitted_value,
-                    fitted_unit=dr_def.unit or "nM",
                     hill_slope=fitted.hill_slope,
                     top=fitted.top,
                     bottom=fitted.bottom,

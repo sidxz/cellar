@@ -27,6 +27,20 @@ class BatchNumberRow:
     batch_number: str
 
 
+@dataclass(frozen=True)
+class MoleculeDisplayRow:
+    """Per-molecule display info: reg id, name, custom synonyms.
+
+    Used to populate the readout-data table without forcing the client to
+    page through ``/molecules`` (which only returns the first ~100, missing
+    most compounds in larger screens).
+    """
+
+    registration_number: str
+    name: str
+    synonyms: list[str]
+
+
 @runtime_checkable
 class ReadoutDataEnrichedReader(Protocol):
     """Application-layer protocol for enriched readout data read-model queries."""
@@ -34,6 +48,10 @@ class ReadoutDataEnrichedReader(Protocol):
     async def resolve_molecule_registration_numbers(
         self, molecule_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]: ...
+
+    async def resolve_molecules(
+        self, molecule_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, MoleculeDisplayRow]: ...
 
     async def resolve_batch_numbers(
         self, batch_ids: list[uuid.UUID]

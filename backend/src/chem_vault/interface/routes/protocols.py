@@ -137,6 +137,8 @@ class ProtocolResponse(BaseModel):
     parent_protocol_id: uuid.UUID | None = None
     status: str
     created_by: uuid.UUID
+    # Canonical dose unit for all wells + IC50 fits of runs of this protocol.
+    dose_unit: str
     readout_definitions: list[ReadoutDefinitionResponse]
     condition_definitions: list[ConditionDefinitionResponse]
     control_layouts: dict[str, str] | None = None
@@ -174,6 +176,7 @@ class ProtocolResponse(BaseModel):
             parent_protocol_id=p.parent_protocol_id,
             status=p.status.value,
             created_by=p.created_by,
+            dose_unit=p.dose_unit.value,
             readout_definitions=[
                 ReadoutDefinitionResponse(
                     id=rd.id,
@@ -288,6 +291,7 @@ class CreateProtocolRequest(BaseModel):
     protocol_type: str
     target_id: uuid.UUID | None = None
     category: str | None = None
+    dose_unit: str = "uM"
     readout_definitions: list[dict[str, Any]]
     condition_definitions: list[dict[str, Any]] | None = None
 
@@ -368,6 +372,7 @@ async def create_protocol(
         protocol_type=body.protocol_type,
         target_id=body.target_id,
         category=body.category,
+        dose_unit=body.dose_unit,
         readout_definitions=body.readout_definitions,
         condition_definitions=body.condition_definitions or [],
     )

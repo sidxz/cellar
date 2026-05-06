@@ -90,6 +90,7 @@ class ProtocolVersioningService:
             parent_protocol_id=parent.id,
             status=ProtocolStatus.DRAFT,
             created_by=parent.created_by,
+            dose_unit=parent.dose_unit,
             readout_definitions=cloned_readouts,
             condition_definitions=cloned_conditions,
             control_layouts=dict(parent.control_layouts) if parent.control_layouts else None,

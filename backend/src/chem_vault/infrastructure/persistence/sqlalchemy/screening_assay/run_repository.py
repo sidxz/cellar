@@ -13,8 +13,7 @@ from chem_vault.domain.screening_assay.enums import (
     WellType,
 )
 from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.enums import ConcentrationUnit
-from chem_vault.domain.shared.value_objects import Barcode, Concentration
+from chem_vault.domain.shared.value_objects import Barcode
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -108,12 +107,6 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             plates.append(plate)
 
             for wm in pm.wells:
-                concentration = None
-                if wm.concentration_value is not None and wm.concentration_unit is not None:
-                    concentration = Concentration(
-                        value=wm.concentration_value,
-                        unit=ConcentrationUnit(wm.concentration_unit),
-                    )
                 well = Well(
                     id=wm.id,
                     plate_id=wm.plate_id,
@@ -121,7 +114,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                     column=wm.column,
                     well_type=WellType(wm.well_type),
                     batch_id=wm.batch_id,
-                    concentration=concentration,
+                    dose=wm.dose,
                     created_at=wm.created_at,
                     updated_at=wm.updated_at,
                 )
@@ -257,10 +250,5 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             column=well.column,
             well_type=well.well_type.value,
             batch_id=well.batch_id,
-            concentration_value=(
-                well.concentration.value if well.concentration else None
-            ),
-            concentration_unit=(
-                well.concentration.unit.value if well.concentration else None
-            ),
+            dose=well.dose,
         )

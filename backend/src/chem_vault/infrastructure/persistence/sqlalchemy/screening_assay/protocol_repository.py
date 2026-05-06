@@ -25,6 +25,7 @@ from chem_vault.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from chem_vault.domain.shared.enums import ConcentrationUnit
 from chem_vault.domain.shared.ontology import OntologyTerm
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -210,7 +211,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             return None
         return DoseResponseConfig(
             curve_type=CurveType(data["curve_type"]),
-            x_readout_name=data["x_readout_name"],
+            x_readout_name=data.get("x_readout_name"),
             y_readout_name=data["y_readout_name"],
             hill_slope_constraint=HillSlopeConstraint(
                 data.get("hill_slope_constraint", "unconstrained")
@@ -297,6 +298,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             parent_protocol_id=model.parent_protocol_id,
             status=ProtocolStatus(model.status),
             created_by=model.created_by,
+            dose_unit=ConcentrationUnit(model.dose_unit),
             readout_definitions=readout_defs,
             condition_definitions=condition_defs,
             control_layouts=control_layouts,
@@ -349,6 +351,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             parent_protocol_id=aggregate.parent_protocol_id,
             status=aggregate.status.value,
             created_by=aggregate.created_by,
+            dose_unit=aggregate.dose_unit.value,
             version=aggregate.version,
             control_layouts=self._serialize_control_layouts(aggregate.control_layouts),
             ontology_annotations=self._serialize_ontology_annotations(aggregate.ontology_annotations),
@@ -373,6 +376,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.protocol_version = aggregate.protocol_version
         model.parent_protocol_id = aggregate.parent_protocol_id
         model.status = aggregate.status.value
+        model.dose_unit = aggregate.dose_unit.value
         model.control_layouts = self._serialize_control_layouts(aggregate.control_layouts)
         model.ontology_annotations = self._serialize_ontology_annotations(aggregate.ontology_annotations)
         model.recommended_hit_criteria = (

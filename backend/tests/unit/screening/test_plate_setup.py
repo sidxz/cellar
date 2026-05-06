@@ -35,7 +35,6 @@ from chem_vault.domain.screening_assay.enums import (
 )
 from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.enums import ConcentrationUnit
 from chem_vault.domain.shared.events import DomainEvent
 
 
@@ -342,7 +341,6 @@ class TestSetUpRunPlate:
                 ),
             ],
             concentration_series=conc_series,
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)
@@ -403,7 +401,6 @@ class TestSetUpRunPlate:
                 CompoundAssignment(molecule_ref="UnknownDrug", well_positions=["B1"]),
             ],
             concentration_series=[1000.0],
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)
@@ -513,7 +510,6 @@ class TestSetUpRunPlate:
                 ),
             ],
             concentration_series=[100.0, 50.0],  # 2 concentrations, 4 wells
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)
@@ -571,7 +567,6 @@ class TestSetUpRunPlate:
                 ),
             ],
             concentration_series=[1000.0, 333.3],
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)

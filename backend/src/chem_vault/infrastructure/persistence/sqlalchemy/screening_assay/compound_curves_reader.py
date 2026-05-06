@@ -49,7 +49,6 @@ class SQLAlchemyCompoundCurvesReader:
                     run_id=r.run_id,
                     curve_type=r.curve_type,
                     fitted_value=r.fitted_value,
-                    fitted_unit=r.fitted_unit,
                     hill_slope=r.hill_slope,
                     top=r.top,
                     bottom=r.bottom,

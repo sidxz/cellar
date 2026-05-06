@@ -648,7 +648,6 @@ class TestWell:
     def test_create_well(self) -> None:
         plate_id = uuid.uuid4()
         batch_id = uuid.uuid4()
-        conc = Concentration(value=10.0, unit=ConcentrationUnit.UM)
 
         well = Well(
             plate_id=plate_id,
@@ -656,7 +655,7 @@ class TestWell:
             column=5,
             well_type=WellType.SAMPLE,
             batch_id=batch_id,
-            concentration=conc,
+            dose=10.0,
         )
 
         assert well.plate_id == plate_id
@@ -664,7 +663,7 @@ class TestWell:
         assert well.column == 5
         assert well.well_type == WellType.SAMPLE
         assert well.batch_id == batch_id
-        assert well.concentration == conc
+        assert well.dose == 10.0
 
     def test_row_uppercased(self) -> None:
         well = Well(plate_id=uuid.uuid4(), row="a", column=1)

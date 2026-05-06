@@ -33,7 +33,6 @@ class CreateRunImportTemplateCommand(Command):
     workspace_id: uuid.UUID
     name: str
     column_mapping: dict[str, Any]
-    concentration_unit: str = "uM"
     description: str | None = None
     created_by: uuid.UUID
 
@@ -45,7 +44,6 @@ class UpdateRunImportTemplateCommand(Command):
     name: str | None = None
     description: str | None = None
     column_mapping: dict[str, Any] | None = None
-    concentration_unit: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -91,7 +89,6 @@ class CreateRunImportTemplate:
                 workspace_id=input.workspace_id,
                 name=input.name,
                 column_mapping=input.column_mapping,
-                concentration_unit=input.concentration_unit,
                 description=input.description,
                 created_by=input.created_by,
             )
@@ -136,7 +133,6 @@ class UpdateRunImportTemplate:
                 name=input.name,
                 description=input.description,
                 column_mapping=input.column_mapping,
-                concentration_unit=input.concentration_unit,
             )
             await self._repo.save(template)
             events = await self._uow.commit()

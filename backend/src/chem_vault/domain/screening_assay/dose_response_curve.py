@@ -34,7 +34,6 @@ class DoseResponseCurve(Entity):
         run_id: uuid.UUID,
         curve_type: CurveType,
         fitted_value: float,
-        fitted_unit: str,
         hill_slope: float,
         top: float,
         bottom: float,
@@ -61,8 +60,9 @@ class DoseResponseCurve(Entity):
         self.protocol_id = protocol_id
         self.run_id = run_id
         self.curve_type = curve_type
+        # Fitted IC50/EC50/etc value. Unit is the owning protocol's dose_unit;
+        # callers look it up at display time. Not denormalized here.
         self.fitted_value = fitted_value
-        self.fitted_unit = fitted_unit
         self.hill_slope = hill_slope
         self.top = top
         self.bottom = bottom

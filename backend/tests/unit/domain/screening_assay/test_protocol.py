@@ -357,6 +357,27 @@ class TestProtocolDefinitionManagement:
         with pytest.raises(ConflictError, match="only DRAFT"):
             protocol.add_readout_definition(new_rd)
 
+    @pytest.mark.parametrize(
+        "name", ["concentration", "Concentration", "DOSE", "well", " batch "]
+    )
+    def test_add_readout_with_reserved_name_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID, name: str
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        bad = _make_readout(protocol.id, name=name)
+        with pytest.raises(ValidationError, match="reserved well-metadata name"):
+            protocol.add_readout_definition(bad)
+
+    def test_update_readout_to_reserved_name_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        rd = _make_readout(name="Raw AU")
+        protocol = _make_protocol(workspace_id, user_id, readout_definitions=[rd])
+        with pytest.raises(ValidationError, match="reserved well-metadata name"):
+            protocol.update_readout_definition(
+                rd.id, name="concentration"
+            )
+
     def test_remove_readout_ok(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:

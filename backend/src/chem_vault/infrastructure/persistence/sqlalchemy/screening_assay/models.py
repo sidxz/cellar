@@ -122,6 +122,11 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         String(20), nullable=False, server_default="draft"
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    # Canonical dose unit for this assay. All wells of all runs of this
+    # protocol use this unit; IC50 fits are reported in this unit.
+    dose_unit: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="uM"
+    )
     control_layouts: Mapped[dict | None] = mapped_column(JSONB)
     ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
     recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)
@@ -301,8 +306,8 @@ class WellModel(Base, EntityModelMixin):
         String(30), nullable=False, server_default="sample"
     )
     batch_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
-    concentration_value: Mapped[float | None] = mapped_column(Float)
-    concentration_unit: Mapped[str | None] = mapped_column(String(20))
+    # Dose value in the owning protocol's dose_unit. Unit not denormalized.
+    dose: Mapped[float | None] = mapped_column(Float)
 
     plate: Mapped[PlateModel] = relationship("PlateModel", back_populates="wells")
 
@@ -362,7 +367,6 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     )
     curve_type: Mapped[str] = mapped_column(String(20), nullable=False)
     fitted_value: Mapped[float] = mapped_column(Float, nullable=False)
-    fitted_unit: Mapped[str] = mapped_column(String(20), nullable=False)
     hill_slope: Mapped[float] = mapped_column(Float, nullable=False)
     top: Mapped[float] = mapped_column(Float, nullable=False)
     bottom: Mapped[float] = mapped_column(Float, nullable=False)
@@ -389,7 +393,6 @@ class RunImportTemplateModel(Base, EntityModelMixin, WorkspaceIdMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     column_mapping: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    concentration_unit: Mapped[str] = mapped_column(String(20), nullable=False, default="uM")
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     __table_args__ = (

@@ -85,11 +85,18 @@ def _make_repos():
     )
 
 
-def _fake_uow():
-    """Create a fake UoW that passes through async context manager."""
+def _fake_uow(is_active: bool = True):
+    """Fake UoW that passes through async context manager.
+
+    By default ``is_active`` is True so the engine takes the no-context
+    fast path. Pass ``False`` to exercise the "open my own UoW + commit"
+    path that runs in production.
+    """
     uow = AsyncMock()
+    uow.is_active = is_active
     uow.__aenter__ = AsyncMock(return_value=uow)
     uow.__aexit__ = AsyncMock(return_value=False)
+    uow.commit = AsyncMock(return_value=[])
     return uow
 
 
@@ -171,6 +178,62 @@ class TestComputedReadoutsPersisted:
         saved = readout_data_repo.save_bulk.call_args[0][0]
         assert len(saved) == 1
         assert saved[0].value.value == 100.0
+
+
+class TestCommitsWhenOpeningOwnUoW:
+    """When the engine opens its own UoW (caller doesn't), it MUST commit
+    or the computed readouts and qc_metrics are silently rolled back on
+    context exit. Real production bug — calc engine was never persisting
+    anything despite returning Success.
+    """
+
+    @pytest.mark.asyncio
+    async def test_commits_own_uow_after_successful_compute(self) -> None:
+        raw_rd = ReadoutDefinition(
+            protocol_id=_PH,
+            name="Raw",
+            data_type=ReadoutDataType.NUMERIC,
+        )
+        calc_rd = ReadoutDefinition(
+            protocol_id=_PH,
+            name="Doubled",
+            data_type=ReadoutDataType.NUMERIC,
+            is_calculated=True,
+            calculation_formula="Raw * 2",
+        )
+        protocol = _make_protocol([raw_rd, calc_rd])
+        run = _make_run(protocol.id)
+        raw_readout = ReadoutData(
+            workspace_id=WS,
+            run_id=run.id,
+            well_id=run.wells[0].id,
+            molecule_id=uuid.uuid4(),
+            batch_id=run.wells[0].batch_id,
+            readout_definition_id=raw_rd.id,
+            value=QualifiedValue(value=50.0),
+        )
+        readout_data_repo, run_repo, protocol_repo = _make_repos()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+        readout_data_repo.find_by_run.return_value = [raw_readout]
+        readout_data_repo.delete_computed_for_run.return_value = 0
+
+        # is_active=False -> engine opens its own context -> must commit.
+        uow = _fake_uow(is_active=False)
+        engine = ReadoutCalculationEngine(
+            uow=uow,
+            formula_evaluator=AstevalFormulaEvaluator(),
+            plate_normalizer=PlateNormalizer(),
+            replicate_aggregator=ReplicateAggregator(),
+            readout_data_repo=readout_data_repo,
+            run_repo=run_repo,
+            protocol_repo=protocol_repo,
+        )
+
+        result = await engine.compute_for_run(run.id, workspace_id=WS)
+        assert isinstance(result, Success)
+        # The fix: commit() MUST be awaited or the session changes are lost.
+        uow.commit.assert_awaited_once()
 
 
 class TestNoCalculatedReadoutsIsNoop:

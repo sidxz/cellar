@@ -58,6 +58,8 @@ class ReadoutDataResponse(BaseModel):
     well_id: uuid.UUID | None = None
     molecule_id: uuid.UUID | None = None
     registration_number: str | None = None
+    molecule_name: str | None = None
+    synonyms: list[str] = []
     batch_id: uuid.UUID | None = None
     batch_number: str | None = None
     readout_definition_id: uuid.UUID
@@ -72,6 +74,8 @@ class ReadoutDataResponse(BaseModel):
         cls,
         rd,
         registration_number: str | None = None,
+        molecule_name: str | None = None,
+        synonyms: list[str] | None = None,
         batch_number: str | None = None,
     ) -> ReadoutDataResponse:
         return cls(
@@ -81,6 +85,8 @@ class ReadoutDataResponse(BaseModel):
             well_id=rd.well_id,
             molecule_id=rd.molecule_id,
             registration_number=registration_number,
+            molecule_name=molecule_name,
+            synonyms=synonyms or [],
             batch_id=rd.batch_id,
             batch_number=batch_number,
             readout_definition_id=rd.readout_definition_id,
@@ -96,7 +102,12 @@ class DoseResponseCurveResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
+    # Canonical reg id (e.g. "CV-00602") — primary label in compound tables.
+    registration_number: str | None = None
     molecule_name: str | None = None
+    # Vendor / external aliases for the molecule (e.g. ["Aspirin", "ASA"]).
+    synonyms: list[str] = []
+    smiles: str | None = None
     batch_id: uuid.UUID
     batch_number: str | None = None
     protocol_id: uuid.UUID
@@ -120,21 +131,28 @@ class DoseResponseCurveResponse(BaseModel):
         cls,
         c,  # type: ignore[no-untyped-def]
         *,
+        registration_number: str | None = None,
         molecule_name: str | None = None,
+        synonyms: list[str] | None = None,
+        smiles: str | None = None,
         batch_number: str | None = None,
+        dose_unit: str = "uM",
     ) -> DoseResponseCurveResponse:
         return cls(
             id=c.id,
             workspace_id=c.workspace_id,
             molecule_id=c.molecule_id,
+            registration_number=registration_number,
             molecule_name=molecule_name,
+            synonyms=synonyms or [],
+            smiles=smiles,
             batch_id=c.batch_id,
             batch_number=batch_number,
             protocol_id=c.protocol_id,
             run_id=c.run_id,
             curve_type=c.curve_type.value,
             fitted_value=c.fitted_value,
-            fitted_unit=c.fitted_unit,
+            fitted_unit=dose_unit,
             hill_slope=c.hill_slope,
             top=c.top,
             bottom=c.bottom,
@@ -206,7 +224,6 @@ class CreateDoseResponseCurveRequest(BaseModel):
     run_id: uuid.UUID
     curve_type: str
     fitted_value: float
-    fitted_unit: str
     hill_slope: float
     top: float
     bottom: float
@@ -313,6 +330,8 @@ async def list_readout_data(
         ReadoutDataResponse.from_domain(
             item.readout,
             registration_number=item.registration_number,
+            molecule_name=item.molecule_name,
+            synonyms=item.synonyms,
             batch_number=item.batch_number,
         )
         for item in items
@@ -333,7 +352,6 @@ async def create_dose_response_curve(
         run_id=body.run_id,
         curve_type=body.curve_type,
         fitted_value=body.fitted_value,
-        fitted_unit=body.fitted_unit,
         hill_slope=body.hill_slope,
         top=body.top,
         bottom=body.bottom,
@@ -361,8 +379,12 @@ async def list_dose_response_curves(
     return [
         DoseResponseCurveResponse.from_domain(
             item.curve,
+            registration_number=item.registration_number,
             molecule_name=item.molecule_name,
+            synonyms=item.synonyms,
+            smiles=item.smiles,
             batch_number=item.batch_number,
+            dose_unit=item.dose_unit,
         )
         for item in items
     ]

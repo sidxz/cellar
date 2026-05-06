@@ -28,7 +28,6 @@ class CreateDoseResponseCurveCommand(Command):
     run_id: uuid.UUID
     curve_type: str
     fitted_value: float
-    fitted_unit: str
     hill_slope: float
     top: float
     bottom: float
@@ -84,7 +83,6 @@ class CreateDoseResponseCurve:
                 run_id=input.run_id,
                 curve_type=CurveType(input.curve_type),
                 fitted_value=input.fitted_value,
-                fitted_unit=input.fitted_unit,
                 hill_slope=input.hill_slope,
                 top=input.top,
                 bottom=input.bottom,

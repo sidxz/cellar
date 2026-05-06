@@ -260,7 +260,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
         if mapped_type == ReadoutDataType.DOSE_RESPONSE:
             dr_config = DoseResponseConfig(
                 curve_type=CurveType.IC50,
-                x_readout_name=rd.get("x_readout_name", "Concentration"),
+                x_readout_name=rd.get("x_readout_name"),
                 y_readout_name=rd.get("y_readout_name", rd_name),
                 hill_slope_constraint=HillSlopeConstraint.UNCONSTRAINED,
                 normalization_scope=NormalizationScope.PER_PLATE,
