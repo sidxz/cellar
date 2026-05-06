@@ -142,7 +142,7 @@ export function MergeCandidateCard({
                   <p className="text-xs font-medium text-destructive">
                     Merge blocked
                   </p>
-                  {impact!.blockers.map((b, i) => (
+                  {impact?.blockers.map((b, i) => (
                     <p key={i} className="text-xs text-destructive/80">
                       {b}
                     </p>

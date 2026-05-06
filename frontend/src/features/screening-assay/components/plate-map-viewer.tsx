@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
 import type { DoseUnit, PlateData, PlateMapWell } from "../types";
+import { plateDimensionsTuple, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
 import { GROUP_PALETTE, WELL_TYPE_COLORS, CHART_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -41,43 +42,6 @@ function buildCompoundColors(ids: string[]): Map<string, string> {
     m.set(id, `hsl(${hue}, 50%, 55%)`);
   });
   return m;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Row label: A, B, ..., Z, AA, AB, ... */
-function rowLabel(index: number): string {
-  if (index < 26) return String.fromCharCode(65 + index);
-  return (
-    String.fromCharCode(65 + Math.floor(index / 26) - 1) +
-    String.fromCharCode(65 + (index % 26))
-  );
-}
-
-function plateDimensions(format: string): [number, number] {
-  switch (format) {
-    case "6": return [2, 3];
-    case "12": return [3, 4];
-    case "24": return [4, 6];
-    case "48": return [6, 8];
-    case "96": return [8, 12];
-    case "384": return [16, 24];
-    case "1536": return [32, 48];
-    default: return [8, 12];
-  }
-}
-
-function cellSize(format: string): number {
-  switch (format) {
-    case "6":
-    case "12":
-    case "24":
-    case "48":
-    case "96": return 28;
-    case "384": return 18;
-    case "1536": return 10;
-    default: return 28;
-  }
 }
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
@@ -139,8 +103,8 @@ export function PlateMapViewer({
   doseUnit,
   className,
 }: PlateMapViewerProps) {
-  const [rows, cols] = plateDimensions(plate.format);
-  const size = cellSize(plate.format);
+  const [rows, cols] = plateDimensionsTuple(plate.format);
+  const size = plateCellSizePx(plate.format);
   const showLabel = size >= 18;
 
   // Build a map: position -> well

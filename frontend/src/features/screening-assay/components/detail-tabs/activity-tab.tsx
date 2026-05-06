@@ -27,6 +27,8 @@ import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
 import { fetchStructureImages } from "@/shared/lib/export/structure-image";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
 import { useCompoundFlags, useCreateFlag, useDeleteFlag } from "../../hooks/use-compound-flags";
+import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
+import { groupBy } from "@/shared/lib/group-by";
 import type { CompoundFlag as CompoundFlagType } from "../../types";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { DoseResponseChart } from "../dose-response-chart";
@@ -400,8 +402,9 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       pinned: "left" as const,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-        if (!params.data) return null;
-        const flag = flagsByMolecule.get(params.data.molecule_id);
+        const data = params.data;
+        if (!data) return null;
+        const flag = flagsByMolecule.get(data.molecule_id);
         return (
           <button
             type="button"
@@ -411,7 +414,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
               if (flag) {
                 deleteFlag.mutate(flag.id);
               } else {
-                createFlag.mutate({ molecule_id: params.data!.molecule_id });
+                createFlag.mutate({ molecule_id: data.molecule_id });
               }
             }}
           >
@@ -460,12 +463,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const traces: any[] = [];
 
-    const byMolecule = new Map<string, typeof multiCurves>();
-    for (const curve of multiCurves) {
-      const mid = curve.molecule_id;
-      if (!byMolecule.has(mid)) byMolecule.set(mid, []);
-      byMolecule.get(mid)!.push(curve);
-    }
+    const byMolecule = groupBy(multiCurves, (curve) => curve.molecule_id);
 
     let colorIdx = 0;
     for (const [molId, curves] of byMolecule) {
@@ -522,8 +520,8 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       const logMax = Math.log10(xMax);
       const lineX: number[] = [];
       const lineY: number[] = [];
-      for (let i = 0; i <= 80; i++) {
-        const logX = logMin + (logMax - logMin) * (i / 80);
+      for (let i = 0; i <= COMPACT_DR_CHART.POINTS; i++) {
+        const logX = logMin + (logMax - logMin) * (i / COMPACT_DR_CHART.POINTS);
         const x = Math.pow(10, logX);
         const y =
           bestCurve.bottom +

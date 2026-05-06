@@ -62,12 +62,13 @@ export function DisclosureConflictList() {
         sortable: false,
         filter: false,
         cellRenderer: (params: ICellRendererParams<DisclosureRequest>) => {
-          if (!params.data) return null;
+          const data = params.data;
+          if (!data) return null;
           return (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSelected(params.data!)}
+              onClick={() => setSelected(data)}
             >
               Resolve
             </Button>

@@ -23,6 +23,11 @@ import { CollectionPickerDialog } from "./collection-picker-dialog";
 
 type EnrichedMolecule = Molecule & { activity?: Record<string, ActivityValue> };
 
+/** Server-side page size for compound search results. Driven by what the
+ * AG Grid viewport can comfortably render before the user scrolls; keep in
+ * sync with the cursor pagination contract on the backend. */
+const SEARCH_PAGE_SIZE = 100;
+
 // ─── Inner component (uses useSearchParams, needs Suspense boundary) ───────
 
 function SearchPageInner() {
@@ -118,7 +123,7 @@ function SearchPageInner() {
       };
 
       searchMutation.mutate(
-        { input, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+        { input, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
         {
           onSuccess: (data) => {
             setResults(enrichItems(data));
@@ -144,7 +149,7 @@ function SearchPageInner() {
     };
 
     searchMutation.mutate(
-      { input, cursor: nextCursor, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+      { input, cursor: nextCursor, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
       {
         onSuccess: (data) => {
           setResults((prev) => [...prev, ...enrichItems(data)]);
@@ -164,7 +169,7 @@ function SearchPageInner() {
       ...(allColumns.length > 0 ? { protocol_columns: allColumns } : {}),
     };
     searchMutation.mutate(
-      { input, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+      { input, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
       {
         onSuccess: (data) => {
           setResults(enrichItems(data));
@@ -210,7 +215,7 @@ function SearchPageInner() {
     };
 
     runSearch(
-      { input, limit: 100 },
+      { input, limit: SEARCH_PAGE_SIZE },
       {
         onSuccess: (data) => {
           setResults(enrichItems(data));

@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { StructureRenderer } from "@/shared/components/chemistry";
+import { COPY_FEEDBACK_MS } from "@/shared/lib/timing";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
@@ -89,7 +90,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
     e.stopPropagation();
     navigator.clipboard.writeText(value);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
   };
 
   return (

@@ -27,7 +27,7 @@ import {
   type LifecycleStage,
 } from "@/features/chemical-registration/types";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
-import { generate4PLPoints } from "../../lib/curve-math";
+import { generate4PLPoints, DETAIL_4PL } from "../../lib/curve-math";
 import type { ProtocolCurveGroup, CurveDetail } from "../../types";
 
 // ─── Dynamic Plotly import (must NOT be SSR'd) ────────────────────────────
@@ -108,7 +108,7 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
       curve.hill_slope,
       curve.top,
       curve.bottom,
-      { numPoints: 100, rangeExtension: 0.5 },
+      DETAIL_4PL,
     );
     if (fitted.x.length > 0) {
       traces.push({

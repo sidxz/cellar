@@ -263,7 +263,7 @@ export function MergePreviewPage({
             <p className="text-sm font-medium text-destructive">
               Merge blocked
             </p>
-            {impact!.blockers.map((b, i) => (
+            {impact?.blockers.map((b, i) => (
               <p key={i} className="text-sm text-destructive/80">
                 {b}
               </p>

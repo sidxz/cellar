@@ -27,6 +27,15 @@ import {
   CURVE_CLASS_LABELS,
 } from "../types";
 import { useRefitDoseResponse, useClassifyDoseResponse } from "../hooks/use-refit-dose-response";
+import {
+  CURVE_FIT_POINTS,
+  X_AXIS_MIN_RATIO,
+  X_AXIS_MAX_RATIO,
+  X_AXIS_FALLBACK_MIN_RATIO,
+  X_AXIS_FALLBACK_MAX_RATIO,
+  X_AXIS_FLOOR,
+  PLOT_MARKER,
+} from "../lib/dose-response-display";
 
 // ─── Dynamic import — Plotly must NOT be SSR'd ─────────────────────────────
 
@@ -80,8 +89,8 @@ function generate4PLCurve(
   const xs: number[] = [];
   const ys: number[] = [];
 
-  for (let i = 0; i <= 100; i++) {
-    const logX = logMin + (logMax - logMin) * (i / 100);
+  for (let i = 0; i <= CURVE_FIT_POINTS; i++) {
+    const logX = logMin + (logMax - logMin) * (i / CURVE_FIT_POINTS);
     const x = Math.pow(10, logX);
     const y = bottom + (top - bottom) / (1 + Math.pow(x / fitted_value, hill_slope));
     xs.push(x);
@@ -611,9 +620,13 @@ export function DoseResponseChart({
     }
 
     const allX = [...serverIncluded.x, ...serverExcluded.x, curve.fitted_value];
-    const xMinRaw = allX.length > 0 ? Math.min(...allX) * 0.1 : curve.fitted_value * 0.01;
-    const xMin = Math.max(xMinRaw, 1e-12);
-    const xMax = allX.length > 0 ? Math.max(...allX) * 10 : curve.fitted_value * 100;
+    const xMinRaw = allX.length > 0
+      ? Math.min(...allX) * X_AXIS_MIN_RATIO
+      : curve.fitted_value * X_AXIS_FALLBACK_MIN_RATIO;
+    const xMin = Math.max(xMinRaw, X_AXIS_FLOOR);
+    const xMax = allX.length > 0
+      ? Math.max(...allX) * X_AXIS_MAX_RATIO
+      : curve.fitted_value * X_AXIS_FALLBACK_MAX_RATIO;
 
     // Compute replicate stats for error bars
     const { meanX, meanY, sdY, replicateX, replicateY } = computeReplicateStats(
@@ -633,9 +646,9 @@ export function DoseResponseChart({
         y: replicateY,
         marker: {
           color,
-          size: 5,
+          size: PLOT_MARKER.REPLICATE_SIZE,
           symbol: "circle",
-          opacity: 0.35,
+          opacity: PLOT_MARKER.REPLICATE_OPACITY,
         },
         showlegend: false,
         hoverinfo: "skip",
@@ -658,7 +671,7 @@ export function DoseResponseChart({
         y: displayY,
         marker: {
           color,
-          size: isInteractive ? 9 : 7,
+          size: isInteractive ? PLOT_MARKER.POINT_SIZE_INTERACTIVE : PLOT_MARKER.POINT_SIZE_STATIC,
           symbol: "circle",
           line: isInteractive
             ? { color: "rgba(255,255,255,0.3)", width: 1 }
@@ -692,7 +705,7 @@ export function DoseResponseChart({
         legendgroup: group,
         x: manualExcludedX,
         y: manualExcludedY,
-        marker: { color, size: 8, symbol: "x", opacity: 0.5 },
+        marker: { color, size: PLOT_MARKER.EXCLUDED_SIZE, symbol: "x", opacity: PLOT_MARKER.MANUAL_EXCLUDED_OPACITY },
         showlegend: false,
         hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to include</i><extra></extra>"
@@ -709,7 +722,7 @@ export function DoseResponseChart({
         legendgroup: group,
         x: autoExcludedX,
         y: autoExcludedY,
-        marker: { color, size: 8, symbol: "diamond", opacity: 0.45 },
+        marker: { color, size: PLOT_MARKER.EXCLUDED_SIZE, symbol: "diamond", opacity: PLOT_MARKER.AUTO_EXCLUDED_OPACITY },
         showlegend: false,
         hovertemplate:
           "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Auto-excluded (3\u03c3 outlier)</i><extra></extra>",

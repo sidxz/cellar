@@ -18,6 +18,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Badge } from "@/shared/components/ui/badge";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
+import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
 import type { Protocol } from "@/features/screening-assay/types";
 import type { ActivityValue, ReportConfig } from "../../types";
@@ -165,15 +166,11 @@ function buildProtocolColumnGroups(
   protocols: Protocol[],
 ): ColGroupDef[] {
   // Group columns by protocol ID — supports both drc: and rd: prefixes
-  const grouped = new Map<string, string[]>();
-  for (const colId of protocolColumns) {
-    const parts = colId.split(":");
-    const prefix = parts[0];
-    if ((prefix !== "drc" && prefix !== "rd") || !parts[1]) continue;
-    const protoId = parts[1];
-    if (!grouped.has(protoId)) grouped.set(protoId, []);
-    grouped.get(protoId)!.push(colId);
-  }
+  const validColumns = protocolColumns.filter((colId) => {
+    const [prefix, protoId] = colId.split(":");
+    return (prefix === "drc" || prefix === "rd") && !!protoId;
+  });
+  const grouped = groupBy(validColumns, (colId) => colId.split(":")[1]);
 
   const groups: ColGroupDef[] = [];
   for (const [protoId, colIds] of grouped) {

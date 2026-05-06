@@ -3,7 +3,7 @@
 import { memo } from "react";
 import dynamic from "next/dynamic";
 import type { ActivityValue } from "../../types";
-import { generate4PLPoints } from "../../lib/curve-math";
+import { generate4PLPoints, COMPACT_4PL, COMPACT_DR_CHART_SIZE } from "../../lib/curve-math";
 import { CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,7 +57,7 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
       value.curve_params.hill_slope,
       value.curve_params.top,
       value.curve_params.bottom,
-      { numPoints: 80, rangeExtension: 0.3 },
+      COMPACT_4PL,
     );
     if (fitted.x.length > 0) {
       traces.push({
@@ -75,8 +75,8 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
     <Plot
       data={traces}
       layout={{
-        width: 220,
-        height: 160,
+        width: COMPACT_DR_CHART_SIZE.width,
+        height: COMPACT_DR_CHART_SIZE.height,
         margin: { l: 30, r: 8, t: 8, b: 26 },
         xaxis: {
           type: "log",
@@ -99,7 +99,7 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
         staticPlot: true,
         displayModeBar: false,
       }}
-      style={{ width: 220, height: 160 }}
+      style={{ width: COMPACT_DR_CHART_SIZE.width, height: COMPACT_DR_CHART_SIZE.height }}
     />
   );
 }

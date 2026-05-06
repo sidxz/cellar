@@ -1,3 +1,12 @@
+/** Compact preset for inline grid-cell dose-response thumbnails (cheap). */
+export const COMPACT_4PL = { numPoints: 80, rangeExtension: 0.3 } as const;
+
+/** Detail preset for the compound detail panel (smoother render). */
+export const DETAIL_4PL = { numPoints: 100, rangeExtension: 0.5 } as const;
+
+/** Compact dose-response chart pixel dimensions (inline cell renderer). */
+export const COMPACT_DR_CHART_SIZE = { width: 220, height: 160 } as const;
+
 /**
  * Generate fitted 4PL (four-parameter logistic) sigmoid curve points on a
  * logarithmic x-scale. Used for rendering dose-response curves in both

@@ -3,6 +3,7 @@
 import { useMemo, useState, useCallback } from "react";
 import { Eye, Filter, FlaskConical, Settings2, RotateCcw } from "lucide-react";
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
+import { groupBy } from "@/shared/lib/group-by";
 import type {
   ColDef,
   ICellRendererParams,
@@ -106,12 +107,7 @@ function curveClassBadge(cc: CurveClass | null) {
  * past the first page).
  */
 function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow[] {
-  const byMolecule = new Map<string, DoseResponseCurve[]>();
-  for (const c of curves) {
-    const mid = c.molecule_id;
-    if (!byMolecule.has(mid)) byMolecule.set(mid, []);
-    byMolecule.get(mid)!.push(c);
-  }
+  const byMolecule = groupBy(curves, (c) => c.molecule_id);
 
   const rows: CompoundCurveRow[] = [];
   for (const [, molCurves] of byMolecule) {

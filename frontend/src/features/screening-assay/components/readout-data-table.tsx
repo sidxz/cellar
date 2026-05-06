@@ -5,6 +5,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
 import { cn } from "@/shared/lib/utils";
+import { groupBy } from "@/shared/lib/group-by";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
@@ -140,13 +141,13 @@ export function ReadoutDataTable({
     // 1. Bucket per-molecule rows (no well_id) — these are calculated
     // readouts that the engine produced once per (mol, batch). They get
     // merged into every well row of the same group below.
-    const perMol = new Map<string, ReadoutData[]>();
-    for (const row of data) {
-      if (!row.molecule_id || row.well_id) continue;
-      const k = `${row.molecule_id}::${row.batch_id ?? ""}`;
-      if (!perMol.has(k)) perMol.set(k, []);
-      perMol.get(k)!.push(row);
-    }
+    const perMolRows = data.filter(
+      (row) => row.molecule_id && !row.well_id,
+    );
+    const perMol = groupBy(
+      perMolRows,
+      (row) => `${row.molecule_id}::${row.batch_id ?? ""}`,
+    );
 
     // 2. Group per-well rows by (molecule, batch, well).
     const groups = new Map<string, PivotRow>();

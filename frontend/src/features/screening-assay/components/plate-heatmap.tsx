@@ -2,6 +2,7 @@
 
 import { cn } from "@/shared/lib/utils";
 import { type PlateFormat, type WellType, WELL_TYPE_LABELS } from "../types";
+import { plateDimensions } from "../lib/plate-dimensions";
 import { WELL_TYPE_COLORS as VF_WELL_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -21,16 +22,6 @@ interface PlateHeatmapProps {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const PLATE_DIMENSIONS: Record<PlateFormat, { rows: number; cols: number }> = {
-  "6": { rows: 2, cols: 3 },
-  "12": { rows: 3, cols: 4 },
-  "24": { rows: 4, cols: 6 },
-  "48": { rows: 6, cols: 8 },
-  "96": { rows: 8, cols: 12 },
-  "384": { rows: 16, cols: 24 },
-  "1536": { rows: 32, cols: 48 },
-};
 
 const WELL_TYPE_COLORS: Record<WellType, string> = VF_WELL_COLORS as Record<WellType, string>;
 
@@ -71,7 +62,7 @@ export function PlateHeatmap({
   valueRange,
   className,
 }: PlateHeatmapProps) {
-  const dims = PLATE_DIMENSIONS[format];
+  const dims = plateDimensions(format);
   if (!dims) return null;
 
   const { rows, cols } = dims;

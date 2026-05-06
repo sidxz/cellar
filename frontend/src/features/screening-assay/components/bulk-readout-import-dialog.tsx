@@ -13,6 +13,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { useBulkCreateReadoutData } from "../hooks/use-readout-data";
 import type { CreateReadoutDataInput } from "../types";
+import { SUCCESS_DIALOG_AUTOCLOSE_MS } from "@/shared/lib/timing";
 
 interface BulkReadoutImportDialogProps {
   runId: string;
@@ -186,7 +187,7 @@ export function BulkReadoutImportDialog({
             setTimeout(() => {
               onOpenChange(false);
               reset();
-            }, 1500);
+            }, SUCCESS_DIALOG_AUTOCLOSE_MS);
           }
         },
       }
