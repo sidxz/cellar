@@ -69,10 +69,10 @@ from chem_vault.domain.shared.errors import (
     ValidationError,
 )
 from chem_vault.domain.shared.value_objects import QualifiedValue
-from chem_vault.infrastructure.parsers.tabular_file import (
+from chem_vault.application.shared.parsers import (
     ParsedTable,
     TabularParseError,
-    parse_tabular,
+    TabularParser,
 )
 
 # Hard cap from the plan: sync-only MVP.
@@ -206,6 +206,7 @@ class PreviewRunFile:
         preview_store: PreviewStore,
         protocol_repo: ProtocolRepository,
         plate_template_repo: PlateTemplateRepository,
+        parser: TabularParser,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -214,6 +215,7 @@ class PreviewRunFile:
         self._store = preview_store
         self._protocol_repo = protocol_repo
         self._plate_template_repo = plate_template_repo
+        self._parser = parser
 
     async def __call__(
         self,
@@ -238,7 +240,7 @@ class PreviewRunFile:
             return Failure(NotFoundError("Run", str(input.run_id)))
 
         try:
-            table = parse_tabular(input.file_content, input.filename)
+            table = self._parser.parse(input.file_content, input.filename)
         except TabularParseError as exc:
             return Failure(ValidationError(f"File parse error: {exc}"))
 

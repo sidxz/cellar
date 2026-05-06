@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 
+import structlog
 from rdkit import Chem
 from rdkit.Chem import Descriptors, GetMolFrags, MolToMolBlock, MolToSmiles, MolToCXSmiles
 from rdkit.Chem.MolStandardize import rdMolStandardize
@@ -161,7 +161,7 @@ class StructureStandardizer:
             molblock = MolToMolBlock(mol)  # type: ignore[arg-type]
             results = checker.check_molblock(molblock)
         except Exception:
-            logging.getLogger(__name__).warning(
+            structlog.get_logger(__name__).warning(
                 "QC check failed — returning zero penalty", exc_info=True,
             )
             return QCResult(total_penalty=0, issues=[])

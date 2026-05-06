@@ -41,7 +41,7 @@ from chem_vault.domain.screening_assay.repository import (
 from chem_vault.domain.shared.enums import Qualifier
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from chem_vault.domain.shared.value_objects import QualifiedValue
-from chem_vault.infrastructure.parsers.tabular_file import TabularParseError, parse_tabular
+from chem_vault.application.shared.parsers import TabularParseError, TabularParser
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +88,7 @@ class ImportRunReadouts:
         protocol_repo: ProtocolRepository,
         readout_data_repo: ReadoutDataRepository,
         batch_repo: BatchRepository,
+        parser: TabularParser,
         dispatcher: EventDispatcherProtocol | None = None,
     ) -> None:
         self._uow = uow
@@ -95,6 +96,7 @@ class ImportRunReadouts:
         self._protocol_repo = protocol_repo
         self._readout_data_repo = readout_data_repo
         self._batch_repo = batch_repo
+        self._parser = parser
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -152,7 +154,7 @@ class ImportRunReadouts:
 
         # 5. Parse file ------------------------------------------------------
         try:
-            table = parse_tabular(cmd.file_content, cmd.filename)
+            table = self._parser.parse(cmd.file_content, cmd.filename)
         except TabularParseError as exc:
             return Failure(ValidationError(f"File parse error: {exc}"))
 

@@ -8,6 +8,7 @@ from enum import StrEnum
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.chemical_registration.molecule_reader import MoleculeReader
 from chem_vault.application.chemical_registration.protocols import ProcessedStructureDTO, StructureProcessorProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -54,10 +55,12 @@ class SearchMolecules:
         self,
         uow: UnitOfWork,
         repo: MoleculeRepository,
+        reader: MoleculeReader,
         structure_processor: StructureProcessorProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._reader = reader
         self._structure_processor = structure_processor
 
     async def __call__(
@@ -83,12 +86,12 @@ class SearchMolecules:
             if search_type == SearchType.EXACT:
                 return await self._exact_search(input)
             elif search_type == SearchType.SUBSTRUCTURE:
-                results = await self._repo.search_substructure(
+                results = await self._reader.search_substructure(
                     input.workspace_id, input.query.strip()
                 )
                 return Success(results)
             else:
-                scored = await self._repo.search_similarity(
+                scored = await self._reader.search_similarity(
                     input.workspace_id,
                     input.query.strip(),
                     threshold=input.threshold,

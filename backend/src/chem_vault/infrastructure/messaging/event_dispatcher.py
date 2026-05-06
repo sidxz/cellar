@@ -6,14 +6,15 @@ Multiple handlers can be registered per event type.
 
 from __future__ import annotations
 
-import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import structlog
+
 from chem_vault.domain.shared.events import DomainEvent
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Handler signature: async callable that takes a DomainEvent subclass
 EventHandler = Callable[[Any], Awaitable[None]]

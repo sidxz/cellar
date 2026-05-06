@@ -8,12 +8,12 @@ of BulkRegistrationItem DTOs for the registration activity.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import structlog
 from temporalio import activity
 
 from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
@@ -21,7 +21,7 @@ from chem_vault.infrastructure.parsers.chemical_file_parser import get_parser
 from chem_vault.infrastructure.temporal.activities.dtos import ChunkItem
 from chem_vault.infrastructure.temporal.task_queues import CHUNK_SIZE
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

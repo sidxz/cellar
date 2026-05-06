@@ -12,17 +12,17 @@ and resolve the actual key from SecretProvider at execution time.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import uuid
 from pathlib import Path
 
-from lagom import Container
+import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
-from chem_vault.application.cdd_import.molecule_mapper import map_cdd_molecules
 from chem_vault.domain.shared.secret_provider import SecretProvider
+
+from chem_vault.application.cdd_import.molecule_mapper import map_cdd_molecules
 from chem_vault.domain.workspace_config.data_source import EntityMapping
 from chem_vault.infrastructure.cdd.client import CddVaultClient
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
@@ -45,18 +45,24 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
 )
 from chem_vault.infrastructure.temporal.task_queues import CHUNK_SIZE
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class CddFetchActivities:
     """Temporal activities for fetching molecules from CDD Vault."""
 
-    def __init__(self, container: Container) -> None:
-        self._container = container
+    def __init__(
+        self,
+        session_factory: async_sessionmaker,
+        secret_provider: SecretProvider,
+        cdd_client: CddVaultClient,
+    ) -> None:
+        self._session_factory = session_factory
+        self._secret_provider = secret_provider
+        self._cdd_client = cdd_client
 
     async def _resolve_api_key(self, secret_ref: str) -> str:
-        provider = self._container[SecretProvider]
-        key = await provider.get_secret(secret_ref)
+        key = await self._secret_provider.get_secret(secret_ref)
         if key is None:
             raise ValueError(f"CDD API key not found for secret ref: {secret_ref}")
         return key
@@ -69,7 +75,7 @@ class CddFetchActivities:
         modified_after, max_molecules) in the JSON body — no URL limits.
         """
         api_key = await self._resolve_api_key(input.secret_ref)
-        client = self._container[CddVaultClient]
+        client = self._cdd_client
 
         total_count = await client.get_molecule_count(input.vault_id, api_key)
 
@@ -104,7 +110,7 @@ class CddFetchActivities:
         never held fully in memory. Too large for Temporal payloads (4MB gRPC limit).
         """
         api_key = await self._resolve_api_key(input.secret_ref)
-        client = self._container[CddVaultClient]
+        client = self._cdd_client
 
         # Lightweight status check (no data download)
         status = await client.check_export_progress(
@@ -294,7 +300,7 @@ class CddFetchActivities:
         Returns the ISO 8601 timestamp to pass as modified_after, or None
         if no prior sync exists (meaning: first sync = full export).
         """
-        session_factory = self._container[async_sessionmaker]
+        session_factory = self._session_factory
         uow = AsyncUnitOfWork(session_factory)
         sync_repo = CddMoleculeSyncRepository(uow)
 
@@ -328,7 +334,7 @@ class CddFetchActivities:
     async def start_plate_export(self, input: CddStartPlateExportInput) -> CddStartExportOutput:
         """Trigger an async plate export on CDD."""
         api_key = await self._resolve_api_key(input.secret_ref)
-        client = self._container[CddVaultClient]
+        client = self._cdd_client
 
         total_count = await client.get_plate_count(input.vault_id, api_key)
 

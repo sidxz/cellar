@@ -6,14 +6,15 @@ Resolves CDD batch IDs to internal batch IDs via custom_fields query.
 
 from __future__ import annotations
 
-import logging
 import uuid
 
-from lagom import Container
+import structlog
 from returns.result import Failure
-from sqlalchemy import cast, select, String
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
+
+from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 
 from chem_vault.application.inventory.registered_plates import (
     MapWells,
@@ -21,7 +22,6 @@ from chem_vault.application.inventory.registered_plates import (
     RegisterPlate,
     RegisterPlateCommand,
 )
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
@@ -36,26 +36,30 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
     PlateChunkOutput,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PlateRegistrationActivities:
     """Temporal activities for registering CDD plates."""
 
-    def __init__(self, container: Container) -> None:
-        self._container = container
+    def __init__(
+        self,
+        session_factory: async_sessionmaker,
+        dispatcher: EventDispatcher,
+    ) -> None:
+        self._session_factory = session_factory
+        self._dispatcher = dispatcher
 
     @activity.defn
     async def process_plate_chunk(self, input: PlateChunkInput) -> PlateChunkOutput:
         """Process a chunk of CDD plates — register plates, resolve wells, map wells."""
-        session_factory = self._container[async_sessionmaker]
         output = PlateChunkOutput()
 
         for plate_item in input.items:
             plate = PlateChunkItem(**plate_item) if isinstance(plate_item, dict) else plate_item
             try:
                 result = await self._process_single_plate(
-                    session_factory, input, plate, output,
+                    self._session_factory, input, plate, output,
                 )
                 if result:
                     output.sync_pairs.append(result)
@@ -82,10 +86,9 @@ class PlateRegistrationActivities:
         """Register a single plate and return sync pair dict, or None."""
         uow = AsyncUnitOfWork(session_factory)
         repo = SQLAlchemyRegisteredPlateRepository(uow)
-        dispatcher = self._container[EventDispatcher]
-        register_uc = RegisterPlate(uow=uow, repo=repo, dispatcher=dispatcher)
+        register_uc = RegisterPlate(uow=uow, repo=repo, dispatcher=self._dispatcher)
         batch_repo = SQLAlchemyBatchRepository(uow)
-        map_wells_uc = MapWells(uow=uow, repo=repo, batch_repo=batch_repo, dispatcher=dispatcher)
+        map_wells_uc = MapWells(uow=uow, repo=repo, batch_repo=batch_repo, dispatcher=self._dispatcher)
 
         ws_id = uuid.UUID(input.workspace_id)
         submitted_by = uuid.UUID(input.submitted_by)

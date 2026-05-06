@@ -69,9 +69,9 @@ class TestExecuteSearchRecordExecution:
         saved_search = _make_saved_search(ws_id)
 
         uow = FakeUnitOfWork()
-        mol_repo = AsyncMock()
-        mol_repo.search_by_query = AsyncMock(return_value=[])
-        mol_repo.count_by_query = AsyncMock(return_value=42)
+        mol_reader = AsyncMock()
+        mol_reader.search_by_query = AsyncMock(return_value=[])
+        mol_reader.count_by_query = AsyncMock(return_value=42)
 
         saved_search_repo = AsyncMock()
         saved_search_repo.find_by_id_in_workspace = AsyncMock(return_value=saved_search)
@@ -79,7 +79,7 @@ class TestExecuteSearchRecordExecution:
 
         uc = ExecuteSearch(
             uow=uow,
-            molecule_repo=mol_repo,
+            molecule_reader=mol_reader,
             saved_search_repo=saved_search_repo,
         )
 
@@ -106,9 +106,9 @@ class TestExecuteSearchRecordExecution:
         saved_search = _make_saved_search(ws_id)
 
         uow = FakeUnitOfWork()
-        mol_repo = AsyncMock()
-        mol_repo.search_by_query = AsyncMock(return_value=[])
-        mol_repo.count_by_query = AsyncMock(side_effect=ValueError("bad query"))
+        mol_reader = AsyncMock()
+        mol_reader.search_by_query = AsyncMock(return_value=[])
+        mol_reader.count_by_query = AsyncMock(side_effect=ValueError("bad query"))
 
         saved_search_repo = AsyncMock()
         saved_search_repo.find_by_id_in_workspace = AsyncMock(return_value=saved_search)
@@ -116,7 +116,7 @@ class TestExecuteSearchRecordExecution:
 
         uc = ExecuteSearch(
             uow=uow,
-            molecule_repo=mol_repo,
+            molecule_reader=mol_reader,
             saved_search_repo=saved_search_repo,
         )
 
@@ -140,8 +140,8 @@ class TestExecuteSearchRecordExecution:
         saved_search = _make_saved_search(ws_id)
 
         uow = FakeUnitOfWork()
-        mol_repo = AsyncMock()
-        mol_repo.search_by_query = AsyncMock(return_value=[])
+        mol_reader = AsyncMock()
+        mol_reader.search_by_query = AsyncMock(return_value=[])
 
         saved_search_repo = AsyncMock()
         saved_search_repo.find_by_id_in_workspace = AsyncMock(return_value=saved_search)
@@ -149,7 +149,7 @@ class TestExecuteSearchRecordExecution:
 
         uc = ExecuteSearch(
             uow=uow,
-            molecule_repo=mol_repo,
+            molecule_reader=mol_reader,
             saved_search_repo=saved_search_repo,
         )
 
@@ -173,15 +173,15 @@ class TestExecuteSearchRecordExecution:
         auth = FakeAuth(workspace_id=ws_id)
 
         uow = FakeUnitOfWork()
-        mol_repo = AsyncMock()
-        mol_repo.search_by_query = AsyncMock(return_value=[])
-        mol_repo.count_by_query = AsyncMock(return_value=5)
+        mol_reader = AsyncMock()
+        mol_reader.search_by_query = AsyncMock(return_value=[])
+        mol_reader.count_by_query = AsyncMock(return_value=5)
 
         saved_search_repo = AsyncMock()
 
         uc = ExecuteSearch(
             uow=uow,
-            molecule_repo=mol_repo,
+            molecule_reader=mol_reader,
             saved_search_repo=saved_search_repo,
         )
 
@@ -208,9 +208,9 @@ class TestExecuteSearchRecordExecution:
                 raise RuntimeError("connection lost")
 
         uow = _FailingCommitUoW()
-        mol_repo = AsyncMock()
-        mol_repo.search_by_query = AsyncMock(return_value=[])
-        mol_repo.count_by_query = AsyncMock(return_value=10)
+        mol_reader = AsyncMock()
+        mol_reader.search_by_query = AsyncMock(return_value=[])
+        mol_reader.count_by_query = AsyncMock(return_value=10)
 
         saved_search_repo = AsyncMock()
         saved_search_repo.find_by_id_in_workspace = AsyncMock(return_value=saved_search)
@@ -218,7 +218,7 @@ class TestExecuteSearchRecordExecution:
 
         uc = ExecuteSearch(
             uow=uow,
-            molecule_repo=mol_repo,
+            molecule_reader=mol_reader,
             saved_search_repo=saved_search_repo,
         )
 

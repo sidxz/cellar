@@ -9,12 +9,12 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_same_workspace
+from chem_vault.application.chemical_registration.molecule_reader import MoleculeReader
 from chem_vault.application.screening.molecule_activity_service import MoleculeActivityService
 from chem_vault.application.shared.pagination import EnrichedPageResult, PageResult
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.research_organization.repository import SavedSearchRepository
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
@@ -43,12 +43,12 @@ class ExecuteSearch:
     def __init__(
         self,
         uow: UnitOfWork,
-        molecule_repo: MoleculeRepository,
+        molecule_reader: MoleculeReader,
         saved_search_repo: SavedSearchRepository,
         activity_service: MoleculeActivityService | None = None,
     ) -> None:
         self._uow = uow
-        self._mol_repo = molecule_repo
+        self._mol_reader = molecule_reader
         self._ss_repo = saved_search_repo
         self._activity_service = activity_service
 
@@ -71,10 +71,10 @@ class ExecuteSearch:
             else:
                 query_dict = input.query  # type: ignore[assignment]
 
-            # Delegate to repository — fetch limit + 1 for next_cursor detection
+            # Delegate to reader — fetch limit + 1 for next_cursor detection
             fetch_limit = input.limit + 1
             try:
-                molecules = await self._mol_repo.search_by_query(
+                molecules = await self._mol_reader.search_by_query(
                     input.workspace_id,
                     query_dict,
                     cursor_id=input.cursor_id,
@@ -90,7 +90,7 @@ class ExecuteSearch:
             total_count: int | None = None
             if input.cursor_id is None:
                 try:
-                    total_count = await self._mol_repo.count_by_query(
+                    total_count = await self._mol_reader.count_by_query(
                         input.workspace_id,
                         query_dict,
                         project_ids=input.project_ids,

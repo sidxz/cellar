@@ -26,10 +26,10 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from chem_vault.infrastructure.parsers.tabular_file import (
+from chem_vault.application.shared.parsers import (
     ParsedTable,
     TabularParseError,
-    parse_tabular,
+    TabularParser,
 )
 
 # ---------------------------------------------------------------------------
@@ -97,6 +97,9 @@ class ParsePlateMapFile:
       SetUpRunPlate based on concentration series length).
     """
 
+    def __init__(self, parser: TabularParser) -> None:
+        self._parser = parser
+
     async def __call__(
         self,
         file_content: bytes | str,
@@ -107,7 +110,7 @@ class ParsePlateMapFile:
             file_content = file_content.encode("utf-8")
 
         try:
-            table = parse_tabular(file_content, filename)
+            table = self._parser.parse(file_content, filename)
         except TabularParseError as exc:
             return Failure(ValidationError(f"File parse error: {exc}"))
 

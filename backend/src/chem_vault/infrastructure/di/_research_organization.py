@@ -20,6 +20,7 @@ from chem_vault.application.research_organization.create_project import CreatePr
 from chem_vault.application.research_organization.create_saved_search import CreateSavedSearch
 from chem_vault.application.research_organization.delete_collection import DeleteCollection
 from chem_vault.application.research_organization.delete_saved_search import DeleteSavedSearch
+from chem_vault.application.chemical_registration.molecule_reader import MoleculeReader
 from chem_vault.application.research_organization.execute_search import ExecuteSearch
 from chem_vault.application.research_organization.get_collection import (
     GetCollection,
@@ -225,7 +226,7 @@ def register_research_organization(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ExecuteSearch(
             uow,
-            SQLAlchemyMoleculeRepository(uow),
+            c[MoleculeReader],
             SQLAlchemySavedSearchRepository(uow),
             activity_service=MoleculeActivityService(
                 uow=uow,

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from functools import partial
 from pathlib import PurePosixPath
 
 import fsspec
+import structlog
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -19,7 +19,7 @@ from chem_vault.domain.attachment.validation import (  # noqa: F401
     validate_file_size,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class StorageSettings(BaseSettings):

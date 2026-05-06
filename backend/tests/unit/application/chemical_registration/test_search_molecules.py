@@ -113,18 +113,39 @@ class FakeMoleculeRepository:
                 return m
         return None
 
+
+class FakeMoleculeReader:
+    """Test double for the read-side ``MoleculeReader`` Protocol."""
+
+    def __init__(self, repo: "FakeMoleculeRepository") -> None:
+        self._repo = repo
+
     async def search_substructure(
         self, workspace_id: uuid.UUID, smarts: str
     ) -> list[Molecule]:
         # Simplified fake: return all molecules in workspace
-        return [m for m in self._store.values() if m.workspace_id == workspace_id]
+        return [m for m in self._repo._store.values() if m.workspace_id == workspace_id]
 
     async def search_similarity(
         self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
     ) -> list[tuple[Molecule, float]]:
         return [
-            (m, 0.85) for m in self._store.values() if m.workspace_id == workspace_id
+            (m, 0.85)
+            for m in self._repo._store.values()
+            if m.workspace_id == workspace_id
         ]
+
+    async def search_by_query(
+        self, workspace_id: uuid.UUID, query: dict, **kwargs
+    ) -> list[Molecule]:
+        return [m for m in self._repo._store.values() if m.workspace_id == workspace_id]
+
+    async def count_by_query(
+        self, workspace_id: uuid.UUID, query: dict, **kwargs
+    ) -> int:
+        return sum(
+            1 for m in self._repo._store.values() if m.workspace_id == workspace_id
+        )
 
 
 class FakeStructureProcessor:
@@ -155,9 +176,10 @@ class FakeStructureProcessor:
 def _deps() -> dict[str, Any]:
     uow = FakeUnitOfWork()
     repo = FakeMoleculeRepository()
+    reader = FakeMoleculeReader(repo)
     processor = FakeStructureProcessor()
-    uc = SearchMolecules(uow, repo, processor)
-    return {"uc": uc, "repo": repo, "processor": processor}
+    uc = SearchMolecules(uow, repo, reader, processor)
+    return {"uc": uc, "repo": repo, "reader": reader, "processor": processor}
 
 
 # ---------------------------------------------------------------------------

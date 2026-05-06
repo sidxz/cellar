@@ -27,6 +27,7 @@ from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefiniti
 from chem_vault.domain.screening_assay.run import Plate, Run, Well
 from chem_vault.domain.shared.errors import NotFoundError, ValidationError
 from chem_vault.domain.shared.events import DomainEvent
+from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +174,7 @@ def _build_use_case(
         protocol_repo=protocol_repo,
         readout_data_repo=readout_data_repo,
         batch_repo=batch_repo,
+        parser=TabularFileParser(),
     )
     return uc, uow, run_repo
 

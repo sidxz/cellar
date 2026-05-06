@@ -30,7 +30,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.errors import DomainError, ValidationError
-from chem_vault.infrastructure.parsers.tabular_file import ParsedTable
+from chem_vault.application.shared.parsers import ParsedTable
 
 # ---------------------------------------------------------------------------
 # Roles + confidence

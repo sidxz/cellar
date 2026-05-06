@@ -7,8 +7,7 @@ persisted independently of the use case's UoW.
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
@@ -17,7 +16,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository imp
     SQLAlchemyAuditRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AuditEventHandler:

@@ -38,7 +38,7 @@ from chem_vault.domain.screening_assay.run import Run
 from chem_vault.domain.shared.enums import PlateFormat
 from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.parsers.tabular_file import parse_tabular
+from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser, parse_tabular
 
 
 _NADD_FIXTURE = "/Users/sidx/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx"
@@ -212,6 +212,7 @@ def _build_preview_uc(
             preview_store=store,
             protocol_repo=protocol_repo,
             plate_template_repo=_make_plate_template_repo(plate_templates),
+            parser=TabularFileParser(),
         ),
         store,
     )

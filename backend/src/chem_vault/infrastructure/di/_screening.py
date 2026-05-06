@@ -120,6 +120,7 @@ from chem_vault.application.screening.search_ontology import SearchOntology
 from chem_vault.application.screening.update_run import UpdateRun
 from chem_vault.application.screening.update_target import UpdateTarget
 from chem_vault.application.shared.molecule_resolver import MoleculeResolver
+from chem_vault.application.shared.parsers import TabularParser
 from chem_vault.domain.screening_assay.curve_fitting import CurveFittingService
 from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator
@@ -128,6 +129,7 @@ from chem_vault.domain.screening_assay.plate_quality import PlateQualityCalculat
 from chem_vault.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from chem_vault.domain.shared.secret_provider import SecretProvider
 from chem_vault.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser
 from chem_vault.infrastructure.external.bioportal.client import BioPortalClient
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
@@ -219,7 +221,9 @@ def register_screening(container: Container) -> None:
     container.define(PlateNormalizer, Singleton(PlateNormalizer))
     container.define(ReplicateAggregator, Singleton(ReplicateAggregator))
     container.define(PlateQualityCalculator, Singleton(PlateQualityCalculator))
-    container.define(ParsePlateMapFile, Singleton(ParsePlateMapFile))
+    container.define(TabularFileParser, Singleton(TabularFileParser))
+    container.define(TabularParser, lambda c: c[TabularFileParser])
+    container.define(ParsePlateMapFile, lambda c: ParsePlateMapFile(c[TabularParser]))
 
     def _add_readout_def(c):  # type: ignore[no-untyped-def]
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -525,6 +529,7 @@ def register_screening(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            parser=c[TabularParser],
         )
 
     container.define(ImportRunReadouts, _import_run_readouts)
@@ -542,6 +547,7 @@ def register_screening(container: Container) -> None:
             preview_store=c[InMemoryPreviewStore],
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
+            parser=c[TabularParser],
         )
 
     container.define(PreviewRunFile, _preview_run_file)

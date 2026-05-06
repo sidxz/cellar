@@ -1,36 +1,18 @@
-"""Shared tabular file parser — xlsx + csv into a unified record stream.
+"""CSV/XLSX implementation of the ``TabularParser`` Protocol.
 
-Used by importers that consume row-based data (plate maps, readout files,
-long-format run files). Format is detected from the filename extension and
-the file's magic bytes (xlsx is a zip; csv is plain text).
+Format is detected from the filename extension and the file's magic bytes
+(xlsx is a zip; csv is plain text). The application layer owns
+``ParsedTable`` and ``TabularParseError``; this module is the concrete impl.
 """
 
 from __future__ import annotations
 
 import csv
 import io
-from collections.abc import Iterator
-from dataclasses import dataclass
 
+from chem_vault.application.shared.parsers import ParsedTable, TabularParseError
 
-class TabularParseError(ValueError):
-    """Raised when a file cannot be parsed as a supported tabular format."""
-
-
-@dataclass
-class ParsedTable:
-    """An immutable, in-memory tabular file."""
-
-    headers: list[str]
-    rows: list[dict[str, str]]
-    source_format: str  # "xlsx" | "csv"
-
-    def iter_rows(self) -> Iterator[dict[str, str]]:
-        return iter(self.rows)
-
-    @property
-    def row_count(self) -> int:
-        return len(self.rows)
+__all__ = ["TabularFileParser", "ParsedTable", "TabularParseError", "parse_tabular"]
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +30,7 @@ def _detect_format(content: bytes, filename: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Public entry points
 # ---------------------------------------------------------------------------
 
 
@@ -57,7 +39,7 @@ def parse_tabular(content: bytes, filename: str = "") -> ParsedTable:
 
     Detects xlsx vs csv from extension + magic bytes. xlsx is read with
     openpyxl in read-only mode; csv falls back to delimiter-sniffing
-    against `,;\t|` and tolerates UTF-8 BOM.
+    against `,;\\t|` and tolerates UTF-8 BOM.
 
     Raises TabularParseError on unparseable input.
     """
@@ -68,6 +50,13 @@ def parse_tabular(content: bytes, filename: str = "") -> ParsedTable:
     if fmt == "xlsx":
         return _parse_xlsx(content)
     return _parse_csv(content)
+
+
+class TabularFileParser:
+    """``TabularParser`` Protocol implementation backed by ``parse_tabular``."""
+
+    def parse(self, content: bytes, filename: str = "") -> ParsedTable:
+        return parse_tabular(content, filename)
 
 
 # ---------------------------------------------------------------------------

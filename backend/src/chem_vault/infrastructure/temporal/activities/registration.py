@@ -6,13 +6,14 @@ invocation resolves fresh UoW + repos from the DI container.
 
 from __future__ import annotations
 
-import logging
 import uuid
 
-from lagom import Container
+import structlog
 from returns.result import Failure
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
+
+from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.merge_service import MergeService
@@ -27,7 +28,6 @@ from chem_vault.application.chemical_registration.register_molecule import (
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from chem_vault.domain.chemical_registration.enums import RegistrationAction
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
     SQLAlchemyDisclosureRequestRepository,
 )
@@ -51,24 +51,31 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
     ChunkOutput,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class RegistrationActivities:
     """Temporal activities for molecule registration."""
 
-    def __init__(self, container: Container) -> None:
-        self._container = container
+    def __init__(
+        self,
+        session_factory: async_sessionmaker,
+        dispatcher: EventDispatcher,
+        structure_processor: StructureProcessorProtocol,
+        side_effect_registry: MergeSideEffectRegistry,
+    ) -> None:
+        self._session_factory = session_factory
+        self._dispatcher = dispatcher
+        self._structure_processor = structure_processor
+        self._side_effect_registry = side_effect_registry
 
     @activity.defn
     async def process_chunk(self, input: ChunkInput) -> ChunkOutput:
         """Process a chunk of molecules sequentially through registration + batch creation."""
-        c = self._container
-        session_factory = c[async_sessionmaker]
-        dispatcher = c[EventDispatcher]
-        structure_processor = c[StructureProcessorProtocol]
-
-        side_effect_registry = c[MergeSideEffectRegistry]
+        session_factory = self._session_factory
+        dispatcher = self._dispatcher
+        structure_processor = self._structure_processor
+        side_effect_registry = self._side_effect_registry
 
         # RegisterMolecule and CreateBatch each manage their own UoW lifecycle
         # internally (async with self._uow:), so they need separate UoW instances

@@ -36,6 +36,7 @@ from chem_vault.domain.screening_assay.enums import (
 from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from chem_vault.domain.screening_assay.run import Run
 from chem_vault.domain.shared.events import DomainEvent
+from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +98,7 @@ class TestParsePlateMapFileWellLevel:
     """Test well-level CSV format: Well, Compound columns."""
 
     async def _parse(self, csv_content: str):
-        parser = ParsePlateMapFile()
+        parser = ParsePlateMapFile(TabularFileParser())
         return await parser(csv_content)
 
     @pytest.mark.asyncio
@@ -149,7 +150,7 @@ class TestParsePlateMapFileRowRange:
     """Test row-range CSV format: Compound, Start Row, End Row columns."""
 
     async def _parse(self, csv_content: str):
-        parser = ParsePlateMapFile()
+        parser = ParsePlateMapFile(TabularFileParser())
         return await parser(csv_content)
 
     @pytest.mark.asyncio
@@ -192,7 +193,7 @@ class TestParsePlateMapFileInvalid:
     """Test invalid CSV inputs."""
 
     async def _parse(self, csv_content: str):
-        parser = ParsePlateMapFile()
+        parser = ParsePlateMapFile(TabularFileParser())
         return await parser(csv_content)
 
     @pytest.mark.asyncio
