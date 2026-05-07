@@ -616,6 +616,42 @@ function SummaryCard({
             <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>
           )}
         </p>
+        {curve.intercept_values && curve.intercept_values.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground pt-0.5">
+            {curve.intercept_values.slice(1).map((iv, idx) => {
+              const label =
+                iv.spec.label ??
+                `${iv.spec.kind.toUpperCase()}${iv.spec.level
+                  .toString()
+                  .replace(/\.0$/, "")}`;
+              if (iv.at_bound || !Number.isFinite(iv.value)) {
+                return (
+                  <span
+                    key={idx}
+                    className="rounded border px-1.5 py-0.5 text-amber-600"
+                    title="Curve does not reach this response level"
+                  >
+                    {label} = at bound
+                  </span>
+                );
+              }
+              return (
+                <span key={idx} className="rounded border px-1.5 py-0.5">
+                  {label} ={" "}
+                  {Number(iv.value.toPrecision(4))} {curve.fitted_unit}
+                  {iv.confidence_interval_low != null &&
+                    iv.confidence_interval_high != null && (
+                      <span className="ml-1 opacity-70">
+                        [
+                        {iv.confidence_interval_low.toPrecision(3)}–
+                        {iv.confidence_interval_high.toPrecision(3)}]
+                      </span>
+                    )}
+                </span>
+              );
+            })}
+          </div>
+        )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
           <span className={cn("font-medium", rSquaredColor(curve.r_squared))}>
             R² = {curve.r_squared.toFixed(3)}

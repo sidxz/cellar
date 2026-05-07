@@ -76,10 +76,12 @@ import {
   type PosControlSignal,
   type Protocol,
   type ProtocolStatus,
+  type InterceptSpec,
   type ReadoutAggregation,
   type ReadoutDataType,
   type ReadoutNormalization,
 } from "../../types";
+import { InterceptsEditor } from "../intercepts-editor";
 
 // Reserved readout-definition names that collide with built-in well metadata.
 // Kept in sync with backend domain.screening_assay.protocol._RESERVED_READOUT_NAMES.
@@ -196,6 +198,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [drFullTopMin, setDrFullTopMin] = useState("");
   const [drFullBottomMax, setDrFullBottomMax] = useState("");
   const [drPartialR2Min, setDrPartialR2Min] = useState("");
+  // Per-spec intercepts. Empty list = server-default (single 50% intercept
+  // derived from curve_type).
+  const [drIntercepts, setDrIntercepts] = useState<InterceptSpec[]>([]);
 
   const resetDoseResponseFields = () => {
     setDrCurveType("ic50");
@@ -222,6 +227,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setDrFullTopMin("");
     setDrFullBottomMax("");
     setDrPartialR2Min("");
+    setDrIntercepts([]);
   };
 
   // Y readouts with bounded normalization (% Inhibition/Activation/Control)
@@ -353,6 +359,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       setDrPartialR2Min(
         cfg.partial_r2_min != null ? String(cfg.partial_r2_min) : "",
       );
+      setDrIntercepts(cfg.intercepts ?? []);
     } else {
       resetDoseResponseFields();
     }
@@ -414,6 +421,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       ...(drPartialR2Min !== "" && {
         partial_r2_min: parseOrNull(drPartialR2Min) ?? undefined,
       }),
+      // Intercepts — only emit when the user explicitly configured a list.
+      // Empty list lets the backend default to a single 50% intercept.
+      ...(drIntercepts.length > 0 && { intercepts: drIntercepts }),
     };
   };
 
@@ -1000,6 +1010,24 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 </p>
               )}
             </div>
+          </div>
+        </details>
+
+        <details className="rounded-md border bg-background/40 p-2">
+          <summary className="cursor-pointer text-xs font-medium select-none">
+            Data Calculations
+          </summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              Each row is one intercept derived from the same Hill fit
+              (e.g. IC50, IC90). Empty list defaults to a single 50%
+              intercept of the curve type.
+            </p>
+            <InterceptsEditor
+              value={drIntercepts}
+              onChange={setDrIntercepts}
+              curveType={drCurveType}
+            />
           </div>
         </details>
       </div>

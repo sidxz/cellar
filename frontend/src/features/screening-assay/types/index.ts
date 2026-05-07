@@ -189,6 +189,24 @@ export const NORMALIZATION_SCOPE_LABELS: Record<NormalizationScope, string> = {
   none: "None",
 };
 
+export type InterceptKind = "ic" | "ec";
+export type InterceptBasis = "relative_percent" | "absolute";
+
+export interface InterceptSpec {
+  kind: InterceptKind;
+  level: number;
+  basis: InterceptBasis;
+  label?: string | null;
+}
+
+export interface InterceptValue {
+  spec: InterceptSpec;
+  value: number;
+  confidence_interval_low: number | null;
+  confidence_interval_high: number | null;
+  at_bound: boolean;
+}
+
 export interface DoseResponseConfig {
   curve_type: CurveType;
   /** null means "use the well's concentration as the X-axis" (default). */
@@ -198,6 +216,9 @@ export interface DoseResponseConfig {
    *  multiple normalized columns (e.g. raw + %inh + z-score). null selects
    *  the raw layer. Must be in the Y readout's `normalizations` set. */
   y_normalization?: ReadoutNormalization | null;
+  /** Per-spec intercepts derived from the same Hill fit. Empty / undefined
+   *  defaults server-side to a single 50% intercept based on `curve_type`. */
+  intercepts?: InterceptSpec[];
   hill_slope_constraint: HillSlopeConstraint;
   activity_threshold: number | null;
   normalization_scope: NormalizationScope;
@@ -398,6 +419,10 @@ export interface DoseResponseCurve {
   /** Machine-readable fit-quality codes; rendered as amber badges.
    *  Known values: "ec50_at_bound", "ec50_outside_dose_range", "low_r_squared". */
   fit_quality_warnings?: string[];
+  /** Per-spec intercepts derived from the same Hill fit (e.g. IC50, IC90).
+   *  Legacy single-intercept curves omit this; consumers fall back to
+   *  `fitted_value` for the headline number. */
+  intercept_values?: InterceptValue[];
 }
 
 // ─── Plate Template ─────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import {
   type ReadoutDefinition,
 } from "../types";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
+import { InterceptsEditor } from "./intercepts-editor";
 
 interface ReadoutDefinitionViewerDialogProps {
   readoutDef: ReadoutDefinition | null;
@@ -177,6 +178,18 @@ export function ReadoutDefinitionViewerDialog({
                     />
                   )}
                 </div>
+              </Section>
+
+              <Section title="Data Calculations">
+                <p className="text-xs text-muted-foreground mb-2 leading-tight">
+                  Intercepts derived from the same Hill fit. Empty list
+                  defaults to a single 50% intercept of the curve type.
+                </p>
+                <InterceptsEditor
+                  value={cfg.intercepts ?? []}
+                  curveType={cfg.curve_type as CurveType}
+                  disabled
+                />
               </Section>
 
               <Section title="Outlier Detection">
