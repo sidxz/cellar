@@ -393,6 +393,10 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     raw_data: Mapped[list | None] = mapped_column(JSONB)
     excluded_points: Mapped[list | None] = mapped_column(JSONB)
     fit_quality_warnings: Mapped[list | None] = mapped_column(JSONB)
+    # Per-spec intercepts (IC50, IC90, ...) derived from the same Hill fit.
+    # NULL on legacy rows; readers synthesize a single-element list from
+    # (curve_type, fitted_value, ci_low, ci_high) when None.
+    intercept_values: Mapped[list | None] = mapped_column(JSONB)
 
     __table_args__ = (
         Index("ix_drc_run", "run_id"),

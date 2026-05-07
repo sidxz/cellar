@@ -9,12 +9,91 @@ import uuid
 
 from sqlalchemy import delete, func, select
 
+from chem_vault.domain.screening_assay.curve_fitting import InterceptValue
+from chem_vault.domain.screening_assay.dose_response_config import InterceptSpec
 from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveClass, CurveType
+from chem_vault.domain.screening_assay.enums import (
+    CurveClass,
+    CurveType,
+    InterceptBasis,
+    InterceptKind,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+
+
+def _serialize_intercept_values(
+    values: list[InterceptValue],
+) -> list[dict] | None:
+    """Serialize a list of InterceptValue VOs to JSONB-friendly dicts.
+
+    Returns ``None`` when empty so the column stays NULL on legacy curves
+    that haven't been refit since the multi-intercept feature shipped.
+    """
+    if not values:
+        return None
+    return [
+        {
+            "spec": {
+                "kind": v.spec.kind.value,
+                "level": v.spec.level,
+                "basis": v.spec.basis.value,
+                "label": v.spec.label,
+            },
+            "value": v.value,
+            "ci_low": v.confidence_interval_low,
+            "ci_high": v.confidence_interval_high,
+            "at_bound": v.at_bound,
+        }
+        for v in values
+    ]
+
+
+def _hydrate_intercept_values(
+    raw: list[dict] | None,
+    *,
+    fallback_curve_type: CurveType,
+    fallback_value: float,
+    fallback_ci_low: float | None,
+    fallback_ci_high: float | None,
+) -> list[InterceptValue]:
+    """Hydrate the JSONB list. When NULL, synthesize a single-element list
+    from the legacy ``(curve_type, fitted_value, ci_low, ci_high)`` so old
+    curves render as one-intercept curves without a data backfill."""
+    if raw is None:
+        kind = (
+            InterceptKind.IC
+            if fallback_curve_type == CurveType.IC50
+            else InterceptKind.EC
+        )
+        return [
+            InterceptValue(
+                spec=InterceptSpec(
+                    kind=kind, level=50.0, basis=InterceptBasis.RELATIVE_PERCENT
+                ),
+                value=fallback_value,
+                confidence_interval_low=fallback_ci_low,
+                confidence_interval_high=fallback_ci_high,
+                at_bound=False,
+            )
+        ]
+    return [
+        InterceptValue(
+            spec=InterceptSpec(
+                kind=InterceptKind(d["spec"]["kind"]),
+                level=float(d["spec"]["level"]),
+                basis=InterceptBasis(d["spec"]["basis"]),
+                label=d["spec"].get("label"),
+            ),
+            value=float(d["value"]),
+            confidence_interval_low=d.get("ci_low"),
+            confidence_interval_high=d.get("ci_high"),
+            at_bound=bool(d.get("at_bound", False)),
+        )
+        for d in raw
+    ]
 
 
 class SQLAlchemyDoseResponseCurveRepository:
@@ -155,6 +234,7 @@ class SQLAlchemyDoseResponseCurveRepository:
         model.raw_data = entity.raw_data
         model.excluded_points = entity.excluded_points
         model.fit_quality_warnings = entity.fit_quality_warnings
+        model.intercept_values = _serialize_intercept_values(entity.intercept_values)
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(DoseResponseCurveModel).where(
@@ -176,6 +256,7 @@ class SQLAlchemyDoseResponseCurveRepository:
 
     @staticmethod
     def _to_domain(model: DoseResponseCurveModel) -> DoseResponseCurve:
+        curve_type = CurveType(model.curve_type)
         return DoseResponseCurve(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -183,7 +264,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             batch_id=model.batch_id,
             protocol_id=model.protocol_id,
             run_id=model.run_id,
-            curve_type=CurveType(model.curve_type),
+            curve_type=curve_type,
             fitted_value=model.fitted_value,
             hill_slope=model.hill_slope,
             top=model.top,
@@ -196,6 +277,13 @@ class SQLAlchemyDoseResponseCurveRepository:
             raw_data=model.raw_data,
             excluded_points=model.excluded_points,
             fit_quality_warnings=model.fit_quality_warnings or [],
+            intercept_values=_hydrate_intercept_values(
+                model.intercept_values,
+                fallback_curve_type=curve_type,
+                fallback_value=model.fitted_value,
+                fallback_ci_low=model.confidence_interval_low,
+                fallback_ci_high=model.confidence_interval_high,
+            ),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -222,4 +310,5 @@ class SQLAlchemyDoseResponseCurveRepository:
             raw_data=entity.raw_data,
             excluded_points=entity.excluded_points,
             fit_quality_warnings=entity.fit_quality_warnings,
+            intercept_values=_serialize_intercept_values(entity.intercept_values),
         )
