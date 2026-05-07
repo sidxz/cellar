@@ -306,10 +306,8 @@ class AddReadoutDefinitionRequest(BaseModel):
     unit: str | None = None
     aggregation: str = "none"
     precision: int | None = None
-    # Preferred: list of normalization formula names. Empty list = no normalization.
-    normalizations: list[str] | None = None
-    # Legacy single-value field. Lifted into a list when ``normalizations`` is None.
-    normalization: str | None = None
+    # List of normalization formula names. Empty list = no normalization.
+    normalizations: list[str] = []
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
@@ -325,10 +323,8 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     unit: str | None = None
     aggregation: str | None = None
     precision: int | None = None
-    # Preferred: list of normalization formulas. Sending [] clears all formulas.
+    # List of normalization formulas. Sending [] clears all formulas.
     normalizations: list[str] | None = None
-    # Legacy single-value field — only honored when ``normalizations`` is omitted.
-    normalization: str | None = None
     is_calculated: bool | None = None
     calculation_formula: str | None = None
     display_order: int | None = None
@@ -527,7 +523,6 @@ async def add_readout_definition(
         aggregation=body.aggregation,
         precision=body.precision,
         normalizations=body.normalizations,
-        normalization=body.normalization,
         is_calculated=body.is_calculated,
         calculation_formula=body.calculation_formula,
         display_order=body.display_order,
@@ -560,7 +555,7 @@ async def update_readout_definition(
     # Only forward keys explicitly present in the request body. Otherwise
     # the use case keeps its sentinel default ("leave unchanged").
     for key in (
-        "name", "data_type", "aggregation", "normalization",
+        "name", "data_type", "aggregation",
         "is_calculated", "display_order",
     ):
         if key in sent:

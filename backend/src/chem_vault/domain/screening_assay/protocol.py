@@ -57,13 +57,26 @@ _TERMINAL_STATES = {ProtocolStatus.RETIRED}
 # definition name confuses the data model (e.g. a "concentration" readout
 # row vs. the well's own concentration property) and is rejected at protocol
 # design time — see Bug 4.
-_RESERVED_READOUT_NAMES: frozenset[str] = frozenset(
+RESERVED_READOUT_NAMES: frozenset[str] = frozenset(
     {"concentration", "dose", "well", "plate", "batch", "compound"}
 )
 
 
-def _is_reserved_readout_name(name: str) -> bool:
-    return name.strip().lower() in _RESERVED_READOUT_NAMES
+def is_reserved_readout_name(name: str) -> bool:
+    """True if `name` collides with a chem-vault well-metadata field.
+
+    These names are stored on the well (well.dose, well.batch_id, well.row+
+    column → position) or the plate/protocol context, not as readout
+    measurements. Used as a creation-time guard at the use-case boundary —
+    NOT in the entity constructor, because legacy data with non-conforming
+    names must still hydrate.
+    """
+    return name.strip().lower() in RESERVED_READOUT_NAMES
+
+
+# Back-compat aliases — internal callers used these names.
+_RESERVED_READOUT_NAMES = RESERVED_READOUT_NAMES
+_is_reserved_readout_name = is_reserved_readout_name
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +105,6 @@ class ReadoutDefinition(Entity):
         aggregation: ReadoutAggregation = ReadoutAggregation.NONE,
         precision: int | None = None,
         normalizations: frozenset[ReadoutNormalization] | None = None,
-        normalization: ReadoutNormalization | None = None,
         is_calculated: bool = False,
         calculation_formula: str | None = None,
         display_order: int = 0,
@@ -105,16 +117,10 @@ class ReadoutDefinition(Entity):
 
         if not name or not name.strip():
             raise ValidationError("ReadoutDefinition name must not be empty")
-        # Reserved well-metadata names are not measurements and must not be
-        # readouts. Enforced at construction so every creation path (CDD
-        # import, protocol versioning, file imports, manual UI add) gets the
-        # same guarantee — not just `Protocol.add_readout_definition`.
-        if _is_reserved_readout_name(name):
-            raise ValidationError(
-                f"ReadoutDefinition name '{name.strip()}' collides with a "
-                f"reserved well-metadata name. Reserved: "
-                f"{sorted(_RESERVED_READOUT_NAMES)}."
-            )
+        # Reserved-name validation lives at the use-case boundary
+        # (Protocol.add_readout_definition, update_readout_definition, the CDD
+        # mapper). Constructor stays permissive so legacy data with
+        # non-conforming names hydrates cleanly from the database.
         if is_calculated and not calculation_formula:
             raise ValidationError(
                 "Calculated readout requires a calculation_formula"
@@ -140,16 +146,9 @@ class ReadoutDefinition(Entity):
                 "dose_response_config can only be set for dose_response data type"
             )
 
-        # Resolve normalizations from new (preferred) or legacy (single-value) kwarg.
-        # Both None → empty set (no normalization). Legacy NONE → empty set.
-        if normalizations is not None:
-            resolved_normalizations: frozenset[ReadoutNormalization] = frozenset(
-                normalizations
-            )
-        elif normalization is not None and normalization != ReadoutNormalization.NONE:
-            resolved_normalizations = frozenset({normalization})
-        else:
-            resolved_normalizations = frozenset()
+        resolved_normalizations: frozenset[ReadoutNormalization] = (
+            frozenset(normalizations) if normalizations is not None else frozenset()
+        )
 
         self.protocol_id = protocol_id
         self.name = name.strip()
@@ -414,6 +413,15 @@ class Protocol(AggregateRoot):
             self.pos_control_signal = pos_control_signal
         self.updated_at = datetime.now(UTC)
 
+    # ------------------------------------------------------------------
+    # Mutators allowed on ACTIVE (NOT draft-guarded)
+    # ------------------------------------------------------------------
+    # These two — set_pos_control_signal and set_recommended_hit_criteria —
+    # intentionally bypass `_guard_draft`. They alter labeling/QC
+    # convention without changing what was measured, so versioning is
+    # overkill and historical raw data stays valid. RETIRED still blocks.
+    # All other Protocol mutations require DRAFT.
+
     def set_pos_control_signal(self, signal: PosControlSignal) -> None:
         """Set the POS control signal direction.
 
@@ -450,8 +458,12 @@ class Protocol(AggregateRoot):
     def add_readout_definition(self, definition: ReadoutDefinition) -> None:
         """Add a readout definition to this protocol."""
         self._guard_draft()
-        # Reserved-name guard now lives in ReadoutDefinition.__init__ — if we
-        # received `definition` at all, its name passed the check.
+        if is_reserved_readout_name(definition.name):
+            raise ValidationError(
+                f"ReadoutDefinition name '{definition.name}' collides with a "
+                f"reserved well-metadata name. Reserved: "
+                f"{sorted(RESERVED_READOUT_NAMES)}."
+            )
         if any(rd.name == definition.name for rd in self.readout_definitions):
             raise ConflictError(
                 f"ReadoutDefinition with name '{definition.name}' already exists"
@@ -523,7 +535,6 @@ class Protocol(AggregateRoot):
         aggregation: ReadoutAggregation | None = None,
         precision: int | None | _UnsetT = _UNSET,
         normalizations: frozenset[ReadoutNormalization] | None | _UnsetT = _UNSET,
-        normalization: ReadoutNormalization | None = None,
         is_calculated: bool | None = None,
         calculation_formula: str | None | _UnsetT = _UNSET,
         display_order: int | None = None,
@@ -549,8 +560,12 @@ class Protocol(AggregateRoot):
         existing = self.readout_definitions[idx]
 
         new_name = (name if name is not None else existing.name).strip()
-        # Reserved-name guard fires inside the replacement ReadoutDefinition
-        # constructor below — no duplicate check here.
+        if is_reserved_readout_name(new_name):
+            raise ValidationError(
+                f"ReadoutDefinition name '{new_name}' collides with a "
+                f"reserved well-metadata name. Reserved: "
+                f"{sorted(RESERVED_READOUT_NAMES)}."
+            )
         if any(
             rd.name == new_name and rd.id != definition_id
             for rd in self.readout_definitions
@@ -559,17 +574,11 @@ class Protocol(AggregateRoot):
                 f"ReadoutDefinition with name '{new_name}' already exists"
             )
 
-        # Resolve final normalizations set: explicit normalizations= wins, then
-        # legacy single-value normalization=, then carry forward existing.
+        # Resolve normalizations set: explicit normalizations= updates,
+        # _UNSET (sentinel) carries forward existing.
         if normalizations is not _UNSET:
             new_normalizations = (
                 frozenset(normalizations) if normalizations is not None else frozenset()
-            )
-        elif normalization is not None:
-            new_normalizations = (
-                frozenset()
-                if normalization == ReadoutNormalization.NONE
-                else frozenset({normalization})
             )
         else:
             new_normalizations = existing.normalizations
@@ -600,6 +609,42 @@ class Protocol(AggregateRoot):
             ),
             created_at=existing.created_at,
         )
+
+        # Cross-readout validation — same rules as add_readout_definition.
+        # When the replacement is a dose-response def, x_readout_name must
+        # either be None (use well.dose) or match an existing readout in
+        # this protocol; y_readout_name must always match.
+        if (
+            replacement.data_type == ReadoutDataType.DOSE_RESPONSE
+            and replacement.dose_response_config is not None
+        ):
+            existing_by_name = {
+                rd.name: rd
+                for rd in self.readout_definitions
+                if rd.id != definition_id  # exclude the row being replaced
+            }
+            existing_by_name[replacement.name] = replacement
+            cfg = replacement.dose_response_config
+            if cfg.x_readout_name is not None and cfg.x_readout_name not in existing_by_name:
+                raise ValidationError(
+                    f"Dose-response X-axis readout '{cfg.x_readout_name}' "
+                    "not found among existing readout definitions"
+                )
+            if cfg.y_readout_name not in existing_by_name:
+                raise ValidationError(
+                    f"Dose-response Y-axis readout '{cfg.y_readout_name}' "
+                    "not found among existing readout definitions"
+                )
+            if cfg.y_normalization is not None:
+                y_def = existing_by_name[cfg.y_readout_name]
+                if cfg.y_normalization not in y_def.normalizations:
+                    raise ValidationError(
+                        f"Dose-response y_normalization "
+                        f"'{cfg.y_normalization.value}' is not in "
+                        f"y readout '{cfg.y_readout_name}' normalizations "
+                        f"{sorted(n.value for n in y_def.normalizations)}"
+                    )
+
         self.readout_definitions[idx] = replacement
         self.updated_at = datetime.now(UTC)
 

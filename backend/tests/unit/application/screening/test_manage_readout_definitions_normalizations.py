@@ -88,42 +88,9 @@ async def test_add_readout_with_normalizations_list():
     )
 
 
-@pytest.mark.asyncio
-async def test_add_readout_legacy_single_normalization_lifted():
-    protocol = _make_protocol()
-    use_case = AddReadoutDefinition(
-        uow=_fake_uow(), repo=_make_repo(protocol), dispatcher=_make_dispatcher()
-    )
-    cmd = AddReadoutDefinitionCommand(
-        workspace_id=WS,
-        protocol_id=protocol.id,
-        name="Raw AU",
-        data_type="numeric",
-        normalization="percent_inhibition",
-    )
-    result = await use_case(cmd)
-    assert isinstance(result, Success)
-    new_rd = next(rd for rd in result.unwrap().readout_definitions if rd.name == "Raw AU")
-    assert new_rd.normalizations == frozenset({ReadoutNormalization.PERCENT_INHIBITION})
-
-
-@pytest.mark.asyncio
-async def test_add_readout_legacy_none_means_empty_set():
-    protocol = _make_protocol()
-    use_case = AddReadoutDefinition(
-        uow=_fake_uow(), repo=_make_repo(protocol), dispatcher=_make_dispatcher()
-    )
-    cmd = AddReadoutDefinitionCommand(
-        workspace_id=WS,
-        protocol_id=protocol.id,
-        name="Raw AU",
-        data_type="numeric",
-        normalization="none",
-    )
-    result = await use_case(cmd)
-    assert isinstance(result, Success)
-    new_rd = next(rd for rd in result.unwrap().readout_definitions if rd.name == "Raw AU")
-    assert new_rd.normalizations == frozenset()
+# Tests for the legacy single-value `normalization=` request field removed —
+# the field is gone from AddReadoutDefinitionCommand; clients pass
+# `normalizations=[]` directly.
 
 
 @pytest.mark.asyncio

@@ -125,12 +125,17 @@ def _make_protocol(
     normalization: ReadoutNormalization = ReadoutNormalization.NONE,
     control_layouts: dict[str, uuid.UUID] | None = None,
 ) -> Protocol:
+    norm_set = (
+        frozenset({normalization})
+        if normalization != ReadoutNormalization.NONE
+        else frozenset()
+    )
     rds = [
         ReadoutDefinition(
             protocol_id=uuid.uuid4(),
             name=n,
             data_type=ReadoutDataType.NUMERIC,
-            normalization=normalization,
+            normalizations=norm_set,
         )
         for n in readout_names
     ]

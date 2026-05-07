@@ -48,24 +48,8 @@ class TestReadoutDefinitionNormalizations:
         )
         assert rd.normalizations == frozenset()
 
-    def test_legacy_normalization_singular_kwarg_lifted_into_set(self) -> None:
-        """Legacy single-value `normalization=` still works, lifted into set."""
-        rd = ReadoutDefinition(
-            protocol_id=uuid.uuid4(),
-            name="Raw",
-            data_type=ReadoutDataType.NUMERIC,
-            normalization=ReadoutNormalization.PERCENT_INHIBITION,
-        )
-        assert rd.normalizations == frozenset({ReadoutNormalization.PERCENT_INHIBITION})
-
-    def test_legacy_normalization_none_means_empty_set(self) -> None:
-        rd = ReadoutDefinition(
-            protocol_id=uuid.uuid4(),
-            name="Raw",
-            data_type=ReadoutDataType.NUMERIC,
-            normalization=ReadoutNormalization.NONE,
-        )
-        assert rd.normalizations == frozenset()
+    # Tests for the legacy single-value `normalization=` kwarg removed —
+    # the kwarg is gone; callers pass `normalizations=` directly.
 
 
 class TestReadoutDataNormalizationApplied:

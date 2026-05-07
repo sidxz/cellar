@@ -39,12 +39,8 @@ class AddReadoutDefinitionCommand(Command):
     unit: str | None = None
     aggregation: str = "none"
     precision: int | None = None
-    # Preferred: list of formula names. Empty list means raw / no normalization.
+    # List of formula names. Empty list / None means raw / no normalization.
     normalizations: list[str] | None = None
-    # Legacy single-value field. Lifted into a singleton list when ``normalizations``
-    # is None and the value isn't ``"none"``. Both None / both set: ``normalizations``
-    # wins.
-    normalization: str | None = None
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
@@ -73,11 +69,9 @@ class UpdateReadoutDefinitionCommand(Command):
     unit: str | None | object = _UNSET
     aggregation: str | None = None
     precision: int | None | object = _UNSET
-    # Preferred: list of formula names. ``_UNSET`` = leave unchanged;
-    # empty list = clear all normalizations.
+    # List of formula names. ``_UNSET`` = leave unchanged; empty list =
+    # clear all normalizations.
     normalizations: list[str] | None | object = _UNSET
-    # Legacy single-value field — only honored when ``normalizations`` is _UNSET.
-    normalization: str | None = None
     is_calculated: bool | None = None
     calculation_formula: str | None | object = _UNSET
     display_order: int | None = None
@@ -129,18 +123,11 @@ class AddReadoutDefinition:
             if input.data_type == "dose_response" and input.dose_response_config:
                 dr_config = deserialize_dose_response_config(input.dose_response_config)
 
-            # Resolve normalizations: explicit list wins, legacy single-value
-            # field is lifted into a singleton (or empty for "none"/None).
-            if input.normalizations is not None:
-                resolved_normalizations = frozenset(
-                    ReadoutNormalization(v) for v in input.normalizations
-                )
-            elif input.normalization is None or input.normalization == "none":
-                resolved_normalizations = frozenset()
-            else:
-                resolved_normalizations = frozenset(
-                    {ReadoutNormalization(input.normalization)}
-                )
+            resolved_normalizations = (
+                frozenset(ReadoutNormalization(v) for v in input.normalizations)
+                if input.normalizations
+                else frozenset()
+            )
 
             definition = ReadoutDefinition(
                 protocol_id=protocol.id,
@@ -232,7 +219,6 @@ class UpdateReadoutDefinition:
                 kwargs["aggregation"] = ReadoutAggregation(input.aggregation)
             if input.precision is not _UNSET:
                 kwargs["precision"] = input.precision
-            # normalizations: explicit list wins, legacy single-value falls back.
             if input.normalizations is not _UNSET:
                 norm_list = input.normalizations  # type: ignore[assignment]
                 kwargs["normalizations"] = (
@@ -240,8 +226,6 @@ class UpdateReadoutDefinition:
                     if norm_list is not None
                     else frozenset()
                 )
-            elif input.normalization is not None:
-                kwargs["normalization"] = ReadoutNormalization(input.normalization)
             if input.is_calculated is not None:
                 kwargs["is_calculated"] = input.is_calculated
             if input.calculation_formula is not _UNSET:

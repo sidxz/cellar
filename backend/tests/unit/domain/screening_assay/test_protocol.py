@@ -360,15 +360,25 @@ class TestProtocolDefinitionManagement:
     @pytest.mark.parametrize(
         "name", ["concentration", "Concentration", "DOSE", "well", " batch "]
     )
-    def test_reserved_name_rejected_at_construction(
+    def test_add_readout_with_reserved_name_raises(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, name: str
     ) -> None:
-        # Reserved-name guard is enforced inside ReadoutDefinition.__init__
-        # so every creation path (CDD import, protocol versioning, manual UI
-        # add) is covered — not just `Protocol.add_readout_definition`. The
-        # entity refuses to construct.
+        # Reserved-name guard fires at the use-case boundary
+        # (Protocol.add_readout_definition / update_readout_definition / CDD
+        # mapper). The entity constructor itself stays permissive so legacy
+        # data with non-conforming names hydrates from the DB.
+        protocol = _make_protocol(workspace_id, user_id)
+        bad = _make_readout(protocol.id, name=name)
         with pytest.raises(ValidationError, match="reserved well-metadata name"):
-            _make_readout(name=name)
+            protocol.add_readout_definition(bad)
+
+    def test_construction_allows_reserved_name_for_hydration(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        # Repository hydrates legacy rows by calling the constructor —
+        # must not block on reserved names that pre-date the rule.
+        rd = _make_readout(name="Well")
+        assert rd.name == "Well"
 
     def test_update_readout_to_reserved_name_raises(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
@@ -416,7 +426,8 @@ class TestProtocolDefinitionManagement:
         assert rd.normalizations == frozenset()
 
         protocol.update_readout_definition(
-            rd.id, normalization=ReadoutNormalization.PERCENT_INHIBITION
+            rd.id,
+            normalizations=frozenset({ReadoutNormalization.PERCENT_INHIBITION}),
         )
         updated = protocol.readout_definitions[0]
         assert updated.id == rd.id  # same id, replaced object

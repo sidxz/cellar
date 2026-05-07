@@ -75,6 +75,24 @@ class CreateProtocol:
             if rd.get("data_type") == "dose_response" and rd.get("dose_response_config"):
                 dr_config = deserialize_dose_response_config(rd["dose_response_config"])
 
+            # Resolve normalizations from new (preferred) or legacy
+            # (single-value) request shape. Legacy NONE / "none" / missing →
+            # empty set.
+            raw_norms = rd.get("normalizations")
+            if raw_norms is not None:
+                resolved_norms: frozenset[ReadoutNormalization] = frozenset(
+                    ReadoutNormalization(n) for n in raw_norms
+                )
+            elif rd.get("normalization"):
+                legacy = ReadoutNormalization(rd["normalization"])
+                resolved_norms = (
+                    frozenset({legacy})
+                    if legacy != ReadoutNormalization.NONE
+                    else frozenset()
+                )
+            else:
+                resolved_norms = frozenset()
+
             readout_defs.append(
                 ReadoutDefinition(
                     protocol_id=tmp_protocol_id,
@@ -83,7 +101,7 @@ class CreateProtocol:
                     unit=rd.get("unit"),
                     aggregation=ReadoutAggregation(rd["aggregation"]) if rd.get("aggregation") else ReadoutAggregation.NONE,
                     precision=rd.get("precision"),
-                    normalization=ReadoutNormalization(rd["normalization"]) if rd.get("normalization") else ReadoutNormalization.NONE,
+                    normalizations=resolved_norms,
                     is_calculated=rd.get("is_calculated", False),
                     calculation_formula=rd.get("calculation_formula"),
                     display_order=rd.get("display_order", 0),
