@@ -154,7 +154,7 @@ class TestMapCddProtocol:
         result = map_cdd_protocol(proto)
         rd = result.readouts[0]
         assert rd.aggregation == ReadoutAggregation.NONE
-        assert rd.normalization == ReadoutNormalization.NONE
+        assert rd.normalizations == frozenset()
 
     def test_dose_response_calculation_mapped(self):
         """Dose-response calculations become DOSE_RESPONSE readouts with proper config."""

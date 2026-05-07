@@ -118,10 +118,6 @@ export function ReadoutDefinitionViewerDialog({
                       cfg.curve_type
                     }
                   />
-                  <Field
-                    label="X readout"
-                    value={cfg.x_readout_name ?? "(use well concentration)"}
-                  />
                   <Field label="Y readout" value={cfg.y_readout_name} />
                   <Field
                     label="Normalization Scope"
@@ -131,6 +127,14 @@ export function ReadoutDefinitionViewerDialog({
                       ] ?? cfg.normalization_scope
                     }
                   />
+                  {/* X readout shown only when overridden — default is
+                      well.dose, not interesting to show. */}
+                  {cfg.x_readout_name && (
+                    <Field
+                      label="X readout (override)"
+                      value={cfg.x_readout_name}
+                    />
+                  )}
                 </div>
               </Section>
 

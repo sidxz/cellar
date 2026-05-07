@@ -18,6 +18,7 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
+from chem_vault.domain.screening_assay.protocol import is_reserved_readout_name
 
 __all__ = [
     "CddProtocolSummary",
@@ -37,19 +38,13 @@ __all__ = [
 # readout-defs that never have data and break the IC50 fit's X-source
 # contract. We detect them in two ways:
 #   1. Their name matches a chem-vault reserved well-metadata name
-#      (concentration / dose / well / plate / batch / compound).
+#      (canonical set lives in domain.screening_assay.protocol —
+#      `is_reserved_readout_name`).
 #   2. They're referenced as the X (dose) readout of a CDD dose-response
 #      calculation, regardless of name.
 # Skipped readouts produce a `MappingWarning` so the chemist sees them in
 # the import preview, and any DR config that pointed at one gets
 # `x_readout_name=None` (= use well.dose implicitly).
-_DOSE_COLUMN_RESERVED: frozenset[str] = frozenset(
-    {"concentration", "dose", "well", "plate", "batch", "compound"}
-)
-
-
-def _is_dose_column_name(name: str) -> bool:
-    return name.strip().lower() in _DOSE_COLUMN_RESERVED
 
 
 def _collect_dose_readout_names(
@@ -101,7 +96,11 @@ class MappedReadout:
     data_type: ReadoutDataType
     unit: str | None
     aggregation: ReadoutAggregation
-    normalization: ReadoutNormalization
+    # Plural for parity with the domain model and the API response surface.
+    # CDD's protocol JSON typically declares a single (or zero) normalization
+    # per readout, but a frozenset preserves room for multi-emit readouts
+    # without another schema migration on the import side.
+    normalizations: frozenset[ReadoutNormalization]
     precision: int | None
     pick_list_values: list[str] | None
     dose_response_config: DoseResponseConfig | None
@@ -240,7 +239,7 @@ def _build_dose_response_readouts(
                 data_type=ReadoutDataType.DOSE_RESPONSE,
                 unit=dr_unit,
                 aggregation=ReadoutAggregation.NONE,
-                normalization=ReadoutNormalization.NONE,
+                normalizations=frozenset(),
                 precision=None,
                 pick_list_values=None,
                 dose_response_config=DoseResponseConfig(
@@ -295,7 +294,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
         # Skip dose-column readouts (named-reserved or referenced as DR X axis).
         # Concentration is well metadata, not a measurement — modeling it as a
         # readout def would produce em-dash-only columns and a broken fit.
-        if _is_dose_column_name(rd_name) or rd_name in dose_referenced_names:
+        if is_reserved_readout_name(rd_name) or rd_name in dose_referenced_names:
             warnings.append(
                 MappingWarning(
                     field_name=rd_name,
@@ -342,7 +341,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
             x_name = rd.get("x_readout_name")
             # If CDD's X readout was a dose column (which we just skipped),
             # null it out so the fitter uses well.dose implicitly.
-            if x_name and (x_name in dose_referenced_names or _is_dose_column_name(x_name)):
+            if x_name and (x_name in dose_referenced_names or is_reserved_readout_name(x_name)):
                 x_name = None
             dr_config = DoseResponseConfig(
                 curve_type=CurveType.IC50,
@@ -371,7 +370,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
                 data_type=mapped_type,
                 unit=rd.get("unit_label") or rd.get("unit"),
                 aggregation=ReadoutAggregation.NONE,
-                normalization=ReadoutNormalization.NONE,
+                normalizations=frozenset(),
                 precision=rd.get("precision_number") or rd.get("precision"),
                 pick_list_values=pick_list_values,
                 dose_response_config=dr_config,

@@ -15,7 +15,9 @@ from chem_vault.application.cdd_import.mapper import (
     MappingWarning,
 )
 from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImportQuery
-from chem_vault.domain.screening_assay.enums import ReadoutNormalization
+from chem_vault.application.screening._dose_response_config_serde import (
+    serialize_dose_response_config,
+)
 from chem_vault.interface.dependencies import (
     AuthDep,
     ImportCddProtocolDep,
@@ -47,6 +49,10 @@ class MappedReadoutResponse(BaseModel):
     precision: int | None = None
     pick_list_values: list[str] | None = None
     has_dose_response_config: bool
+    # Same shape as ReadoutDefinitionResponse.dose_response_config so the
+    # import wizard can preview intercepts, range constraints, and curve
+    # type before the user clicks Import. None for non-dose-response readouts.
+    dose_response_config: dict | None = None
     display_order: int
 
     @classmethod
@@ -56,14 +62,15 @@ class MappedReadoutResponse(BaseModel):
             data_type=r.data_type.value,
             unit=r.unit,
             aggregation=r.aggregation.value,
-            normalizations=(
-                [r.normalization.value]
-                if r.normalization != ReadoutNormalization.NONE
-                else []
-            ),
+            normalizations=sorted(n.value for n in r.normalizations),
             precision=r.precision,
             pick_list_values=r.pick_list_values,
             has_dose_response_config=r.dose_response_config is not None,
+            dose_response_config=(
+                serialize_dose_response_config(r.dose_response_config)
+                if r.dose_response_config is not None
+                else None
+            ),
             display_order=r.display_order,
         )
 

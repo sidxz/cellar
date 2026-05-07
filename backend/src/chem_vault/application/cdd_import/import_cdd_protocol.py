@@ -91,7 +91,7 @@ class ImportCddProtocol:
                     data_type=r.data_type,
                     unit=r.unit,
                     aggregation=r.aggregation,
-                    normalization=r.normalization,
+                    normalizations=r.normalizations,
                     precision=r.precision,
                     pick_list_values=r.pick_list_values,
                     dose_response_config=r.dose_response_config,

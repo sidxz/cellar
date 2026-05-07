@@ -19,6 +19,9 @@ export interface MappedReadout {
   precision: number | null;
   pick_list_values: string[] | null;
   has_dose_response_config: boolean;
+  /** Same shape as ReadoutDefinition.dose_response_config — surfaced so the
+   *  import wizard can preview intercepts, range constraints, etc. */
+  dose_response_config: Record<string, unknown> | null;
   display_order: number;
 }
 

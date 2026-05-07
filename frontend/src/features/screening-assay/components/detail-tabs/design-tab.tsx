@@ -6,6 +6,11 @@ import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/components/ui/collapsible";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -547,10 +552,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const renderDoseResponseFields = (excludeId: string | null) => {
     if (rdDataType !== "dose_response") return null;
     const candidates = axisCandidates(excludeId);
+    const xIsAdvanced = drXReadout !== WELL_CONC_X;
     return (
       <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
         <p className="text-xs font-medium">Dose-Response Configuration</p>
-        <div className="grid grid-cols-3 gap-3">
+        {/* Curve Type + Y on the always-visible row. X axis defaults to
+            well.dose (the experimental setpoint, stored on every well);
+            chemists almost never need to change it. The rare case
+            (log-transformed X computed by a calculated readout) lives
+            behind the Advanced disclosure below. */}
+        <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1">
             <Label className="text-xs">Curve Type</Label>
             <Select
@@ -564,24 +575,6 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 {Object.entries(CURVE_TYPE_LABELS).map(([v, l]) => (
                   <SelectItem key={v} value={v}>
                     {l}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">X-Axis Readout</Label>
-            <Select value={drXReadout} onValueChange={setDrXReadout}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={WELL_CONC_X}>
-                  (use well concentration)
-                </SelectItem>
-                {candidates.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -603,6 +596,43 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </Select>
           </div>
         </div>
+        <Collapsible defaultOpen={xIsAdvanced}>
+          <CollapsibleTrigger className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+            <span aria-hidden>▸</span>
+            Advanced — X axis source
+            {xIsAdvanced ? null : (
+              <span className="ml-1 italic opacity-70">
+                (default: well concentration)
+              </span>
+            )}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <div className="grid gap-1 max-w-sm">
+              <Label className="text-xs">X-Axis Readout</Label>
+              <Select value={drXReadout} onValueChange={setDrXReadout}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={WELL_CONC_X}>
+                    (use well concentration — default)
+                  </SelectItem>
+                  {candidates.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Pick a different readout only when the X axis is a
+                derivation (e.g. log-concentration computed by a
+                calculated readout). 99% of dose-response fits use the
+                well's recorded concentration.
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
         <div className="grid grid-cols-3 gap-3">
           <div className="grid gap-1">
             <Label className="text-xs">Hill Slope</Label>
