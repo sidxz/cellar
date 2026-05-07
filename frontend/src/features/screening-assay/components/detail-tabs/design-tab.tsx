@@ -62,6 +62,7 @@ import {
 } from "@/shared/components/ontology-search-input";
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
+import { PlateMapView } from "../plate-map-view";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
 import { NormalizationCheckboxGroup } from "../readout-normalization-checkboxes";
 import { showInfo } from "@/shared/lib/toast";
@@ -1452,7 +1453,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           {/* Existing layouts */}
           {protocol.control_layouts &&
           Object.keys(protocol.control_layouts).length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {Object.entries(protocol.control_layouts).map(
                 ([format, templateId]) => {
                   const tmpl = plateTemplates?.find(
@@ -1461,27 +1462,38 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   return (
                     <div
                       key={format}
-                      className="flex items-center justify-between rounded-md border px-3 py-2"
+                      className="rounded-md border px-3 py-2 space-y-3"
                     >
-                      <span className="text-sm">
-                        {PLATE_FORMAT_LABELS[format as PlateFormat] ??
-                          `${format}-well`}{" "}
-                        &rarr;{" "}
-                        <span className="font-medium">
-                          {tmpl?.name ?? templateId}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">
+                          {PLATE_FORMAT_LABELS[format as PlateFormat] ??
+                            `${format}-well`}{" "}
+                          &rarr;{" "}
+                          <span className="font-medium">
+                            {tmpl?.name ?? templateId}
+                          </span>
                         </span>
-                      </span>
-                      {isDraft && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() =>
-                            removeControlLayout.mutate(format)
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {isDraft && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() =>
+                              removeControlLayout.mutate(format)
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {/* Read-only preview of the template — same color
+                          vocabulary as the editor + Plate Templates page,
+                          so chemists recognize the layout instantly. */}
+                      {tmpl && (
+                        <PlateMapView
+                          format={tmpl.format}
+                          templateMap={tmpl.template_map}
+                        />
                       )}
                     </div>
                   );
