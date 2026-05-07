@@ -43,6 +43,7 @@ from chem_vault.application.screening.long_format_normalizer import (
     ReadoutColumn,
     SuggestedMapping,
     WellPosition,
+    ReadoutDefRef,
     infer_mapping,
     normalize,
 )
@@ -313,7 +314,28 @@ class PreviewRunFile:
                 )
             )
 
-        suggested = infer_mapping(table)
+        # Load the protocol first so its readout-definition catalog can
+        # feed into infer_mapping. Headers whose name matches a defined
+        # readout (e.g. a Text readout named "Scientist") are then
+        # suggested as role=readout / confidence=high with the def id
+        # attached — no FE-side upgrade or auto-binding needed.
+        protocol = await self._protocol_repo.find_by_id_in_workspace(
+            input.workspace_id, run.protocol_id
+        )
+        readout_def_refs: tuple[ReadoutDefRef, ...] = (
+            tuple(
+                ReadoutDefRef(
+                    id=rd.id,
+                    name=rd.name,
+                    data_type=rd.data_type.value,
+                )
+                for rd in protocol.readout_definitions
+            )
+            if protocol is not None
+            else ()
+        )
+
+        suggested = infer_mapping(table, readout_defs=readout_def_refs)
         guessed = _build_guess_mapping(suggested)
 
         plates: tuple[PlatePreview, ...] = ()
@@ -325,10 +347,6 @@ class PreviewRunFile:
         will_create_readouts = 0
         well_conflicts: list[WellConflict] = []
         readout_conflicts: list[ReadoutConflict] = []
-
-        protocol = await self._protocol_repo.find_by_id_in_workspace(
-            input.workspace_id, run.protocol_id
-        )
 
         if guessed is not None:
             normalized = normalize(table, guessed)

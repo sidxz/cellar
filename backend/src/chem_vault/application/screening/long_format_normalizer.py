@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -79,13 +79,36 @@ class ColumnMapping:
 
 
 @dataclass(frozen=True)
+class ReadoutDefRef:
+    """Lightweight reference to a protocol's readout definition.
+
+    Passed into ``infer_mapping`` so that headers whose name matches a
+    protocol-defined readout (e.g. a Text readout named "Scientist") are
+    suggested as ``role="readout"`` with ``confidence="high"`` and the
+    matching def id pre-bound — without coupling the normalizer module to
+    the full domain ReadoutDefinition aggregate.
+    """
+
+    id: uuid.UUID
+    name: str
+    data_type: str  # "numeric" | "text" | "dose_response" | "pick_list"
+
+
+@dataclass(frozen=True)
 class HeaderSuggestion:
-    """One suggested role for a single header."""
+    """One suggested role for a single header.
+
+    ``readout_definition_id`` is set only when the inference step decided
+    that this header maps to a specific protocol-defined readout (exact
+    name match against the ``readout_defs`` argument to ``infer_mapping``).
+    The wizard uses it to pre-bind the readout-def select.
+    """
 
     header: str
     role: Role | None
     confidence: Confidence
     reason: str = ""
+    readout_definition_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -224,23 +247,51 @@ _WELL_RE = re.compile(r"^[A-Z]{1,2}\d{1,2}$", re.IGNORECASE)
 # ---------------------------------------------------------------------------
 
 
-def infer_mapping(table: ParsedTable, sample_size: int = 100) -> SuggestedMapping:
+def infer_mapping(
+    table: ParsedTable,
+    sample_size: int = 100,
+    readout_defs: Sequence[ReadoutDefRef] = (),
+) -> SuggestedMapping:
     """Suggest a role for each header, with confidence.
 
-    1. Synonym dictionary (high confidence on hit).
-    2. Value-based fallback for unknowns:
-        - >80% of sampled cells match ``[A-Z]{1,2}\\d{1,2}`` → ``well``.
-        - Numeric, high uniqueness, no nulls → ``readout``.
-        - Numeric with many repeats and many nulls → ``concentration``.
-        - Long string with shared prefix → ``plate_name``.
-        - Short string ID-shaped (mixed alnum + dashes) → ``batch_ref``.
+    Inference stages (highest to lowest precedence):
+      1. **Synonym dictionary** — header matches a built-in synonym for a
+         core role (well / plate_name / concentration / batch_ref).
+         Confidence: high.
+      2. **Readout-definition name match** — header (after normalization)
+         exactly equals the name of a protocol-defined readout def.
+         Confidence: high. The matching def's id is attached to the
+         suggestion so the wizard can pre-bind the readout-def select.
+         Only ``numeric`` and ``text`` readout defs are considered;
+         ``dose_response`` and ``pick_list`` are computed/derived and
+         shouldn't be column-mapped.
+      3. **Value-based fallback** — heuristics on cell values:
+         - >80% match ``[A-Z]{1,2}\\d{1,2}`` → ``well``.
+         - Numeric, high uniqueness, no nulls → ``readout`` (low/medium).
+         - Numeric with many repeats and many nulls → ``concentration``.
+         - Long string with shared prefix → ``plate_name``.
+         - Short string ID-shaped → ``batch_ref``.
 
-    Each role can be claimed by multiple headers; ``ColumnMapping`` then picks
-    the user-confirmed assignment. Readout columns may be multiple by design.
+    Synonym precedence over readout-def name match guards against a
+    protocol that smuggled a reserved well-metadata name (e.g. a readout
+    def named "concentration") into its catalog — the synonym still wins,
+    and the user can manually re-bind if the readout def really was
+    intended.
+
+    Each role can be claimed by multiple headers; ``ColumnMapping`` then
+    picks the user-confirmed assignment. Readout columns may be multiple
+    by design.
     """
     sample_rows = list(table.rows[:sample_size])
     suggestions: list[HeaderSuggestion] = []
     role_taken: dict[Role, bool] = {}
+
+    # Build a normalized-name index for protocol-defined readouts.
+    bindable_defs: dict[str, ReadoutDefRef] = {
+        _norm(d.name): d
+        for d in readout_defs
+        if d.data_type in ("numeric", "text")
+    }
 
     for header in table.headers:
         norm = _norm(header)
@@ -260,7 +311,21 @@ def infer_mapping(table: ParsedTable, sample_size: int = 100) -> SuggestedMappin
                 role_taken[role] = True
                 continue
 
-        # 2. Value-based fallback
+        # 2. Readout-definition name match
+        bound_def = bindable_defs.get(norm)
+        if bound_def is not None:
+            suggestions.append(
+                HeaderSuggestion(
+                    header=header,
+                    role="readout",
+                    confidence="high",
+                    reason=f'header matches readout def "{bound_def.name}"',
+                    readout_definition_id=bound_def.id,
+                )
+            )
+            continue
+
+        # 3. Value-based fallback
         values = [(r.get(header) or "").strip() for r in sample_rows]
         guess, conf, reason = _guess_role_from_values(values, role_taken)
         suggestions.append(

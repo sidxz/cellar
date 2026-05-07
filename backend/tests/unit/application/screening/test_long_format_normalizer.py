@@ -11,6 +11,7 @@ from chem_vault.application.screening.long_format_normalizer import (
     ColumnMapping,
     NormalizedTable,
     ReadoutColumn,
+    ReadoutDefRef,
     WellPosition,
     infer_mapping,
     normalize,
@@ -68,6 +69,129 @@ class TestInferMappingSynonyms:
         s = infer_mapping(table)
         readouts = [x.header for x in s.by_role("readout")]
         assert set(readouts) == {"Absorbance", "Fluorescence"}
+
+
+# ---------------------------------------------------------------------------
+# infer_mapping — readout-definition name match (Phase B follow-on)
+# ---------------------------------------------------------------------------
+
+
+class TestInferMappingReadoutDefMatch:
+    """Headers whose normalized name equals a protocol-defined readout's
+    name should be suggested as role=readout / confidence=high with the
+    matching def id pre-bound — without the FE having to second-guess.
+    """
+
+    def _scientist_def(self) -> ReadoutDefRef:
+        return ReadoutDefRef(
+            id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
+            name="Scientist",
+            data_type="text",
+        )
+
+    def test_text_readout_def_name_match_yields_high_confidence_with_binding(
+        self,
+    ) -> None:
+        table = _make_table(
+            ["Well", "Scientist"],
+            [{"Well": "A01", "Scientist": "Dan"}],
+        )
+        defs = [self._scientist_def()]
+        s = infer_mapping(table, readout_defs=defs)
+
+        sci = next(x for x in s.suggestions if x.header == "Scientist")
+        assert sci.role == "readout"
+        assert sci.confidence == "high"
+        assert sci.readout_definition_id == defs[0].id
+        assert "readout def" in sci.reason
+
+    def test_match_is_case_and_punctuation_insensitive(self) -> None:
+        table = _make_table(["Well", "raw au"], [{"Well": "A01", "raw au": "0.6"}])
+        defs = [
+            ReadoutDefRef(
+                id=uuid.UUID("22222222-2222-2222-2222-222222222222"),
+                name="Raw AU",
+                data_type="numeric",
+            )
+        ]
+        s = infer_mapping(table, readout_defs=defs)
+        raw = next(x for x in s.suggestions if x.header == "raw au")
+        assert raw.role == "readout"
+        assert raw.readout_definition_id == defs[0].id
+
+    def test_synonym_wins_over_readout_def_name_match(self) -> None:
+        """A protocol that smuggled a reserved well-metadata name as a
+        readout def shouldn't override the synonym dictionary — synonyms
+        win, the user can manually re-bind if they really meant it."""
+        table = _make_table(
+            ["Well", "Concentration"],
+            [{"Well": "A01", "Concentration": "100"}],
+        )
+        defs = [
+            ReadoutDefRef(
+                id=uuid.UUID("33333333-3333-3333-3333-333333333333"),
+                name="Concentration",  # name collides with the synonym
+                data_type="numeric",
+            )
+        ]
+        s = infer_mapping(table, readout_defs=defs)
+        conc = next(x for x in s.suggestions if x.header == "Concentration")
+        assert conc.role == "concentration"  # synonym precedence
+        assert conc.readout_definition_id is None
+
+    def test_dose_response_def_is_not_eligible_for_binding(self) -> None:
+        """Dose-response readouts are computed/derived; mapping a column
+        to one would be nonsensical. They must be excluded from the
+        match catalog regardless of name."""
+        table = _make_table(["Well", "IC50"], [{"Well": "A01", "IC50": ""}])
+        defs = [
+            ReadoutDefRef(
+                id=uuid.UUID("44444444-4444-4444-4444-444444444444"),
+                name="IC50",
+                data_type="dose_response",
+            )
+        ]
+        s = infer_mapping(table, readout_defs=defs)
+        ic50 = next(x for x in s.suggestions if x.header == "IC50")
+        assert ic50.readout_definition_id is None
+
+    def test_pick_list_def_is_not_eligible_for_binding(self) -> None:
+        table = _make_table(["Well", "Status"], [{"Well": "A01", "Status": "ok"}])
+        defs = [
+            ReadoutDefRef(
+                id=uuid.UUID("55555555-5555-5555-5555-555555555555"),
+                name="Status",
+                data_type="pick_list",
+            )
+        ]
+        s = infer_mapping(table, readout_defs=defs)
+        status = next(x for x in s.suggestions if x.header == "Status")
+        assert status.readout_definition_id is None
+
+    def test_no_readout_defs_passed_preserves_legacy_behavior(self) -> None:
+        """Back-compat: pre-Phase-B callers don't pass readout_defs;
+        suggestions must look identical to before."""
+        table = _make_table(["Well", "Scientist"], [{"Well": "A01", "Scientist": "Dan"}])
+        s = infer_mapping(table)  # default readout_defs=()
+        sci = next(x for x in s.suggestions if x.header == "Scientist")
+        assert sci.readout_definition_id is None
+        # "Scientist" has no synonym hit, no readout-def hit, falls through
+        # to value-based which can't classify text → role=None.
+        assert sci.role is None
+
+    def test_no_match_when_protocol_lacks_def(self) -> None:
+        table = _make_table(["Well", "Scientist"], [{"Well": "A01", "Scientist": "Dan"}])
+        defs = [
+            ReadoutDefRef(
+                id=uuid.UUID("66666666-6666-6666-6666-666666666666"),
+                name="raw AU",
+                data_type="numeric",
+            )
+        ]
+        s = infer_mapping(table, readout_defs=defs)
+        sci = next(x for x in s.suggestions if x.header == "Scientist")
+        assert sci.readout_definition_id is None
+        assert sci.role is None
 
 
 # ---------------------------------------------------------------------------

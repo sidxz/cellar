@@ -49,6 +49,10 @@ class HeaderSuggestionModel(BaseModel):
     role: str | None
     confidence: str
     reason: str = ""
+    # Set when the header's normalized name matches a protocol-defined
+    # readout (numeric or text). The wizard pre-binds the readout-def
+    # select from this id; no FE-side name matching needed.
+    readout_definition_id: uuid.UUID | None = None
 
 
 class PlatePreviewModel(BaseModel):
@@ -130,6 +134,7 @@ async def preview_run_file(
                 role=s.role,
                 confidence=s.confidence,
                 reason=s.reason,
+                readout_definition_id=s.readout_definition_id,
             )
             for s in preview.suggestions
         ],

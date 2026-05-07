@@ -7,7 +7,7 @@ import {
   ChevronRight,
   Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { useProtocol } from "../hooks/use-protocols";
 import {
@@ -81,50 +81,24 @@ function emptyDraft(): MappingDraft {
 function suggestionToInitialDraft(
   suggestions: HeaderSuggestion[],
 ): MappingDraft {
+  // Seed both the role and the readout-def binding directly from the
+  // backend's suggestion. ``readout_definition_id`` is set when the
+  // header's normalized name matched a protocol-defined readout (the
+  // backend's `infer_mapping` runs that match against the protocol's
+  // catalog, so the FE doesn't need its own auto-bind heuristic).
   const roles: Record<string, ImportRole | null> = {};
+  const readoutDefByHeader: Record<string, string> = {};
   for (const s of suggestions) {
     roles[s.header] = s.role;
+    if (s.role === "readout" && s.readout_definition_id) {
+      readoutDefByHeader[s.header] = s.readout_definition_id;
+    }
   }
   return {
     roles,
-    readoutDefByHeader: {},
+    readoutDefByHeader,
     acknowledgedLowConfidence: false,
   };
-}
-
-/** Auto-bind unclaimed headers to readout defs whose name matches.
- *
- * Synonym matches (well/plate_name/concentration/batch_ref) win — only
- * headers without a non-readout role are eligible. This is what restores
- * frictionless mapping for protocol-defined Text columns like "Scientist"
- * (which used to be a hard-coded role, now lives as a Text readout def).
- */
-function autoBindReadoutDefs(
-  draft: MappingDraft,
-  headers: string[],
-  defs: { id: string; name: string; data_type: string }[],
-): MappingDraft {
-  const bindable = defs.filter(
-    (d) => d.data_type === "text" || d.data_type === "numeric",
-  );
-  if (bindable.length === 0) return draft;
-  const defByNorm = new Map(bindable.map((d) => [normalize(d.name), d]));
-  const next: MappingDraft = {
-    ...draft,
-    roles: { ...draft.roles },
-    readoutDefByHeader: { ...draft.readoutDefByHeader },
-  };
-  for (const h of headers) {
-    const def = defByNorm.get(normalize(h));
-    if (!def) continue;
-    const currentRole = next.roles[h] ?? null;
-    if (currentRole !== null && currentRole !== "readout") continue;
-    next.roles[h] = "readout";
-    if (!next.readoutDefByHeader[h]) {
-      next.readoutDefByHeader[h] = def.id;
-    }
-  }
-  return next;
 }
 
 function applyTemplateToDraft(
@@ -251,20 +225,6 @@ export function RunImportWizard({
     [previewMutation, templates],
   );
 
-  // Run readout-def auto-bind once the preview AND the protocol's readout
-  // defs are both available. Doing this in an effect (rather than inside
-  // the preview onSuccess callback) avoids a race where a fast file parse
-  // resolves before the protocol query — under which `readoutDefs` was an
-  // empty array and Scientist / etc. silently failed to auto-bind.
-  const autoBoundForPreviewIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!preview) return;
-    if (readoutDefs.length === 0) return;
-    if (autoBoundForPreviewIdRef.current === preview.preview_id) return;
-    autoBoundForPreviewIdRef.current = preview.preview_id;
-    setDraft((d) => autoBindReadoutDefs(d, preview.headers, readoutDefs));
-  }, [preview, readoutDefs]);
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -281,26 +241,9 @@ export function RunImportWizard({
   const lowConfidenceHeaders = useMemo(() => {
     if (!preview) return [] as string[];
     return preview.suggestions
-      .filter((s) => {
-        if (s.confidence !== "low") return false;
-        if (draft.roles[s.header] === null) return false;
-        // Mirror the row-level upgrade: a header bound to a same-named
-        // readout def is an exact match, not a low-confidence guess.
-        const boundDefId = draft.readoutDefByHeader[s.header];
-        const boundDef = boundDefId
-          ? readoutDefs?.find((d) => d.id === boundDefId)
-          : null;
-        if (
-          draft.roles[s.header] === "readout" &&
-          boundDef != null &&
-          normalize(boundDef.name) === normalize(s.header)
-        ) {
-          return false;
-        }
-        return true;
-      })
+      .filter((s) => s.confidence === "low" && draft.roles[s.header] !== null)
       .map((s) => s.header);
-  }, [preview, draft.roles, draft.readoutDefByHeader, readoutDefs]);
+  }, [preview, draft.roles]);
 
   const readoutHeaders = useMemo(
     () =>
@@ -676,25 +619,6 @@ function MappingStep({
           <tbody>
             {preview.suggestions.map((s) => {
               const role = draft.roles[s.header] ?? null;
-              // Backend doesn't know the protocol's readout-def catalog, so
-              // text columns like "Scientist" land as low-confidence even
-              // when their header exactly matches a readout def's name.
-              // Upgrade the displayed confidence when the FE has bound the
-              // header to a same-named readout def — that's an exact match.
-              const boundDefId = draft.readoutDefByHeader[s.header];
-              const boundDef = boundDefId
-                ? readoutDefs.find((d) => d.id === boundDefId)
-                : null;
-              const exactReadoutNameMatch =
-                role === "readout" &&
-                boundDef != null &&
-                normalize(boundDef.name) === normalize(s.header);
-              const effectiveConfidence: ImportConfidence = exactReadoutNameMatch
-                ? "high"
-                : s.confidence;
-              const effectiveReason = exactReadoutNameMatch
-                ? `header matches readout def "${boundDef.name}"`
-                : s.reason;
               return (
                 <tr key={s.header} className="border-b last:border-b-0">
                   <td className="px-3 py-2 font-mono">{s.header}</td>
@@ -720,12 +644,12 @@ function MappingStep({
                   <td className="px-3 py-2">
                     <Badge
                       variant="outline"
-                      className={confidenceBadgeClass(effectiveConfidence)}
+                      className={confidenceBadgeClass(s.confidence)}
                     >
-                      {confidenceLabel(effectiveConfidence)}
+                      {confidenceLabel(s.confidence)}
                     </Badge>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {effectiveReason}
+                      {s.reason}
                     </span>
                   </td>
                   <td className="px-3 py-2">

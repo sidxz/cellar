@@ -20,6 +20,10 @@ export interface HeaderSuggestion {
   role: ImportRole | null;
   confidence: ImportConfidence;
   reason: string;
+  /** Set by the backend when the header's normalized name matches a
+   *  protocol-defined readout (numeric or text). The wizard pre-binds
+   *  the readout-def select from this id. */
+  readout_definition_id?: string | null;
 }
 
 export interface PlatePreview {
