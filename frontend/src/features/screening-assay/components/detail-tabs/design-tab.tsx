@@ -1283,7 +1283,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
       {/* ── Add Readout Definition Dialog ───────────────────────────────── */}
       <Dialog open={addReadoutOpen} onOpenChange={setAddReadoutOpen}>
-        <DialogContent>
+        <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Readout Definition</DialogTitle>
             <DialogDescription>
@@ -1425,7 +1425,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           if (!open) closeEditReadout();
         }}
       >
-        <DialogContent>
+        <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Readout Definition</DialogTitle>
             <DialogDescription>

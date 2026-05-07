@@ -246,7 +246,7 @@ export function PlateSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {step === "upload" ? "Upload Plate Map" : "Confirm Plate Setup"}

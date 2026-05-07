@@ -49,7 +49,7 @@ export function ReadoutDefinitionViewerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>View Readout Definition: {readoutDef.name}</DialogTitle>
         </DialogHeader>
