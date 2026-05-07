@@ -85,6 +85,26 @@ class PlateNormalizer:
         # Defensive: unknown strategy — treat as NONE
         return []
 
+    def normalize_many(
+        self,
+        wells: list[Well],
+        raw_values: dict[uuid.UUID, float],
+        normalizations: frozenset[ReadoutNormalization],
+        pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
+    ) -> dict[ReadoutNormalization, list[NormalizedValue]]:
+        """Fan out a single plate's raw data to multiple normalization formulas.
+
+        Each formula in ``normalizations`` is computed independently, sharing
+        the same controls and sample wells. Returns a dict keyed by the
+        formula. Used when one ReadoutDefinition emits multiple views (e.g.
+        ``{PERCENT_INHIBITION, Z_SCORE}`` together).
+        """
+        return {
+            formula: self.normalize(wells, raw_values, formula, pos_control_signal)
+            for formula in normalizations
+            if formula != ReadoutNormalization.NONE
+        }
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

@@ -653,3 +653,61 @@ class TestNormalizedValueFields:
 
         assert len(values) == 1
         assert values[0].well_id == s1.id
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizeMany — multi-emit normalization fan-out
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeMany:
+    def test_emits_one_result_set_per_formula(self) -> None:
+        """Readout def with {%inh, z_score} computes both views off the same plate."""
+        normalizer = PlateNormalizer()
+        s = _sample("A", 1)
+        # Z-score requires >= 2 high-signal control wells with non-zero stdev.
+        p1 = _pos_ctrl("B", 1)
+        p2 = _pos_ctrl("B", 2)
+        n = _neg_ctrl("C", 1)
+        raw = {s.id: 50.0, p1.id: 100.0, p2.id: 90.0, n.id: 0.0}
+
+        result = normalizer.normalize_many(
+            [s, p1, p2, n],
+            raw,
+            frozenset(
+                {
+                    ReadoutNormalization.PERCENT_INHIBITION,
+                    ReadoutNormalization.Z_SCORE,
+                }
+            ),
+        )
+
+        assert set(result.keys()) == {
+            ReadoutNormalization.PERCENT_INHIBITION,
+            ReadoutNormalization.Z_SCORE,
+        }
+        assert len(result[ReadoutNormalization.PERCENT_INHIBITION]) == 1
+        assert len(result[ReadoutNormalization.Z_SCORE]) == 1
+
+    def test_empty_set_returns_empty_dict(self) -> None:
+        normalizer = PlateNormalizer()
+        s = _sample()
+        result = normalizer.normalize_many([s], {s.id: 1.0}, frozenset())
+        assert result == {}
+
+    def test_each_formula_independent_of_others(self) -> None:
+        """Same input, single-formula and multi-formula calls give identical output."""
+        normalizer = PlateNormalizer()
+        s = _sample("A", 1)
+        p = _pos_ctrl("B", 1)
+        n = _neg_ctrl("C", 1)
+        raw = {s.id: 50.0, p.id: 100.0, n.id: 0.0}
+
+        single = normalizer.normalize(
+            [s, p, n], raw, ReadoutNormalization.PERCENT_INHIBITION
+        )
+        many = normalizer.normalize_many(
+            [s, p, n], raw, frozenset({ReadoutNormalization.PERCENT_INHIBITION})
+        )
+
+        assert many[ReadoutNormalization.PERCENT_INHIBITION] == single
