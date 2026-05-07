@@ -884,17 +884,23 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                   {curvesLoading ? (
                     <Skeleton className="h-[300px] w-full" />
                   ) : compoundCurves && compoundCurves.length > 0 ? (
-                    <>
-                      <DoseResponseChart
-                        curves={compoundCurves}
-                        isInteractive={false}
-                        protocolConfig={
-                          protocol.readout_definitions.find(
-                            (rd) => rd.dose_response_config != null,
-                          )?.dose_response_config ?? null
-                        }
-                      />
-                      <div className="rounded-lg border">
+                    (() => {
+                      const drDef = protocol.readout_definitions.find(
+                        (rd) => rd.dose_response_config != null,
+                      );
+                      const yName = drDef?.dose_response_config?.y_readout_name;
+                      const yDef = yName
+                        ? protocol.readout_definitions.find((r) => r.name === yName)
+                        : undefined;
+                      return (
+                        <>
+                          <DoseResponseChart
+                            curves={compoundCurves}
+                            isInteractive={false}
+                            protocolConfig={drDef?.dose_response_config ?? null}
+                            yReadoutNormalization={yDef?.normalization ?? null}
+                          />
+                          <div className="rounded-lg border">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-muted/50">
@@ -926,7 +932,9 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                           </tbody>
                         </table>
                       </div>
-                    </>
+                        </>
+                      );
+                    })()
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       No dose-response curves available for this compound.

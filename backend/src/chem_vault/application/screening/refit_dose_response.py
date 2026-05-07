@@ -73,9 +73,12 @@ class RefitDoseResponseCurve:
             if curve is None:
                 return Failure(NotFoundError("DoseResponseCurve", str(input.curve_id)))
 
-            # Reconstruct all points from raw_data + excluded_points
+            # Reconstruct all points from raw_data + excluded_points. Sort
+            # ASCENDING by concentration so user-supplied
+            # ``excluded_point_indices`` lines up with the UI's display order
+            # (low → high dose).
             all_points_raw = list(curve.raw_data or []) + list(curve.excluded_points or [])
-            all_points_raw.sort(key=lambda p: p.get("concentration", 0), reverse=True)
+            all_points_raw.sort(key=lambda p: p.get("concentration", 0))
 
             excluded_set = set(input.excluded_point_indices)
             points = [

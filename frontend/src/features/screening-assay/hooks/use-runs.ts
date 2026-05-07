@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
+import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { CreateRunInput, Run } from "../types";
 
@@ -155,6 +155,9 @@ export function useDeleteRun() {
 
 interface RecomputeResponse {
   computed_readouts: number;
+  /** Per-compound fit failure messages from the post-recompute curve fit.
+   *  Optional for back-compat with older backend deployments. */
+  fit_warnings?: string[];
 }
 
 export interface RecomputeOverrides {
@@ -201,6 +204,17 @@ export function useRecomputeRun() {
       showSuccess(
         `Recomputed ${data.computed_readouts} readouts and refit curves`,
       );
+      const warnings = data.fit_warnings ?? [];
+      if (warnings.length > 0) {
+        const head = warnings.slice(0, 3);
+        const rest = warnings.length - head.length;
+        const description =
+          rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
+        showWarning(
+          `${warnings.length} curve(s) had fit issues — see the chart for details.`,
+          { description },
+        );
+      }
     },
   });
 }

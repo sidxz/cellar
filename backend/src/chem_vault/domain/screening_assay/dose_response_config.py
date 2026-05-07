@@ -12,6 +12,20 @@ from chem_vault.domain.screening_assay.enums import (
 from chem_vault.domain.shared.errors import ValidationError
 
 
+# Single source of truth for the auto-outlier-removal default sigma threshold.
+# CDD/Prism convention is 3.0 (Grubbs-like leave-one-out).
+DEFAULT_OUTLIER_SIGMA: float = 3.0
+
+# Curve classification defaults — calibrated for normalized (% inhibition / %
+# activation / % control) readouts. Raw-signal protocols should override these
+# on the config so they don't all collapse to PARTIAL/INACTIVE by mismatch.
+DEFAULT_INACTIVE_THRESHOLD: float = 30.0
+DEFAULT_FULL_R2_MIN: float = 0.8
+DEFAULT_FULL_TOP_MIN: float = 80.0
+DEFAULT_FULL_BOTTOM_MAX: float = 20.0
+DEFAULT_PARTIAL_R2_MIN: float = 0.6
+
+
 @dataclass(frozen=True)
 class DoseResponseConfig:
     """Protocol-level configuration for dose-response curve fitting.
@@ -36,6 +50,8 @@ class DoseResponseConfig:
         - if both ``*_min`` and ``*_max`` are set, ``min < max``
         - hill range must not contradict ``hill_slope_constraint`` (e.g.,
           POSITIVE_ONLY + range straddling 0 is rejected)
+        - classification thresholds: r2 fields in (0, 1]; inactive/top/bottom
+          plain floats; full_top_min > full_bottom_max
     """
 
     curve_type: CurveType
@@ -58,7 +74,14 @@ class DoseResponseConfig:
     # threshold (CDD-equivalent default is 3.0). Below the minimum-points
     # floor (~6 points) the fitter doesn't have enough degrees of freedom
     # to estimate residual SD, so detection is skipped regardless.
-    outlier_sigma: float | None = 3.0
+    outlier_sigma: float | None = DEFAULT_OUTLIER_SIGMA
+    # Curve classification thresholds. Defaults assume a normalized (%) Y axis;
+    # raw-signal protocols (fluorescence, luminescence) should override.
+    inactive_threshold: float = DEFAULT_INACTIVE_THRESHOLD
+    full_r2_min: float = DEFAULT_FULL_R2_MIN
+    full_top_min: float = DEFAULT_FULL_TOP_MIN
+    full_bottom_max: float = DEFAULT_FULL_BOTTOM_MAX
+    partial_r2_min: float = DEFAULT_PARTIAL_R2_MIN
 
     def __post_init__(self) -> None:
         if not self.y_readout_name or not self.y_readout_name.strip():
@@ -153,4 +176,17 @@ class DoseResponseConfig:
         if self.outlier_sigma is not None and self.outlier_sigma <= 0:
             raise ValidationError(
                 "DoseResponseConfig outlier_sigma must be positive (or None to disable)"
+            )
+
+        if not (0 < self.full_r2_min <= 1):
+            raise ValidationError(
+                "DoseResponseConfig full_r2_min must be in (0, 1]"
+            )
+        if not (0 < self.partial_r2_min <= 1):
+            raise ValidationError(
+                "DoseResponseConfig partial_r2_min must be in (0, 1]"
+            )
+        if self.full_top_min <= self.full_bottom_max:
+            raise ValidationError(
+                "DoseResponseConfig full_top_min must be greater than full_bottom_max"
             )

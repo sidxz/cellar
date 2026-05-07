@@ -550,3 +550,138 @@ class TestOutlierSigmaConfig:
                 y_readout_name="response",
                 outlier_sigma=-1.0,
             )
+
+
+class TestOutlierMaskAlignment:
+    """F2 — outlier indices must map to original active-points order, not the
+    post-cleanup arrays. Bug guard: when a specific point at position 3 is
+    blatantly off, ``raw_data`` must drop that point (and only that point) and
+    the dropped point must end up in ``excluded_points`` with the original
+    concentration/response."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def test_single_clear_outlier_at_position_three_is_correctly_isolated(self):
+        # 11 points in a clean rising curve; replace point at index 3 with
+        # something massively wrong (residual ~ 60).
+        clean = _generate_inhibition_data(
+            ic50=10.0, hill=1.0, top=100.0, bottom=0.0,
+            n_points=11, noise_pct=0.005, conc_min=0.01, conc_max=1000.0,
+            seed=21,
+        )
+        bad_idx = 3
+        original_bad_conc = clean[bad_idx].concentration
+        clean[bad_idx] = ConcentrationResponsePoint(
+            concentration=original_bad_conc,
+            response=clean[bad_idx].response + 60.0,
+        )
+        cfg = _config_with_ranges()
+        fitted = self.fitter.fit(clean, cfg).unwrap()
+
+        auto_excluded = [
+            p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
+        ]
+        assert len(auto_excluded) == 1, (
+            f"expected exactly 1 auto-flagged outlier, got {len(auto_excluded)}"
+        )
+        # The flagged point must be the actual offending one — not whatever
+        # point landed at index 3 of the post-cleanup array.
+        flagged = auto_excluded[0]
+        assert flagged["concentration"] == pytest.approx(original_bad_conc, rel=1e-9), (
+            f"outlier mask realigned wrong — flagged "
+            f"{flagged['concentration']} not {original_bad_conc}"
+        )
+        # And no good points leaked into excluded_data
+        good_concs = {p["concentration"] for p in fitted.raw_data}
+        assert flagged["concentration"] not in good_concs
+
+
+class TestProtocolDrivenClassification:
+    """F4 — classification thresholds are driven by ``DoseResponseConfig`` so
+    raw-signal protocols (fluorescence, luminescence) classify correctly."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def test_raw_signal_full_curve_with_overridden_thresholds(self):
+        # Synthetic fluorescence-style data: top ~ 6000 RFU, bottom ~ 100 RFU.
+        # Default classification thresholds (full_top_min=80, full_bottom_max=20)
+        # would never fire; protocol overrides them to lab-realistic numbers.
+        points = _generate_inhibition_data(
+            ic50=10.0, hill=1.0, top=6000.0, bottom=100.0,
+            n_points=11, noise_pct=0.01, conc_min=0.01, conc_max=1000.0,
+            seed=33,
+        )
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="Raw RFU",
+            inactive_threshold=300.0,
+            full_top_min=5000.0,
+            full_bottom_max=200.0,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert fitted.curve_class == CurveClass.FULL, (
+            f"raw-signal curve should classify as FULL with overridden "
+            f"thresholds; got {fitted.curve_class}"
+        )
+
+    def test_inactive_fast_path_uses_config_threshold(self):
+        # Max response ~ 200 — below custom threshold 300 → INACTIVE.
+        rng = random.Random(2)
+        points = [
+            ConcentrationResponsePoint(
+                concentration=10.0 ** (i - 3),
+                response=150.0 + rng.gauss(0, 10),
+            )
+            for i in range(10)
+        ]
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="Raw RFU",
+            inactive_threshold=300.0,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert fitted.curve_class == CurveClass.INACTIVE
+        # CI is now None (was 0.0 synthetic) for inactive fast-path.
+        assert fitted.confidence_interval_low is None
+        assert fitted.confidence_interval_high is None
+
+
+class TestConfidenceIntervalNoneAtBound:
+    """F6 — return ``None`` for CI when the fit is unreliable (bound hit, stderr
+    unavailable, or stderr would clamp to >= 10 decades)."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def test_ci_is_none_when_ec50_at_bound(self):
+        # Truly flat data with hard locks → log_ec50 hits a bound; CI must be
+        # None rather than a synthetic ±10 decades.
+        points = [
+            ConcentrationResponsePoint(concentration=10**i, response=0.0)
+            for i in range(-3, 8)
+        ]
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            top_constraint=100.0,
+            bottom_constraint=0.0,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert "ec50_at_bound" in fitted.fit_quality_warnings
+        assert fitted.confidence_interval_low is None
+        assert fitted.confidence_interval_high is None
+
+    def test_ci_present_for_clean_fit(self):
+        # Sanity check: a normal fit still returns finite CI bounds.
+        points = _generate_inhibition_data(
+            ic50=80.0, hill=1.0, top=100.0, bottom=0.0, noise_pct=0.02,
+        )
+        fitted = self.fitter.fit(points, _config_with_ranges()).unwrap()
+        assert fitted.confidence_interval_low is not None
+        assert fitted.confidence_interval_high is not None
+        assert fitted.confidence_interval_low < fitted.fitted_value < fitted.confidence_interval_high

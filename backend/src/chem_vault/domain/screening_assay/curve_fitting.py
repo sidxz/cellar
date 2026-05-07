@@ -37,8 +37,11 @@ class FittedCurveResult:
     top: float
     bottom: float
     r_squared: float
-    confidence_interval_low: float
-    confidence_interval_high: float
+    # ``None`` when the fit hit a bound or stderr is unavailable / so wide it
+    # would imply more than 10 decades of uncertainty — no meaningful CI to
+    # report.
+    confidence_interval_low: float | None
+    confidence_interval_high: float | None
     curve_class: CurveClass
     num_points: int
     raw_data: list[dict[str, Any]]

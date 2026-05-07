@@ -214,6 +214,7 @@ class ImportRunFileResponse(BaseModel):
     attachment_id: uuid.UUID | None = None
     compute_warning: str | None = None
     attachment_warning: str | None = None
+    fit_warnings: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -275,6 +276,7 @@ async def import_run_file(
         attachment_id=out.attachment_id,
         compute_warning=out.compute_warning,
         attachment_warning=out.attachment_warning,
+        fit_warnings=out.fit_warnings,
     )
 
 

@@ -15,7 +15,9 @@ from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
-from returns.result import Success
+from returns.result import Failure, Success
+
+from chem_vault.domain.shared.errors import AuthorizationError
 
 from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 from chem_vault.domain.screening_assay.curve_fitting import (
@@ -226,7 +228,7 @@ async def test_normalized_y_uses_only_computed_rows():
     fitter = _RecordingFitter()
     use_case = _make_use_case(fitter)
     result = await use_case.fit_for_run(
-        run=run, protocol=protocol, readout_data=readout_data
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
     )
     assert isinstance(result, Success)
 
@@ -268,7 +270,7 @@ async def test_raw_y_uses_only_raw_rows():
     fitter = _RecordingFitter()
     use_case = _make_use_case(fitter)
     result = await use_case.fit_for_run(
-        run=run, protocol=protocol, readout_data=readout_data
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
     )
     assert isinstance(result, Success)
 
@@ -307,7 +309,7 @@ async def test_calculated_y_uses_only_computed_rows():
     fitter = _RecordingFitter()
     use_case = _make_use_case(fitter)
     result = await use_case.fit_for_run(
-        run=run, protocol=protocol, readout_data=readout_data
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
     )
     assert isinstance(result, Success)
 
@@ -347,7 +349,7 @@ async def test_normalized_y_no_double_feed_per_concentration():
     fitter = _RecordingFitter()
     use_case = _make_use_case(fitter)
     await use_case.fit_for_run(
-        run=run, protocol=protocol, readout_data=readout_data
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
     )
 
     points = fitter.calls[0]
@@ -356,3 +358,122 @@ async def test_normalized_y_no_double_feed_per_concentration():
         points_by_conc.setdefault(p.concentration, []).append(p.response)
     for conc, ys in points_by_conc.items():
         assert len(ys) == 1, f"concentration {conc} got {len(ys)} y-values: {ys}"
+
+
+# ---------------------------------------------------------------------------
+# F3: workspace_id assertion at entry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_workspace_mismatch_rejected():
+    protocol, _, _ = _make_protocol_with_y()
+    run, _ = _make_run_with_dose_series(protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0])
+
+    other_ws = uuid.uuid4()
+    fitter = _RecordingFitter()
+    use_case = _make_use_case(fitter)
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=[], workspace_id=other_ws,
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), AuthorizationError)
+    assert "Run workspace mismatch" in str(result.failure())
+
+
+@pytest.mark.asyncio
+async def test_protocol_workspace_mismatch_rejected():
+    protocol, _, _ = _make_protocol_with_y()
+    run, _ = _make_run_with_dose_series(protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0])
+    # Forge a protocol from a different workspace
+    object.__setattr__(protocol, "workspace_id", uuid.uuid4())
+
+    fitter = _RecordingFitter()
+    use_case = _make_use_case(fitter)
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=[], workspace_id=WS,
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), AuthorizationError)
+    assert "Protocol workspace mismatch" in str(result.failure())
+
+
+# ---------------------------------------------------------------------------
+# F11: silent fit failures surface as warnings
+# ---------------------------------------------------------------------------
+
+
+class _FailingFitter:
+    """Returns Failure for the second compound's fit; succeeds otherwise."""
+
+    def __init__(self, fail_for_response: float) -> None:
+        self._fail_for = fail_for_response
+        self.calls: int = 0
+
+    def fit(self, points, config):
+        self.calls += 1
+        from chem_vault.domain.shared.errors import ValidationError
+        # Trigger failure when the points contain the sentinel response.
+        if any(p.response == self._fail_for for p in points):
+            return Failure(ValidationError("synthetic fit failure"))
+        return Success(
+            FittedCurveResult(
+                fitted_value=1.0, hill_slope=1.0, top=100.0, bottom=0.0,
+                r_squared=0.99,
+                confidence_interval_low=0.5, confidence_interval_high=2.0,
+                curve_class=CurveClass.FULL,
+                num_points=len(points), raw_data=[], excluded_points=[],
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_fit_failures_surface_in_warnings():
+    """F11: when one compound's fit fails, the result still succeeds for the
+    others and the failed compound is named in the warnings list."""
+    protocol, y_def, _ = _make_protocol_with_y()
+    concs = [0.1, 1.0, 10.0, 100.0]
+    run, wells = _make_run_with_dose_series(protocol_id=protocol.id, concentrations=concs)
+
+    sentinel_response = -42.0  # used by _FailingFitter to detect the bad compound
+    bad_mol = uuid.UUID(int=99)
+    good_mol = uuid.UUID(int=100)
+
+    readout_data: list[ReadoutData] = []
+    for w in wells:
+        readout_data.append(
+            _rd(
+                run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
+                value=sentinel_response, is_computed=False,
+                molecule_id=bad_mol, batch_id=uuid.UUID(int=44),
+            )
+        )
+    # Add a good compound on a separate well per concentration
+    for w in wells:
+        readout_data.append(
+            _rd(
+                run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
+                value=10.0, is_computed=False,
+                molecule_id=good_mol, batch_id=uuid.UUID(int=45),
+            )
+        )
+
+    fitter = _FailingFitter(fail_for_response=sentinel_response)
+    curve_repo = AsyncMock()
+    curve_repo.delete_by_run = AsyncMock()
+    curve_repo.save = AsyncMock()
+    use_case = FitDoseResponseCurves(
+        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter,
+    )
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+    assert isinstance(result, Success)
+    fit_result = result.unwrap()
+    # Only the good compound got a curve.
+    assert len(fit_result.curves) == 1
+    # The failure for bad_mol surfaced as a warning naming it.
+    assert any(str(bad_mol) in w for w in fit_result.warnings), (
+        f"warnings did not name failed molecule: {fit_result.warnings}"
+    )

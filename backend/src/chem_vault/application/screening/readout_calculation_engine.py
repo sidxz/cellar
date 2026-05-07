@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
@@ -45,6 +46,19 @@ from chem_vault.domain.shared.value_objects import QualifiedValue
 
 # Regex to detect cross-protocol references: @ProtocolName.ReadoutName or @{Protocol Name}.Readout
 _CROSS_PROTOCOL_RE = re.compile(r"@\{?[\w\s]+\}?\.[\w\s]+")
+
+
+@dataclass(frozen=True)
+class ComputeRunResult:
+    """Outcome of a full compute pipeline run.
+
+    ``computed_readouts`` is the list of newly persisted ``ReadoutData`` rows.
+    ``fit_warnings`` accumulates any per-compound dose-response fit failures
+    so callers can surface them instead of silently swallowing them.
+    """
+
+    computed_readouts: list["ReadoutData"]
+    fit_warnings: list[str] = field(default_factory=list)
 
 
 class ReadoutCalculationEngine:
@@ -85,11 +99,12 @@ class ReadoutCalculationEngine:
         *,
         workspace_id: uuid.UUID,
         fit_overrides: FitOverrides | None = None,
-    ) -> Result[list[ReadoutData], DomainError]:
+    ) -> Result[ComputeRunResult, DomainError]:
         """Execute the full computation pipeline for *run_id*.
 
         Returns:
-            Success(list[ReadoutData]) — all newly computed readout data entities.
+            Success(ComputeRunResult) — newly computed readouts + any
+                non-fatal dose-response fit warnings.
             Failure(DomainError) — if run/protocol not found or a computation fails.
         """
         if self._uow.is_active:
@@ -114,7 +129,7 @@ class ReadoutCalculationEngine:
         *,
         workspace_id: uuid.UUID,
         fit_overrides: FitOverrides | None = None,
-    ) -> Result[list[ReadoutData], DomainError]:
+    ) -> Result[ComputeRunResult, DomainError]:
         # ------------------------------------------------------------------
         # 1. Load context + workspace ownership check
         # ------------------------------------------------------------------
@@ -138,7 +153,7 @@ class ReadoutCalculationEngine:
             run.workspace_id, run_id
         )
         if not raw_data:
-            return Success([])
+            return Success(ComputeRunResult(computed_readouts=[]))
 
         computed: list[ReadoutData] = []
 
@@ -340,13 +355,17 @@ class ReadoutCalculationEngine:
         # ------------------------------------------------------------------
         # 7.5. Auto-fit dose-response curves
         # ------------------------------------------------------------------
+        fit_warnings: list[str] = []
         if self._fit_dose_response is not None:
-            await self._fit_dose_response.fit_for_run(
+            fit_outcome = await self._fit_dose_response.fit_for_run(
                 run=run,
                 protocol=protocol,
                 readout_data=raw_data + computed,
+                workspace_id=workspace_id,
                 overrides=fit_overrides,
             )
+            if isinstance(fit_outcome, Success):
+                fit_warnings = list(fit_outcome.unwrap().warnings)
 
         # ------------------------------------------------------------------
         # 7. Persist
@@ -354,7 +373,7 @@ class ReadoutCalculationEngine:
         if computed:
             await self._readout_data_repo.save_bulk(computed)
 
-        return Success(computed)
+        return Success(ComputeRunResult(computed_readouts=computed, fit_warnings=fit_warnings))
 
     # ------------------------------------------------------------------
     # Topological sort

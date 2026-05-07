@@ -165,7 +165,7 @@ class TestComputedReadoutsPersisted:
 
         # -- Assert --
         assert isinstance(result, Success)
-        computed = result.unwrap()
+        computed = result.unwrap().computed_readouts
 
         assert len(computed) == 1
         assert computed[0].is_computed is True
@@ -285,7 +285,7 @@ class TestNoCalculatedReadoutsIsNoop:
 
         # -- Assert --
         assert isinstance(result, Success)
-        assert result.unwrap() == []
+        assert result.unwrap().computed_readouts == []
         readout_data_repo.save_bulk.assert_not_awaited()
 
 
@@ -349,7 +349,7 @@ class TestIdempotentDeletesPreviousComputed:
         readout_data_repo.delete_computed_for_run.assert_awaited_once_with(WS, run.id)
 
         # Verify new computed data is correct
-        computed = result.unwrap()
+        computed = result.unwrap().computed_readouts
         assert len(computed) == 1
         assert computed[0].value.value == 30.0  # 10.0 * 3
 
@@ -452,7 +452,7 @@ class TestEmptyRawDataReturnsSuccess:
         result = await engine.compute_for_run(run.id, workspace_id=WS)
 
         assert isinstance(result, Success)
-        assert result.unwrap() == []
+        assert result.unwrap().computed_readouts == []
         readout_data_repo.save_bulk.assert_not_awaited()
 
 
@@ -510,7 +510,7 @@ class TestCrossProtocolFormulasSkipped:
 
         assert isinstance(result, Success)
         # No computed data because the only calculated readout is cross-protocol
-        assert result.unwrap() == []
+        assert result.unwrap().computed_readouts == []
         readout_data_repo.save_bulk.assert_not_awaited()
 
 
@@ -575,7 +575,7 @@ class TestChainedCalculatedReadouts:
         result = await engine.compute_for_run(run.id, workspace_id=WS)
 
         assert isinstance(result, Success)
-        computed = result.unwrap()
+        computed = result.unwrap().computed_readouts
         assert len(computed) == 2
 
         step_a = next(c for c in computed if c.readout_definition_id == calc_a.id)

@@ -215,6 +215,15 @@ export interface DoseResponseConfig {
   /** Auto-outlier removal threshold (residual > σ × SD). Default 3.0;
    *  null disables. CDD-equivalent default. */
   outlier_sigma: number | null;
+  /** Curve-classification thresholds. Defaults are calibrated for normalized
+   *  (% inhibition / % activation / % control) Y axes; override per-protocol
+   *  for raw-signal assays (fluorescence, luminescence, HTRF, etc.). All
+   *  optional with `?:` for back-compat with old protocol rows. */
+  inactive_threshold?: number;
+  full_r2_min?: number;
+  full_top_min?: number;
+  full_bottom_max?: number;
+  partial_r2_min?: number;
 }
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────

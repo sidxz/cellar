@@ -42,9 +42,13 @@ export function renderCurveToBase64(
   const plotW = WIDTH - 2 * PAD;
   const plotH = HEIGHT - 2 * PAD;
 
-  // Ranges
-  const logMin = Math.log10(Math.max(fitted_value * 0.01, 1e-12));
-  const logMax = Math.log10(fitted_value * 100);
+  // log10 chokes on NaN/Infinity/non-positive — fall back to a generic
+  // µM-range default when fitted_value is degenerate (failed fit, etc.).
+  const fittedOk = Number.isFinite(fitted_value) && fitted_value > 0;
+  const logMin = fittedOk
+    ? Math.log10(Math.max(fitted_value * 0.01, 1e-12))
+    : Math.log10(0.001);
+  const logMax = fittedOk ? Math.log10(fitted_value * 100) : Math.log10(1000);
   const logRange = logMax - logMin || 1;
   const yMin = Math.min(0, bottom, top);
   const yMax = Math.max(100, bottom, top);
@@ -75,9 +79,9 @@ export function renderCurveToBase64(
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // IC50 vertical dashed line
-  const ic50X = toX(Math.log10(fitted_value));
-  if (ic50X >= PAD && ic50X <= PAD + plotW) {
+  // IC50 vertical dashed line — only when fitted_value is plottable.
+  const ic50X = fittedOk ? toX(Math.log10(fitted_value)) : Number.NaN;
+  if (Number.isFinite(ic50X) && ic50X >= PAD && ic50X <= PAD + plotW) {
     ctx.strokeStyle = color;
     ctx.globalAlpha = 0.5;
     ctx.setLineDash([3, 3]);

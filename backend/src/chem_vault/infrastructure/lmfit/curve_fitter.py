@@ -39,17 +39,9 @@ if TYPE_CHECKING:
     from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 
 
-# Thresholds for curve classification
-_INACTIVE_THRESHOLD = 30.0  # max response < 30% → inactive (skipped when constraints are set)
-_FULL_R2_MIN = 0.8
-_FULL_TOP_MIN = 80.0
-_FULL_BOTTOM_MAX = 20.0
-_PARTIAL_R2_MIN = 0.6
 _MIN_FITTING_POINTS = 4
 
-# Outlier detection thresholds
 _MIN_POINTS_FOR_OUTLIER_DETECTION = 6   # need at least 6 points to run 3σ detection
-_OUTLIER_SIGMA = 3.0                    # flag residuals > 3 * SD
 
 # Bound-detection epsilon for log_ec50 (in log10 units)
 _BOUND_EPSILON_LOG10 = 0.05
@@ -71,7 +63,7 @@ def _hill_equation(
     return bottom + (top - bottom) / (1.0 + 10.0 ** exponent)
 
 
-def _detect_outliers(residuals: np.ndarray, sigma: float = 3.0) -> np.ndarray:
+def _detect_outliers(residuals: np.ndarray, sigma: float) -> np.ndarray:
     """Single-outlier leave-one-out (Grubbs-like) test.
 
     For the point with the largest absolute residual, compute the SD of the
@@ -118,9 +110,12 @@ class LmfitCurveFitter:
 
         # All concentrations must be positive (we fit in log space).
         if not np.all(concentrations > 0):
+            bad = [float(c) for c in concentrations if not (c > 0)]
             return Failure(
                 ValidationError(
-                    "All concentrations must be > 0 for log-space dose-response fitting"
+                    f"Cannot fit dose-response: {len(bad)} point(s) have "
+                    f"non-positive concentration (e.g., {bad[0]}). Dose-response "
+                    f"curves require all doses > 0."
                 )
             )
 
@@ -149,7 +144,7 @@ class LmfitCurveFitter:
             or config.hill_slope_min is not None
             or config.hill_slope_max is not None
         )
-        if max_response < _INACTIVE_THRESHOLD and not has_constraints:
+        if max_response < config.inactive_threshold and not has_constraints:
             return Success(
                 FittedCurveResult(
                     fitted_value=0.0,
@@ -157,8 +152,8 @@ class LmfitCurveFitter:
                     top=float(np.max(responses)),
                     bottom=float(np.min(responses)),
                     r_squared=0.0,
-                    confidence_interval_low=0.0,
-                    confidence_interval_high=0.0,
+                    confidence_interval_low=None,
+                    confidence_interval_high=None,
                     curve_class=CurveClass.INACTIVE,
                     num_points=len(active_points),
                     raw_data=raw_data,
@@ -271,33 +266,14 @@ class LmfitCurveFitter:
                         pass
 
         # ──────────────────────────────────────────────────────────────────
-        # Convert log_ec50 → ec50 and compute log-space CI
-        # ──────────────────────────────────────────────────────────────────
-        fitted_ec50 = float(10.0 ** fitted_log_ec50)
-        if (
-            log_ec50_stderr is not None
-            and np.isfinite(log_ec50_stderr)
-            and log_ec50_stderr > 0
-        ):
-            # Cap the half-width at 10 decades to avoid 10**huge overflow when
-            # the fit hits a bound (lmfit can return absurd stderrs in that
-            # regime). The matching ec50_at_bound warning still fires.
-            half_width = min(1.96 * log_ec50_stderr, 10.0)
-            ci_low = float(10.0 ** (fitted_log_ec50 - half_width))
-            ci_high = float(10.0 ** (fitted_log_ec50 + half_width))
-        else:
-            # Fallback ±0.5 decades — better than ±30% linear when stderr is unavailable.
-            ci_low = float(10.0 ** (fitted_log_ec50 - 0.5))
-            ci_high = float(10.0 ** (fitted_log_ec50 + 0.5))
-
-        # ──────────────────────────────────────────────────────────────────
-        # Fit quality warnings
+        # Fit quality warnings — compute first so CI logic can consult them
         # ──────────────────────────────────────────────────────────────────
         warnings: list[str] = []
-        if (
+        ec50_at_bound = (
             abs(fitted_log_ec50 - log_ec50_min) < _BOUND_EPSILON_LOG10
             or abs(log_ec50_max - fitted_log_ec50) < _BOUND_EPSILON_LOG10
-        ):
+        )
+        if ec50_at_bound:
             warnings.append("ec50_at_bound")
         log_min_c = float(np.min(log_concentrations))
         log_max_c = float(np.max(log_concentrations))
@@ -306,12 +282,44 @@ class LmfitCurveFitter:
         if r_squared < 0.5:
             warnings.append("low_r_squared")
 
+        # ──────────────────────────────────────────────────────────────────
+        # Convert log_ec50 → ec50 and compute log-space CI.
+        #
+        # When the fit hits a bound or the stderr is unavailable / clamped to
+        # the 10-decade cap, ``log_ec50_stderr`` is not a meaningful estimate
+        # of uncertainty. Reporting a synthetic "±10 decades" or "±0.5 decade"
+        # range would mislead the user into thinking the fitter has any
+        # confidence in those bounds. Return None instead so the UI can show
+        # "—" rather than a fake interval.
+        # ──────────────────────────────────────────────────────────────────
+        fitted_ec50 = float(10.0 ** fitted_log_ec50)
+        ci_low: float | None
+        ci_high: float | None
+        if (
+            ec50_at_bound
+            or log_ec50_stderr is None
+            or not np.isfinite(log_ec50_stderr)
+            or log_ec50_stderr <= 0
+        ):
+            ci_low = None
+            ci_high = None
+        else:
+            half_width = 1.96 * log_ec50_stderr
+            if half_width >= 10.0:
+                # stderr is so large the CI is meaningless — still degenerate.
+                ci_low = None
+                ci_high = None
+            else:
+                ci_low = float(10.0 ** (fitted_log_ec50 - half_width))
+                ci_high = float(10.0 ** (fitted_log_ec50 + half_width))
+
         curve_class = _classify_curve(
             responses=responses,
             predicted=predicted,
             r_squared=r_squared,
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,
+            config=config,
         )
 
         return Success(
@@ -466,13 +474,16 @@ def _classify_curve(
     r_squared: float,
     fitted_top: float,
     fitted_bottom: float,
+    config: DoseResponseConfig,
 ) -> CurveClass:
-    """Classify a fitted curve. FULL/PARTIAL thresholds assume a normalized
-    (% inhibition / % activation / % control) Y axis; raw-signal protocols
-    will land in PARTIAL by R² alone, which is acceptable until the
-    classification refactor lands (Phase B)."""
+    """Classify a fitted curve using thresholds from ``config``.
+
+    Defaults are calibrated for normalized (%) Y axes. Raw-signal protocols
+    must override ``inactive_threshold``/``full_top_min``/``full_bottom_max``
+    on the protocol's ``DoseResponseConfig`` to classify correctly.
+    """
     max_response = float(np.max(responses))
-    if max_response < _INACTIVE_THRESHOLD:
+    if max_response < config.inactive_threshold:
         return CurveClass.INACTIVE
 
     # Bell-shaped detection on predicted curve; with the new Prism param this
@@ -484,17 +495,14 @@ def _classify_curve(
         if not is_monotonic:
             return CurveClass.BELL_SHAPED
 
-    # FULL: clean fit AND chemist-bounded plateaus (works for % readouts;
-    # raw-signal protocols won't hit this branch because top/bottom are
-    # in raw units).
     if (
-        r_squared >= _FULL_R2_MIN
-        and fitted_top >= _FULL_TOP_MIN
-        and fitted_bottom <= _FULL_BOTTOM_MAX
+        r_squared >= config.full_r2_min
+        and fitted_top >= config.full_top_min
+        and fitted_bottom <= config.full_bottom_max
     ):
         return CurveClass.FULL
 
-    if r_squared >= _PARTIAL_R2_MIN:
+    if r_squared >= config.partial_r2_min:
         return CurveClass.PARTIAL
 
     return CurveClass.INACTIVE

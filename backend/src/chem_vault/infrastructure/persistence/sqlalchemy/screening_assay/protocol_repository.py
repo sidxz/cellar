@@ -7,13 +7,14 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from chem_vault.application.screening._dose_response_config_serde import (
+    deserialize_dose_response_config,
+    serialize_dose_response_config,
+)
 from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
-    CurveType,
-    HillSlopeConstraint,
-    NormalizationScope,
     PosControlSignal,
     ProtocolStatus,
     ProtocolType,
@@ -210,27 +211,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     ) -> DoseResponseConfig | None:
         if data is None:
             return None
-        return DoseResponseConfig(
-            curve_type=CurveType(data["curve_type"]),
-            x_readout_name=data.get("x_readout_name"),
-            y_readout_name=data["y_readout_name"],
-            hill_slope_constraint=HillSlopeConstraint(
-                data.get("hill_slope_constraint", "unconstrained")
-            ),
-            activity_threshold=data.get("activity_threshold"),
-            normalization_scope=NormalizationScope(
-                data.get("normalization_scope", "per_plate")
-            ),
-            top_constraint=data.get("top_constraint"),
-            bottom_constraint=data.get("bottom_constraint"),
-            top_constraint_min=data.get("top_constraint_min"),
-            top_constraint_max=data.get("top_constraint_max"),
-            bottom_constraint_min=data.get("bottom_constraint_min"),
-            bottom_constraint_max=data.get("bottom_constraint_max"),
-            hill_slope_min=data.get("hill_slope_min"),
-            hill_slope_max=data.get("hill_slope_max"),
-            outlier_sigma=data.get("outlier_sigma", 3.0),
-        )
+        return deserialize_dose_response_config(data)
 
     def _to_domain(self, model: ProtocolModel) -> Protocol:
         readout_defs = [
@@ -409,26 +390,12 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _serialize_dose_response_config(
-        config: DoseResponseConfig | None,
-    ) -> dict | None:
-        if config is None:
-            return None
-        from dataclasses import asdict
-        return asdict(config)
-
-    @staticmethod
     def _readout_def_to_model(rd: ReadoutDefinition) -> ReadoutDefinitionModel:
-        dose_response_dict = None
-        if rd.dose_response_config is not None:
-            from dataclasses import asdict
-
-            raw = asdict(rd.dose_response_config)
-            # Convert enums to their string values for JSON serialization
-            raw["curve_type"] = rd.dose_response_config.curve_type.value
-            raw["hill_slope_constraint"] = rd.dose_response_config.hill_slope_constraint.value
-            raw["normalization_scope"] = rd.dose_response_config.normalization_scope.value
-            dose_response_dict = raw
+        dose_response_dict = (
+            serialize_dose_response_config(rd.dose_response_config)
+            if rd.dose_response_config is not None
+            else None
+        )
 
         return ReadoutDefinitionModel(
             id=rd.id,

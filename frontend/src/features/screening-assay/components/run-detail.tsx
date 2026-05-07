@@ -517,7 +517,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                                 Positive only
                               </SelectItem>
                               <SelectItem value="fixed_at_one">
-                                Fixed at ±1
+                                Fixed at 1
                               </SelectItem>
                             </SelectContent>
                           </Select>

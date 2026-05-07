@@ -312,6 +312,7 @@ async def import_run_readouts(
 
 class RecomputeRunResponse(BaseModel):
     computed_readouts: int
+    fit_warnings: list[str] = []
 
 
 class RecomputeRunRequest(BaseModel):
@@ -380,8 +381,11 @@ async def recompute_run(
     result = await engine.compute_for_run(
         run_id, workspace_id=auth.workspace_id, fit_overrides=overrides
     )
-    computed = result_to_response(result)
-    return RecomputeRunResponse(computed_readouts=len(computed))
+    outcome = result_to_response(result)
+    return RecomputeRunResponse(
+        computed_readouts=len(outcome.computed_readouts),
+        fit_warnings=outcome.fit_warnings,
+    )
 
 
 def _all_none(body: RecomputeRunRequest) -> bool:

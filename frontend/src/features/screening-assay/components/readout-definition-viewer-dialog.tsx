@@ -188,6 +188,40 @@ export function ReadoutDefinitionViewerDialog({
                   )}
                 </div>
               </Section>
+
+              <Section title="Classification thresholds">
+                <p className="text-xs text-muted-foreground mb-3 leading-tight">
+                  Defaults are calibrated for % readouts. Raw-signal assays
+                  may have these overridden per-protocol.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <ClassificationThresholdField
+                    label="Inactive cutoff (max response)"
+                    value={cfg.inactive_threshold}
+                    defaultValue={30}
+                  />
+                  <ClassificationThresholdField
+                    label="Full curve · min R²"
+                    value={cfg.full_r2_min}
+                    defaultValue={0.8}
+                  />
+                  <ClassificationThresholdField
+                    label="Full curve · min Top"
+                    value={cfg.full_top_min}
+                    defaultValue={80}
+                  />
+                  <ClassificationThresholdField
+                    label="Full curve · max Bottom"
+                    value={cfg.full_bottom_max}
+                    defaultValue={20}
+                  />
+                  <ClassificationThresholdField
+                    label="Partial curve · min R²"
+                    value={cfg.partial_r2_min}
+                    defaultValue={0.6}
+                  />
+                </div>
+              </Section>
             </>
           )}
         </div>
@@ -233,9 +267,11 @@ function Field({
       <Label className="text-xs">{label}</Label>
       <Input
         readOnly
-        disabled
+        aria-readonly="true"
         value={value}
-        className={monospace ? "font-mono text-xs" : ""}
+        className={
+          "bg-muted cursor-not-allowed " + (monospace ? "font-mono text-xs" : "")
+        }
       />
     </div>
   );
@@ -275,21 +311,28 @@ function ParamRow({
         </span>
       </div>
       {mode === "lock" && (
-        <Input readOnly disabled value={String(lock)} className="max-w-xs" />
+        <Input
+          readOnly
+          aria-readonly="true"
+          value={String(lock)}
+          className="max-w-xs bg-muted cursor-not-allowed"
+        />
       )}
       {mode === "range" && (
         <div className="flex items-center gap-2 max-w-md">
           <span className="text-xs text-muted-foreground">from</span>
           <Input
             readOnly
-            disabled
+            aria-readonly="true"
             value={min != null ? String(min) : "—"}
+            className="bg-muted cursor-not-allowed"
           />
           <span className="text-xs text-muted-foreground">to</span>
           <Input
             readOnly
-            disabled
+            aria-readonly="true"
             value={max != null ? String(max) : "—"}
+            className="bg-muted cursor-not-allowed"
           />
         </div>
       )}
@@ -298,6 +341,41 @@ function ParamRow({
           Optimizer chooses freely from the data.
         </p>
       )}
+    </div>
+  );
+}
+
+/** Read-only numeric field that falls back to a backend default when the
+ *  protocol hasn't overridden it. The label gets a "(default)" suffix so
+ *  the analyst can tell at a glance whether they configured this or are
+ *  inheriting the calibration. */
+function ClassificationThresholdField({
+  label,
+  value,
+  defaultValue,
+}: {
+  label: string;
+  value: number | undefined | null;
+  defaultValue: number;
+}) {
+  const isDefault = value == null;
+  const displayed = isDefault ? defaultValue : value;
+  return (
+    <div className="grid gap-1">
+      <Label className="text-xs">
+        {label}
+        {isDefault && (
+          <span className="ml-1 font-normal text-muted-foreground">
+            (default)
+          </span>
+        )}
+      </Label>
+      <Input
+        readOnly
+        aria-readonly="true"
+        value={String(displayed)}
+        className="bg-muted cursor-not-allowed"
+      />
     </div>
   );
 }
@@ -315,9 +393,19 @@ function RangeField({
     <div className="grid gap-1">
       <Label className="text-xs">{label}</Label>
       <div className="flex items-center gap-2">
-        <Input readOnly disabled value={min != null ? String(min) : "—"} />
+        <Input
+          readOnly
+          aria-readonly="true"
+          value={min != null ? String(min) : "—"}
+          className="bg-muted cursor-not-allowed"
+        />
         <span className="text-xs text-muted-foreground">to</span>
-        <Input readOnly disabled value={max != null ? String(max) : "—"} />
+        <Input
+          readOnly
+          aria-readonly="true"
+          value={max != null ? String(max) : "—"}
+          className="bg-muted cursor-not-allowed"
+        />
       </div>
     </div>
   );

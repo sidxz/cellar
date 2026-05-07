@@ -248,6 +248,8 @@ class ImportRunFileResult:
     # succeeded.
     compute_warning: str | None = None
     attachment_warning: str | None = None
+    # Per-compound dose-response fit warnings surfaced from the calc engine.
+    fit_warnings: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +663,8 @@ class ImportRunFile:
         )
         if isinstance(compute_result, Failure):
             result.compute_warning = str(compute_result.failure())
+        else:
+            result.fit_warnings = list(compute_result.unwrap().fit_warnings)
 
     async def _maybe_attach_raw_file(
         self,

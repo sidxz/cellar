@@ -8,6 +8,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
+from chem_vault.application.screening._dose_response_config_serde import (
+    serialize_dose_response_config,
+)
 from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
 from chem_vault.application.screening.create_protocol import CreateProtocol, CreateProtocolCommand
 from chem_vault.application.screening.create_target import CreateTarget, CreateTargetCommand
@@ -195,23 +198,7 @@ class ProtocolResponse(BaseModel):
                     display_order=rd.display_order,
                     pick_list_values=rd.pick_list_values,
                     dose_response_config=(
-                        {
-                            "curve_type": rd.dose_response_config.curve_type.value,
-                            "x_readout_name": rd.dose_response_config.x_readout_name,
-                            "y_readout_name": rd.dose_response_config.y_readout_name,
-                            "hill_slope_constraint": rd.dose_response_config.hill_slope_constraint.value,
-                            "activity_threshold": rd.dose_response_config.activity_threshold,
-                            "normalization_scope": rd.dose_response_config.normalization_scope.value,
-                            "top_constraint": rd.dose_response_config.top_constraint,
-                            "bottom_constraint": rd.dose_response_config.bottom_constraint,
-                            "top_constraint_min": rd.dose_response_config.top_constraint_min,
-                            "top_constraint_max": rd.dose_response_config.top_constraint_max,
-                            "bottom_constraint_min": rd.dose_response_config.bottom_constraint_min,
-                            "bottom_constraint_max": rd.dose_response_config.bottom_constraint_max,
-                            "hill_slope_min": rd.dose_response_config.hill_slope_min,
-                            "hill_slope_max": rd.dose_response_config.hill_slope_max,
-                            "outlier_sigma": rd.dose_response_config.outlier_sigma,
-                        }
+                        serialize_dose_response_config(rd.dose_response_config)
                         if rd.dose_response_config is not None
                         else None
                     ),

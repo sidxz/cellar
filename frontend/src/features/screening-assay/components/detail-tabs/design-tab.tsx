@@ -58,6 +58,7 @@ import {
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
+import { showInfo } from "@/shared/lib/toast";
 import {
   CURVE_TYPE_LABELS,
   HILL_SLOPE_CONSTRAINT_LABELS,
@@ -92,6 +93,17 @@ const RESERVED_READOUT_NAMES: ReadonlySet<string> = new Set([
 
 function isReservedReadoutName(name: string): boolean {
   return RESERVED_READOUT_NAMES.has(name.trim().toLowerCase());
+}
+
+function isFiniteValue(s: string): boolean {
+  if (s.trim() === "") return false;
+  const v = parseFloat(s);
+  return Number.isFinite(v);
+}
+
+function isFiniteRange(minS: string, maxS: string): boolean {
+  if (!isFiniteValue(minS) || !isFiniteValue(maxS)) return false;
+  return parseFloat(minS) < parseFloat(maxS);
 }
 
 // Sentinel for the X-axis dropdown that means "use the well's concentration"
@@ -175,6 +187,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // points. The σ threshold is editable when enabled.
   const [drOutlierEnabled, setDrOutlierEnabled] = useState(true);
   const [drOutlierSigma, setDrOutlierSigma] = useState("3");
+  // Classification thresholds (Phase C). Empty string → use backend default.
+  // Defaults match the backend: 30 / 0.8 / 80 / 20 / 0.6, calibrated for
+  // % readouts. Raw-signal assays must override per-protocol.
+  const [drInactiveThreshold, setDrInactiveThreshold] = useState("");
+  const [drFullR2Min, setDrFullR2Min] = useState("");
+  const [drFullTopMin, setDrFullTopMin] = useState("");
+  const [drFullBottomMax, setDrFullBottomMax] = useState("");
+  const [drPartialR2Min, setDrPartialR2Min] = useState("");
 
   const resetDoseResponseFields = () => {
     setDrCurveType("ic50");
@@ -196,6 +216,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setDrHillMax("");
     setDrOutlierEnabled(true);
     setDrOutlierSigma("3");
+    setDrInactiveThreshold("");
+    setDrFullR2Min("");
+    setDrFullTopMin("");
+    setDrFullBottomMax("");
+    setDrPartialR2Min("");
   };
 
   // Y readouts with bounded normalization (% Inhibition/Activation/Control)
@@ -306,6 +331,23 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       const sigma = cfg.outlier_sigma;
       setDrOutlierEnabled(sigma != null);
       setDrOutlierSigma(sigma != null ? String(sigma) : "3");
+
+      // Classification thresholds — empty string = "inherit backend default".
+      setDrInactiveThreshold(
+        cfg.inactive_threshold != null ? String(cfg.inactive_threshold) : "",
+      );
+      setDrFullR2Min(
+        cfg.full_r2_min != null ? String(cfg.full_r2_min) : "",
+      );
+      setDrFullTopMin(
+        cfg.full_top_min != null ? String(cfg.full_top_min) : "",
+      );
+      setDrFullBottomMax(
+        cfg.full_bottom_max != null ? String(cfg.full_bottom_max) : "",
+      );
+      setDrPartialR2Min(
+        cfg.partial_r2_min != null ? String(cfg.partial_r2_min) : "",
+      );
     } else {
       resetDoseResponseFields();
     }
@@ -350,6 +392,23 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       outlier_sigma: drOutlierEnabled
         ? parseOrNull(drOutlierSigma) ?? 3.0
         : null,
+      // Classification thresholds — omit when empty so the backend keeps its
+      // default. Otherwise ship the explicit override.
+      ...(drInactiveThreshold !== "" && {
+        inactive_threshold: parseOrNull(drInactiveThreshold) ?? undefined,
+      }),
+      ...(drFullR2Min !== "" && {
+        full_r2_min: parseOrNull(drFullR2Min) ?? undefined,
+      }),
+      ...(drFullTopMin !== "" && {
+        full_top_min: parseOrNull(drFullTopMin) ?? undefined,
+      }),
+      ...(drFullBottomMax !== "" && {
+        full_bottom_max: parseOrNull(drFullBottomMax) ?? undefined,
+      }),
+      ...(drPartialR2Min !== "" && {
+        partial_r2_min: parseOrNull(drPartialR2Min) ?? undefined,
+      }),
     };
   };
 
@@ -361,20 +420,27 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setDrYReadout(newY);
     const suggested = suggestedRangesForY(newY);
     if (!suggested) return;
+    let injected = false;
     if (drTopMode === "free") {
       setDrTopMode("range");
       setDrTopMin(String(suggested.topMin));
       setDrTopMax(String(suggested.topMax));
+      injected = true;
     }
     if (drBottomMode === "free") {
       setDrBottomMode("range");
       setDrBottomMin(String(suggested.bottomMin));
       setDrBottomMax(String(suggested.bottomMax));
+      injected = true;
     }
     if (!drHillCustomRange) {
       setDrHillCustomRange(true);
       setDrHillMin(String(suggested.hillMin));
       setDrHillMax(String(suggested.hillMax));
+      injected = true;
+    }
+    if (injected) {
+      showInfo("Auto-filled CDD ranges for % readout");
     }
   };
 
@@ -392,6 +458,73 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setDrHillMin(String(suggested.hillMin));
     setDrHillMax(String(suggested.hillMax));
   };
+
+  // Range-mode validation. Empty inputs become NaN via parseFloat — we
+  // refuse to ship those to the backend. Min<Max required.
+  const drTopRangeError =
+    rdDataType === "dose_response" &&
+    drTopMode === "range" &&
+    !isFiniteRange(drTopMin, drTopMax);
+  const drBottomRangeError =
+    rdDataType === "dose_response" &&
+    drBottomMode === "range" &&
+    !isFiniteRange(drBottomMin, drBottomMax);
+  const drTopLockError =
+    rdDataType === "dose_response" &&
+    drTopMode === "lock" &&
+    !isFiniteValue(drTopConstraint);
+  const drBottomLockError =
+    rdDataType === "dose_response" &&
+    drBottomMode === "lock" &&
+    !isFiniteValue(drBottomConstraint);
+  const drHillRangeError =
+    rdDataType === "dose_response" &&
+    drHillCustomRange &&
+    !isFiniteRange(drHillMin, drHillMax);
+
+  // Classification threshold validation. Empty = inherit default = OK.
+  // When set: numeric required, R² fields ∈ (0, 1], full_top_min must be
+  // strictly greater than full_bottom_max so the FULL band is non-empty.
+  const isFiniteUnitInterval = (s: string): boolean => {
+    if (s.trim() === "") return true; // empty inherits default
+    const v = parseFloat(s);
+    return Number.isFinite(v) && v > 0 && v <= 1;
+  };
+  const drInactiveThresholdError =
+    rdDataType === "dose_response" &&
+    drInactiveThreshold !== "" &&
+    !isFiniteValue(drInactiveThreshold);
+  const drFullR2MinError =
+    rdDataType === "dose_response" && !isFiniteUnitInterval(drFullR2Min);
+  const drPartialR2MinError =
+    rdDataType === "dose_response" && !isFiniteUnitInterval(drPartialR2Min);
+  const drFullTopMinError =
+    rdDataType === "dose_response" &&
+    drFullTopMin !== "" &&
+    !isFiniteValue(drFullTopMin);
+  const drFullBottomMaxError =
+    rdDataType === "dose_response" &&
+    drFullBottomMax !== "" &&
+    !isFiniteValue(drFullBottomMax);
+  const drFullPlateauOrderError =
+    rdDataType === "dose_response" &&
+    drFullTopMin !== "" &&
+    drFullBottomMax !== "" &&
+    isFiniteValue(drFullTopMin) &&
+    isFiniteValue(drFullBottomMax) &&
+    parseFloat(drFullTopMin) <= parseFloat(drFullBottomMax);
+  const drFormInvalid =
+    drTopRangeError ||
+    drBottomRangeError ||
+    drTopLockError ||
+    drBottomLockError ||
+    drHillRangeError ||
+    drInactiveThresholdError ||
+    drFullR2MinError ||
+    drPartialR2MinError ||
+    drFullTopMinError ||
+    drFullBottomMaxError ||
+    drFullPlateauOrderError;
 
   /** Numeric readouts available as X/Y axis candidates, optionally excluding one. */
   const axisCandidates = (excludeId: string | null) =>
@@ -522,31 +655,43 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             />
           </div>
           {drTopMode === "lock" && (
-            <Input
-              type="number"
-              placeholder="exact value, e.g. 100"
-              value={drTopConstraint}
-              onChange={(e) => setDrTopConstraint(e.target.value)}
-              className="max-w-xs"
-            />
+            <>
+              <Input
+                type="number"
+                placeholder="exact value, e.g. 100"
+                value={drTopConstraint}
+                onChange={(e) => setDrTopConstraint(e.target.value)}
+                className="max-w-xs"
+              />
+              {drTopLockError && (
+                <p className="text-xs text-destructive">Enter a numeric value.</p>
+              )}
+            </>
           )}
           {drTopMode === "range" && (
-            <div className="flex items-center gap-2 max-w-md">
-              <span className="text-xs text-muted-foreground">from</span>
-              <Input
-                type="number"
-                placeholder="85"
-                value={drTopMin}
-                onChange={(e) => setDrTopMin(e.target.value)}
-              />
-              <span className="text-xs text-muted-foreground">to</span>
-              <Input
-                type="number"
-                placeholder="110"
-                value={drTopMax}
-                onChange={(e) => setDrTopMax(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="flex items-center gap-2 max-w-md">
+                <span className="text-xs text-muted-foreground">from</span>
+                <Input
+                  type="number"
+                  placeholder="85"
+                  value={drTopMin}
+                  onChange={(e) => setDrTopMin(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  placeholder="110"
+                  value={drTopMax}
+                  onChange={(e) => setDrTopMax(e.target.value)}
+                />
+              </div>
+              {drTopRangeError && (
+                <p className="text-xs text-destructive">
+                  Enter both min and max with min &lt; max.
+                </p>
+              )}
+            </>
           )}
           {drTopMode === "free" && (
             <p className="text-xs text-muted-foreground">
@@ -566,31 +711,43 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             />
           </div>
           {drBottomMode === "lock" && (
-            <Input
-              type="number"
-              placeholder="exact value, e.g. 0"
-              value={drBottomConstraint}
-              onChange={(e) => setDrBottomConstraint(e.target.value)}
-              className="max-w-xs"
-            />
+            <>
+              <Input
+                type="number"
+                placeholder="exact value, e.g. 0"
+                value={drBottomConstraint}
+                onChange={(e) => setDrBottomConstraint(e.target.value)}
+                className="max-w-xs"
+              />
+              {drBottomLockError && (
+                <p className="text-xs text-destructive">Enter a numeric value.</p>
+              )}
+            </>
           )}
           {drBottomMode === "range" && (
-            <div className="flex items-center gap-2 max-w-md">
-              <span className="text-xs text-muted-foreground">from</span>
-              <Input
-                type="number"
-                placeholder="-10"
-                value={drBottomMin}
-                onChange={(e) => setDrBottomMin(e.target.value)}
-              />
-              <span className="text-xs text-muted-foreground">to</span>
-              <Input
-                type="number"
-                placeholder="10"
-                value={drBottomMax}
-                onChange={(e) => setDrBottomMax(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="flex items-center gap-2 max-w-md">
+                <span className="text-xs text-muted-foreground">from</span>
+                <Input
+                  type="number"
+                  placeholder="-10"
+                  value={drBottomMin}
+                  onChange={(e) => setDrBottomMin(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  placeholder="10"
+                  value={drBottomMax}
+                  onChange={(e) => setDrBottomMax(e.target.value)}
+                />
+              </div>
+              {drBottomRangeError && (
+                <p className="text-xs text-destructive">
+                  Enter both min and max with min &lt; max.
+                </p>
+              )}
+            </>
           )}
           {drBottomMode === "free" && (
             <p className="text-xs text-muted-foreground">
@@ -611,24 +768,31 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             Custom Hill slope range (overrides the bounds set above)
           </label>
           {drHillCustomRange && (
-            <div className="flex items-center gap-2 max-w-md">
-              <span className="text-xs text-muted-foreground">from</span>
-              <Input
-                type="number"
-                step="0.1"
-                placeholder="0.9"
-                value={drHillMin}
-                onChange={(e) => setDrHillMin(e.target.value)}
-              />
-              <span className="text-xs text-muted-foreground">to</span>
-              <Input
-                type="number"
-                step="0.1"
-                placeholder="1.1"
-                value={drHillMax}
-                onChange={(e) => setDrHillMax(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="flex items-center gap-2 max-w-md">
+                <span className="text-xs text-muted-foreground">from</span>
+                <Input
+                  type="number"
+                  step="0.1"
+                  placeholder="0.9"
+                  value={drHillMin}
+                  onChange={(e) => setDrHillMin(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  step="0.1"
+                  placeholder="1.1"
+                  value={drHillMax}
+                  onChange={(e) => setDrHillMax(e.target.value)}
+                />
+              </div>
+              {drHillRangeError && (
+                <p className="text-xs text-destructive">
+                  Enter both min and max with min &lt; max.
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -690,7 +854,13 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               </p>
               <button
                 type="button"
-                className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+                disabled={!suggested}
+                title={
+                  suggested
+                    ? "Apply CDD-style ranges to Top, Bottom, and Hill"
+                    : "Suggested ranges only apply to %-normalized readouts"
+                }
+                className="shrink-0 text-xs text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
                 onClick={applySuggestedRanges}
               >
                 Use suggested
@@ -698,6 +868,135 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
           );
         })()}
+
+        {/* Classification thresholds — collapsed by default. Defaults match
+            the backend (30 / 0.8 / 80 / 20 / 0.6) calibrated for % readouts.
+            Override per-protocol for raw-signal assays. Intentionally NOT
+            auto-touched by the suggestedRangesForY flow — these are a
+            one-time per-protocol calibration, not a per-Y-readout suggestion. */}
+        <details className="rounded-md border bg-background">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium select-none">
+            Classification thresholds
+            <span className="ml-2 font-normal text-muted-foreground">
+              (advanced — defaults work for % readouts)
+            </span>
+          </summary>
+          <div className="space-y-3 px-3 pb-3 pt-1">
+            <p className="text-xs text-muted-foreground leading-tight">
+              Defaults are calibrated for % readouts. Override for raw-signal
+              assays (fluorescence, luminescence, HTRF, etc.).
+            </p>
+            <div className="grid gap-1">
+              <Label className="text-xs">Inactive cutoff</Label>
+              <div className="flex items-center gap-2 max-w-md">
+                <Input
+                  type="number"
+                  placeholder="30"
+                  value={drInactiveThreshold}
+                  onChange={(e) => setDrInactiveThreshold(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  max response
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Compounds with max response below this are flagged INACTIVE
+                without fitting.
+              </p>
+              {drInactiveThresholdError && (
+                <p className="text-xs text-destructive">
+                  Enter a numeric value or leave blank for default (30).
+                </p>
+              )}
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Full curve · min R²</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                placeholder="0.8"
+                value={drFullR2Min}
+                onChange={(e) => setDrFullR2Min(e.target.value)}
+                className="max-w-[8rem]"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                R² required to qualify as a FULL curve.
+              </p>
+              {drFullR2MinError && (
+                <p className="text-xs text-destructive">
+                  Enter a value in (0, 1] or leave blank for default (0.8).
+                </p>
+              )}
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Full curve · min Top</Label>
+              <Input
+                type="number"
+                placeholder="80"
+                value={drFullTopMin}
+                onChange={(e) => setDrFullTopMin(e.target.value)}
+                className="max-w-[8rem]"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Fitted top plateau must reach this for FULL classification.
+              </p>
+              {drFullTopMinError && (
+                <p className="text-xs text-destructive">
+                  Enter a numeric value or leave blank for default (80).
+                </p>
+              )}
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Full curve · max Bottom</Label>
+              <Input
+                type="number"
+                placeholder="20"
+                value={drFullBottomMax}
+                onChange={(e) => setDrFullBottomMax(e.target.value)}
+                className="max-w-[8rem]"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Fitted bottom plateau must be below this for FULL
+                classification.
+              </p>
+              {drFullBottomMaxError && (
+                <p className="text-xs text-destructive">
+                  Enter a numeric value or leave blank for default (20).
+                </p>
+              )}
+            </div>
+            {drFullPlateauOrderError && (
+              <p className="text-xs text-destructive">
+                Full curve · min Top must be greater than Full curve · max
+                Bottom.
+              </p>
+            )}
+            <div className="grid gap-1">
+              <Label className="text-xs">Partial curve · min R²</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                placeholder="0.6"
+                value={drPartialR2Min}
+                onChange={(e) => setDrPartialR2Min(e.target.value)}
+                className="max-w-[8rem]"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                R² required to qualify as a PARTIAL curve. Below this,
+                classified INACTIVE.
+              </p>
+              {drPartialR2MinError && (
+                <p className="text-xs text-destructive">
+                  Enter a value in (0, 1] or leave blank for default (0.6).
+                </p>
+              )}
+            </div>
+          </div>
+        </details>
       </div>
     );
   };
@@ -1386,7 +1685,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 !rdName.trim() ||
                 isReservedReadoutName(rdName) ||
                 addReadoutDef.isPending ||
-                (rdDataType === "dose_response" && !drYReadout)
+                (rdDataType === "dose_response" && !drYReadout) ||
+                drFormInvalid
               }
               onClick={() => {
                 addReadoutDef.mutate(
@@ -1519,7 +1819,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 !rdName.trim() ||
                 isReservedReadoutName(rdName) ||
                 updateReadoutDef.isPending ||
-                (rdDataType === "dose_response" && !drYReadout)
+                (rdDataType === "dose_response" && !drYReadout) ||
+                drFormInvalid
               }
               onClick={() => {
                 if (!editingReadoutId) return;

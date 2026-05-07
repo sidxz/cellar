@@ -8,14 +8,13 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.screening._dose_response_config_serde import (
+    deserialize_dose_response_config,
+)
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.enums import (
-    CurveType,
-    HillSlopeConstraint,
-    NormalizationScope,
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
@@ -119,28 +118,7 @@ class AddReadoutDefinition:
             # Build dose_response_config VO from dict if provided
             dr_config = None
             if input.data_type == "dose_response" and input.dose_response_config:
-                cfg = input.dose_response_config
-                dr_config = DoseResponseConfig(
-                    curve_type=CurveType(cfg["curve_type"]),
-                    x_readout_name=cfg.get("x_readout_name"),
-                    y_readout_name=cfg["y_readout_name"],
-                    hill_slope_constraint=HillSlopeConstraint(
-                        cfg.get("hill_slope_constraint", "unconstrained")
-                    ),
-                    activity_threshold=cfg.get("activity_threshold"),
-                    normalization_scope=NormalizationScope(
-                        cfg.get("normalization_scope", "per_plate")
-                    ),
-                    top_constraint=cfg.get("top_constraint"),
-                    bottom_constraint=cfg.get("bottom_constraint"),
-                    top_constraint_min=cfg.get("top_constraint_min"),
-                    top_constraint_max=cfg.get("top_constraint_max"),
-                    bottom_constraint_min=cfg.get("bottom_constraint_min"),
-                    bottom_constraint_max=cfg.get("bottom_constraint_max"),
-                    hill_slope_min=cfg.get("hill_slope_min"),
-                    hill_slope_max=cfg.get("hill_slope_max"),
-                    outlier_sigma=cfg.get("outlier_sigma", 3.0),
-                )
+                dr_config = deserialize_dose_response_config(input.dose_response_config)
 
             definition = ReadoutDefinition(
                 protocol_id=protocol.id,
@@ -247,28 +225,7 @@ class UpdateReadoutDefinition:
                 if cfg is None:
                     kwargs["dose_response_config"] = None
                 else:
-                    cfg_dict = cfg  # type: ignore[assignment]
-                    kwargs["dose_response_config"] = DoseResponseConfig(
-                        curve_type=CurveType(cfg_dict["curve_type"]),
-                        x_readout_name=cfg_dict.get("x_readout_name"),
-                        y_readout_name=cfg_dict["y_readout_name"],
-                        hill_slope_constraint=HillSlopeConstraint(
-                            cfg_dict.get("hill_slope_constraint", "unconstrained")
-                        ),
-                        activity_threshold=cfg_dict.get("activity_threshold"),
-                        normalization_scope=NormalizationScope(
-                            cfg_dict.get("normalization_scope", "per_plate")
-                        ),
-                        top_constraint=cfg_dict.get("top_constraint"),
-                        bottom_constraint=cfg_dict.get("bottom_constraint"),
-                        top_constraint_min=cfg_dict.get("top_constraint_min"),
-                        top_constraint_max=cfg_dict.get("top_constraint_max"),
-                        bottom_constraint_min=cfg_dict.get("bottom_constraint_min"),
-                        bottom_constraint_max=cfg_dict.get("bottom_constraint_max"),
-                        hill_slope_min=cfg_dict.get("hill_slope_min"),
-                        hill_slope_max=cfg_dict.get("hill_slope_max"),
-                        outlier_sigma=cfg_dict.get("outlier_sigma", 3.0),
-                    )
+                    kwargs["dose_response_config"] = deserialize_dose_response_config(cfg)  # type: ignore[arg-type]
 
             # Optional formula validation
             formula = kwargs.get("calculation_formula")

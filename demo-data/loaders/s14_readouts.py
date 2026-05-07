@@ -272,11 +272,12 @@ async def _load_dose_response_run(
             error=str(engine_result.failure()),
         )
     else:
-        computed = engine_result.unwrap()
+        outcome = engine_result.unwrap()
         logger.info(
             "readout.engine_done",
             run_key=run_key,
-            computed_count=len(computed),
+            computed_count=len(outcome.computed_readouts),
+            fit_warnings=len(outcome.fit_warnings),
         )
 
     # Also load extra single-point readouts (e.g. Selectivity Index for COX-2)

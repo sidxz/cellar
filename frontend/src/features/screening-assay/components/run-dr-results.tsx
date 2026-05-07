@@ -708,17 +708,23 @@ export function RunDoseResponseResults({
                 />
               </SheetHeader>
               <ScrollArea className="flex-1 min-h-0 px-4 pb-6">
-                {viewingCurves && (
-                  <DoseResponseChart
-                    curves={viewingCurves}
-                    isInteractive={!run.is_locked}
-                    protocolConfig={
-                      protocol?.readout_definitions.find(
-                        (rd) => rd.dose_response_config != null,
-                      )?.dose_response_config ?? null
-                    }
-                  />
-                )}
+                {viewingCurves && (() => {
+                  const drDef = protocol?.readout_definitions.find(
+                    (rd) => rd.dose_response_config != null,
+                  );
+                  const yName = drDef?.dose_response_config?.y_readout_name;
+                  const yDef = yName
+                    ? protocol?.readout_definitions.find((r) => r.name === yName)
+                    : undefined;
+                  return (
+                    <DoseResponseChart
+                      curves={viewingCurves}
+                      isInteractive={!run.is_locked}
+                      protocolConfig={drDef?.dose_response_config ?? null}
+                      yReadoutNormalization={yDef?.normalization ?? null}
+                    />
+                  );
+                })()}
               </ScrollArea>
             </>
           )}

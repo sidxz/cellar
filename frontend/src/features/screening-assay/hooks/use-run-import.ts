@@ -3,6 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showWarning } from "@/shared/lib/toast";
+
+/** Compose a non-blocking warning toast body from a fit_warnings array.
+ *  Up to 3 lines are shown verbatim; anything beyond is collapsed into a
+ *  "+N more" suffix so the toast doesn't grow unbounded on bad runs. */
+function buildFitWarningDescription(warnings: string[]): string {
+  const head = warnings.slice(0, 3);
+  const rest = warnings.length - head.length;
+  return rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -98,6 +108,9 @@ export interface ImportRunFileResponse {
   /** Non-fatal warning when post-import normalization fails (missing controls etc). */
   compute_warning: string | null;
   attachment_warning: string | null;
+  /** Per-compound fit failure messages from the post-import curve fit. Optional
+   *  for back-compat with deployments that haven't been upgraded. */
+  fit_warnings?: string[];
 }
 
 export interface RunImportTemplate {
@@ -136,12 +149,19 @@ export function useImportRunFile(runId: string) {
         method: "POST",
         data: payload,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["plate-map", runId] });
       qc.invalidateQueries({ queryKey: ["readout-data"] });
       qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
       qc.invalidateQueries({ queryKey: ["runs"] });
       qc.invalidateQueries({ queryKey: ["attachments", "run", runId] });
+      const warnings = data.fit_warnings ?? [];
+      if (warnings.length > 0) {
+        showWarning(
+          `Run imported. ${warnings.length} curve(s) had fit issues.`,
+          { description: buildFitWarningDescription(warnings) },
+        );
+      }
     },
   });
 }

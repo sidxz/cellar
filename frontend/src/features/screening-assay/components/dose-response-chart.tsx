@@ -51,6 +51,12 @@ interface DoseResponseChartProps {
    *  [85, 110] at the protocol level sees Range pre-selected here, instead
    *  of a misleading "Free". Per-curve edits remain independent overrides. */
   protocolConfig?: DoseResponseConfig | null;
+  /** Normalization of the Y readout (looked up from
+   *  ``protocol.readout_definitions`` by the parent). Used to decide
+   *  whether seeding CDD's [85,110]/[-10,10]/[0.9,1.1] defaults makes
+   *  sense — those bounds are only meaningful for percent-scale
+   *  readouts. Pass null/undefined to disable seeding. */
+  yReadoutNormalization?: string | null;
 }
 
 type ParamMode = "free" | "range" | "lock";
@@ -59,18 +65,39 @@ interface CurveConstraints {
   // Top: Free leaves the optimizer alone; Range bounds it inside [min, max];
   // Lock pins it to a single value. Mutually exclusive with the protocol's
   // own constraint when sent — see refit_dose_response.py for resolution.
+  // null in *Min/*Max/*Value means "user has not entered a value" — refit
+  // is gated until the active mode's required fields are populated.
   topMode: ParamMode;
-  topValue: number;
-  topMin: number;
-  topMax: number;
+  topValue: number | null;
+  topMin: number | null;
+  topMax: number | null;
   bottomMode: ParamMode;
-  bottomValue: number;
-  bottomMin: number;
-  bottomMax: number;
+  bottomValue: number | null;
+  bottomMin: number | null;
+  bottomMax: number | null;
   hillSlope: string;
   hillCustomRange: boolean;
-  hillMin: number;
-  hillMax: number;
+  hillMin: number | null;
+  hillMax: number | null;
+}
+
+function parseInputOrNull(s: string): number | null {
+  if (s.trim() === "") return null;
+  const v = parseFloat(s);
+  return Number.isFinite(v) ? v : null;
+}
+
+function isRangeValid(min: number | null, max: number | null): boolean {
+  return min != null && max != null && Number.isFinite(min) && Number.isFinite(max) && min < max;
+}
+
+function constraintsValid(c: CurveConstraints): boolean {
+  if (c.topMode === "lock" && (c.topValue == null || !Number.isFinite(c.topValue))) return false;
+  if (c.topMode === "range" && !isRangeValid(c.topMin, c.topMax)) return false;
+  if (c.bottomMode === "lock" && (c.bottomValue == null || !Number.isFinite(c.bottomValue))) return false;
+  if (c.bottomMode === "range" && !isRangeValid(c.bottomMin, c.bottomMax)) return false;
+  if (c.hillCustomRange && !isRangeValid(c.hillMin, c.hillMax)) return false;
+  return true;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -185,6 +212,59 @@ function rSquaredColor(r2: number): string {
   return "text-destructive";
 }
 
+/** Whether a Y-axis normalization belongs to the percent-scale family that
+ *  CDD's [85,110]/[-10,10]/[0.9,1.1] defaults are calibrated for. */
+function isPercentNormalization(norm: string | null | undefined): boolean {
+  return (
+    norm === "percent_inhibition" ||
+    norm === "percent_activation" ||
+    norm === "percent_control"
+  );
+}
+
+/** Pure helper: derive the per-curve UI defaults from the protocol's config
+ *  and the Y readout's normalization. Hoisted out of the component so its
+ *  identity is stable across renders — letting useCallback's exhaustive-deps
+ *  list its actual inputs (protocolConfig, yReadoutNormalization) instead of
+ *  swallowing the warning. */
+function defaultConstraintsFor(
+  curve: DoseResponseCurve,
+  protocolConfig: DoseResponseConfig | null | undefined,
+  yReadoutNormalization: string | null | undefined,
+): CurveConstraints {
+  const cfg = protocolConfig;
+  const isPercentY = isPercentNormalization(yReadoutNormalization);
+  const topMode: ParamMode =
+    cfg?.top_constraint != null
+      ? "lock"
+      : cfg?.top_constraint_min != null || cfg?.top_constraint_max != null
+        ? "range"
+        : "free";
+  const bottomMode: ParamMode =
+    cfg?.bottom_constraint != null
+      ? "lock"
+      : cfg?.bottom_constraint_min != null ||
+          cfg?.bottom_constraint_max != null
+        ? "range"
+        : "free";
+  const hillCustomRange =
+    cfg?.hill_slope_min != null || cfg?.hill_slope_max != null;
+  return {
+    topMode,
+    topValue: cfg?.top_constraint ?? curve.top,
+    topMin: cfg?.top_constraint_min ?? (isPercentY ? 85 : null),
+    topMax: cfg?.top_constraint_max ?? (isPercentY ? 110 : null),
+    bottomMode,
+    bottomValue: cfg?.bottom_constraint ?? curve.bottom,
+    bottomMin: cfg?.bottom_constraint_min ?? (isPercentY ? -10 : null),
+    bottomMax: cfg?.bottom_constraint_max ?? (isPercentY ? 10 : null),
+    hillSlope: cfg?.hill_slope_constraint ?? "unconstrained",
+    hillCustomRange,
+    hillMin: cfg?.hill_slope_min ?? (isPercentY ? 0.9 : null),
+    hillMax: cfg?.hill_slope_max ?? (isPercentY ? 1.1 : null),
+  };
+}
+
 const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
 
 const CURVE_CLASS_OPTIONS: CurveClass[] = ["full", "partial", "bell_shaped", "inactive"];
@@ -193,7 +273,7 @@ const HILL_SLOPE_OPTIONS: { value: string; label: string }[] = [
   { value: "unconstrained", label: "Unconstrained" },
   { value: "negative_only", label: "Negative only" },
   { value: "positive_only", label: "Positive only" },
-  { value: "fixed_at_one", label: "Fixed at -1" },
+  { value: "fixed_at_one", label: "Fixed at 1" },
 ];
 
 // ─── Interactive single-curve controls ────────────────────────────────────────
@@ -218,6 +298,17 @@ function CurveControls({
   const [open, setOpen] = useState(false);
   const totalPoints = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
   const includedCount = totalPoints - excludedIndices.size;
+
+  const topRangeError =
+    constraints.topMode === "range" && !isRangeValid(constraints.topMin, constraints.topMax);
+  const topLockError =
+    constraints.topMode === "lock" && (constraints.topValue == null || !Number.isFinite(constraints.topValue));
+  const bottomRangeError =
+    constraints.bottomMode === "range" && !isRangeValid(constraints.bottomMin, constraints.bottomMax);
+  const bottomLockError =
+    constraints.bottomMode === "lock" && (constraints.bottomValue == null || !Number.isFinite(constraints.bottomValue));
+  const hillRangeError =
+    constraints.hillCustomRange && !isRangeValid(constraints.hillMin, constraints.hillMax);
 
   return (
     <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
@@ -267,43 +358,49 @@ function CurveControls({
               />
             </div>
             {constraints.topMode === "lock" && (
-              <Input
-                type="number"
-                className="h-7 text-xs"
-                value={constraints.topValue}
-                onChange={(e) =>
-                  onConstraintChange({
-                    topValue: parseFloat(e.target.value) || 0,
-                  })
-                }
-              />
+              <>
+                <Input
+                  type="number"
+                  className="h-7 text-xs"
+                  value={constraints.topValue ?? ""}
+                  onChange={(e) =>
+                    onConstraintChange({ topValue: parseInputOrNull(e.target.value) })
+                  }
+                />
+                {topLockError && (
+                  <p className="text-[10px] text-destructive">Enter a numeric value.</p>
+                )}
+              </>
             )}
             {constraints.topMode === "range" && (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="number"
-                  className="h-7 text-xs"
-                  placeholder="min"
-                  value={constraints.topMin}
-                  onChange={(e) =>
-                    onConstraintChange({
-                      topMin: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <Input
-                  type="number"
-                  className="h-7 text-xs"
-                  placeholder="max"
-                  value={constraints.topMax}
-                  onChange={(e) =>
-                    onConstraintChange({
-                      topMax: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    className="h-7 text-xs"
+                    placeholder="min"
+                    value={constraints.topMin ?? ""}
+                    onChange={(e) =>
+                      onConstraintChange({ topMin: parseInputOrNull(e.target.value) })
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <Input
+                    type="number"
+                    className="h-7 text-xs"
+                    placeholder="max"
+                    value={constraints.topMax ?? ""}
+                    onChange={(e) =>
+                      onConstraintChange({ topMax: parseInputOrNull(e.target.value) })
+                    }
+                  />
+                </div>
+                {topRangeError && (
+                  <p className="text-[10px] text-destructive">
+                    Enter both min and max with min &lt; max.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -318,43 +415,49 @@ function CurveControls({
               />
             </div>
             {constraints.bottomMode === "lock" && (
-              <Input
-                type="number"
-                className="h-7 text-xs"
-                value={constraints.bottomValue}
-                onChange={(e) =>
-                  onConstraintChange({
-                    bottomValue: parseFloat(e.target.value) || 0,
-                  })
-                }
-              />
+              <>
+                <Input
+                  type="number"
+                  className="h-7 text-xs"
+                  value={constraints.bottomValue ?? ""}
+                  onChange={(e) =>
+                    onConstraintChange({ bottomValue: parseInputOrNull(e.target.value) })
+                  }
+                />
+                {bottomLockError && (
+                  <p className="text-[10px] text-destructive">Enter a numeric value.</p>
+                )}
+              </>
             )}
             {constraints.bottomMode === "range" && (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="number"
-                  className="h-7 text-xs"
-                  placeholder="min"
-                  value={constraints.bottomMin}
-                  onChange={(e) =>
-                    onConstraintChange({
-                      bottomMin: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <Input
-                  type="number"
-                  className="h-7 text-xs"
-                  placeholder="max"
-                  value={constraints.bottomMax}
-                  onChange={(e) =>
-                    onConstraintChange({
-                      bottomMax: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    className="h-7 text-xs"
+                    placeholder="min"
+                    value={constraints.bottomMin ?? ""}
+                    onChange={(e) =>
+                      onConstraintChange({ bottomMin: parseInputOrNull(e.target.value) })
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <Input
+                    type="number"
+                    className="h-7 text-xs"
+                    placeholder="max"
+                    value={constraints.bottomMax ?? ""}
+                    onChange={(e) =>
+                      onConstraintChange({ bottomMax: parseInputOrNull(e.target.value) })
+                    }
+                  />
+                </div>
+                {bottomRangeError && (
+                  <p className="text-[10px] text-destructive">
+                    Enter both min and max with min &lt; max.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -390,33 +493,36 @@ function CurveControls({
               Custom range (overrides bounds)
             </label>
             {constraints.hillCustomRange && (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="number"
-                  step="0.1"
-                  className="h-7 text-xs"
-                  placeholder="min"
-                  value={constraints.hillMin}
-                  onChange={(e) =>
-                    onConstraintChange({
-                      hillMin: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <Input
-                  type="number"
-                  step="0.1"
-                  className="h-7 text-xs"
-                  placeholder="max"
-                  value={constraints.hillMax}
-                  onChange={(e) =>
-                    onConstraintChange({
-                      hillMax: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    className="h-7 text-xs"
+                    placeholder="min"
+                    value={constraints.hillMin ?? ""}
+                    onChange={(e) =>
+                      onConstraintChange({ hillMin: parseInputOrNull(e.target.value) })
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    className="h-7 text-xs"
+                    placeholder="max"
+                    value={constraints.hillMax ?? ""}
+                    onChange={(e) =>
+                      onConstraintChange({ hillMax: parseInputOrNull(e.target.value) })
+                    }
+                  />
+                </div>
+                {hillRangeError && (
+                  <p className="text-[10px] text-destructive">
+                    Enter both min and max with min &lt; max.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -489,6 +595,7 @@ function SummaryCard({
 
   const warnings = curve.fit_quality_warnings ?? [];
   const isExtrapolated = warnings.includes("ec50_at_bound");
+  const notFitted = isDegenerateFit(curve);
 
   return (
     <Card key={curve.id} className="py-4">
@@ -565,8 +672,17 @@ function SummaryCard({
             </div>
           )}
         </div>
-        {warnings.length > 0 && (
+        {(warnings.length > 0 || notFitted) && (
           <div className="flex flex-wrap gap-1 pt-1">
+            {notFitted && (
+              <Badge
+                variant="outline"
+                className="text-xs border-muted-foreground/40 bg-muted text-muted-foreground"
+                title="The fit produced degenerate parameters (inactive or unfit)."
+              >
+                Curve not fitted (inactive or degenerate)
+              </Badge>
+            )}
             {warnings.map((code) => (
               <Badge
                 key={code}
@@ -591,6 +707,7 @@ export function DoseResponseChart({
   className,
   isInteractive = false,
   protocolConfig = null,
+  yReadoutNormalization = null,
 }: DoseResponseChartProps) {
   // ── Interactive state ───────────────────────────────────────────────────────
   const { mutate: refit, isPending: isRefitting } = useRefitDoseResponse();
@@ -622,46 +739,15 @@ export function DoseResponseChart({
   // set Top ∈ [85, 110] at the protocol level should see Range here, not
   // a misleading "Free". Editing a per-curve value sends an explicit
   // override; "Reset" clears the override and resnaps to these defaults.
-  const defaultConstraints = (curve: DoseResponseCurve): CurveConstraints => {
-    const cfg = protocolConfig;
-    const topMode: ParamMode =
-      cfg?.top_constraint != null
-        ? "lock"
-        : cfg?.top_constraint_min != null || cfg?.top_constraint_max != null
-          ? "range"
-          : "free";
-    const bottomMode: ParamMode =
-      cfg?.bottom_constraint != null
-        ? "lock"
-        : cfg?.bottom_constraint_min != null ||
-            cfg?.bottom_constraint_max != null
-          ? "range"
-          : "free";
-    const hillCustomRange =
-      cfg?.hill_slope_min != null || cfg?.hill_slope_max != null;
-    return {
-      topMode,
-      topValue: cfg?.top_constraint ?? curve.top,
-      topMin: cfg?.top_constraint_min ?? 85,
-      topMax: cfg?.top_constraint_max ?? 110,
-      bottomMode,
-      bottomValue: cfg?.bottom_constraint ?? curve.bottom,
-      bottomMin: cfg?.bottom_constraint_min ?? -10,
-      bottomMax: cfg?.bottom_constraint_max ?? 10,
-      hillSlope: cfg?.hill_slope_constraint ?? "unconstrained",
-      hillCustomRange,
-      hillMin: cfg?.hill_slope_min ?? 0.9,
-      hillMax: cfg?.hill_slope_max ?? 1.1,
-    };
-  };
-
+  // CDD's [85,110]/[-10,10]/[0.9,1.1] only make sense for percent-scale
+  // readouts (% inhibition / activation / control). For raw signal,
+  // Z-score, NONE, etc., we leave range fields empty so the user must
+  // explicitly choose ranges instead of inheriting bogus percent bounds.
   const getConstraints = useCallback(
     (curve: DoseResponseCurve): CurveConstraints =>
-      constraintsMap[curve.id] ?? defaultConstraints(curve),
-    // defaultConstraints closes over protocolConfig — re-derive when it
-    // changes so the toggles stay in sync with the protocol.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [constraintsMap, protocolConfig]
+      constraintsMap[curve.id] ??
+      defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
+    [constraintsMap, protocolConfig, yReadoutNormalization]
   );
 
   const getExcluded = useCallback(
@@ -709,10 +795,13 @@ export function DoseResponseChart({
       const next = { ...current, ...patch };
       setConstraintsMap((prev) => ({ ...prev, [curve.id]: next }));
 
-      // debounce 500ms
       if (debounceRefs.current[curve.id]) {
         clearTimeout(debounceRefs.current[curve.id]);
       }
+      // Only fire refit when the active mode's required values are
+      // populated and consistent — otherwise we'd ship NaN/null to the
+      // backend and provoke a 500.
+      if (!constraintsValid(next)) return;
       debounceRefs.current[curve.id] = setTimeout(() => {
         callRefit(curve, getExcluded(curve.id), next);
       }, 500);
@@ -723,11 +812,18 @@ export function DoseResponseChart({
   const handleReset = useCallback(
     (curve: DoseResponseCurve) => {
       setExcludedMap((prev) => ({ ...prev, [curve.id]: new Set() }));
-      setConstraintsMap((prev) => ({ ...prev, [curve.id]: defaultConstraints(curve) }));
+      setConstraintsMap((prev) => ({
+        ...prev,
+        [curve.id]: defaultConstraintsFor(
+          curve,
+          protocolConfig,
+          yReadoutNormalization,
+        ),
+      }));
       // Reset = clear per-curve overrides, fall back to protocol's config.
       refit({ curveId: curve.id, input: { excluded_point_indices: [] } });
     },
-    [refit]
+    [refit, protocolConfig, yReadoutNormalization]
   );
 
   const handleClassify = useCallback(
@@ -747,8 +843,14 @@ export function DoseResponseChart({
   }
 
   // ── Build Plotly traces ─────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const traces: any[] = [];
+  // PlotTrace / PlotShape / PlotAnnotation: the project doesn't depend on
+  // @types/plotly.js (react-plotly.js's wrapper here uses PlotProps with
+  // Record<string, unknown>). We mirror that shape for trace/shape/annotation
+  // builders so call sites don't need `any`.
+  type PlotTrace = Record<string, unknown>;
+  type PlotShape = Record<string, unknown>;
+  type PlotAnnotation = Record<string, unknown>;
+  const traces: PlotTrace[] = [];
 
   // Track trace index → (curveId, pointIndex within included array) for click handling
   // Each included-points trace gets a traceIndex so we can map clicks back.
@@ -825,14 +927,25 @@ export function DoseResponseChart({
       );
     }
 
-    const allX = [...serverIncluded.x, ...serverExcluded.x, curve.fitted_value];
-    const xMinRaw = allX.length > 0
-      ? Math.min(...allX) * X_AXIS_MIN_RATIO
-      : curve.fitted_value * X_AXIS_FALLBACK_MIN_RATIO;
-    const xMin = Math.max(xMinRaw, X_AXIS_FLOOR);
-    const xMax = allX.length > 0
-      ? Math.max(...allX) * X_AXIS_MAX_RATIO
-      : curve.fitted_value * X_AXIS_FALLBACK_MAX_RATIO;
+    // Filter out NaN/non-positive values: log10 explodes on them and
+    // `fitted_value` may be NaN/0 for degenerate fits.
+    const finiteFitted = Number.isFinite(curve.fitted_value) && curve.fitted_value > 0;
+    const allX = [...serverIncluded.x, ...serverExcluded.x, ...(finiteFitted ? [curve.fitted_value] : [])]
+      .filter((v) => Number.isFinite(v) && v > 0);
+    let xMin: number;
+    let xMax: number;
+    if (allX.length > 0) {
+      xMin = Math.max(Math.min(...allX) * X_AXIS_MIN_RATIO, X_AXIS_FLOOR);
+      xMax = Math.max(...allX) * X_AXIS_MAX_RATIO;
+    } else if (finiteFitted) {
+      xMin = Math.max(curve.fitted_value * X_AXIS_FALLBACK_MIN_RATIO, X_AXIS_FLOOR);
+      xMax = curve.fitted_value * X_AXIS_FALLBACK_MAX_RATIO;
+    } else {
+      // No usable scale info — pick a generic µM-range default rather
+      // than feeding NaN into Plotly's log axis.
+      xMin = 0.001;
+      xMax = 1000;
+    }
 
     // Compute replicate stats for error bars
     const { meanX, meanY, sdY, replicateX, replicateY } = computeReplicateStats(
@@ -954,7 +1067,12 @@ export function DoseResponseChart({
     }
 
     // Confidence interval band (shaded area between CI low/high EC50 curves)
-    if (!skipFitLine && showCI && curve.confidence_interval_low && curve.confidence_interval_high) {
+    if (
+      !skipFitLine &&
+      showCI &&
+      curve.confidence_interval_low != null &&
+      curve.confidence_interval_high != null
+    ) {
       const ciLowCurve = { ...curve, fitted_value: curve.confidence_interval_low };
       const ciHighCurve = { ...curve, fitted_value: curve.confidence_interval_high };
       const { x: ciX, y: ciLowY } = generate4PLCurve(ciLowCurve, xMin, xMax);
@@ -1046,10 +1164,8 @@ export function DoseResponseChart({
   );
 
   // Build overlay shapes and annotations based on toggle state
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const shapes: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const annotations: any[] = [];
+  const shapes: PlotShape[] = [];
+  const annotations: PlotAnnotation[] = [];
   for (let i = 0; i < curves.length; i++) {
     const curve = curves[i];
     const color = TRACE_COLORS[i % TRACE_COLORS.length];

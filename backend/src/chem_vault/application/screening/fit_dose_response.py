@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
@@ -24,9 +24,23 @@ from chem_vault.domain.screening_assay.protocol import Protocol
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.screening_assay.repository import DoseResponseCurveRepository
 from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError
 
 _MIN_POINTS = 4
+
+
+@dataclass(frozen=True)
+class FitRunResult:
+    """Outcome of fitting all dose-response curves for one run.
+
+    ``warnings`` carries one entry per skipped fit — typically a fitter
+    Failure that would otherwise have been silently swallowed. Each entry
+    names the molecule/batch and the underlying error so the user can see
+    which compounds didn't get curves.
+    """
+
+    curves: list[DoseResponseCurve]
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -142,9 +156,27 @@ class FitDoseResponseCurves:
         run: Run,
         protocol: Protocol,
         readout_data: list[ReadoutData],
+        workspace_id: uuid.UUID,
         overrides: FitOverrides | None = None,
-    ) -> Result[list[DoseResponseCurve], DomainError]:
-        """Fit curves for all DOSE_RESPONSE readout definitions in the protocol."""
+    ) -> Result[FitRunResult, DomainError]:
+        """Fit curves for all DOSE_RESPONSE readout definitions in the protocol.
+
+        ``workspace_id`` must match both ``run.workspace_id`` and
+        ``protocol.workspace_id``; cross-workspace calls are rejected.
+        """
+        if run.workspace_id != workspace_id:
+            return Failure(
+                AuthorizationError(
+                    "Run workspace mismatch — run does not belong to the caller's workspace"
+                )
+            )
+        if protocol.workspace_id != workspace_id:
+            return Failure(
+                AuthorizationError(
+                    "Protocol workspace mismatch — protocol does not belong to the caller's workspace"
+                )
+            )
+
         if not self._uow.is_active:
             async with self._uow:
                 result = await self._fit(
@@ -170,21 +202,23 @@ class FitDoseResponseCurves:
         protocol: Protocol,
         readout_data: list[ReadoutData],
         overrides: FitOverrides | None = None,
-    ) -> Result[list[DoseResponseCurve], DomainError]:
+    ) -> Result[FitRunResult, DomainError]:
         dr_defs = [
             rd for rd in protocol.readout_definitions
             if rd.data_type == ReadoutDataType.DOSE_RESPONSE
             and rd.dose_response_config is not None
         ]
         if not dr_defs:
-            return Success([])
+            return Success(FitRunResult(curves=[], warnings=[]))
 
         well_map = {w.id: w for w in run.wells}
+        rd_by_name = {rd.name: rd for rd in protocol.readout_definitions}
 
         # Idempotent: remove previous auto-fitted curves
         await self._curve_repo.delete_by_run(run.workspace_id, run.id)
 
         all_curves: list[DoseResponseCurve] = []
+        warnings: list[str] = []
 
         for dr_def in dr_defs:
             base_config = dr_def.dose_response_config
@@ -193,11 +227,12 @@ class FitDoseResponseCurves:
             )
             y_readout_name = config.y_readout_name
 
-            y_rd = next(
-                (rd for rd in protocol.readout_definitions if rd.name == y_readout_name),
-                None,
-            )
+            y_rd = rd_by_name.get(y_readout_name)
             if y_rd is None:
+                warnings.append(
+                    f"Readout '{dr_def.name}': Y readout '{y_readout_name}' not found "
+                    f"on the protocol; skipping."
+                )
                 continue
 
             # Per readout def, exactly one value layer is the canonical fit input:
@@ -231,10 +266,19 @@ class FitDoseResponseCurves:
 
             for (molecule_id, batch_id), points in groups.items():
                 if len(points) < _MIN_POINTS:
+                    warnings.append(
+                        f"Molecule {molecule_id} batch {batch_id} on '{dr_def.name}': "
+                        f"only {len(points)} dose point(s) — need at least {_MIN_POINTS}."
+                    )
                     continue
 
                 fit_result = self._curve_fitter.fit(points, config)
                 if isinstance(fit_result, Failure):
+                    err = fit_result.failure()
+                    warnings.append(
+                        f"Molecule {molecule_id} batch {batch_id} on "
+                        f"'{dr_def.name}': fit failed — {err}"
+                    )
                     continue
 
                 fitted = fit_result.unwrap()
@@ -261,4 +305,4 @@ class FitDoseResponseCurves:
                 await self._curve_repo.save(curve)
                 all_curves.append(curve)
 
-        return Success(all_curves)
+        return Success(FitRunResult(curves=all_curves, warnings=warnings))

@@ -9,15 +9,14 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.screening._dose_response_config_serde import (
+    deserialize_dose_response_config,
+)
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
-    CurveType,
-    HillSlopeConstraint,
-    NormalizationScope,
     PosControlSignal,
     ProtocolType,
     ReadoutAggregation,
@@ -74,28 +73,7 @@ class CreateProtocol:
         for rd in input.readout_definitions:
             dr_config = None
             if rd.get("data_type") == "dose_response" and rd.get("dose_response_config"):
-                cfg = rd["dose_response_config"]
-                dr_config = DoseResponseConfig(
-                    curve_type=CurveType(cfg["curve_type"]),
-                    x_readout_name=cfg.get("x_readout_name"),
-                    y_readout_name=cfg["y_readout_name"],
-                    hill_slope_constraint=HillSlopeConstraint(
-                        cfg.get("hill_slope_constraint", "unconstrained")
-                    ),
-                    activity_threshold=cfg.get("activity_threshold"),
-                    normalization_scope=NormalizationScope(
-                        cfg.get("normalization_scope", "per_plate")
-                    ),
-                    top_constraint=cfg.get("top_constraint"),
-                    bottom_constraint=cfg.get("bottom_constraint"),
-                    top_constraint_min=cfg.get("top_constraint_min"),
-                    top_constraint_max=cfg.get("top_constraint_max"),
-                    bottom_constraint_min=cfg.get("bottom_constraint_min"),
-                    bottom_constraint_max=cfg.get("bottom_constraint_max"),
-                    hill_slope_min=cfg.get("hill_slope_min"),
-                    hill_slope_max=cfg.get("hill_slope_max"),
-                    outlier_sigma=cfg.get("outlier_sigma", 3.0),
-                )
+                dr_config = deserialize_dose_response_config(rd["dose_response_config"])
 
             readout_defs.append(
                 ReadoutDefinition(
