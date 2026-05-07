@@ -281,9 +281,26 @@ export function RunImportWizard({
   const lowConfidenceHeaders = useMemo(() => {
     if (!preview) return [] as string[];
     return preview.suggestions
-      .filter((s) => s.confidence === "low" && draft.roles[s.header] !== null)
+      .filter((s) => {
+        if (s.confidence !== "low") return false;
+        if (draft.roles[s.header] === null) return false;
+        // Mirror the row-level upgrade: a header bound to a same-named
+        // readout def is an exact match, not a low-confidence guess.
+        const boundDefId = draft.readoutDefByHeader[s.header];
+        const boundDef = boundDefId
+          ? readoutDefs?.find((d) => d.id === boundDefId)
+          : null;
+        if (
+          draft.roles[s.header] === "readout" &&
+          boundDef != null &&
+          normalize(boundDef.name) === normalize(s.header)
+        ) {
+          return false;
+        }
+        return true;
+      })
       .map((s) => s.header);
-  }, [preview, draft.roles]);
+  }, [preview, draft.roles, draft.readoutDefByHeader, readoutDefs]);
 
   const readoutHeaders = useMemo(
     () =>
@@ -659,6 +676,25 @@ function MappingStep({
           <tbody>
             {preview.suggestions.map((s) => {
               const role = draft.roles[s.header] ?? null;
+              // Backend doesn't know the protocol's readout-def catalog, so
+              // text columns like "Scientist" land as low-confidence even
+              // when their header exactly matches a readout def's name.
+              // Upgrade the displayed confidence when the FE has bound the
+              // header to a same-named readout def — that's an exact match.
+              const boundDefId = draft.readoutDefByHeader[s.header];
+              const boundDef = boundDefId
+                ? readoutDefs.find((d) => d.id === boundDefId)
+                : null;
+              const exactReadoutNameMatch =
+                role === "readout" &&
+                boundDef != null &&
+                normalize(boundDef.name) === normalize(s.header);
+              const effectiveConfidence: ImportConfidence = exactReadoutNameMatch
+                ? "high"
+                : s.confidence;
+              const effectiveReason = exactReadoutNameMatch
+                ? `header matches readout def "${boundDef.name}"`
+                : s.reason;
               return (
                 <tr key={s.header} className="border-b last:border-b-0">
                   <td className="px-3 py-2 font-mono">{s.header}</td>
@@ -684,12 +720,12 @@ function MappingStep({
                   <td className="px-3 py-2">
                     <Badge
                       variant="outline"
-                      className={confidenceBadgeClass(s.confidence)}
+                      className={confidenceBadgeClass(effectiveConfidence)}
                     >
-                      {confidenceLabel(s.confidence)}
+                      {confidenceLabel(effectiveConfidence)}
                     </Badge>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {s.reason}
+                      {effectiveReason}
                     </span>
                   </td>
                   <td className="px-3 py-2">
