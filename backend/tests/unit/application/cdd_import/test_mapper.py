@@ -86,7 +86,9 @@ class TestMapCddProtocol:
         assert result.readouts[0].dose_response_config is not None
 
     def test_batch_link_readout(self):
-        proto = _protocol_json(readouts=[_readout("Batch", "Batch Link")])
+        # "Batch" alone is reserved well-metadata and would be skipped by the
+        # mapper. Use a name that's unambiguously a measurement/reference.
+        proto = _protocol_json(readouts=[_readout("Reference Batch", "Batch Link")])
         result = map_cdd_protocol(proto)
         assert result.readouts[0].data_type == ReadoutDataType.BATCH_LINK
 
@@ -183,17 +185,85 @@ class TestMapCddProtocol:
             ],
         }
         result = map_cdd_protocol(proto)
-        # 2 user-defined Number readouts + 1 synthesized DOSE_RESPONSE
+        # "Concentration" is the dose column (reserved name + referenced as
+        # the calculation's dose_readout_definition) — it's skipped, with a
+        # warning. Result: 1 user-defined Number readout (% Inhibition) + 1
+        # synthesized DOSE_RESPONSE.
         names = [r.name for r in result.readouts]
-        assert names == ["Concentration", "% Inhibition", "IC50calc"]
-        assert len(result.readouts) == 3
+        assert names == ["% Inhibition", "IC50calc"]
+        assert len(result.readouts) == 2
 
-        dr = result.readouts[2]
+        # Skipped Concentration shows up in warnings.
+        assert any(w.field_name == "Concentration" for w in result.warnings)
+
+        dr = result.readouts[1]
         assert dr.data_type == ReadoutDataType.DOSE_RESPONSE
         assert dr.unit == "uM"
         assert dr.dose_response_config is not None
-        assert dr.dose_response_config.x_readout_name == "Concentration"
+        # X axis is None — chem-vault sources X from well.dose, not from a
+        # separate readout column.
+        assert dr.dose_response_config.x_readout_name is None
         assert dr.dose_response_config.y_readout_name == "% Inhibition"
+
+    def test_reserved_name_readout_is_skipped(self):
+        """A CDD readout literally named "Concentration"/"Dose"/etc. is
+        well metadata, not a measurement. The mapper drops it with a
+        warning so it never becomes a chem-vault ReadoutDefinition."""
+        proto = _protocol_json(
+            readouts=[
+                _readout("Concentration", "Number", "uM"),
+                _readout("Raw AU", "Number", "AU"),
+                _readout("Dose", "Number", "uM"),
+                _readout("Batch", "Number"),
+            ]
+        )
+        result = map_cdd_protocol(proto)
+        names = [r.name for r in result.readouts]
+        assert names == ["Raw AU"], (
+            "Reserved well-metadata names must be skipped"
+        )
+        skipped = {w.field_name for w in result.warnings}
+        assert skipped == {"Concentration", "Dose", "Batch"}
+        for w in result.warnings:
+            assert "dose/concentration column" in w.reason
+
+    def test_x_readout_name_referenced_dose_column_is_skipped(self):
+        """A non-reserved name (e.g. "Compound Conc") that's referenced as
+        the X axis of a Plot readout is also a dose column and must be
+        skipped + null'd out on the DR config."""
+        proto = _protocol_json(
+            readouts=[
+                {
+                    "id": 1,
+                    "name": "Compound Conc",
+                    "data_type": "Number",
+                    "unit_label": "uM",
+                },
+                {"id": 2, "name": "%Control", "data_type": "Number", "unit_label": "%"},
+                {
+                    "id": 3,
+                    "name": "IC50",
+                    "data_type": "Plot",
+                    "x_readout_name": "Compound Conc",
+                    "y_readout_name": "%Control",
+                },
+            ]
+        )
+        result = map_cdd_protocol(proto)
+        names = [r.name for r in result.readouts]
+        assert "Compound Conc" not in names, (
+            "Dose column referenced by a DR readout must be skipped"
+        )
+        assert names == ["%Control", "IC50"]
+
+        dr = next(r for r in result.readouts if r.name == "IC50")
+        assert dr.dose_response_config is not None
+        assert dr.dose_response_config.x_readout_name is None, (
+            "DR config's x_readout_name must be nulled when its source was a "
+            "skipped dose column — fitter then reads X from well.dose"
+        )
+        assert dr.dose_response_config.y_readout_name == "%Control"
+        assert any(w.field_name == "Compound Conc" for w in result.warnings)
 
     def test_description_and_category_from_protocol_fields(self):
         proto = {

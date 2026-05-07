@@ -30,6 +30,57 @@ __all__ = [
 ]
 
 
+# CDD users frequently name a column "Concentration", "Dose", "Compound Conc",
+# etc. and reference it as the X axis of an IC50 calculation. Chem-vault
+# stores concentration on `wells.dose` (the experimental setpoint, not a
+# measurement), so importing those columns as readouts would create dead
+# readout-defs that never have data and break the IC50 fit's X-source
+# contract. We detect them in two ways:
+#   1. Their name matches a chem-vault reserved well-metadata name
+#      (concentration / dose / well / plate / batch / compound).
+#   2. They're referenced as the X (dose) readout of a CDD dose-response
+#      calculation, regardless of name.
+# Skipped readouts produce a `MappingWarning` so the chemist sees them in
+# the import preview, and any DR config that pointed at one gets
+# `x_readout_name=None` (= use well.dose implicitly).
+_DOSE_COLUMN_RESERVED: frozenset[str] = frozenset(
+    {"concentration", "dose", "well", "plate", "batch", "compound"}
+)
+
+
+def _is_dose_column_name(name: str) -> bool:
+    return name.strip().lower() in _DOSE_COLUMN_RESERVED
+
+
+def _collect_dose_readout_names(
+    protocol_data: dict[str, Any],
+    rd_by_id: dict[int, dict[str, Any]],
+) -> set[str]:
+    """Return names of readouts that are 'the dose column' for any DR config.
+
+    CDD has two ways of declaring a dose-response: a `Plot` readout with
+    `x_readout_name`, or a `class: dose response calculation` with an
+    input `dose_readout_definition` (an int ID).
+    """
+    names: set[str] = set()
+    for rd in protocol_data.get("readout_definitions", []):
+        if rd.get("data_type") == "Plot":
+            x = rd.get("x_readout_name")
+            if x:
+                names.add(x)
+    for calc in protocol_data.get("calculations", []) or []:
+        if calc.get("class") != "dose response calculation":
+            continue
+        inputs = calc.get("inputs", {}) or {}
+        dose_id = inputs.get("dose_readout_definition")
+        if isinstance(dose_id, int):
+            dose_rd = rd_by_id.get(dose_id, {})
+            n = dose_rd.get("name")
+            if n:
+                names.add(n)
+    return names
+
+
 @dataclass(frozen=True)
 class CddProtocolSummary:
     external_id: int
@@ -143,9 +194,11 @@ def _build_dose_response_readouts(
       - inputs: dose_readout_definition (X axis), response_readout_definition (Y axis)
       - outputs: intercept_readout_definitions (primary IC50/EC50 value + CI bounds + stats)
 
-    We create one DOSE_RESPONSE readout per calculation, named after the primary
-    intercept output (user-defined name like "IC50calc"), with X/Y axis names
-    from the input readout definitions.
+    We emit one DOSE_RESPONSE readout per calculation, named after the
+    primary intercept output (e.g. "IC50calc"). The Y axis is the response
+    readout name. The X axis is always `None` — chem-vault stores doses on
+    `well.dose` (per protocol-design contract), so the 4PL fitter sources X
+    from the well, not from a separate dose readout.
     """
     dr_readouts: list[MappedReadout] = []
     order = start_order
@@ -160,10 +213,15 @@ def _build_dose_response_readouts(
         # Resolve input readout names
         dose_id = inputs.get("dose_readout_definition")
         response_id = inputs.get("response_readout_definition")
-        dose_rd = rd_by_id.get(dose_id, {}) if dose_id else {}
         response_rd = rd_by_id.get(response_id, {}) if response_id else {}
 
-        x_name = dose_rd.get("name", "Dose")
+        # CDD's dose readout (referenced by `dose_id`) is the dose column —
+        # chem-vault stores that on `well.dose`, so x_readout_name=None
+        # tells the 4PL fitter to source X from the well implicitly. The
+        # main loop will already have skipped this readout from the
+        # protocol's readout list.
+        _ = dose_id  # intentionally unused — the well owns the X axis
+        x_name = None
         y_name = response_rd.get("name", "Response")
 
         # Primary output name + unit from the intercept readout definition
@@ -216,6 +274,11 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
         rd["id"]: rd for rd in protocol_data.get("readout_definitions", []) if "id" in rd
     }
 
+    # Names of readouts that are dose columns for any DR config — skipped
+    # below and used to null `x_readout_name` on emitted DR configs so the
+    # 4PL fitter reads X from `well.dose` implicitly.
+    dose_referenced_names = _collect_dose_readout_names(protocol_data, rd_by_id)
+
     # readout_definitions includes both readouts and conditions.
     # Conditions have "protocol_condition": true.
     # Field names: "data_type" (not "type"), "unit_label" (not "unit"),
@@ -228,6 +291,24 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
             continue
 
         rd_name = rd.get("name", f"Readout {readout_idx + 1}")
+
+        # Skip dose-column readouts (named-reserved or referenced as DR X axis).
+        # Concentration is well metadata, not a measurement — modeling it as a
+        # readout def would produce em-dash-only columns and a broken fit.
+        if _is_dose_column_name(rd_name) or rd_name in dose_referenced_names:
+            warnings.append(
+                MappingWarning(
+                    field_name=rd_name,
+                    source_type=rd.get("data_type", "") or "",
+                    reason=(
+                        f"'{rd_name}' is a dose/concentration column — "
+                        "chem-vault stores well concentrations on the well "
+                        "itself (well.dose + protocol.dose_unit), not as a "
+                        "readout. Skipped; IC50 fits read X from well.dose."
+                    ),
+                )
+            )
+            continue
 
         # Conditions are marked with protocol_condition flag
         if rd.get("protocol_condition", False):
@@ -258,9 +339,14 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
 
         dr_config: DoseResponseConfig | None = None
         if mapped_type == ReadoutDataType.DOSE_RESPONSE:
+            x_name = rd.get("x_readout_name")
+            # If CDD's X readout was a dose column (which we just skipped),
+            # null it out so the fitter uses well.dose implicitly.
+            if x_name and (x_name in dose_referenced_names or _is_dose_column_name(x_name)):
+                x_name = None
             dr_config = DoseResponseConfig(
                 curve_type=CurveType.IC50,
-                x_readout_name=rd.get("x_readout_name"),
+                x_readout_name=x_name,
                 y_readout_name=rd.get("y_readout_name", rd_name),
                 hill_slope_constraint=HillSlopeConstraint.UNCONSTRAINED,
                 normalization_scope=NormalizationScope.PER_PLATE,
