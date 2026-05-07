@@ -91,6 +91,7 @@ class ProtocolVersioningService:
             status=ProtocolStatus.DRAFT,
             created_by=parent.created_by,
             dose_unit=parent.dose_unit,
+            pos_control_signal=parent.pos_control_signal,
             readout_definitions=cloned_readouts,
             condition_definitions=cloned_conditions,
             control_layouts=dict(parent.control_layouts) if parent.control_layouts else None,

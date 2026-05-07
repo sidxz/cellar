@@ -139,6 +139,9 @@ class ProtocolResponse(BaseModel):
     created_by: uuid.UUID
     # Canonical dose unit for all wells + IC50 fits of runs of this protocol.
     dose_unit: str
+    # POS control signal direction — "high" (uninhibited reference) or
+    # "low" (known-inhibitor reference). Drives normalization formula.
+    pos_control_signal: str
     readout_definitions: list[ReadoutDefinitionResponse]
     condition_definitions: list[ConditionDefinitionResponse]
     control_layouts: dict[str, str] | None = None
@@ -177,6 +180,7 @@ class ProtocolResponse(BaseModel):
             status=p.status.value,
             created_by=p.created_by,
             dose_unit=p.dose_unit.value,
+            pos_control_signal=p.pos_control_signal.value,
             readout_definitions=[
                 ReadoutDefinitionResponse(
                     id=rd.id,
@@ -292,6 +296,7 @@ class CreateProtocolRequest(BaseModel):
     target_id: uuid.UUID | None = None
     category: str | None = None
     dose_unit: str = "uM"
+    pos_control_signal: str = "high"
     readout_definitions: list[dict[str, Any]]
     condition_definitions: list[dict[str, Any]] | None = None
 
@@ -373,6 +378,7 @@ async def create_protocol(
         target_id=body.target_id,
         category=body.category,
         dose_unit=body.dose_unit,
+        pos_control_signal=body.pos_control_signal,
         readout_definitions=body.readout_definitions,
         condition_definitions=body.condition_definitions or [],
     )
@@ -449,6 +455,9 @@ class UpdateProtocolRequest(BaseModel):
     target_id: uuid.UUID | None = None
     category: str | None = None
     recommended_hit_criteria: list[dict] | None = None
+    # Allowed on ACTIVE protocols (unlike the other fields above which are
+    # DRAFT-only). The use case applies it via Protocol.set_pos_control_signal.
+    pos_control_signal: str | None = None
 
 
 @router.patch("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])
@@ -460,14 +469,18 @@ async def update_protocol(
 ) -> ProtocolResponse:
     """Update a DRAFT protocol's metadata."""
     from chem_vault.application.shared.sentinel import UNSET
+    # ``name`` and ``pos_control_signal`` are typed as ``str | None`` on the
+    # command — None means "leave unchanged". The other fields are nullable
+    # and use UNSET to distinguish omission from "set to null".
     cmd = UpdateProtocolCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
-        name=body.name if "name" in body.model_fields_set else UNSET,
+        name=body.name,
         description=body.description if "description" in body.model_fields_set else UNSET,
         target_id=body.target_id if "target_id" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
         recommended_hit_criteria=body.recommended_hit_criteria if "recommended_hit_criteria" in body.model_fields_set else UNSET,
+        pos_control_signal=body.pos_control_signal,
     )
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))

@@ -18,6 +18,7 @@ from chem_vault.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
     NormalizationScope,
+    PosControlSignal,
     ProtocolType,
     ReadoutAggregation,
     ReadoutDataType,
@@ -42,6 +43,7 @@ class CreateProtocolCommand(Command):
     target_id: uuid.UUID | None = None
     category: str | None = None
     dose_unit: str = "uM"
+    pos_control_signal: str = "high"
     readout_definitions: list[dict[str, Any]] = field(default_factory=list)
     condition_definitions: list[dict[str, Any]] = field(default_factory=list)
 
@@ -126,6 +128,7 @@ class CreateProtocol:
                 category=input.category,
                 created_by=auth.user_id,
                 dose_unit=ConcentrationUnit(input.dose_unit),
+                pos_control_signal=PosControlSignal(input.pos_control_signal),
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs or None,
             )

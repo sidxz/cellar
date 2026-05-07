@@ -205,6 +205,17 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
       autoHeight: true,
       wrapText: true,
       cellStyle: { lineHeight: "1.3", paddingTop: 6, paddingBottom: 6 },
+      // Quick-filter input spans every identifier surfaced in the cell —
+      // reg id, internal name, vendor synonyms, batch number — so a search
+      // for "Compound-3" or a partial vendor alias matches the row.
+      getQuickFilterText: (params) => {
+        if (!params.data) return "";
+        const { registration_number, molecule_name, synonyms, batch_number } =
+          params.data;
+        return [registration_number, molecule_name, batch_number, ...(synonyms ?? [])]
+          .filter((s): s is string => !!s)
+          .join(" ");
+      },
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;
         const { registration_number, molecule_name, synonyms, batch_number } =

@@ -11,7 +11,13 @@ const PROTOCOLS_KEY = ["protocols"];
 const protocolHooks = createCrudHooks<
   Protocol,
   CreateProtocolInput,
-  { name?: string; description?: string | null; target_id?: string | null; category?: string | null }
+  {
+    name?: string;
+    description?: string | null;
+    target_id?: string | null;
+    category?: string | null;
+    pos_control_signal?: "high" | "low";
+  }
 >({
   entityName: "Protocol",
   baseUrl: "/api/v1/protocols",

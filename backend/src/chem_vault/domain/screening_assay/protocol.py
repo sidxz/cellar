@@ -9,6 +9,7 @@ from chem_vault.domain.screening_assay.dose_response_config import DoseResponseC
 from chem_vault.domain.screening_assay.enums import (
     ConditionDataType,
     PlateFormat,
+    PosControlSignal,
     ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
@@ -213,6 +214,7 @@ class Protocol(AggregateRoot):
         status: ProtocolStatus = ProtocolStatus.DRAFT,
         created_by: uuid.UUID,
         dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
+        pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
         control_layouts: dict[str, uuid.UUID] | None = None,
@@ -240,6 +242,10 @@ class Protocol(AggregateRoot):
         # The canonical concentration unit for this assay's well doses (and IC50
         # fits). Single source of truth — every well of every run inherits this.
         self.dose_unit = dose_unit
+        # Direction of the POS control's raw signal. Drives normalization +
+        # Z' formula dispatch so labs can keep their wet-lab "POS = inhibitor"
+        # naming without inverting the math.
+        self.pos_control_signal = pos_control_signal
         self.readout_definitions: list[ReadoutDefinition] = readout_definitions or []
         self.condition_definitions: list[ConditionDefinition] = condition_definitions or []
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
@@ -287,6 +293,7 @@ class Protocol(AggregateRoot):
         target_id: uuid.UUID | None = None,
         category: str | None = None,
         dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
+        pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
     ) -> Protocol:
@@ -304,6 +311,7 @@ class Protocol(AggregateRoot):
             category=category,
             created_by=created_by,
             dose_unit=dose_unit,
+            pos_control_signal=pos_control_signal,
             readout_definitions=readout_definitions,
             condition_definitions=condition_definitions,
         )
@@ -361,6 +369,7 @@ class Protocol(AggregateRoot):
         description: str | None = ...,  # type: ignore[assignment]
         target_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         category: str | None = ...,  # type: ignore[assignment]
+        pos_control_signal: PosControlSignal | None = None,
     ) -> None:
         """Update mutable metadata fields.
 
@@ -379,6 +388,25 @@ class Protocol(AggregateRoot):
             self.target_id = target_id
         if category is not ...:
             self.category = category
+        if pos_control_signal is not None:
+            self.pos_control_signal = pos_control_signal
+        self.updated_at = datetime.now(UTC)
+
+    def set_pos_control_signal(self, signal: PosControlSignal) -> None:
+        """Set the POS control signal direction.
+
+        Allowed on ACTIVE protocols too — flipping the convention does not
+        invalidate any historical raw data; it only changes how downstream
+        normalization and QC are computed when Recompute is run. Locking
+        this behind ``_guard_draft`` would force users to version a
+        protocol just to fix a labeling slip, which the use case is
+        specifically meant to avoid.
+        """
+        if self.status == ProtocolStatus.RETIRED:
+            raise ConflictError(
+                "Cannot change pos_control_signal on a retired protocol"
+            )
+        self.pos_control_signal = signal
         self.updated_at = datetime.now(UTC)
 
     def set_recommended_hit_criteria(

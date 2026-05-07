@@ -29,6 +29,7 @@ import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { PlateSetupDialog } from "./plate-setup-dialog";
 import { ReadoutDataTable } from "./readout-data-table";
+import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
 import { readPerPlateQc, worstZPrime, classifyZPrime, type ZPrimeQuality } from "../lib/qc-metrics";
 
@@ -204,7 +205,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const doseUnit = plateMap?.dose_unit ?? "uM";
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
 
-  const validTabs = ["readout", "plate-map", "dose-response", "qc", "files"];
+  const validTabs = ["readout", "plate-map", "heat-map", "dose-response", "qc", "files"];
   const [activeTab, setActiveTab] = useState("readout");
 
   // Sync from URL hash on mount + hash changes
@@ -229,6 +230,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         <TabsList>
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
           <TabsTrigger value="plate-map">Plate Map</TabsTrigger>
+          <TabsTrigger value="heat-map">Heat Map</TabsTrigger>
           <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
           <TabsTrigger value="qc">QC Metrics</TabsTrigger>
           <TabsTrigger value="files">
@@ -343,6 +345,11 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        {/* Heat Map */}
+        <TabsContent value="heat-map">
+          <RunHeatmapPanel run={run} />
         </TabsContent>
 
         {/* Dose-Response */}

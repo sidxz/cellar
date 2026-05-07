@@ -10,7 +10,11 @@ import statistics
 import uuid
 from dataclasses import dataclass
 
-from chem_vault.domain.screening_assay.enums import ReadoutNormalization, WellType
+from chem_vault.domain.screening_assay.enums import (
+    PosControlSignal,
+    ReadoutNormalization,
+    WellType,
+)
 from chem_vault.domain.screening_assay.run import Well
 from chem_vault.domain.shared.errors import ValidationError
 
@@ -58,18 +62,26 @@ class PlateNormalizer:
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
         normalization: ReadoutNormalization,
+        pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
     ) -> list[NormalizedValue]:
-        """Dispatch to the appropriate normalization strategy."""
+        """Dispatch to the appropriate normalization strategy.
+
+        ``pos_control_signal`` resolves the convention slip between two wet-lab
+        labelings: when ``LOW``, the POS/NEG roles in formula inputs are
+        swapped so that the high-signal control always anchors "max activity"
+        regardless of how the wells were tagged in the plate template. See
+        :class:`PosControlSignal` for the full semantic.
+        """
         if normalization == ReadoutNormalization.NONE:
             return []
         if normalization == ReadoutNormalization.PERCENT_INHIBITION:
-            return self._percent_inhibition(wells, raw_values)
+            return self._percent_inhibition(wells, raw_values, pos_control_signal)
         if normalization == ReadoutNormalization.PERCENT_ACTIVATION:
-            return self._percent_activation(wells, raw_values)
+            return self._percent_activation(wells, raw_values, pos_control_signal)
         if normalization == ReadoutNormalization.PERCENT_CONTROL:
-            return self._percent_control(wells, raw_values)
+            return self._percent_control(wells, raw_values, pos_control_signal)
         if normalization == ReadoutNormalization.Z_SCORE:
-            return self._z_score(wells, raw_values)
+            return self._z_score(wells, raw_values, pos_control_signal)
         # Defensive: unknown strategy — treat as NONE
         return []
 
@@ -91,6 +103,32 @@ class PlateNormalizer:
         ]
 
     @staticmethod
+    def _resolve_anchors(
+        wells: list[Well],
+        raw_values: dict[uuid.UUID, float],
+        pos_control_signal: PosControlSignal,
+    ) -> tuple[list[float], list[float]]:
+        """Return (high_signal_values, low_signal_values).
+
+        Independent of which template label was applied to each control well —
+        the caller-supplied ``pos_control_signal`` resolves the role:
+
+        - ``HIGH``: POSITIVE_CONTROL wells anchor the high-signal end (max
+          activity); NEGATIVE_CONTROL wells anchor the low-signal end.
+        - ``LOW``: roles swap — the lab labels its known-inhibitor wells as
+          POSITIVE_CONTROL, but those carry the low signal.
+        """
+        pos_label = PlateNormalizer._values_for_type(
+            wells, raw_values, WellType.POSITIVE_CONTROL
+        )
+        neg_label = PlateNormalizer._values_for_type(
+            wells, raw_values, WellType.NEGATIVE_CONTROL
+        )
+        if pos_control_signal == PosControlSignal.LOW:
+            return neg_label, pos_label
+        return pos_label, neg_label
+
+    @staticmethod
     def _sample_wells(
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
@@ -110,46 +148,46 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
-        """100 * (pos_ctrl_mean - sample) / (pos_ctrl_mean - neg_ctrl_mean).
+        """100 * (high_anchor - sample) / (high_anchor - low_anchor).
 
-        Convention (consistent with PERCENT_ACTIVATION):
-        - POS control anchors the "max signal / max activity" reference (0% inhibition)
-        - NEG control anchors the "min signal / blank" reference (100% inhibition)
-        - % inhibition is the complement of % activation: how far sample falls below POS
+        Anchors are resolved by ``pos_control_signal``:
+            HIGH: high_anchor = POS wells, low_anchor = NEG wells (default)
+            LOW:  high_anchor = NEG wells, low_anchor = POS wells (lab's
+                  "POS = known inhibitor" convention — POS reads low signal).
 
-        Setup guidance: place the uninhibited / DMSO / max-activity wells as
-        POSITIVE_CONTROL and the inhibited / reference-inhibitor / min-activity
-        wells as NEGATIVE_CONTROL. This matches the convention used by CDD's
-        "% inhibition" readouts in HTS workflows.
-
-        Requires: both negative_control AND positive_control wells.
+        A sample at the high anchor → 0% inhibition; at the low anchor → 100%.
         """
-        neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
-        pos_vals = self._values_for_type(wells, raw_values, WellType.POSITIVE_CONTROL)
-
-        if not neg_vals:
+        high_vals, low_vals = self._resolve_anchors(
+            wells, raw_values, pos_control_signal
+        )
+        if not low_vals:
             raise ValidationError(
-                "PERCENT_INHIBITION requires at least one negative control well with data"
+                "PERCENT_INHIBITION requires at least one low-signal control "
+                "well with data (NEGATIVE_CONTROL when pos_control_signal=high; "
+                "POSITIVE_CONTROL when pos_control_signal=low)"
             )
-        if not pos_vals:
+        if not high_vals:
             raise ValidationError(
-                "PERCENT_INHIBITION requires at least one positive control well with data"
+                "PERCENT_INHIBITION requires at least one high-signal control "
+                "well with data (POSITIVE_CONTROL when pos_control_signal=high; "
+                "NEGATIVE_CONTROL when pos_control_signal=low)"
             )
 
-        neg_ctrl_mean = statistics.mean(neg_vals)
-        pos_ctrl_mean = statistics.mean(pos_vals)
+        high_mean = statistics.mean(high_vals)
+        low_mean = statistics.mean(low_vals)
 
-        denominator = pos_ctrl_mean - neg_ctrl_mean
+        denominator = high_mean - low_mean
         if denominator == 0.0:
             raise ValidationError(
-                "PERCENT_INHIBITION: denominator (pos_ctrl_mean - neg_ctrl_mean) is zero"
+                "PERCENT_INHIBITION: denominator (high_anchor - low_anchor) is zero"
             )
 
         results: list[NormalizedValue] = []
         for w in self._sample_wells(wells, raw_values):
             sample = raw_values[w.id]
-            normalized = 100.0 * (pos_ctrl_mean - sample) / denominator
+            normalized = 100.0 * (high_mean - sample) / denominator
             results.append(
                 NormalizedValue(
                     well_id=w.id,
@@ -165,36 +203,36 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
-        """100 * ((sample - neg_ctrl_mean) / (pos_ctrl_mean - neg_ctrl_mean)).
-
-        Requires: positive_control AND negative_control wells.
-        """
-        neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
-        pos_vals = self._values_for_type(wells, raw_values, WellType.POSITIVE_CONTROL)
-
-        if not neg_vals:
+        """100 * (sample - low_anchor) / (high_anchor - low_anchor)."""
+        high_vals, low_vals = self._resolve_anchors(
+            wells, raw_values, pos_control_signal
+        )
+        if not low_vals:
             raise ValidationError(
-                "PERCENT_ACTIVATION requires at least one negative control well with data"
+                "PERCENT_ACTIVATION requires at least one low-signal control "
+                "well with data"
             )
-        if not pos_vals:
+        if not high_vals:
             raise ValidationError(
-                "PERCENT_ACTIVATION requires at least one positive control well with data"
+                "PERCENT_ACTIVATION requires at least one high-signal control "
+                "well with data"
             )
 
-        neg_ctrl_mean = statistics.mean(neg_vals)
-        pos_ctrl_mean = statistics.mean(pos_vals)
+        high_mean = statistics.mean(high_vals)
+        low_mean = statistics.mean(low_vals)
 
-        denominator = pos_ctrl_mean - neg_ctrl_mean
+        denominator = high_mean - low_mean
         if denominator == 0.0:
             raise ValidationError(
-                "PERCENT_ACTIVATION: denominator (pos_ctrl_mean - neg_ctrl_mean) is zero"
+                "PERCENT_ACTIVATION: denominator (high_anchor - low_anchor) is zero"
             )
 
         results: list[NormalizedValue] = []
         for w in self._sample_wells(wells, raw_values):
             sample = raw_values[w.id]
-            normalized = 100.0 * (sample - neg_ctrl_mean) / denominator
+            normalized = 100.0 * (sample - low_mean) / denominator
             results.append(
                 NormalizedValue(
                     well_id=w.id,
@@ -210,27 +248,33 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
-        """100 * (sample / neg_ctrl_mean).
+        """100 * (sample / high_anchor_mean).
 
-        Requires: negative_control wells.
+        The high-signal control (uninhibited / max-activity) is the natural
+        baseline for "% of control activity" — independent of which template
+        label the lab assigns to it.
         """
-        neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
-        if not neg_vals:
+        high_vals, _ = self._resolve_anchors(
+            wells, raw_values, pos_control_signal
+        )
+        if not high_vals:
             raise ValidationError(
-                "PERCENT_CONTROL requires at least one negative control well with data"
+                "PERCENT_CONTROL requires at least one high-signal control "
+                "well with data"
             )
 
-        neg_ctrl_mean = statistics.mean(neg_vals)
-        if neg_ctrl_mean == 0.0:
+        high_mean = statistics.mean(high_vals)
+        if high_mean == 0.0:
             raise ValidationError(
-                "PERCENT_CONTROL: neg_ctrl_mean is zero — cannot divide"
+                "PERCENT_CONTROL: high-signal control mean is zero — cannot divide"
             )
 
         results: list[NormalizedValue] = []
         for w in self._sample_wells(wells, raw_values):
             sample = raw_values[w.id]
-            normalized = 100.0 * sample / neg_ctrl_mean
+            normalized = 100.0 * sample / high_mean
             results.append(
                 NormalizedValue(
                     well_id=w.id,
@@ -246,30 +290,33 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
-        """(sample - neg_ctrl_mean) / neg_ctrl_stdev.
+        """(sample - high_anchor_mean) / high_anchor_stdev.
 
-        Requires: at least 2 negative control wells (stdev requires n >= 2).
-        Raises if stdev is zero.
+        Uses the high-signal control's distribution as the reference —
+        consistent with PERCENT_CONTROL's choice of baseline.
         """
-        neg_vals = self._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
-        if len(neg_vals) < 2:
+        high_vals, _ = self._resolve_anchors(
+            wells, raw_values, pos_control_signal
+        )
+        if len(high_vals) < 2:
             raise ValidationError(
-                "Z_SCORE requires at least 2 negative control wells with data"
+                "Z_SCORE requires at least 2 high-signal control wells with data"
             )
 
-        neg_ctrl_mean = statistics.mean(neg_vals)
-        neg_ctrl_stdev = statistics.stdev(neg_vals)
+        high_mean = statistics.mean(high_vals)
+        high_stdev = statistics.stdev(high_vals)
 
-        if neg_ctrl_stdev == 0.0:
+        if high_stdev == 0.0:
             raise ValidationError(
-                "Z_SCORE: negative control stdev is zero — cannot compute Z-score"
+                "Z_SCORE: high-signal control stdev is zero — cannot compute Z-score"
             )
 
         results: list[NormalizedValue] = []
         for w in self._sample_wells(wells, raw_values):
             sample = raw_values[w.id]
-            normalized = (sample - neg_ctrl_mean) / neg_ctrl_stdev
+            normalized = (sample - high_mean) / high_stdev
             results.append(
                 NormalizedValue(
                     well_id=w.id,

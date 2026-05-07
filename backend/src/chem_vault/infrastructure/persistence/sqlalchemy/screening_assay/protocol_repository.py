@@ -14,6 +14,7 @@ from chem_vault.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
     NormalizationScope,
+    PosControlSignal,
     ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
@@ -299,6 +300,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             status=ProtocolStatus(model.status),
             created_by=model.created_by,
             dose_unit=ConcentrationUnit(model.dose_unit),
+            pos_control_signal=PosControlSignal(model.pos_control_signal),
             readout_definitions=readout_defs,
             condition_definitions=condition_defs,
             control_layouts=control_layouts,
@@ -352,6 +354,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             status=aggregate.status.value,
             created_by=aggregate.created_by,
             dose_unit=aggregate.dose_unit.value,
+            pos_control_signal=aggregate.pos_control_signal.value,
             version=aggregate.version,
             control_layouts=self._serialize_control_layouts(aggregate.control_layouts),
             ontology_annotations=self._serialize_ontology_annotations(aggregate.ontology_annotations),
@@ -377,6 +380,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.parent_protocol_id = aggregate.parent_protocol_id
         model.status = aggregate.status.value
         model.dose_unit = aggregate.dose_unit.value
+        model.pos_control_signal = aggregate.pos_control_signal.value
         model.control_layouts = self._serialize_control_layouts(aggregate.control_layouts)
         model.ontology_annotations = self._serialize_ontology_annotations(aggregate.ontology_annotations)
         model.recommended_hit_criteria = (

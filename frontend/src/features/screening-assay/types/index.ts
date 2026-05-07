@@ -247,6 +247,15 @@ export const DOSE_UNIT_LABELS: Record<DoseUnit, string> = {
   "mg/mL": "mg/mL",
 };
 
+/** What raw signal POS control wells produce. Drives % Inhibition,
+ *  % Activation, % Control, and Z-score formula dispatch. */
+export type PosControlSignal = "high" | "low";
+
+export const POS_CONTROL_SIGNAL_LABELS: Record<PosControlSignal, string> = {
+  high: "High (POS = uninhibited / DMSO)",
+  low: "Low (POS = known inhibitor / blank)",
+};
+
 export interface Protocol {
   id: string;
   workspace_id: string;
@@ -261,6 +270,7 @@ export interface Protocol {
   created_by: string;
   /** Canonical dose unit for all wells + IC50 fits of this protocol's runs. */
   dose_unit: DoseUnit;
+  pos_control_signal: PosControlSignal;
   readout_definitions: ReadoutDefinition[];
   condition_definitions: ConditionDefinition[];
   control_layouts: Record<string, string> | null;
@@ -423,6 +433,7 @@ export interface CreateProtocolInput {
   target_id?: string | null;
   category?: string | null;
   dose_unit?: DoseUnit;
+  pos_control_signal?: PosControlSignal;
   readout_definitions?: CreateReadoutDefinitionInput[];
   condition_definitions?: CreateConditionDefinitionInput[];
 }

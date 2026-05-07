@@ -143,3 +143,21 @@ class CurveClass(StrEnum):
     PARTIAL = "partial"
     BELL_SHAPED = "bell_shaped"
     INACTIVE = "inactive"
+
+
+class PosControlSignal(StrEnum):
+    """What raw signal the POSITIVE_CONTROL wells produce.
+
+    Resolves the convention slip between two wet-lab labelings of "POS":
+
+    - ``HIGH``: POS = uninhibited / DMSO / max-activity reference (signal is
+      high when there is no inhibitor). Standard convention for the
+      built-in % Inhibition / % Activation formulas.
+    - ``LOW``: POS = known-inhibitor / no-enzyme / blank reference (signal
+      is low because the readout is suppressed). When set, the normalizer
+      and Z' calculator swap POS/NEG roles in the formula inputs so the
+      math reads correctly with the lab's convention.
+    """
+
+    HIGH = "high"
+    LOW = "low"

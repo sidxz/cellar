@@ -48,6 +48,7 @@ import {
   useRemoveControlLayout,
   useSetOntologyAnnotation,
   useRemoveOntologyAnnotation,
+  useUpdateProtocol,
 } from "../../hooks/use-protocols";
 import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
 import {
@@ -61,6 +62,7 @@ import {
   HILL_SLOPE_CONSTRAINT_LABELS,
   NORMALIZATION_SCOPE_LABELS,
   PLATE_FORMAT_LABELS,
+  POS_CONTROL_SIGNAL_LABELS,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
   READOUT_NORMALIZATION_LABELS,
@@ -68,6 +70,7 @@ import {
   type HillSlopeConstraint,
   type NormalizationScope,
   type PlateFormat,
+  type PosControlSignal,
   type Protocol,
   type ProtocolStatus,
   type ReadoutAggregation,
@@ -106,8 +109,10 @@ interface DesignTabProps {
 export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const status = protocol.status as ProtocolStatus;
   const isDraft = status === "draft";
+  const isRetired = status === "retired";
 
   // --- Mutations ---
+  const updateProtocol = useUpdateProtocol(protocolId);
   const addReadoutDef = useAddReadoutDefinition(protocolId);
   const removeReadoutDef = useRemoveReadoutDefinition(protocolId);
   const updateReadoutDef = useUpdateReadoutDefinition(protocolId);
@@ -791,6 +796,52 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               )}
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ── 4b. Control Convention ──────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Control Convention</CardTitle>
+          <CardDescription>
+            Tells the calculation engine which control well produces high raw
+            signal. Drives % Inhibition / % Activation / % Control / Z-Score
+            formula dispatch and the heatmap legend. Editable after publish —
+            re-run Recompute on each run after changing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">POS control signal</Label>
+              <Select
+                value={protocol.pos_control_signal}
+                onValueChange={(v) => {
+                  if (v === protocol.pos_control_signal) return;
+                  updateProtocol.mutate({
+                    pos_control_signal: v as PosControlSignal,
+                  });
+                }}
+                disabled={isRetired || updateProtocol.isPending}
+              >
+                <SelectTrigger className="w-[420px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(["high", "low"] as PosControlSignal[]).map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {POS_CONTROL_SIGNAL_LABELS[v]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {updateProtocol.isPending && (
+              <span className="pb-2 text-xs text-muted-foreground">
+                Saving…
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 

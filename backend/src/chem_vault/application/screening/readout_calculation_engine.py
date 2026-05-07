@@ -165,7 +165,10 @@ class ReadoutCalculationEngine:
             for plate_id, wells in plate_wells.items():
                 try:
                     norm_values = self._plate_normalizer.normalize(
-                        wells, plate_raw_values[plate_id], rd.normalization
+                        wells,
+                        plate_raw_values[plate_id],
+                        rd.normalization,
+                        protocol.pos_control_signal,
                     )
                 except DomainError as exc:
                     return Failure(exc)

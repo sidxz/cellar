@@ -169,6 +169,7 @@ export function useRecomputeRun() {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: ["readout-data"] });
       qc.invalidateQueries({ queryKey: ["plate-map"] });
+      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
       qc.invalidateQueries({ queryKey: ["compound-curves"] });
       qc.invalidateQueries({ queryKey: ["protocol-activity"] });
       showSuccess(

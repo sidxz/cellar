@@ -127,6 +127,13 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     dose_unit: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="uM"
     )
+    # Direction of POS control raw signal — drives normalization formula
+    # dispatch. "high" matches the built-in formulas (POS = uninhibited
+    # reference); "low" supports labs that label the known-inhibitor wells
+    # as POSITIVE_CONTROL.
+    pos_control_signal: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="high"
+    )
     control_layouts: Mapped[dict | None] = mapped_column(JSONB)
     ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
     recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)

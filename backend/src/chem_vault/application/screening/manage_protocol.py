@@ -14,7 +14,7 @@ from chem_vault.application.shared.event_dispatcher import EventDispatcherProtoc
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.screening_assay.enums import ProtocolStatus
+from chem_vault.domain.screening_assay.enums import PosControlSignal, ProtocolStatus
 from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
 from chem_vault.domain.screening_assay.protocol import Protocol
 from chem_vault.domain.screening_assay.protocol_versioning_service import ProtocolVersioningService
@@ -143,6 +143,7 @@ class UpdateProtocolCommand(Command):
     target_id: uuid.UUID | None | object = UNSET
     category: str | None | object = UNSET
     recommended_hit_criteria: list[dict] | None | object = UNSET
+    pos_control_signal: str | None = None
 
 
 class UpdateProtocol:
@@ -185,6 +186,13 @@ class UpdateProtocol:
                 if input.recommended_hit_criteria is not None:
                     criteria = [HitCriterion.from_dict(c) for c in input.recommended_hit_criteria]
                 protocol.set_recommended_hit_criteria(criteria)
+
+            # pos_control_signal uses its own setter — allowed on ACTIVE
+            # protocols too (the ``update()`` path above is DRAFT-only).
+            if input.pos_control_signal is not None:
+                protocol.set_pos_control_signal(
+                    PosControlSignal(input.pos_control_signal)
+                )
 
             await self._repo.save(protocol)
             events = await self._uow.commit()
