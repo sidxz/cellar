@@ -685,3 +685,90 @@ class TestConfidenceIntervalNoneAtBound:
         assert fitted.confidence_interval_low is not None
         assert fitted.confidence_interval_high is not None
         assert fitted.confidence_interval_low < fitted.fitted_value < fitted.confidence_interval_high
+
+
+class TestMultiIntercept:
+    """One Hill fit -> N intercepts (IC50, IC90, IC99 etc.) — CDD parity."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def test_single_default_intercept_matches_fitted_value(self):
+        """Default config emits one intercept (IC50@50). Its value must equal fitted_value."""
+        points = _generate_inhibition_data(ic50=10.0, hill=1.0, top=100.0, bottom=0.0)
+        cfg = _make_config()
+        result = self.fitter.fit(points, cfg).unwrap()
+        assert len(result.intercept_values) == 1
+        assert result.intercept_values[0].value == pytest.approx(result.fitted_value, rel=1e-6)
+        assert not result.intercept_values[0].at_bound
+
+    def test_ic50_and_ic90_from_one_fit(self):
+        """Hill=1 + perfect 0..100 plateau curve: IC90/IC50 = 9 (analytic)."""
+        from chem_vault.domain.screening_assay.dose_response_config import (
+            DoseResponseConfig,
+            InterceptSpec,
+        )
+        from chem_vault.domain.screening_assay.enums import InterceptKind
+        points = _generate_inhibition_data(
+            ic50=1.0, hill=1.0, top=100.0, bottom=0.0,
+            n_points=15, noise_pct=0.001,
+            conc_min=0.001, conc_max=1000.0,
+        )
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            intercepts=(
+                InterceptSpec(InterceptKind.IC, 50),
+                InterceptSpec(InterceptKind.IC, 90),
+            ),
+        )
+        result = self.fitter.fit(points, cfg).unwrap()
+        assert len(result.intercept_values) == 2
+        ic50 = result.intercept_values[0]
+        ic90 = result.intercept_values[1]
+        # IC90 must be at higher concentration than IC50 for a rising curve
+        # (need more drug for stronger inhibition).
+        assert ic90.value > ic50.value
+        # Hill=1 → IC90 / IC50 = 9 (analytic).
+        assert ic90.value / ic50.value == pytest.approx(9.0, rel=0.02)
+
+    def test_intercept_outside_curve_window_returns_at_bound(self):
+        """IC90 on a curve that plateaus at 50% inhibition can never reach 90%."""
+        from chem_vault.domain.screening_assay.dose_response_config import (
+            DoseResponseConfig,
+            InterceptSpec,
+        )
+        from chem_vault.domain.screening_assay.enums import InterceptKind
+        # Synthetic data hard-capped at 50%: bottom=0, top=50.
+        points = _generate_inhibition_data(
+            ic50=1.0, hill=1.0, top=50.0, bottom=0.0,
+            n_points=11, noise_pct=0.005,
+        )
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            top_constraint=50.0,
+            bottom_constraint=0.0,
+            intercepts=(InterceptSpec(InterceptKind.IC, 90),),
+        )
+        result = self.fitter.fit(points, cfg).unwrap()
+        # Target y = 0 + 0.9 * 50 = 45 — within [0, 50], so this should NOT
+        # be at_bound. Adjust expectation: IC90 == conc at 90% along the
+        # 0..50 window. That's reachable.
+        assert not result.intercept_values[0].at_bound
+        # Now ask for IC@y=80 absolute → outside the curve, must be at_bound.
+        from chem_vault.domain.screening_assay.enums import InterceptBasis
+        cfg2 = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            top_constraint=50.0,
+            bottom_constraint=0.0,
+            intercepts=(InterceptSpec(InterceptKind.IC, 80, basis=InterceptBasis.ABSOLUTE),),
+        )
+        result2 = self.fitter.fit(points, cfg2).unwrap()
+        import math
+        assert result2.intercept_values[0].at_bound
+        assert math.isnan(result2.intercept_values[0].value)

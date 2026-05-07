@@ -25,13 +25,17 @@ import lmfit
 import numpy as np
 from returns.result import Failure, Result, Success
 
+import math
+
 from chem_vault.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     FittedCurveResult,
+    InterceptValue,
 )
 from chem_vault.domain.screening_assay.enums import (
     CurveClass,
     HillSlopeConstraint,
+    InterceptBasis,
 )
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 
@@ -83,6 +87,51 @@ def _detect_outliers(residuals: np.ndarray, sigma: float) -> np.ndarray:
     if sd_others > 0 and abs_res[max_idx] > sigma * sd_others:
         mask[max_idx] = True
     return mask
+
+
+def _hill_inverse_log10(
+    *,
+    top: float,
+    bottom: float,
+    log_ec50: float,
+    hill: float,
+    y_target: float,
+) -> float | None:
+    """Solve the 4PL for log10(x) at a given y_target.
+
+    Returns ``log10(x)`` such that ``y(x) == y_target`` on the curve, or
+    ``None`` when y_target is outside the response window
+    ``[min(top, bottom), max(top, bottom)]`` (the curve never reaches it).
+
+    Derivation: from y = bottom + (top - bottom) / (1 + 10^(hill*(log_ec50 - x))),
+        x = log_ec50 - log10((top - y) / (y - bottom)) / hill
+    """
+    y_lo, y_hi = min(top, bottom), max(top, bottom)
+    if not (y_lo < y_target < y_hi):
+        return None
+    if hill == 0.0 or top == bottom:
+        return None
+    ratio = (top - y_target) / (y_target - bottom)
+    if ratio <= 0:
+        return None
+    return log_ec50 - math.log10(ratio) / hill
+
+
+def _response_target(spec, top: float, bottom: float) -> float:
+    """Translate an ``InterceptSpec`` into the absolute y-value the curve
+    must cross.
+
+    For ``RELATIVE_PERCENT``, the level is interpreted as a percentage of
+    the response window from bottom to top — symmetric for IC and EC.
+    The "kind" label (IC vs EC) is a naming convention (decreasing vs
+    increasing assay readout); on a normalized %inhibition curve where
+    bottom=0, top=100, both produce ``y_target = level`` directly.
+
+    For ``ABSOLUTE``, the level is an absolute Y value.
+    """
+    if spec.basis == InterceptBasis.ABSOLUTE:
+        return float(spec.level)
+    return bottom + (spec.level / 100.0) * (top - bottom)
 
 
 class LmfitCurveFitter:
@@ -322,9 +371,75 @@ class LmfitCurveFitter:
             config=config,
         )
 
+        # Compute the per-spec intercepts. ``config.intercepts`` is non-empty
+        # by construction (DoseResponseConfig.__post_init__ defaults to a
+        # single 50% intercept derived from curve_type when none are set).
+        intercept_values: list[InterceptValue] = []
+        for spec in config.intercepts:
+            y_target = _response_target(spec, fitted_top, fitted_bottom)
+            log_x = _hill_inverse_log10(
+                top=fitted_top,
+                bottom=fitted_bottom,
+                log_ec50=fitted_log_ec50,
+                hill=fitted_hill,
+                y_target=y_target,
+            )
+            if log_x is None:
+                intercept_values.append(
+                    InterceptValue(
+                        spec=spec,
+                        value=float("nan"),
+                        confidence_interval_low=None,
+                        confidence_interval_high=None,
+                        at_bound=True,
+                    )
+                )
+                continue
+            value = float(10.0 ** log_x)
+            # CI: the offset (log_x - log_ec50) is constant for fixed
+            # (top, bottom, hill, y_target), so log-space stderr propagates
+            # unchanged. Reuse the same gating as the headline CI.
+            i_ci_low: float | None
+            i_ci_high: float | None
+            if (
+                ec50_at_bound
+                or log_ec50_stderr is None
+                or not np.isfinite(log_ec50_stderr)
+                or log_ec50_stderr <= 0
+            ):
+                i_ci_low = None
+                i_ci_high = None
+            else:
+                half_width = 1.96 * float(log_ec50_stderr)
+                if half_width >= 10.0:
+                    i_ci_low = None
+                    i_ci_high = None
+                else:
+                    i_ci_low = float(10.0 ** (log_x - half_width))
+                    i_ci_high = float(10.0 ** (log_x + half_width))
+            intercept_values.append(
+                InterceptValue(
+                    spec=spec,
+                    value=value,
+                    confidence_interval_low=i_ci_low,
+                    confidence_interval_high=i_ci_high,
+                    at_bound=False,
+                )
+            )
+
+        # Headline ``fitted_value`` stays as the primary intercept's value
+        # for back-compat with all existing readers (grids, sparkline,
+        # exports). For a default single-50%-intercept config this equals
+        # the legacy log_ec50 → 10**log_ec50 conversion.
+        primary_value = (
+            intercept_values[0].value
+            if intercept_values and not intercept_values[0].at_bound
+            else fitted_ec50
+        )
+
         return Success(
             FittedCurveResult(
-                fitted_value=fitted_ec50,
+                fitted_value=primary_value,
                 hill_slope=fitted_hill,
                 top=fitted_top,
                 bottom=fitted_bottom,
@@ -338,6 +453,7 @@ class LmfitCurveFitter:
                 raw_data=raw_data,
                 excluded_points=excluded_data,
                 fit_quality_warnings=warnings,
+                intercept_values=tuple(intercept_values),
             )
         )
 
