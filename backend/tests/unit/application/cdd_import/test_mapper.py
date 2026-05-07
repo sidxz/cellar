@@ -265,6 +265,108 @@ class TestMapCddProtocol:
         assert dr.dose_response_config.y_readout_name == "%Control"
         assert any(w.field_name == "Compound Conc" for w in result.warnings)
 
+    def test_percent_inhibition_calc_lifted_to_input_normalizations(self):
+        """A `percent inhibition calculation` in CDD is just-another-column
+        on their side, but conceptually it's a normalization formula on
+        the input readout. The mapper must lift it onto the input
+        readout's normalizations set so the imported protocol declares
+        the same computed layer the source vault was producing."""
+        proto = {
+            "id": 1,
+            "name": "Inh Protocol",
+            "readout_definitions": [
+                {"id": 100, "name": "Raw Data", "data_type": "Number"},
+                # Output of the calc — this row is auto-skipped via
+                # _collect_calculated_readout_ids.
+                {
+                    "id": 101,
+                    "name": "Raw Data % inhibition",
+                    "data_type": "Number",
+                    "unit_label": "%",
+                },
+            ],
+            "calculations": [
+                {
+                    "id": 1,
+                    "class": "percent inhibition calculation",
+                    "inputs": {"input_readout_definition": 100},
+                    "outputs": {"output_readout_definition": 101},
+                }
+            ],
+        }
+        result = map_cdd_protocol(proto)
+        names = [r.name for r in result.readouts]
+        # Output readout is skipped — only Raw Data emerges.
+        assert names == ["Raw Data"]
+        rd = result.readouts[0]
+        assert rd.normalizations == frozenset(
+            {ReadoutNormalization.PERCENT_INHIBITION}
+        ), (
+            "percent inhibition calc must lift onto input readout "
+            "normalizations set"
+        )
+
+    def test_multiple_calcs_on_same_input_combine_into_one_normalizations_set(self):
+        """The NadD-Sumo HTS shape (CDD 73684): a single Raw Data readout
+        feeds both percent-inhibition and z-score calculations. Both
+        normalizations land on the same input readout."""
+        proto = {
+            "id": 1,
+            "name": "Combo",
+            "readout_definitions": [
+                {"id": 100, "name": "Raw Data", "data_type": "Number"},
+                {"id": 101, "name": "Raw Data % inhibition", "data_type": "Number"},
+                {"id": 102, "name": "Raw Data z score", "data_type": "Number"},
+            ],
+            "calculations": [
+                {
+                    "id": 1,
+                    "class": "percent inhibition calculation",
+                    "inputs": {"input_readout_definition": 100},
+                    "outputs": {"output_readout_definition": 101},
+                },
+                {
+                    "id": 2,
+                    "class": "z score calculation",
+                    "inputs": {"input_readout_definition": 100},
+                    "outputs": {"output_readout_definition": 102},
+                },
+            ],
+        }
+        result = map_cdd_protocol(proto)
+        names = [r.name for r in result.readouts]
+        assert names == ["Raw Data"]
+        rd = result.readouts[0]
+        assert rd.normalizations == frozenset(
+            {ReadoutNormalization.PERCENT_INHIBITION, ReadoutNormalization.Z_SCORE}
+        )
+
+    def test_unmapped_calc_class_does_not_lift_normalization(self):
+        """A calculation class chem-vault doesn't recognize must not
+        produce a phantom normalization. Output readout is still skipped
+        via the calculated_ids path, but the input stays bare-raw."""
+        proto = {
+            "id": 1,
+            "name": "Unknown",
+            "readout_definitions": [
+                {"id": 100, "name": "Raw Data", "data_type": "Number"},
+                {"id": 101, "name": "Some Output", "data_type": "Number"},
+            ],
+            "calculations": [
+                {
+                    "id": 1,
+                    "class": "made up calculation",
+                    "inputs": {"input_readout_definition": 100},
+                    "outputs": {"output_readout_definition": 101},
+                }
+            ],
+        }
+        result = map_cdd_protocol(proto)
+        rd = next(r for r in result.readouts if r.name == "Raw Data")
+        assert rd.normalizations == frozenset(), (
+            "Unknown calc class must not invent a normalization"
+        )
+
     def test_description_and_category_from_protocol_fields(self):
         proto = {
             "id": 1,

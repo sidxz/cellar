@@ -181,6 +181,48 @@ def _collect_calculated_readout_ids(calculations: list[dict[str, Any]]) -> set[i
     return ids
 
 
+# CDD's normalization-style calculations live as separate `calculations`
+# entries that point at an input readout and emit one or more output
+# readouts. Chem-vault's model collapses this into a single ReadoutDefinition
+# whose `normalizations` set declares which formula layers it emits — the
+# calc engine produces them at runtime. Map CDD's calculation classes onto
+# our normalization vocabulary so an imported protocol declares the same
+# computed layers the source vault was producing.
+#
+# Calc classes NOT listed here (notably "dose response calculation") are
+# handled by their own dedicated synthesis path and ignored here.
+_NORMALIZATION_CALC_CLASSES: dict[str, ReadoutNormalization] = {
+    "percent inhibition calculation": ReadoutNormalization.PERCENT_INHIBITION,
+    "percent activation calculation": ReadoutNormalization.PERCENT_ACTIVATION,
+    "percent control calculation": ReadoutNormalization.PERCENT_CONTROL,
+    "z score calculation": ReadoutNormalization.Z_SCORE,
+}
+
+
+def _collect_normalizations_by_input_id(
+    calculations: list[dict[str, Any]],
+) -> dict[int, set[ReadoutNormalization]]:
+    """Map input readout id → set of normalizations CDD computes from it.
+
+    For each normalization-style calculation, look up its
+    ``inputs.input_readout_definition`` and bucket its calc-class
+    normalization under that input readout's id. The main loop reads this
+    map when emitting MappedReadout so the imported readout declares the
+    same computed layers CDD was producing.
+    """
+    by_input: dict[int, set[ReadoutNormalization]] = {}
+    for calc in calculations:
+        norm = _NORMALIZATION_CALC_CLASSES.get(calc.get("class") or "")
+        if norm is None:
+            continue
+        inputs = calc.get("inputs", {}) or {}
+        input_id = inputs.get("input_readout_definition")
+        if not isinstance(input_id, int):
+            continue
+        by_input.setdefault(input_id, set()).add(norm)
+    return by_input
+
+
 def _build_dose_response_readouts(
     calculations: list[dict[str, Any]],
     rd_by_id: dict[int, dict[str, Any]],
@@ -278,6 +320,13 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
     # 4PL fitter reads X from `well.dose` implicitly.
     dose_referenced_names = _collect_dose_readout_names(protocol_data, rd_by_id)
 
+    # CDD calculation outputs (e.g. "Raw Data % inhibition") are skipped
+    # via `calculated_ids`, but the *normalization formula* they represent
+    # must be lifted onto their input readout — otherwise an imported
+    # protocol forgets which computed layers CDD was producing and the
+    # screen runs without them.
+    normalizations_by_input_id = _collect_normalizations_by_input_id(calculations)
+
     # readout_definitions includes both readouts and conditions.
     # Conditions have "protocol_condition": true.
     # Field names: "data_type" (not "type"), "unit_label" (not "unit"),
@@ -364,13 +413,22 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
                 )
                 pick_list_values = ["(empty)"]
 
+        # Pick up any normalization-style calculations that point at this
+        # readout as their input. CDD models these as separate output rows;
+        # chem-vault collapses them into a normalizations set on the input.
+        lifted_norms = (
+            frozenset(normalizations_by_input_id.get(rd_id, set()))
+            if rd_id is not None
+            else frozenset()
+        )
+
         readouts.append(
             MappedReadout(
                 name=rd_name,
                 data_type=mapped_type,
                 unit=rd.get("unit_label") or rd.get("unit"),
                 aggregation=ReadoutAggregation.NONE,
-                normalizations=frozenset(),
+                normalizations=lifted_norms,
                 precision=rd.get("precision_number") or rd.get("precision"),
                 pick_list_values=pick_list_values,
                 dose_response_config=dr_config,
