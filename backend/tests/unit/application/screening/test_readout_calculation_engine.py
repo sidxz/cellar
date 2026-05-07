@@ -646,3 +646,105 @@ class TestCircularDependencyDetected:
         result = await engine.compute_for_run(run.id, workspace_id=WS)
         assert isinstance(result, Failure)
         assert "ircular dependency" in str(result.failure())
+
+
+class TestMultiFormulaNormalization:
+    """A readout def with `normalizations={%inh, z_score}` should produce
+    one ReadoutData row per (well, formula). Each computed row carries
+    the formula in `normalization_applied`.
+    """
+
+    @pytest.mark.asyncio
+    async def test_emits_one_row_per_formula_per_well(self) -> None:
+        # Single readout def with two formulas in its set.
+        raw_rd = ReadoutDefinition(
+            protocol_id=_PH,
+            name="Raw AU",
+            data_type=ReadoutDataType.NUMERIC,
+            normalizations=frozenset(
+                {
+                    ReadoutNormalization.PERCENT_INHIBITION,
+                    ReadoutNormalization.Z_SCORE,
+                }
+            ),
+        )
+        protocol = _make_protocol([raw_rd])
+
+        # Build a run with two pos-control wells (z-score needs SD > 0),
+        # one neg-control, and one sample well — all on a single plate.
+        run = Run.create(
+            workspace_id=WS,
+            protocol_id=protocol.id,
+            run_date=date(2026, 4, 6),
+            operator=USER,
+        )
+        plate = Plate(run_id=run.id, plate_number=1, format=PlateFormat.F96)
+        run.plates.append(plate)
+        sample_well = Well(
+            plate_id=plate.id, row="A", column=1, well_type=WellType.SAMPLE,
+            batch_id=uuid.uuid4(),
+        )
+        pos1 = Well(plate_id=plate.id, row="A", column=2, well_type=WellType.POSITIVE_CONTROL)
+        pos2 = Well(plate_id=plate.id, row="A", column=3, well_type=WellType.POSITIVE_CONTROL)
+        neg = Well(plate_id=plate.id, row="A", column=4, well_type=WellType.NEGATIVE_CONTROL)
+        run.wells.extend([sample_well, pos1, pos2, neg])
+
+        mol_id = uuid.uuid4()
+        raw_data = [
+            ReadoutData(
+                workspace_id=WS, run_id=run.id, well_id=sample_well.id,
+                molecule_id=mol_id, batch_id=sample_well.batch_id,
+                readout_definition_id=raw_rd.id,
+                value=QualifiedValue(value=50.0),
+            ),
+            ReadoutData(
+                workspace_id=WS, run_id=run.id, well_id=pos1.id,
+                readout_definition_id=raw_rd.id,
+                value=QualifiedValue(value=100.0),
+            ),
+            ReadoutData(
+                workspace_id=WS, run_id=run.id, well_id=pos2.id,
+                readout_definition_id=raw_rd.id,
+                value=QualifiedValue(value=90.0),
+            ),
+            ReadoutData(
+                workspace_id=WS, run_id=run.id, well_id=neg.id,
+                readout_definition_id=raw_rd.id,
+                value=QualifiedValue(value=0.0),
+            ),
+        ]
+
+        readout_data_repo, run_repo, protocol_repo = _make_repos()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+        readout_data_repo.find_by_run.return_value = raw_data
+        readout_data_repo.delete_computed_for_run.return_value = 0
+
+        engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
+            formula_evaluator=AstevalFormulaEvaluator(),
+            plate_normalizer=PlateNormalizer(),
+            replicate_aggregator=ReplicateAggregator(),
+            readout_data_repo=readout_data_repo,
+            run_repo=run_repo,
+            protocol_repo=protocol_repo,
+        )
+
+        result = await engine.compute_for_run(run.id, workspace_id=WS)
+        assert isinstance(result, Success)
+
+        computed = [
+            r for r in result.unwrap().computed_readouts
+            if r.readout_definition_id == raw_rd.id
+        ]
+        # 1 sample × 2 formulas = 2 computed rows
+        assert len(computed) == 2
+        formulas = {c.normalization_applied for c in computed}
+        assert formulas == {
+            ReadoutNormalization.PERCENT_INHIBITION,
+            ReadoutNormalization.Z_SCORE,
+        }
+        # Both rows must reference the same well + readout def
+        assert all(c.well_id == sample_well.id for c in computed)
+        assert all(c.is_computed for c in computed)
+        assert all(c.molecule_id == mol_id for c in computed)

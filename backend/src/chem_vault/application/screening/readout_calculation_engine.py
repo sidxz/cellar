@@ -169,7 +169,7 @@ class ReadoutCalculationEngine:
         # 4. Normalize per-plate
         # ------------------------------------------------------------------
         for rd in protocol.readout_definitions:
-            if rd.normalization == ReadoutNormalization.NONE or rd.is_calculated:
+            if not rd.normalizations or rd.is_calculated:
                 continue
 
             # Group raw data by plate for this readout definition
@@ -194,41 +194,43 @@ class ReadoutCalculationEngine:
 
             for plate_id, wells in plate_wells.items():
                 try:
-                    norm_values = self._plate_normalizer.normalize(
+                    per_formula = self._plate_normalizer.normalize_many(
                         wells,
                         plate_raw_values[plate_id],
-                        rd.normalization,
+                        rd.normalizations,
                         protocol.pos_control_signal,
                     )
                 except DomainError as exc:
                     return Failure(exc)
 
-                for nv in norm_values:
-                    # Find the original readout to get molecule_id and batch_id
-                    original = next(
-                        (
-                            r
-                            for r in raw_data
-                            if r.well_id == nv.well_id
-                            and r.readout_definition_id == rd.id
-                        ),
-                        None,
-                    )
-                    if original is None:
-                        continue
-
-                    computed.append(
-                        ReadoutData(
-                            workspace_id=run.workspace_id,
-                            run_id=run_id,
-                            well_id=nv.well_id,
-                            molecule_id=original.molecule_id,
-                            batch_id=original.batch_id,
-                            readout_definition_id=rd.id,
-                            value=QualifiedValue(value=nv.normalized_value),
-                            is_computed=True,
+                for formula, norm_values in per_formula.items():
+                    for nv in norm_values:
+                        # Find the original readout to get molecule_id and batch_id
+                        original = next(
+                            (
+                                r
+                                for r in raw_data
+                                if r.well_id == nv.well_id
+                                and r.readout_definition_id == rd.id
+                            ),
+                            None,
                         )
-                    )
+                        if original is None:
+                            continue
+
+                        computed.append(
+                            ReadoutData(
+                                workspace_id=run.workspace_id,
+                                run_id=run_id,
+                                well_id=nv.well_id,
+                                molecule_id=original.molecule_id,
+                                batch_id=original.batch_id,
+                                readout_definition_id=rd.id,
+                                value=QualifiedValue(value=nv.normalized_value),
+                                is_computed=True,
+                                normalization_applied=formula,
+                            )
+                        )
 
         # ------------------------------------------------------------------
         # 4.5. Z-prime QC from controls
