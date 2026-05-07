@@ -204,6 +204,13 @@ class ProtocolResponse(BaseModel):
                             "normalization_scope": rd.dose_response_config.normalization_scope.value,
                             "top_constraint": rd.dose_response_config.top_constraint,
                             "bottom_constraint": rd.dose_response_config.bottom_constraint,
+                            "top_constraint_min": rd.dose_response_config.top_constraint_min,
+                            "top_constraint_max": rd.dose_response_config.top_constraint_max,
+                            "bottom_constraint_min": rd.dose_response_config.bottom_constraint_min,
+                            "bottom_constraint_max": rd.dose_response_config.bottom_constraint_max,
+                            "hill_slope_min": rd.dose_response_config.hill_slope_min,
+                            "hill_slope_max": rd.dose_response_config.hill_slope_max,
+                            "outlier_sigma": rd.dose_response_config.outlier_sigma,
                         }
                         if rd.dose_response_config is not None
                         else None

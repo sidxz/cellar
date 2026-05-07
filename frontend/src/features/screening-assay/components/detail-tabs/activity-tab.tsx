@@ -888,6 +888,11 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                       <DoseResponseChart
                         curves={compoundCurves}
                         isInteractive={false}
+                        protocolConfig={
+                          protocol.readout_definitions.find(
+                            (rd) => rd.dose_response_config != null,
+                          )?.dose_response_config ?? null
+                        }
                       />
                       <div className="rounded-lg border">
                         <table className="w-full text-sm">

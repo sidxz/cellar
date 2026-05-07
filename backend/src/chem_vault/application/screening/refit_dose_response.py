@@ -32,6 +32,19 @@ class RefitDoseResponseCurveCommand(Command):
     hill_slope_constraint: str | None = None
     top_constraint: float | None = None
     bottom_constraint: float | None = None
+    # Per-curve range overrides — bidirectional with respect to the protocol's
+    # config: protocol Range → per-curve Lock or per-curve Range, and vice
+    # versa. ``override_top``/``bottom``/``hill`` is True when the field block
+    # below is the authoritative source for that param on this refit.
+    override_top: bool = False
+    top_constraint_min: float | None = None
+    top_constraint_max: float | None = None
+    override_bottom: bool = False
+    bottom_constraint_min: float | None = None
+    bottom_constraint_max: float | None = None
+    override_hill: bool = False
+    hill_slope_min: float | None = None
+    hill_slope_max: float | None = None
 
 
 class RefitDoseResponseCurve:
@@ -120,21 +133,69 @@ class RefitDoseResponseCurve:
                 y_readout_name="Response",
             )
 
-        hill = (
-            HillSlopeConstraint(input.hill_slope_constraint)
-            if input.hill_slope_constraint
-            else base_config.hill_slope_constraint
-        )
-        top = input.top_constraint if input.top_constraint is not None else base_config.top_constraint
-        bottom = input.bottom_constraint if input.bottom_constraint is not None else base_config.bottom_constraint
+        # Per-param override semantics: when ``override_<param>`` is True the
+        # client is the authoritative source — its lock/range fields replace
+        # the protocol's, including the case "Free" (all override fields None).
+        # When False, the protocol's config carries through unchanged.
+        if input.override_top:
+            top_lock = input.top_constraint
+            top_min = input.top_constraint_min
+            top_max = input.top_constraint_max
+        elif input.top_constraint is not None:
+            # Legacy: client sent only ``top_constraint`` without the override
+            # flag. Treat as Lock override (back-compat with pre-Phase-B clients).
+            top_lock = input.top_constraint
+            top_min = None
+            top_max = None
+        else:
+            top_lock = base_config.top_constraint
+            top_min = base_config.top_constraint_min
+            top_max = base_config.top_constraint_max
+
+        if input.override_bottom:
+            bottom_lock = input.bottom_constraint
+            bottom_min = input.bottom_constraint_min
+            bottom_max = input.bottom_constraint_max
+        elif input.bottom_constraint is not None:
+            bottom_lock = input.bottom_constraint
+            bottom_min = None
+            bottom_max = None
+        else:
+            bottom_lock = base_config.bottom_constraint
+            bottom_min = base_config.bottom_constraint_min
+            bottom_max = base_config.bottom_constraint_max
+
+        if input.override_hill:
+            hill_enum = (
+                HillSlopeConstraint(input.hill_slope_constraint)
+                if input.hill_slope_constraint
+                else HillSlopeConstraint.UNCONSTRAINED
+            )
+            hill_min = input.hill_slope_min
+            hill_max = input.hill_slope_max
+        elif input.hill_slope_constraint:
+            hill_enum = HillSlopeConstraint(input.hill_slope_constraint)
+            hill_min = None
+            hill_max = None
+        else:
+            hill_enum = base_config.hill_slope_constraint
+            hill_min = base_config.hill_slope_min
+            hill_max = base_config.hill_slope_max
 
         return DoseResponseConfig(
             curve_type=base_config.curve_type,
             x_readout_name=base_config.x_readout_name,
             y_readout_name=base_config.y_readout_name,
-            hill_slope_constraint=hill,
+            hill_slope_constraint=hill_enum,
             activity_threshold=base_config.activity_threshold,
             normalization_scope=base_config.normalization_scope,
-            top_constraint=top,
-            bottom_constraint=bottom,
+            top_constraint=top_lock,
+            bottom_constraint=bottom_lock,
+            top_constraint_min=top_min,
+            top_constraint_max=top_max,
+            bottom_constraint_min=bottom_min,
+            bottom_constraint_max=bottom_max,
+            hill_slope_min=hill_min,
+            hill_slope_max=hill_max,
+            outlier_sigma=base_config.outlier_sigma,
         )

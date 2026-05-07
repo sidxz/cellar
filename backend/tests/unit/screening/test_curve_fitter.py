@@ -321,3 +321,232 @@ class TestDirectionAwareFitting:
         assert fitted.fit_quality_warnings == [], (
             f"Expected no warnings, got {fitted.fit_quality_warnings}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Phase B — bounded-range constraints (CDD-style)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _config_with_ranges(**overrides) -> DoseResponseConfig:
+    base = dict(
+        curve_type=CurveType.IC50,
+        x_readout_name="Concentration",
+        y_readout_name="% Inhibition",
+    )
+    base.update(overrides)
+    return DoseResponseConfig(**base)
+
+
+class TestRangeConstraints:
+    """Phase B — Top/Bottom/Hill bounded ranges (CDD's IC50calc default)."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def test_top_range_keeps_fitted_top_inside_bounds(self):
+        """Plain rising curve, Top range [85, 110] — fitted Top must land in range."""
+        points = _generate_inhibition_data(ic50=80.0, hill=1.0, top=100.0, bottom=0.0)
+        cfg = _config_with_ranges(top_constraint_min=85.0, top_constraint_max=110.0)
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert 85.0 <= fitted.top <= 110.0, (
+            f"Top {fitted.top} outside [85, 110]"
+        )
+
+    def test_top_range_hits_upper_bound_on_overshoot(self):
+        """Synthetic data plateauing well above the range (true top=130, observed
+        plateau ≈ 130 over a wide dose range) — fit pegged at upper bound 110."""
+        points = _generate_inhibition_data(
+            ic50=10.0,
+            hill=1.0,
+            top=130.0,
+            bottom=0.0,
+            noise_pct=0.01,
+            conc_min=0.01,
+            conc_max=1000.0,
+        )
+        cfg = _config_with_ranges(top_constraint_min=85.0, top_constraint_max=110.0)
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert fitted.top == pytest.approx(110.0, abs=0.5)
+
+    def test_nadd_partial_curve_with_cdd_default_ranges(self):
+        """Canonical Phase B acceptance: an NadD-shaped partial curve
+        (capping ~62 % at 100 µM) with CDD-default ranges
+        Top ∈ [85, 110], Bottom ∈ [-10, 10], Hill ∈ [0.9, 1.1] should produce
+        an IC50 in the [55, 90] µM band where CDD's optimizer lands.
+
+        Generated from the Prism 4PL with true Top=110, Bottom=0, Hill=1,
+        IC50=70 µM, sampled across the same dose range as the NadD plate
+        (0.001 to 100 µM, 11 points). The optimizer cannot observe the
+        upper plateau, so without ranges the fit is wildly under-determined;
+        with CDD's ranges it converges near IC50 = 70.
+        """
+        points = _generate_inhibition_data(
+            ic50=70.0,
+            hill=1.0,
+            top=110.0,
+            bottom=0.0,
+            n_points=11,
+            noise_pct=0.03,
+            conc_min=0.001,
+            conc_max=100.0,
+            seed=11,
+        )
+        cfg = _config_with_ranges(
+            top_constraint_min=85.0,
+            top_constraint_max=110.0,
+            bottom_constraint_min=-10.0,
+            bottom_constraint_max=10.0,
+            hill_slope_min=0.9,
+            hill_slope_max=1.1,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert 55.0 <= fitted.fitted_value <= 90.0, (
+            f"IC50 {fitted.fitted_value} outside acceptance band [55, 90] µM"
+        )
+        assert fitted.r_squared > 0.95
+        assert 0.9 <= fitted.hill_slope <= 1.1
+
+    def test_lock_and_range_mutually_exclusive_at_construction(self):
+        """Domain-layer ValidationError, not a runtime fitter error."""
+        from chem_vault.domain.shared.errors import ValidationError as VE
+
+        with pytest.raises(VE, match="top_constraint"):
+            _config_with_ranges(top_constraint=100.0, top_constraint_min=85.0)
+
+    def test_range_min_greater_than_max_rejected_at_construction(self):
+        from chem_vault.domain.shared.errors import ValidationError as VE
+
+        with pytest.raises(VE, match="top_constraint_min"):
+            _config_with_ranges(top_constraint_min=110.0, top_constraint_max=85.0)
+
+    def test_init_value_clamped_into_range(self):
+        """Strongly rising data → top_init ≈ 130 from data inference; with
+        Top range [50, 100] the fitter must clamp the start point inside
+        [50, 100] (lmfit rejects out-of-bounds starts with a SystemExit)."""
+        points = _generate_inhibition_data(
+            ic50=80.0, hill=1.0, top=130.0, bottom=0.0, noise_pct=0.01,
+        )
+        cfg = _config_with_ranges(top_constraint_min=50.0, top_constraint_max=100.0)
+        result = self.fitter.fit(points, cfg)
+        assert isinstance(result, Success), (
+            f"Fit must succeed despite top_init outside range: "
+            f"{result.failure() if isinstance(result, Failure) else None}"
+        )
+        fitted = result.unwrap()
+        assert 50.0 <= fitted.top <= 100.0
+
+    def test_hill_range_consistent_with_positive_only_enum(self):
+        """POSITIVE_ONLY enum + Hill range [0.5, 2.0] both constrain hill > 0;
+        the explicit range overrides the enum's [0.01, 20] bounds — fit lands
+        inside [0.5, 2.0]."""
+        points = _generate_inhibition_data(ic50=80.0, hill=1.5)
+        cfg = _config_with_ranges(
+            hill_constraint=HillSlopeConstraint.POSITIVE_ONLY,
+            hill_slope_min=0.5,
+            hill_slope_max=2.0,
+        ) if False else DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            hill_slope_constraint=HillSlopeConstraint.POSITIVE_ONLY,
+            hill_slope_min=0.5,
+            hill_slope_max=2.0,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert 0.5 <= fitted.hill_slope <= 2.0
+
+    def test_hill_range_contradicting_enum_rejected_at_construction(self):
+        """POSITIVE_ONLY + Hill range straddling 0 → ValidationError."""
+        from chem_vault.domain.shared.errors import ValidationError as VE
+
+        with pytest.raises(VE, match="hill_slope"):
+            DoseResponseConfig(
+                curve_type=CurveType.IC50,
+                x_readout_name="Concentration",
+                y_readout_name="% Inhibition",
+                hill_slope_constraint=HillSlopeConstraint.POSITIVE_ONLY,
+                hill_slope_min=-2.0,
+                hill_slope_max=2.0,
+            )
+
+    def test_open_top_range_only_max_set(self):
+        """Top range with only max set → upper bound only, no lower bound."""
+        points = _generate_inhibition_data(ic50=80.0, hill=1.0, top=100.0, bottom=0.0)
+        cfg = _config_with_ranges(top_constraint_max=110.0)
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert fitted.top <= 110.0
+
+    def test_bottom_range_keeps_fitted_bottom_inside_bounds(self):
+        points = _generate_inhibition_data(
+            ic50=80.0, hill=1.0, top=100.0, bottom=5.0
+        )
+        cfg = _config_with_ranges(
+            bottom_constraint_min=-10.0, bottom_constraint_max=10.0
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert -10.0 <= fitted.bottom <= 10.0
+
+
+class TestOutlierSigmaConfig:
+    """Phase B follow-on — outlier removal threshold is protocol-configurable."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def _points_with_one_clear_outlier(self):
+        """Inhibition curve where the 4th point is wildly off."""
+        points = _generate_inhibition_data(
+            ic50=10.0, hill=1.0, top=100.0, bottom=0.0,
+            n_points=11, noise_pct=0.01, conc_min=0.01, conc_max=1000.0,
+            seed=7,
+        )
+        outlier = points[3]
+        points[3] = ConcentrationResponsePoint(
+            concentration=outlier.concentration,
+            response=outlier.response + 60.0,  # huge residual
+        )
+        return points
+
+    def test_default_3sigma_removes_clear_outlier(self):
+        points = self._points_with_one_clear_outlier()
+        cfg = _config_with_ranges()
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        auto_excluded = [
+            p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
+        ]
+        assert len(auto_excluded) == 1, (
+            f"expected 1 auto-excluded outlier, got {len(auto_excluded)}"
+        )
+
+    def test_outlier_sigma_none_disables_removal(self):
+        points = self._points_with_one_clear_outlier()
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            outlier_sigma=None,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        auto_excluded = [
+            p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
+        ]
+        assert auto_excluded == [], (
+            "outlier_sigma=None must disable auto-removal entirely"
+        )
+
+    def test_outlier_sigma_must_be_positive(self):
+        from chem_vault.domain.shared.errors import ValidationError as VE
+
+        with pytest.raises(VE, match="outlier_sigma"):
+            DoseResponseConfig(
+                curve_type=CurveType.IC50,
+                y_readout_name="response",
+                outlier_sigma=0.0,
+            )
+        with pytest.raises(VE, match="outlier_sigma"):
+            DoseResponseConfig(
+                curve_type=CurveType.IC50,
+                y_readout_name="response",
+                outlier_sigma=-1.0,
+            )

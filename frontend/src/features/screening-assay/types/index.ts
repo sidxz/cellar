@@ -197,8 +197,24 @@ export interface DoseResponseConfig {
   hill_slope_constraint: HillSlopeConstraint;
   activity_threshold: number | null;
   normalization_scope: NormalizationScope;
+  /** Hard lock on the upper plateau (vary=False on top). Mutually exclusive
+   *  with `top_constraint_min`/`top_constraint_max`. */
   top_constraint: number | null;
   bottom_constraint: number | null;
+  /** Range bounds on the upper plateau — the optimizer picks the best
+   *  `top` inside `[top_constraint_min, top_constraint_max]`. CDD's
+   *  IC50calc default is [85, 110] for percent-normalized readouts. */
+  top_constraint_min: number | null;
+  top_constraint_max: number | null;
+  bottom_constraint_min: number | null;
+  bottom_constraint_max: number | null;
+  /** Explicit Hill range; overrides the implicit bounds set by
+   *  `hill_slope_constraint`. CDD's default is [0.9, 1.1]. */
+  hill_slope_min: number | null;
+  hill_slope_max: number | null;
+  /** Auto-outlier removal threshold (residual > σ × SD). Default 3.0;
+   *  null disables. CDD-equivalent default. */
+  outlier_sigma: number | null;
 }
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -540,6 +556,18 @@ export interface RefitDoseResponseInput {
   hill_slope_constraint?: string | null;
   top_constraint?: number | null;
   bottom_constraint?: number | null;
+  /** Phase B per-curve overrides. Set `override_<param>` true when the client
+   *  controls that param's mode end-to-end (Free/Range/Lock); false inherits
+   *  from the protocol's config. */
+  override_top?: boolean;
+  top_constraint_min?: number | null;
+  top_constraint_max?: number | null;
+  override_bottom?: boolean;
+  bottom_constraint_min?: number | null;
+  bottom_constraint_max?: number | null;
+  override_hill?: boolean;
+  hill_slope_min?: number | null;
+  hill_slope_max?: number | null;
 }
 
 export interface ClassifyDoseResponseInput {

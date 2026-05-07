@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -57,6 +57,7 @@ import {
 } from "@/shared/components/ontology-search-input";
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
+import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
 import {
   CURVE_TYPE_LABELS,
   HILL_SLOPE_CONSTRAINT_LABELS,
@@ -132,6 +133,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [addReadoutOpen, setAddReadoutOpen] = useState(false);
   const [addConditionOpen, setAddConditionOpen] = useState(false);
   const [editingReadoutId, setEditingReadoutId] = useState<string | null>(null);
+  const [viewingReadoutId, setViewingReadoutId] = useState<string | null>(null);
 
   // --- Readout form fields ---
   const [rdName, setRdName] = useState("");
@@ -151,8 +153,28 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [drNormalizationScope, setDrNormalizationScope] =
     useState<NormalizationScope>("per_plate");
   const [drActivityThreshold, setDrActivityThreshold] = useState("");
+  // Top/Bottom now have a tri-state mode (Phase B). Lock and Range are
+  // mutually exclusive in the domain; the mode field is the UI's source of
+  // truth and decides which of the *Constraint* / *Min* / *Max* fields ship.
+  type ParamMode = "free" | "range" | "lock";
+  const [drTopMode, setDrTopMode] = useState<ParamMode>("free");
   const [drTopConstraint, setDrTopConstraint] = useState("");
+  const [drTopMin, setDrTopMin] = useState("");
+  const [drTopMax, setDrTopMax] = useState("");
+  const [drBottomMode, setDrBottomMode] = useState<ParamMode>("free");
   const [drBottomConstraint, setDrBottomConstraint] = useState("");
+  const [drBottomMin, setDrBottomMin] = useState("");
+  const [drBottomMax, setDrBottomMax] = useState("");
+  // Hill stays an enum + an optional explicit range that overrides the
+  // implicit bounds (POSITIVE_ONLY etc.).
+  const [drHillCustomRange, setDrHillCustomRange] = useState(false);
+  const [drHillMin, setDrHillMin] = useState("");
+  const [drHillMax, setDrHillMax] = useState("");
+  // Auto-outlier removal: enabled (true) by default at 3σ. Off (false)
+  // disables auto-detection — the fitter still respects manually excluded
+  // points. The σ threshold is editable when enabled.
+  const [drOutlierEnabled, setDrOutlierEnabled] = useState(true);
+  const [drOutlierSigma, setDrOutlierSigma] = useState("3");
 
   const resetDoseResponseFields = () => {
     setDrCurveType("ic50");
@@ -161,25 +183,51 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setDrHillConstraint("unconstrained");
     setDrNormalizationScope("per_plate");
     setDrActivityThreshold("");
+    setDrTopMode("free");
     setDrTopConstraint("");
+    setDrTopMin("");
+    setDrTopMax("");
+    setDrBottomMode("free");
     setDrBottomConstraint("");
+    setDrBottomMin("");
+    setDrBottomMax("");
+    setDrHillCustomRange(false);
+    setDrHillMin("");
+    setDrHillMax("");
+    setDrOutlierEnabled(true);
+    setDrOutlierSigma("3");
   };
 
   // Y readouts with bounded normalization (% Inhibition/Activation/Control)
-  // are theoretically capped at [0, 100]. Suggest those bounds as defaults
-  // so the 4PL fitter doesn't escape into chemically meaningless territory
-  // (e.g. Top=137% on partial curves that never reach the upper plateau).
-  // Raw signal and z-score have no natural bounds → no suggestion.
-  const suggestedBoundsForY = (
+  // get CDD's IC50calc default ranges: Top ∈ [85, 110], Bottom ∈ [-10, 10],
+  // Hill ∈ [0.9, 1.1]. Ranges (not hard locks) let the optimizer pick a
+  // data-consistent plateau when the upper plateau isn't observed in the
+  // dose range — the difference between IC50 = 39 µM (lock at 85) and
+  // IC50 = 70 µM (range up to 110) on partial curves.
+  const suggestedRangesForY = (
     yReadoutName: string,
-  ): { top: number; bottom: number } | null => {
+  ): {
+    topMin: number;
+    topMax: number;
+    bottomMin: number;
+    bottomMax: number;
+    hillMin: number;
+    hillMax: number;
+  } | null => {
     const y = protocol.readout_definitions.find((r) => r.name === yReadoutName);
     if (!y) return null;
     switch (y.normalization) {
       case "percent_inhibition":
       case "percent_activation":
       case "percent_control":
-        return { top: 100, bottom: 0 };
+        return {
+          topMin: 85,
+          topMax: 110,
+          bottomMin: -10,
+          bottomMax: 10,
+          hillMin: 0.9,
+          hillMax: 1.1,
+        };
       default:
         return null;
     }
@@ -194,26 +242,70 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdAggregation(rd.aggregation);
     setRdNormalization(rd.normalization);
     if (rd.dose_response_config) {
-      setDrCurveType(rd.dose_response_config.curve_type);
-      setDrXReadout(rd.dose_response_config.x_readout_name ?? WELL_CONC_X);
-      setDrYReadout(rd.dose_response_config.y_readout_name);
-      setDrHillConstraint(rd.dose_response_config.hill_slope_constraint);
-      setDrNormalizationScope(rd.dose_response_config.normalization_scope);
+      const cfg = rd.dose_response_config;
+      setDrCurveType(cfg.curve_type);
+      setDrXReadout(cfg.x_readout_name ?? WELL_CONC_X);
+      setDrYReadout(cfg.y_readout_name);
+      setDrHillConstraint(cfg.hill_slope_constraint);
+      setDrNormalizationScope(cfg.normalization_scope);
       setDrActivityThreshold(
-        rd.dose_response_config.activity_threshold != null
-          ? String(rd.dose_response_config.activity_threshold)
-          : "",
+        cfg.activity_threshold != null ? String(cfg.activity_threshold) : "",
       );
-      setDrTopConstraint(
-        rd.dose_response_config.top_constraint != null
-          ? String(rd.dose_response_config.top_constraint)
-          : "",
-      );
-      setDrBottomConstraint(
-        rd.dose_response_config.bottom_constraint != null
-          ? String(rd.dose_response_config.bottom_constraint)
-          : "",
-      );
+
+      // Top: lock takes precedence; else range; else free.
+      if (cfg.top_constraint != null) {
+        setDrTopMode("lock");
+        setDrTopConstraint(String(cfg.top_constraint));
+        setDrTopMin("");
+        setDrTopMax("");
+      } else if (
+        cfg.top_constraint_min != null ||
+        cfg.top_constraint_max != null
+      ) {
+        setDrTopMode("range");
+        setDrTopConstraint("");
+        setDrTopMin(cfg.top_constraint_min != null ? String(cfg.top_constraint_min) : "");
+        setDrTopMax(cfg.top_constraint_max != null ? String(cfg.top_constraint_max) : "");
+      } else {
+        setDrTopMode("free");
+        setDrTopConstraint("");
+        setDrTopMin("");
+        setDrTopMax("");
+      }
+
+      if (cfg.bottom_constraint != null) {
+        setDrBottomMode("lock");
+        setDrBottomConstraint(String(cfg.bottom_constraint));
+        setDrBottomMin("");
+        setDrBottomMax("");
+      } else if (
+        cfg.bottom_constraint_min != null ||
+        cfg.bottom_constraint_max != null
+      ) {
+        setDrBottomMode("range");
+        setDrBottomConstraint("");
+        setDrBottomMin(
+          cfg.bottom_constraint_min != null ? String(cfg.bottom_constraint_min) : "",
+        );
+        setDrBottomMax(
+          cfg.bottom_constraint_max != null ? String(cfg.bottom_constraint_max) : "",
+        );
+      } else {
+        setDrBottomMode("free");
+        setDrBottomConstraint("");
+        setDrBottomMin("");
+        setDrBottomMax("");
+      }
+
+      const hasHillRange =
+        cfg.hill_slope_min != null || cfg.hill_slope_max != null;
+      setDrHillCustomRange(hasHillRange);
+      setDrHillMin(cfg.hill_slope_min != null ? String(cfg.hill_slope_min) : "");
+      setDrHillMax(cfg.hill_slope_max != null ? String(cfg.hill_slope_max) : "");
+
+      const sigma = cfg.outlier_sigma;
+      setDrOutlierEnabled(sigma != null);
+      setDrOutlierSigma(sigma != null ? String(sigma) : "3");
     } else {
       resetDoseResponseFields();
     }
@@ -230,35 +322,75 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     resetDoseResponseFields();
   };
 
-  /** Build the dose_response_config payload for add/update mutations. */
+  /** Build the dose_response_config payload for add/update mutations.
+   *  Encodes the tri-state mode for Top/Bottom into the lock vs range fields.
+   */
   const buildDoseResponseConfig = (): Record<string, unknown> | null => {
     if (rdDataType !== "dose_response") return null;
     if (!drYReadout) return null;
+    const parseOrNull = (s: string) => (s !== "" ? parseFloat(s) : null);
     return {
       curve_type: drCurveType,
       x_readout_name: drXReadout === WELL_CONC_X ? null : drXReadout,
       y_readout_name: drYReadout,
       hill_slope_constraint: drHillConstraint,
       normalization_scope: drNormalizationScope,
-      activity_threshold: drActivityThreshold
-        ? parseFloat(drActivityThreshold)
-        : null,
-      top_constraint:
-        drTopConstraint !== "" ? parseFloat(drTopConstraint) : null,
+      activity_threshold: parseOrNull(drActivityThreshold),
+      top_constraint: drTopMode === "lock" ? parseOrNull(drTopConstraint) : null,
       bottom_constraint:
-        drBottomConstraint !== "" ? parseFloat(drBottomConstraint) : null,
+        drBottomMode === "lock" ? parseOrNull(drBottomConstraint) : null,
+      top_constraint_min: drTopMode === "range" ? parseOrNull(drTopMin) : null,
+      top_constraint_max: drTopMode === "range" ? parseOrNull(drTopMax) : null,
+      bottom_constraint_min:
+        drBottomMode === "range" ? parseOrNull(drBottomMin) : null,
+      bottom_constraint_max:
+        drBottomMode === "range" ? parseOrNull(drBottomMax) : null,
+      hill_slope_min: drHillCustomRange ? parseOrNull(drHillMin) : null,
+      hill_slope_max: drHillCustomRange ? parseOrNull(drHillMax) : null,
+      outlier_sigma: drOutlierEnabled
+        ? parseOrNull(drOutlierSigma) ?? 3.0
+        : null,
     };
   };
 
-  // When the Y readout changes, prefill Top/Bottom with sensible bounds for
-  // its normalization — but only if the user hasn't already typed something.
-  // Lets the dialog feel pre-configured without clobbering explicit choices.
+  // When the Y readout changes, prefill Top/Bottom/Hill with CDD-style ranges
+  // for its normalization — but only if the user hasn't already chosen
+  // something. Lets the dialog feel pre-configured without clobbering
+  // explicit choices.
   const handleDrYReadoutChange = (newY: string) => {
     setDrYReadout(newY);
-    const suggested = suggestedBoundsForY(newY);
+    const suggested = suggestedRangesForY(newY);
     if (!suggested) return;
-    if (drTopConstraint === "") setDrTopConstraint(String(suggested.top));
-    if (drBottomConstraint === "") setDrBottomConstraint(String(suggested.bottom));
+    if (drTopMode === "free") {
+      setDrTopMode("range");
+      setDrTopMin(String(suggested.topMin));
+      setDrTopMax(String(suggested.topMax));
+    }
+    if (drBottomMode === "free") {
+      setDrBottomMode("range");
+      setDrBottomMin(String(suggested.bottomMin));
+      setDrBottomMax(String(suggested.bottomMax));
+    }
+    if (!drHillCustomRange) {
+      setDrHillCustomRange(true);
+      setDrHillMin(String(suggested.hillMin));
+      setDrHillMax(String(suggested.hillMax));
+    }
+  };
+
+  /** Apply CDD-style ranges to Top, Bottom, Hill in one click. */
+  const applySuggestedRanges = () => {
+    const suggested = suggestedRangesForY(drYReadout);
+    if (!suggested) return;
+    setDrTopMode("range");
+    setDrTopMin(String(suggested.topMin));
+    setDrTopMax(String(suggested.topMax));
+    setDrBottomMode("range");
+    setDrBottomMin(String(suggested.bottomMin));
+    setDrBottomMax(String(suggested.bottomMax));
+    setDrHillCustomRange(true);
+    setDrHillMin(String(suggested.hillMin));
+    setDrHillMax(String(suggested.hillMax));
   };
 
   /** Numeric readouts available as X/Y axis candidates, optionally excluding one. */
@@ -379,65 +511,230 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="grid gap-1">
-            <Label className="text-xs">Top Constraint</Label>
+        {/* Top fit-parameter controls (Free / Range / Lock). */}
+        <div className="grid gap-2 rounded-md border bg-background p-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium">Top (upper plateau)</Label>
+            <ParamModeToggle
+              mode={drTopMode}
+              onChange={setDrTopMode}
+              idPrefix="top"
+            />
+          </div>
+          {drTopMode === "lock" && (
             <Input
               type="number"
-              placeholder="leave empty = unconstrained"
+              placeholder="exact value, e.g. 100"
               value={drTopConstraint}
               onChange={(e) => setDrTopConstraint(e.target.value)}
+              className="max-w-xs"
+            />
+          )}
+          {drTopMode === "range" && (
+            <div className="flex items-center gap-2 max-w-md">
+              <span className="text-xs text-muted-foreground">from</span>
+              <Input
+                type="number"
+                placeholder="85"
+                value={drTopMin}
+                onChange={(e) => setDrTopMin(e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="number"
+                placeholder="110"
+                value={drTopMax}
+                onChange={(e) => setDrTopMax(e.target.value)}
+              />
+            </div>
+          )}
+          {drTopMode === "free" && (
+            <p className="text-xs text-muted-foreground">
+              Optimizer chooses Top freely from the data.
+            </p>
+          )}
+        </div>
+
+        {/* Bottom fit-parameter controls. */}
+        <div className="grid gap-2 rounded-md border bg-background p-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium">Bottom (lower plateau)</Label>
+            <ParamModeToggle
+              mode={drBottomMode}
+              onChange={setDrBottomMode}
+              idPrefix="bottom"
             />
           </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">Bottom Constraint</Label>
+          {drBottomMode === "lock" && (
             <Input
               type="number"
-              placeholder="leave empty = unconstrained"
+              placeholder="exact value, e.g. 0"
               value={drBottomConstraint}
               onChange={(e) => setDrBottomConstraint(e.target.value)}
+              className="max-w-xs"
             />
-          </div>
-          <div className="flex items-end pb-1">
-            {(() => {
-              const suggested = suggestedBoundsForY(drYReadout);
-              if (!suggested) {
-                return (
-                  <p className="text-xs text-muted-foreground leading-tight">
-                    Bounds the 4PL fit. Leave empty for raw signals;
-                    set Top=100, Bottom=0 for % readouts.
-                  </p>
-                );
-              }
-              const alreadySuggested =
-                drTopConstraint === String(suggested.top) &&
-                drBottomConstraint === String(suggested.bottom);
-              return (
-                <div className="flex flex-col gap-1">
-                  <p className="text-xs text-muted-foreground leading-tight">
-                    Suggested for this readout: Top={suggested.top}, Bottom=
-                    {suggested.bottom}.
-                  </p>
-                  {!alreadySuggested && (
-                    <button
-                      type="button"
-                      className="text-xs text-primary underline-offset-2 hover:underline self-start"
-                      onClick={() => {
-                        setDrTopConstraint(String(suggested.top));
-                        setDrBottomConstraint(String(suggested.bottom));
-                      }}
-                    >
-                      Use suggested
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
+          )}
+          {drBottomMode === "range" && (
+            <div className="flex items-center gap-2 max-w-md">
+              <span className="text-xs text-muted-foreground">from</span>
+              <Input
+                type="number"
+                placeholder="-10"
+                value={drBottomMin}
+                onChange={(e) => setDrBottomMin(e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="number"
+                placeholder="10"
+                value={drBottomMax}
+                onChange={(e) => setDrBottomMax(e.target.value)}
+              />
+            </div>
+          )}
+          {drBottomMode === "free" && (
+            <p className="text-xs text-muted-foreground">
+              Optimizer chooses Bottom freely from the data.
+            </p>
+          )}
         </div>
+
+        {/* Hill: explicit range overrides the enum's implicit bounds. */}
+        <div className="grid gap-2 rounded-md border bg-background p-3">
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={drHillCustomRange}
+              onChange={(e) => setDrHillCustomRange(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Custom Hill slope range (overrides the bounds set above)
+          </label>
+          {drHillCustomRange && (
+            <div className="flex items-center gap-2 max-w-md">
+              <span className="text-xs text-muted-foreground">from</span>
+              <Input
+                type="number"
+                step="0.1"
+                placeholder="0.9"
+                value={drHillMin}
+                onChange={(e) => setDrHillMin(e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="number"
+                step="0.1"
+                placeholder="1.1"
+                value={drHillMax}
+                onChange={(e) => setDrHillMax(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Auto-outlier removal — protocol-level threshold. */}
+        <div className="grid gap-2 rounded-md border bg-background p-3">
+          <label className="flex items-center gap-2 text-xs font-medium">
+            <input
+              type="checkbox"
+              checked={drOutlierEnabled}
+              onChange={(e) => setDrOutlierEnabled(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Auto-remove outliers during fitting
+          </label>
+          {drOutlierEnabled && (
+            <div className="flex items-center gap-2 max-w-md">
+              <Label className="text-xs text-muted-foreground">Threshold</Label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0.5"
+                max="10"
+                value={drOutlierSigma}
+                onChange={(e) => setDrOutlierSigma(e.target.value)}
+                className="max-w-[6rem]"
+              />
+              <span className="text-xs text-muted-foreground">
+                × SD of residuals (CDD default: 3)
+              </span>
+            </div>
+          )}
+          {!drOutlierEnabled && (
+            <p className="text-xs text-muted-foreground">
+              Disabled — fitter will not auto-flag points; manual exclusion
+              still works.
+            </p>
+          )}
+        </div>
+
+        {/* CDD-style suggestion banner. */}
+        {(() => {
+          const suggested = suggestedRangesForY(drYReadout);
+          if (!suggested) {
+            return (
+              <p className="text-xs text-muted-foreground leading-tight">
+                Lock and Range are mutually exclusive. Leave both at Free for
+                raw-signal readouts; use Range for percent-normalized
+                readouts.
+              </p>
+            );
+          }
+          return (
+            <div className="flex items-start justify-between gap-3 rounded-md border border-dashed bg-muted/40 p-2">
+              <p className="text-xs text-muted-foreground leading-tight">
+                Suggested for this readout: Top ∈ [{suggested.topMin},{" "}
+                {suggested.topMax}], Bottom ∈ [{suggested.bottomMin},{" "}
+                {suggested.bottomMax}], Hill ∈ [{suggested.hillMin},{" "}
+                {suggested.hillMax}].
+              </p>
+              <button
+                type="button"
+                className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+                onClick={applySuggestedRanges}
+              >
+                Use suggested
+              </button>
+            </div>
+          );
+        })()}
       </div>
     );
   };
+
+  // Tiny segmented control reused by Top and Bottom param blocks.
+  function ParamModeToggle({
+    mode,
+    onChange,
+    idPrefix,
+  }: {
+    mode: "free" | "range" | "lock";
+    onChange: (m: "free" | "range" | "lock") => void;
+    idPrefix: string;
+  }) {
+    const options: ("free" | "range" | "lock")[] = ["free", "range", "lock"];
+    return (
+      <div className="inline-flex rounded-md border" role="radiogroup">
+        {options.map((opt) => (
+          <button
+            key={`${idPrefix}-${opt}`}
+            type="button"
+            role="radio"
+            aria-checked={mode === opt}
+            onClick={() => onChange(opt)}
+            className={
+              "px-2.5 py-1 text-xs capitalize first:rounded-l-md last:rounded-r-md " +
+              (mode === opt
+                ? "bg-primary text-primary-foreground"
+                : "bg-background hover:bg-muted")
+            }
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   // --- Condition form fields ---
   const [cdName, setCdName] = useState("");
@@ -571,7 +868,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <TableHead>Unit</TableHead>
                   <TableHead>Aggregation</TableHead>
                   <TableHead>Normalization</TableHead>
-                  {isDraft && <TableHead className="w-10" />}
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -581,7 +878,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       {idx + 1}
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{rd.name}</span>
+                      <button
+                        type="button"
+                        className="font-medium hover:underline underline-offset-2"
+                        onClick={() => setViewingReadoutId(rd.id)}
+                        title="View readout definition details"
+                      >
+                        {rd.name}
+                      </button>
                       {rd.dose_response_config && (
                         <span className="ml-2 text-xs text-muted-foreground">
                           (
@@ -640,33 +944,44 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                         rd.normalization as ReadoutNormalization
                       ] ?? rd.normalization}
                     </TableCell>
-                    {isDraft && (
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditReadout(rd.id)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            disabled={
-                              protocol.readout_definitions.length <= 1
-                            }
-                            onClick={() =>
-                              removeReadoutDef.mutate(rd.id)
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setViewingReadoutId(rd.id)}
+                          title="View configuration"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {isDraft && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => openEditReadout(rd.id)}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              disabled={
+                                protocol.readout_definitions.length <= 1
+                              }
+                              onClick={() => removeReadoutDef.mutate(rd.id)}
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -1373,6 +1688,20 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReadoutDefinitionViewerDialog
+        readoutDef={
+          viewingReadoutId
+            ? protocol.readout_definitions.find(
+                (rd) => rd.id === viewingReadoutId,
+              ) ?? null
+            : null
+        }
+        open={viewingReadoutId !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingReadoutId(null);
+        }}
+      />
     </div>
   );
 }

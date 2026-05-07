@@ -243,6 +243,18 @@ class RefitDoseResponseCurveRequest(BaseModel):
     hill_slope_constraint: str | None = None
     top_constraint: float | None = None
     bottom_constraint: float | None = None
+    # Per-curve overrides (Phase B). Set ``override_<param>`` to True when the
+    # client controls that param's mode end-to-end (Free/Range/Lock); leave
+    # False to inherit the protocol's config for that param.
+    override_top: bool = False
+    top_constraint_min: float | None = None
+    top_constraint_max: float | None = None
+    override_bottom: bool = False
+    bottom_constraint_min: float | None = None
+    bottom_constraint_max: float | None = None
+    override_hill: bool = False
+    hill_slope_min: float | None = None
+    hill_slope_max: float | None = None
 
 
 class ClassifyDoseResponseCurveRequest(BaseModel):
@@ -409,6 +421,15 @@ async def refit_dose_response_curve(
             hill_slope_constraint=body.hill_slope_constraint,
             top_constraint=body.top_constraint,
             bottom_constraint=body.bottom_constraint,
+            override_top=body.override_top,
+            top_constraint_min=body.top_constraint_min,
+            top_constraint_max=body.top_constraint_max,
+            override_bottom=body.override_bottom,
+            bottom_constraint_min=body.bottom_constraint_min,
+            bottom_constraint_max=body.bottom_constraint_max,
+            override_hill=body.override_hill,
+            hill_slope_min=body.hill_slope_min,
+            hill_slope_max=body.hill_slope_max,
         ),
         auth=auth,
     )

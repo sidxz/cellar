@@ -88,6 +88,13 @@ class CreateProtocol:
                     ),
                     top_constraint=cfg.get("top_constraint"),
                     bottom_constraint=cfg.get("bottom_constraint"),
+                    top_constraint_min=cfg.get("top_constraint_min"),
+                    top_constraint_max=cfg.get("top_constraint_max"),
+                    bottom_constraint_min=cfg.get("bottom_constraint_min"),
+                    bottom_constraint_max=cfg.get("bottom_constraint_max"),
+                    hill_slope_min=cfg.get("hill_slope_min"),
+                    hill_slope_max=cfg.get("hill_slope_max"),
+                    outlier_sigma=cfg.get("outlier_sigma", 3.0),
                 )
 
             readout_defs.append(

@@ -712,6 +712,11 @@ export function RunDoseResponseResults({
                   <DoseResponseChart
                     curves={viewingCurves}
                     isInteractive={!run.is_locked}
+                    protocolConfig={
+                      protocol?.readout_definitions.find(
+                        (rd) => rd.dose_response_config != null,
+                      )?.dose_response_config ?? null
+                    }
                   />
                 )}
               </ScrollArea>

@@ -223,6 +223,13 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             ),
             top_constraint=data.get("top_constraint"),
             bottom_constraint=data.get("bottom_constraint"),
+            top_constraint_min=data.get("top_constraint_min"),
+            top_constraint_max=data.get("top_constraint_max"),
+            bottom_constraint_min=data.get("bottom_constraint_min"),
+            bottom_constraint_max=data.get("bottom_constraint_max"),
+            hill_slope_min=data.get("hill_slope_min"),
+            hill_slope_max=data.get("hill_slope_max"),
+            outlier_sigma=data.get("outlier_sigma", 3.0),
         )
 
     def _to_domain(self, model: ProtocolModel) -> Protocol:

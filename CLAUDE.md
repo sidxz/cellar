@@ -197,6 +197,487 @@ Closing the issue automatically moves it to "Done" on the project board.
 
 ## Current Session Notes
 
+> ### Handoff (2026-05-07 cont., branch: `fe2`) — Phase B SHIPPED, awaiting NadD smoke verification
+>
+> #### What's in tree (uncommitted)
+>
+> Phase B is implemented end-to-end. Branch is clean against `origin/fe2`
+> (Phase A is already pushed as commit `cbb4783`). The Phase B diff is 14
+> files modified + 1 new component, ~1500 LOC net. **Not yet committed —
+> waiting on the user to run the NadD CV-00784 manual smoke (B11 below).**
+>
+> Test status:
+> - Backend: **1617 unit tests pass** (was 1594 pre-Phase-B; +23 new for
+>   range constraints + NadD acceptance fixture).
+> - Frontend: `pnpm tsc --noEmit` clean.
+>
+> Files touched:
+> - `backend/src/chem_vault/domain/screening_assay/dose_response_config.py`
+>   — 6 new optional fields (`top/bottom/hill_*_min/max`) + validation:
+>   lock+range mutually exclusive per param, min<max, hill range vs enum
+>   consistency.
+> - `backend/src/chem_vault/infrastructure/lmfit/curve_fitter.py` — new
+>   `_clamp` helper; three-mode precedence in `_build_params` (lock > range
+>   > free, with hill enum interplay); `has_constraints` extended to
+>   include range fields so the inactive fast-path is bypassed when ranges
+>   are set.
+> - `backend/src/chem_vault/application/screening/refit_dose_response.py`
+>   — `RefitDoseResponseCurveCommand` extended with `override_<param>:
+>   bool` flags + range fields. `_resolve_config` resolves per-param: when
+>   `override_<param>` is True, client is authoritative (incl. Free); else
+>   inherits from protocol. Back-compat: clients that only send
+>   `top_constraint` without the flag are treated as Lock override.
+> - `backend/src/chem_vault/application/screening/fit_dose_response.py` —
+>   `FitOverrides.apply` (used by Recompute popover) zeroes the protocol's
+>   range when a per-run lock override is applied (lock+range mutually
+>   exclusive).
+> - `backend/src/chem_vault/application/screening/create_protocol.py`,
+>   `manage_readout_definitions.py` — pass-through of new fields in
+>   dict→VO deserializers (4 call sites total, kept inline rather than
+>   extracting a helper to keep the diff surgical).
+> - `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/protocol_repository.py`
+>   — `_reconstruct_dose_response_config` reads new fields. Serializer
+>   uses `asdict` so it picks them up automatically. **Persistence is
+>   JSONB — no migration needed.** Old protocol rows missing the fields
+>   deserialize cleanly via `.get(...)`.
+> - `backend/src/chem_vault/interface/routes/protocols.py` — response body
+>   now emits the 6 new fields.
+> - `backend/src/chem_vault/interface/routes/readout_data.py` —
+>   `RefitDoseResponseCurveRequest` extended with `override_<param>` +
+>   range fields, plumbed through to the command.
+> - `backend/tests/unit/domain/screening_assay/test_dose_response_config.py`
+>   — 13 new tests covering each validation rule.
+> - `backend/tests/unit/screening/test_curve_fitter.py` — 10 new tests
+>   including the canonical `test_nadd_partial_curve_with_cdd_default_ranges`
+>   acceptance test (NadD-shaped partial curve, Top ∈ [85, 110], Bottom ∈
+>   [-10, 10], Hill ∈ [0.9, 1.1] → IC50 in [55, 90] µM).
+> - `frontend/src/features/screening-assay/types/index.ts` — extended
+>   `DoseResponseConfig` and `RefitDoseResponseCurveInput` interfaces.
+> - `frontend/src/features/screening-assay/components/detail-tabs/design-tab.tsx`
+>   — Free/Range/Lock segmented control per Top and Bottom; Hill enum
+>   select + "Custom range" checkbox + min/max inputs. Smart defaults
+>   switched to CDD ranges. "Use suggested" applies all three. Eye icon
+>   added to action column (visible always, not just for drafts);
+>   readout name made clickable. Viewer dialog mounted.
+> - `frontend/src/features/screening-assay/components/dose-response-chart.tsx`
+>   — `CurveControls` rebuilt with the same Free/Range/Lock toggles.
+>   `callRefit` sends all `override_<param>` flags. `handleReset` clears
+>   per-curve overrides via empty refit.
+> - **NEW** `frontend/src/features/screening-assay/components/readout-definition-viewer-dialog.tsx`
+>   — CDD-style read-only viewer with disabled inputs preserving the
+>   spatial/visual structure of the Edit dialog. Renders Basic, Axes, Fit
+>   Parameters sections. Shows mode badge (Free/Range/Lock) per param.
+>
+> #### Smoke recipe to verify (B11 from previous handoff)
+>
+> 1. Restart backend: `docker compose restart backend`. (No alembic
+>    migration needed — JSONB.)
+> 2. Open the existing `NadD-Sumo dose response` protocol → Design tab
+>    → click the IC50 readout's Edit pencil.
+> 3. Set:
+>    - Top: **Range**, from 85 to 110
+>    - Bottom: **Range**, from −10 to 10
+>    - Hill: check "Custom range", from 0.9 to 1.1
+>    Save.
+> 4. Click **Recompute** on `Run 2026-05-07`.
+> 5. Open CV-00784 (page 3/31). Acceptance:
+>    - IC50 ∈ **[55, 90] µM** (CDD reports 70).
+>    - Hill ≈ 1.0 (within [0.9, 1.1]).
+>    - R² > 0.95.
+>    - No `ec50_at_bound` warning.
+> 6. From Design tab, click the new **Eye** icon (or the readout name
+>    itself) on IC50. Confirm the viewer modal renders with all fields
+>    disabled and matches what was just saved. Close button works; no
+>    save button visible.
+> 7. Open per-curve **Fit Constraints** accordion on CV-00784. Toggle Top
+>    to **Lock = 130** (override). Refit triggers; IC50 shifts. Switch
+>    Top back to **Free** — IC50 returns to data-driven value.
+>
+> Acceptance: IC50 within ±15 µM of CDD's 70 µM with the user able to
+> inspect the protocol config in a read-only modal.
+>
+> #### Once verified
+>
+> Commit Phase B as one clean commit, e.g. `feat(screening): bounded-range
+> constraints + read-only protocol viewer (CDD parity)`. Phase A
+> (`cbb4783`) plus Phase B together close the IC50 vocabulary gap.
+>
+> #### Phase C deferrals (unchanged from prior handoff)
+>
+> Profile-likelihood CIs, plate-normalizer warnings on % > 110 / < -10,
+> non-percent classification refinements, Spearman ρ direction tiebreak,
+> snapshot history viewer.
+>
+> ---
+>
+> ### Original Phase B plan (preserved below for reference)
+>
+> #### ⚠️ Critical handoff state (now resolved)
+>
+> **Phase A is shipped but UNCOMMITTED on `fe2`.** Branch is 24+ commits
+> ahead of `origin/fe2`; new Phase A work is on top of that, untracked.
+> Migration `020_add_fit_quality_warnings.py` exists in
+> `backend/alembic/versions/`. Do not lose either. Recommended first move:
+> commit Phase A as a single commit ("feat(screening): direction-agnostic
+> 4PL fitter + fit-quality warnings") *before* starting Phase B work, so
+> the boundary is clean.
+>
+> Files modified by Phase A (uncommitted):
+> - `backend/src/chem_vault/infrastructure/lmfit/curve_fitter.py` — full rewrite (Prism param, log-space EC50, CI, warnings, fast-path guard, `_build_params` helper)
+> - `backend/src/chem_vault/domain/screening_assay/curve_fitting.py` — `FittedCurveResult.fit_quality_warnings`
+> - `backend/src/chem_vault/domain/screening_assay/dose_response_curve.py` — entity field
+> - `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/models.py` — JSONB column
+> - `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py` — round-trip
+> - `backend/src/chem_vault/application/screening/fit_dose_response.py` — persist warnings
+> - `backend/src/chem_vault/application/screening/refit_dose_response.py` — persist warnings on refit
+> - `backend/src/chem_vault/interface/routes/readout_data.py` — response field
+> - `backend/alembic/versions/020_add_fit_quality_warnings.py` — new migration
+> - `backend/tests/unit/screening/test_curve_fitter.py` — 8 new direction-aware tests
+> - `frontend/src/features/screening-assay/types/index.ts` — `fit_quality_warnings?: string[]`
+> - `frontend/src/features/screening-assay/lib/dose-response-display.ts` — shared `evaluate4PL` / `generate4PLPoints`
+> - `frontend/src/features/screening-assay/components/dose-response-chart.tsx` — uses shared evaluator + WarningBadge row + "(extrapolated)" suffix
+> - `frontend/src/features/screening-assay/components/dose-response-sparkline.tsx` — uses shared evaluator
+> - `frontend/src/shared/lib/export/curve-image.ts` — uses shared evaluator
+>
+> Phase A was driven by the plan at `~/.claude/plans/mellow-mixing-pony.md`.
+> Tests: `uv run pytest tests/unit/` → 1594 passing. `pnpm tsc --noEmit` clean.
+>
+> #### Why Phase A wasn't enough
+>
+> Phase A made the 4PL math correct. Smoke test on the NadD file (CV-00784,
+> page 3/31) revealed a remaining IC50 disagreement with CDD on the SAME
+> data: chem-vault → IC50 = 39 µM, CDD → 70 µM. Both fits are
+> mathematically valid; the disagreement is a vocabulary gap.
+>
+> CDD's `IC50calc` readout definition (verified against the live UI) uses
+> **bounded ranges**, not single-value locks:
+> - Min (Bottom): from −10 to 10
+> - Max (Top): from 85 to 110
+> - Slope (Hill): from 0.9 to 1.1
+>
+> CDD's optimizer searches inside those ranges. For partial curves where
+> the upper plateau isn't observed (NadD CV-00784 caps at 62 % at 100 µM),
+> CDD's fit converges at Max = 110 (the upper bound), Min = −0.019 →
+> IC50 ≈ 70 µM with an honestly wide CI [12, 410] µM.
+>
+> chem-vault's `DoseResponseConfig` only supports `top_constraint: float | None`
+> (None = free, value = `vary=False` hard lock). When the user mirrors CDD by
+> setting Top = 85 (CDD's lower bound), our fitter locks Top exactly there →
+> midpoint at 37.5 % → IC50 ≈ 39 µM with artificially narrow CI [34, 45].
+> The math is correct, but the constraint shape is wrong.
+>
+> When the upper plateau is unobserved, IC50 is highly sensitive to where
+> Top is fixed (Top = 85 → IC50 39, Top = 110 → IC50 70, Top free → IC50 108).
+> Hard locks are arbitrary; ranges let the optimizer pick the
+> data-consistent point. Industry standard (CDD, GraphPad Prism, Genedata
+> Screener, ActivityBase) is ranges by default with locks as a special case.
+>
+> #### Phase B scope (this session)
+>
+> Add bounded-range constraints to `DoseResponseConfig`. Hard locks remain
+> a special case (range collapsed to a point). Add a CDD-style read-only
+> protocol design viewer alongside.
+>
+> ##### B1. Domain extension — `DoseResponseConfig`
+>
+> File: `backend/src/chem_vault/domain/screening_assay/dose_response_config.py`
+>
+> New optional fields:
+> ```python
+> top_constraint_min: float | None = None
+> top_constraint_max: float | None = None
+> bottom_constraint_min: float | None = None
+> bottom_constraint_max: float | None = None
+> hill_slope_min: float | None = None
+> hill_slope_max: float | None = None
+> ```
+>
+> Existing `top_constraint` / `bottom_constraint` / `hill_slope_constraint`
+> stay — they represent the "lock" mode. Validation rules:
+> - Cannot set both `top_constraint` AND (`top_constraint_min` OR
+>   `top_constraint_max`) — choose lock or range, not both.
+> - If both `_min` and `_max` set, `_min < _max`.
+> - Same for bottom.
+> - Hill: range fields override the enum's implicit bounds when set.
+> - Open question for the next session: should `HillSlopeConstraint` enum
+>   gain a `RANGE` variant, or stay as-is and treat range fields as
+>   independent? Recommendation — keep enum, add range fields independent.
+>   The enum continues to express the discrete intent (UNCONSTRAINED, FIXED_AT_ONE,
+>   POSITIVE_ONLY, NEGATIVE_ONLY); the range fields are an explicit override.
+>
+> ##### B2. Curve fitter — `_build_params`
+>
+> File: `backend/src/chem_vault/infrastructure/lmfit/curve_fitter.py`
+>
+> For each of Top, Bottom, Hill, decide mode in this order:
+> 1. If single-value `top_constraint` is set → existing `vary=False` lock.
+> 2. Else if `top_constraint_min` or `top_constraint_max` is set →
+>    `params['top'].set(value=clamp(top_init, min, max), min=..., max=...)`.
+> 3. Else → existing free / direction-aware behavior.
+>
+> Hill needs care: existing enum sets bounds for POSITIVE_ONLY (`[0.01, 20]`)
+> and NEGATIVE_ONLY (`[-20, -0.01]`). When `hill_slope_min` / `hill_slope_max`
+> are also set, they override the enum's bounds. Validate that explicit
+> range is consistent with the enum (e.g. POSITIVE_ONLY + range [-2, 2]
+> is contradictory; raise `ValidationError`).
+>
+> Initial-value clamping: when the data-driven `top_init` falls outside
+> [min, max], lmfit will reject it. Clamp into the range before
+> `params.set(...)`. Same for bottom and hill.
+>
+> ##### B3. Persistence
+>
+> First step for the next session: **verify how `DoseResponseConfig` is
+> currently stored**. If it's a JSONB blob on the protocol's readout
+> definitions table, the new fields just go in the dict — no schema
+> migration. If columns, add 6 nullable Float columns with a migration
+> (`021_add_dose_response_range_constraints.py`).
+>
+> Update `_to_model` / `_to_domain` mappers in the protocol repository to
+> round-trip the new fields.
+>
+> ##### B4. API
+>
+> File: `backend/src/chem_vault/interface/routes/protocols.py`
+>
+> Extend `DoseResponseConfigRequest` and `DoseResponseConfigResponse`
+> (or whatever Pydantic shape exists) with the 6 new fields. Validation
+> at the API layer mirrors the domain layer.
+>
+> Refit endpoint (`readout_data.py`): extend `RefitDoseResponseCurveRequest`
+> with the 6 new fields. Per-curve refits already merge protocol defaults
+> with overrides (`refit_dose_response.py:_resolve_config`); add range
+> handling there.
+>
+> Recompute endpoint (`plate_setup.py:RecomputeRunRequest`): keep as is —
+> per-run override remains single-value-only (one-shot exploration tool;
+> ranges live on the protocol).
+>
+> ##### B5. UI — Protocol Design tab Add/Edit Readout dialog
+>
+> File: `frontend/src/features/screening-assay/components/detail-tabs/design-tab.tsx`
+>
+> Replace each Top / Bottom input with a **mode segmented control**:
+>
+> ```
+> Top:    ( ) Free    ( ) Range    ( ) Lock
+>          ────────────────────────────────────
+>          Range mode:  [ from 85 ] to [ 110 ]
+>          Lock  mode:  [    100   ]
+>          Free  mode:  (no inputs)
+> ```
+>
+> Hill slope: keep the existing enum dropdown but add a new `Custom range...`
+> entry that reveals two inputs ("from 0.9 to 1.1").
+>
+> Update the smart-default suggestion logic. When the Y readout's
+> normalization is `% inhibition`, `% activation`, or `% control`, suggest:
+> - Top: Range, [85, 110]
+> - Bottom: Range, [-10, 10]
+> - Hill: Custom range, [0.9, 1.1]
+>
+> "Use suggested" button applies all three at once. These are CDD's exact
+> defaults — see CDD screenshot in this session.
+>
+> Edit-mode loading (`openEditReadout`): branch on which fields are set
+> (single-value → Lock mode, range → Range mode, neither → Free mode) and
+> populate the appropriate inputs.
+>
+> ##### B6. UI — Per-curve Fit Constraints accordion
+>
+> File: `frontend/src/features/screening-assay/components/dose-response-chart.tsx`
+>
+> Same Free / Range / Lock toggle pattern for Top and Bottom in the
+> existing `CurveControls` component. Per-curve override semantics
+> unchanged: protocol provides defaults; per-curve override applies to
+> this curve only on this run. Bidirectional — protocol Range can be
+> overridden to per-curve Lock and vice versa.
+>
+> Refit hook (`useRefitDoseResponse`) updated to send all 6 range fields.
+>
+> ##### B7. UI — Per-run Recompute popover
+>
+> File: `frontend/src/features/screening-assay/components/run-detail.tsx`
+>
+> Stays exactly as is. Single-value lock inputs only. Per-run override is
+> intentionally simpler than protocol-level — it's a one-shot "what if Top = 100"
+> exploration tool, not a configuration surface.
+>
+> ##### B8. UI — NEW: Read-only protocol design viewer (CDD-style) ⭐
+>
+> User explicitly asked for this in the same conversation: *"now there is
+> no way to view what the protocol design says in detail. i liked the way
+> CDD shows making the field read only."*
+>
+> Reference: CDD's *View Readout Definition: IC50calc* modal (screenshot
+> 3 from this session). Key UX trait: a structured form with **disabled
+> inputs** (greyed but visually preserved), not a text dump. The user can
+> read the configuration as if they were about to edit it, without risk
+> of accidental changes.
+>
+> New component: `frontend/src/features/screening-assay/components/readout-definition-viewer-dialog.tsx`.
+>
+> Trigger: small "View" / info icon button (lucide-react `Eye` or `Info`)
+> next to the existing "Edit" pencil on each readout chip in the Design
+> tab. Also: clicking the readout name itself opens the viewer (Edit
+> stays as the explicit pencil click). For non-draft protocols where Edit
+> is hidden, View is the only access — and it's the primary discovery
+> path for "what's actually configured here".
+>
+> Modal layout (mirror CDD's structure but on our domain):
+>
+> ```
+> ┌────────────────────────────────────────────────────────────┐
+> │  View Readout Definition: <name>                       ✕  │
+> ├────────────────────────────────────────────────────────────┤
+> │  ⓘ <status banner — only when relevant>                   │
+> │     "This protocol is published; edits go through a new   │
+> │      version" / "Read-only from a shared project" / etc.  │
+> │                                                            │
+> │  ── Basic ─────────────────────────────────────────────── │
+> │   Name        [ raw AU                                  ] │
+> │   Data Type   [ Numeric                            ▾   ] │
+> │   Unit        [ AU                                       ] │
+> │   Aggregation [ Mean                               ▾   ] │
+> │   Normalization [ % Inhibition                     ▾   ] │
+> │                                                            │
+> │  ── Axes (dose-response) ──────────────────────────────── │
+> │   X readout   [ (use well concentration)           ▾   ] │
+> │   Y readout   [ raw AU                             ▾   ] │
+> │   X log scale  ☑                                          │
+> │                                                            │
+> │  ── Fit Parameters ────────────────────────────────────── │
+> │   Top      ( )Free  (●)Range  ( )Lock                     │
+> │            from [ 85    ]  to [ 110   ]                   │
+> │   Bottom   ( )Free  (●)Range  ( )Lock                     │
+> │            from [ -10   ]  to [ 10    ]                   │
+> │   Hill     [ Custom range                          ▾   ] │
+> │            from [ 0.9   ]  to [ 1.1   ]                   │
+> │   Activity Threshold   [ 30                          ] %  │
+> │   Normalization Scope  [ Per Plate                 ▾   ] │
+> │                                                            │
+> │  ── Inactive Range ────────────────────────────────────── │
+> │   ● max(response) < 30 %  (built-in)                      │
+> │   ○ 3 SD from negative control mean (Phase C)             │
+> │                                                            │
+> │                                          [    Close    ]  │
+> └────────────────────────────────────────────────────────────┘
+> ```
+>
+> All form controls `disabled` (greyed). No save button. Same component
+> reusable for snapshot/history views later.
+>
+> Implementation tip: extract the dose-response config block from
+> `design-tab.tsx` into a presentational component (`<DoseResponseConfigBlock readOnly={...}>`)
+> shared between the Edit dialog and the new Viewer dialog. Same UI,
+> different `disabled` state. Saves duplication and keeps the two views
+> structurally identical.
+>
+> #### B9. Tests
+>
+> Backend (`backend/tests/unit/screening/test_curve_fitter.py`):
+> 1. **Range constraint on Top** — set Top ∈ [85, 110]; fit; assert
+>    `85 ≤ fitted_top ≤ 110`.
+> 2. **Range hits upper bound** — synthetic data plateauing at 130 %, Top
+>    range [85, 110]; assert `fitted_top == pytest.approx(110, abs=0.1)`.
+> 3. **NadD CV-00784 fixture, CDD-equivalent ranges** — Top [85, 110],
+>    Bottom [-10, 10], Hill [0.9, 1.1]; assert IC50 ∈ [55, 90] µM, R² > 0.95.
+>    This is the canonical Phase B acceptance test.
+> 4. **Lock + range mutually exclusive** — `DoseResponseConfig(top_constraint=100, top_constraint_min=80)`
+>    raises `ValidationError`.
+> 5. **Range with min > max** — raises `ValidationError`.
+> 6. **Initial value clamping** — synthetic data with `top_init = 150`,
+>    Top range [50, 100]; fitter clamps initial value into the range, fit
+>    succeeds.
+> 7. **Hill range overrides enum** — POSITIVE_ONLY enum + explicit Hill
+>    range [-5, 5] is contradictory → `ValidationError`. POSITIVE_ONLY +
+>    Hill range [0.5, 2] is consistent → fit lands inside.
+>
+> Frontend:
+> - Component test for `ReadoutDefinitionViewerDialog`: renders all
+>   sections, all inputs disabled, no save button, configured values match
+>   the input prop.
+> - `tsc --noEmit` clean.
+>
+> #### B10. Migration / back-compat
+>
+> Phase A's hard-lock semantic is preserved:
+> - Existing protocols with `top_constraint = 85` continue to apply that
+>   exact lock. No data migration.
+> - The new range fields are nullable additions — existing rows have them
+>   as NULL, treated as "no range constraint" by the fitter.
+>
+> One-time UX nudge: when a user opens the Edit Readout dialog on an old
+> protocol with single-value `top_constraint = 100` AND the Y readout's
+> normalization is `% inhibition`, show a small banner above the Top
+> control: *"This is locked at 100. Switch to a Range like CDD does
+> ([85, 110]) to allow the optimizer to find the natural plateau? [Apply
+> suggested ranges]"*. One click → switches to Range mode with smart
+> defaults. Optional, not blocking.
+>
+> #### B11. Verification recipe (canonical NadD smoke)
+>
+> 1. Apply migration: `cd backend && uv run alembic upgrade head` (only
+>    needed if Phase B adds columns; if JSONB-only, no migration).
+> 2. Restart backend: `docker compose restart backend`.
+> 3. Open the existing `NadD-Sumo dose response` protocol → Design tab →
+>    Edit the IC50 readout.
+> 4. Set:
+>    - Top mode: **Range**, from 85 to 110
+>    - Bottom mode: **Range**, from −10 to 10
+>    - Hill: **Custom range**, from 0.9 to 1.1
+>    Save.
+> 5. Click **Recompute** on `Run 2026-05-07`.
+> 6. Open CV-00784 (page 3/31). Expect:
+>    - IC50 ∈ **[55, 90] µM** (CDD reports 70).
+>    - Hill ≈ **1.0** (within [0.9, 1.1] range).
+>    - R² > 0.95.
+>    - Top fitted near 110, Bottom near 0.
+>    - 95 % CI band asymmetric, similar shape to CDD's [12, 410].
+>    - No `ec50_at_bound` warning.
+> 7. From the Design tab readout list, click the new "View" icon (or the
+>    readout name) on IC50. Confirm the viewer modal renders with all
+>    fields read-only and matches what was just saved. Close button
+>    works; no save button visible.
+> 8. Open the per-curve Fit Constraints accordion on CV-00784. Toggle Top
+>    to Lock = 130 (override). Refit triggers; IC50 should shift to the
+>    larger value the new lock implies. Switch back to Range — IC50
+>    returns to ~70.
+>
+> Acceptance criterion: IC50 within 10 µM of CDD's 70 µM on the canonical
+> NadD curve, with the user able to inspect the protocol config end-to-end
+> in a read-only modal.
+>
+> #### B12. Out of scope (Phase C, future)
+>
+> - **Profile-likelihood CIs** — more accurate than log-space symmetric.
+>   lmfit's `conf_interval()` does this. Replace the `1.96 × stderr` fallback.
+> - **Plate normalizer warnings** — emit `WARN` log when % inhibition > 110
+>   or < -10 to surface mis-orientation of controls. Don't clamp.
+> - **Curve classification refinements** for non-percentage readouts —
+>   thresholds tied to readout normalization.
+> - **Direction inference robustness** — Spearman ρ as tiebreak when low
+>   and high plateaus are within noise.
+> - **`HillSlopeConstraint.FIXED_AT_ONE` migration banner** — communicate
+>   the sign-convention change from Phase A.
+> - **Snapshot history viewer** — reuse the new viewer for "what was the
+>   protocol config when this curve was fit?". Out of scope; future feature.
+>
+> #### Where to start
+>
+> 1. Commit Phase A as a single clean commit on `fe2`.
+> 2. Read this handoff section + `~/.claude/plans/mellow-mixing-pony.md`
+>    (the Phase A plan, for parametrization context).
+> 3. Verify how `DoseResponseConfig` is persisted (JSONB or columns).
+>    Decide migration accordingly.
+> 4. Start with B1 (domain extension) → B2 (fitter) → B9 (tests). That
+>    cycle alone should bring NadD CV-00784 into the [55, 90] range.
+> 5. Then B5/B6 (UI for ranges).
+> 6. Finally B8 (read-only viewer) — independent of the rest, ship in
+>    parallel if convenient.
+>
+> ---
+>
 > ### Resolved (2026-05-07) — four IC50/import bugs from the 2026-05-05 handoff are all fixed
 >
 > All four issues called out in the prior handoff have landed on `fe2` and

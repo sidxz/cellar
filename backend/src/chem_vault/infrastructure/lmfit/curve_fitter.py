@@ -142,6 +142,12 @@ class LmfitCurveFitter:
             config.top_constraint is not None
             or config.bottom_constraint is not None
             or config.hill_slope_constraint != HillSlopeConstraint.UNCONSTRAINED
+            or config.top_constraint_min is not None
+            or config.top_constraint_max is not None
+            or config.bottom_constraint_min is not None
+            or config.bottom_constraint_max is not None
+            or config.hill_slope_min is not None
+            or config.hill_slope_max is not None
         )
         if max_response < _INACTIVE_THRESHOLD and not has_constraints:
             return Success(
@@ -193,11 +199,16 @@ class LmfitCurveFitter:
         r_squared = _r_squared(responses, predicted)
 
         # ──────────────────────────────────────────────────────────────────
-        # 3σ outlier detection + second-pass refit on clean subset
+        # Outlier detection + second-pass refit on clean subset.
+        # Threshold comes from the protocol's ``outlier_sigma`` (default 3.0,
+        # CDD-equivalent). ``None`` disables auto-detection.
         # ──────────────────────────────────────────────────────────────────
-        if len(active_points) >= _MIN_POINTS_FOR_OUTLIER_DETECTION:
+        if (
+            config.outlier_sigma is not None
+            and len(active_points) >= _MIN_POINTS_FOR_OUTLIER_DETECTION
+        ):
             residuals = responses - predicted
-            outlier_mask = _detect_outliers(residuals, sigma=_OUTLIER_SIGMA)
+            outlier_mask = _detect_outliers(residuals, sigma=config.outlier_sigma)
 
             if np.any(outlier_mask):
                 clean_log_c = log_concentrations[~outlier_mask]
@@ -365,12 +376,23 @@ def _build_params(
     )
     params["log_ec50"].set(value=log_ec50_init, min=log_ec50_min, max=log_ec50_max)
 
-    # Hill slope constraint
+    # Hill slope: lock > explicit range > enum > free.
     constraint = config.hill_slope_constraint
+    hill_has_range = (
+        config.hill_slope_min is not None or config.hill_slope_max is not None
+    )
     if constraint == HillSlopeConstraint.FIXED_AT_ONE:
         # "Magnitude exactly 1, sign matches data direction" — chemist's
         # natural "no cooperativity" Hill = 1.
         params["hill"].set(value=hill_sign * 1.0, vary=False)
+    elif hill_has_range:
+        # Explicit range overrides enum-implicit bounds. Cross-validation
+        # against the enum already happened in DoseResponseConfig.
+        h_min = config.hill_slope_min if config.hill_slope_min is not None else -20.0
+        h_max = config.hill_slope_max if config.hill_slope_max is not None else 20.0
+        params["hill"].set(
+            value=_clamp(hill_init, h_min, h_max), min=h_min, max=h_max
+        )
     elif constraint == HillSlopeConstraint.POSITIVE_ONLY:
         params["hill"].set(value=max(hill_init, 0.5), min=0.01, max=20.0)
     elif constraint == HillSlopeConstraint.NEGATIVE_ONLY:
@@ -378,14 +400,55 @@ def _build_params(
     else:
         params["hill"].set(value=hill_init, min=-20.0, max=20.0)
 
-    # Top / Bottom hard locks from config (chemist's plateau values — direct mapping
-    # now that the parametrization is direction-agnostic).
+    # Top: lock > range > free.
     if config.top_constraint is not None:
         params["top"].set(value=config.top_constraint, vary=False)
+    elif config.top_constraint_min is not None or config.top_constraint_max is not None:
+        t_min = (
+            config.top_constraint_min
+            if config.top_constraint_min is not None
+            else -np.inf
+        )
+        t_max = (
+            config.top_constraint_max
+            if config.top_constraint_max is not None
+            else np.inf
+        )
+        params["top"].set(
+            value=_clamp(top_init, t_min, t_max), min=t_min, max=t_max
+        )
+
+    # Bottom: lock > range > free.
     if config.bottom_constraint is not None:
         params["bottom"].set(value=config.bottom_constraint, vary=False)
+    elif (
+        config.bottom_constraint_min is not None
+        or config.bottom_constraint_max is not None
+    ):
+        b_min = (
+            config.bottom_constraint_min
+            if config.bottom_constraint_min is not None
+            else -np.inf
+        )
+        b_max = (
+            config.bottom_constraint_max
+            if config.bottom_constraint_max is not None
+            else np.inf
+        )
+        params["bottom"].set(
+            value=_clamp(bottom_init, b_min, b_max), min=b_min, max=b_max
+        )
 
     return params, log_ec50_min, log_ec50_max
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    """Clamp ``value`` into ``[lo, hi]``. Either bound may be ±inf."""
+    if value < lo:
+        return lo
+    if value > hi:
+        return hi
+    return value
 
 
 def _r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:

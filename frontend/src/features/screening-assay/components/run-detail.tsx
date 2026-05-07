@@ -102,32 +102,79 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
-  // Per-run fit constraint overrides for Recompute. Empty fields = use the
-  // protocol's configured DoseResponseConfig. Set fields override the
-  // protocol defaults for THIS recompute pass only — not persisted.
+  // Per-run fit constraint overrides for Recompute. Mirrors the protocol's
+  // Free/Range/Lock vocabulary so the popover matches the protocol-design
+  // surface; "inherit" means the protocol's setting carries through
+  // unchanged for that param. Override values are applied for THIS recompute
+  // pass only and are not persisted.
+  type RecomputeMode = "inherit" | "free" | "range" | "lock";
   const [recomputePopoverOpen, setRecomputePopoverOpen] = useState(false);
+  const [recomputeTopMode, setRecomputeTopMode] =
+    useState<RecomputeMode>("inherit");
   const [recomputeTop, setRecomputeTop] = useState("");
+  const [recomputeTopMin, setRecomputeTopMin] = useState("");
+  const [recomputeTopMax, setRecomputeTopMax] = useState("");
+  const [recomputeBottomMode, setRecomputeBottomMode] =
+    useState<RecomputeMode>("inherit");
   const [recomputeBottom, setRecomputeBottom] = useState("");
-  const [recomputeHill, setRecomputeHill] = useState<string>("__protocol__");
+  const [recomputeBottomMin, setRecomputeBottomMin] = useState("");
+  const [recomputeBottomMax, setRecomputeBottomMax] = useState("");
+  const [recomputeHillMode, setRecomputeHillMode] = useState<
+    "inherit" | "enum" | "range"
+  >("inherit");
+  const [recomputeHillEnum, setRecomputeHillEnum] = useState<
+    "unconstrained" | "negative_only" | "positive_only" | "fixed_at_one"
+  >("unconstrained");
+  const [recomputeHillMin, setRecomputeHillMin] = useState("");
+  const [recomputeHillMax, setRecomputeHillMax] = useState("");
+
+  const clearRecomputeOverrides = () => {
+    setRecomputeTopMode("inherit");
+    setRecomputeTop("");
+    setRecomputeTopMin("");
+    setRecomputeTopMax("");
+    setRecomputeBottomMode("inherit");
+    setRecomputeBottom("");
+    setRecomputeBottomMin("");
+    setRecomputeBottomMax("");
+    setRecomputeHillMode("inherit");
+    setRecomputeHillEnum("unconstrained");
+    setRecomputeHillMin("");
+    setRecomputeHillMax("");
+  };
 
   const handleRecompute = (withOverrides: boolean) => {
     if (!withOverrides) {
       recomputeMutation.mutate({ runId });
       return;
     }
+    const parseOrNull = (s: string) => (s !== "" ? parseFloat(s) : null);
     const overrides = {
+      override_top: recomputeTopMode !== "inherit",
       top_constraint:
-        recomputeTop !== "" ? parseFloat(recomputeTop) : null,
+        recomputeTopMode === "lock" ? parseOrNull(recomputeTop) : null,
+      top_constraint_min:
+        recomputeTopMode === "range" ? parseOrNull(recomputeTopMin) : null,
+      top_constraint_max:
+        recomputeTopMode === "range" ? parseOrNull(recomputeTopMax) : null,
+      override_bottom: recomputeBottomMode !== "inherit",
       bottom_constraint:
-        recomputeBottom !== "" ? parseFloat(recomputeBottom) : null,
+        recomputeBottomMode === "lock" ? parseOrNull(recomputeBottom) : null,
+      bottom_constraint_min:
+        recomputeBottomMode === "range"
+          ? parseOrNull(recomputeBottomMin)
+          : null,
+      bottom_constraint_max:
+        recomputeBottomMode === "range"
+          ? parseOrNull(recomputeBottomMax)
+          : null,
+      override_hill: recomputeHillMode !== "inherit",
       hill_slope_constraint:
-        recomputeHill === "__protocol__"
-          ? null
-          : (recomputeHill as
-              | "unconstrained"
-              | "negative_only"
-              | "positive_only"
-              | "fixed_at_one"),
+        recomputeHillMode === "enum" ? recomputeHillEnum : null,
+      hill_slope_min:
+        recomputeHillMode === "range" ? parseOrNull(recomputeHillMin) : null,
+      hill_slope_max:
+        recomputeHillMode === "range" ? parseOrNull(recomputeHillMax) : null,
     };
     recomputeMutation.mutate(
       { runId, overrides },
@@ -303,7 +350,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      className="w-80 space-y-3"
+                      className="w-[28rem] space-y-3"
                       align="end"
                     >
                       <div>
@@ -311,72 +358,204 @@ export function RunDetail({ runId }: RunDetailProps) {
                           Override fit constraints
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          One-time bounds for this recompute. Empty fields
-                          use the protocol&apos;s defaults. Not saved on
-                          the run or the protocol.
+                          One-time overrides for this recompute. &ldquo;Inherit&rdquo;
+                          uses the protocol&apos;s setting (Free, Range, or
+                          Lock). Not saved on the run or the protocol.
                         </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="grid gap-1">
-                          <Label className="text-xs">Top</Label>
+
+                      {/* Top */}
+                      <div className="rounded-md border bg-background p-2 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium">Top</Label>
+                          <RecomputeModeToggle
+                            mode={recomputeTopMode}
+                            onChange={setRecomputeTopMode}
+                            idPrefix="rec-top"
+                          />
+                        </div>
+                        {recomputeTopMode === "lock" && (
                           <Input
                             type="number"
+                            className="h-8 text-xs"
                             placeholder="e.g., 100"
                             value={recomputeTop}
                             onChange={(e) =>
                               setRecomputeTop(e.target.value)
                             }
                           />
+                        )}
+                        {recomputeTopMode === "range" && (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              className="h-8 text-xs"
+                              placeholder="85"
+                              value={recomputeTopMin}
+                              onChange={(e) =>
+                                setRecomputeTopMin(e.target.value)
+                              }
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              to
+                            </span>
+                            <Input
+                              type="number"
+                              className="h-8 text-xs"
+                              placeholder="110"
+                              value={recomputeTopMax}
+                              onChange={(e) =>
+                                setRecomputeTopMax(e.target.value)
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom */}
+                      <div className="rounded-md border bg-background p-2 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium">Bottom</Label>
+                          <RecomputeModeToggle
+                            mode={recomputeBottomMode}
+                            onChange={setRecomputeBottomMode}
+                            idPrefix="rec-bot"
+                          />
                         </div>
-                        <div className="grid gap-1">
-                          <Label className="text-xs">Bottom</Label>
+                        {recomputeBottomMode === "lock" && (
                           <Input
                             type="number"
+                            className="h-8 text-xs"
                             placeholder="e.g., 0"
                             value={recomputeBottom}
                             onChange={(e) =>
                               setRecomputeBottom(e.target.value)
                             }
                           />
+                        )}
+                        {recomputeBottomMode === "range" && (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              className="h-8 text-xs"
+                              placeholder="-10"
+                              value={recomputeBottomMin}
+                              onChange={(e) =>
+                                setRecomputeBottomMin(e.target.value)
+                              }
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              to
+                            </span>
+                            <Input
+                              type="number"
+                              className="h-8 text-xs"
+                              placeholder="10"
+                              value={recomputeBottomMax}
+                              onChange={(e) =>
+                                setRecomputeBottomMax(e.target.value)
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Hill */}
+                      <div className="rounded-md border bg-background p-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-xs font-medium">
+                            Hill Slope
+                          </Label>
+                          <Select
+                            value={recomputeHillMode}
+                            onValueChange={(v) =>
+                              setRecomputeHillMode(
+                                v as "inherit" | "enum" | "range",
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-7 w-36 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="inherit" className="text-xs">
+                                Inherit
+                              </SelectItem>
+                              <SelectItem value="enum" className="text-xs">
+                                Use preset
+                              </SelectItem>
+                              <SelectItem value="range" className="text-xs">
+                                Custom range
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
+                        {recomputeHillMode === "enum" && (
+                          <Select
+                            value={recomputeHillEnum}
+                            onValueChange={(v) =>
+                              setRecomputeHillEnum(
+                                v as
+                                  | "unconstrained"
+                                  | "negative_only"
+                                  | "positive_only"
+                                  | "fixed_at_one",
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unconstrained">
+                                Unconstrained
+                              </SelectItem>
+                              <SelectItem value="negative_only">
+                                Negative only
+                              </SelectItem>
+                              <SelectItem value="positive_only">
+                                Positive only
+                              </SelectItem>
+                              <SelectItem value="fixed_at_one">
+                                Fixed at ±1
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {recomputeHillMode === "range" && (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              className="h-8 text-xs"
+                              placeholder="0.9"
+                              value={recomputeHillMin}
+                              onChange={(e) =>
+                                setRecomputeHillMin(e.target.value)
+                              }
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              to
+                            </span>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              className="h-8 text-xs"
+                              placeholder="1.1"
+                              value={recomputeHillMax}
+                              onChange={(e) =>
+                                setRecomputeHillMax(e.target.value)
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
-                      <div className="grid gap-1">
-                        <Label className="text-xs">Hill Slope</Label>
-                        <Select
-                          value={recomputeHill}
-                          onValueChange={setRecomputeHill}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__protocol__">
-                              (use protocol default)
-                            </SelectItem>
-                            <SelectItem value="unconstrained">
-                              Unconstrained
-                            </SelectItem>
-                            <SelectItem value="negative_only">
-                              Negative only
-                            </SelectItem>
-                            <SelectItem value="positive_only">
-                              Positive only
-                            </SelectItem>
-                            <SelectItem value="fixed_at_one">
-                              Fixed at -1
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+
                       <div className="flex justify-end gap-2 pt-1">
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => {
-                            setRecomputeTop("");
-                            setRecomputeBottom("");
-                            setRecomputeHill("__protocol__");
-                          }}
+                          onClick={clearRecomputeOverrides}
                         >
                           Clear
                         </Button>
@@ -596,5 +775,47 @@ export function RunDetail({ runId }: RunDetailProps) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Inherit / Free / Range / Lock toggle for Top and Bottom in the Recompute
+ *  popover. "Inherit" is recompute-specific; the protocol-design and
+ *  per-curve toggles use the same Free/Range/Lock vocabulary but always
+ *  ship a value, never "inherit". */
+function RecomputeModeToggle({
+  mode,
+  onChange,
+  idPrefix,
+}: {
+  mode: "inherit" | "free" | "range" | "lock";
+  onChange: (m: "inherit" | "free" | "range" | "lock") => void;
+  idPrefix: string;
+}) {
+  const options: ("inherit" | "free" | "range" | "lock")[] = [
+    "inherit",
+    "free",
+    "range",
+    "lock",
+  ];
+  return (
+    <div className="inline-flex rounded-md border" role="radiogroup">
+      {options.map((opt) => (
+        <button
+          key={`${idPrefix}-${opt}`}
+          type="button"
+          role="radio"
+          aria-checked={mode === opt}
+          onClick={() => onChange(opt)}
+          className={
+            "px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md " +
+            (mode === opt
+              ? "bg-primary text-primary-foreground"
+              : "bg-background hover:bg-muted")
+          }
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
   );
 }

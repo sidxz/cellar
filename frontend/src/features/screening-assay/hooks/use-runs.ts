@@ -158,14 +158,23 @@ interface RecomputeResponse {
 }
 
 export interface RecomputeOverrides {
+  override_top?: boolean;
   top_constraint?: number | null;
+  top_constraint_min?: number | null;
+  top_constraint_max?: number | null;
+  override_bottom?: boolean;
   bottom_constraint?: number | null;
+  bottom_constraint_min?: number | null;
+  bottom_constraint_max?: number | null;
+  override_hill?: boolean;
   hill_slope_constraint?:
     | "unconstrained"
     | "negative_only"
     | "positive_only"
     | "fixed_at_one"
     | null;
+  hill_slope_min?: number | null;
+  hill_slope_max?: number | null;
 }
 
 export interface RecomputeRunArgs {

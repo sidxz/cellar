@@ -20,6 +20,7 @@ import {
 import { Download, ImageIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import {
+  type DoseResponseConfig,
   type DoseResponseCurve,
   type CurveType,
   type CurveClass,
@@ -44,14 +45,32 @@ interface DoseResponseChartProps {
   curves: DoseResponseCurve[];
   className?: string;
   isInteractive?: boolean;
+  /** Protocol's dose-response config for the readout being plotted. When
+   *  provided, the per-curve Fit Constraints accordion seeds its
+   *  Free/Range/Lock toggles from these values — so a user who set Top ∈
+   *  [85, 110] at the protocol level sees Range pre-selected here, instead
+   *  of a misleading "Free". Per-curve edits remain independent overrides. */
+  protocolConfig?: DoseResponseConfig | null;
 }
 
+type ParamMode = "free" | "range" | "lock";
+
 interface CurveConstraints {
-  fixTop: boolean;
+  // Top: Free leaves the optimizer alone; Range bounds it inside [min, max];
+  // Lock pins it to a single value. Mutually exclusive with the protocol's
+  // own constraint when sent — see refit_dose_response.py for resolution.
+  topMode: ParamMode;
   topValue: number;
-  fixBottom: boolean;
+  topMin: number;
+  topMax: number;
+  bottomMode: ParamMode;
   bottomValue: number;
+  bottomMin: number;
+  bottomMax: number;
   hillSlope: string;
+  hillCustomRange: boolean;
+  hillMin: number;
+  hillMax: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -236,78 +255,205 @@ function CurveControls({
 
       {/* Collapsible constraint panel */}
       {open && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
-          {/* Fix Top */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={`fix-top-${curve.id}`}
-                checked={constraints.fixTop}
-                onCheckedChange={(checked) =>
-                  onConstraintChange({ fixTop: checked === true })
+        <div className="space-y-2 pt-1">
+          {/* Top */}
+          <div className="rounded-md border bg-background p-2 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">Top</Label>
+              <PerCurveModeToggle
+                mode={constraints.topMode}
+                onChange={(m) => onConstraintChange({ topMode: m })}
+                idPrefix={`top-${curve.id}`}
+              />
+            </div>
+            {constraints.topMode === "lock" && (
+              <Input
+                type="number"
+                className="h-7 text-xs"
+                value={constraints.topValue}
+                onChange={(e) =>
+                  onConstraintChange({
+                    topValue: parseFloat(e.target.value) || 0,
+                  })
                 }
               />
-              <Label htmlFor={`fix-top-${curve.id}`} className="text-xs">
-                Fix Top
-              </Label>
-            </div>
-            <Input
-              type="number"
-              className="h-7 text-xs"
-              value={constraints.topValue}
-              disabled={!constraints.fixTop}
-              onChange={(e) =>
-                onConstraintChange({ topValue: parseFloat(e.target.value) || 0 })
-              }
-            />
+            )}
+            {constraints.topMode === "range" && (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  className="h-7 text-xs"
+                  placeholder="min"
+                  value={constraints.topMin}
+                  onChange={(e) =>
+                    onConstraintChange({
+                      topMin: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  className="h-7 text-xs"
+                  placeholder="max"
+                  value={constraints.topMax}
+                  onChange={(e) =>
+                    onConstraintChange({
+                      topMax: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+            )}
           </div>
 
-          {/* Fix Bottom */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={`fix-bottom-${curve.id}`}
-                checked={constraints.fixBottom}
-                onCheckedChange={(checked) =>
-                  onConstraintChange({ fixBottom: checked === true })
+          {/* Bottom */}
+          <div className="rounded-md border bg-background p-2 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">Bottom</Label>
+              <PerCurveModeToggle
+                mode={constraints.bottomMode}
+                onChange={(m) => onConstraintChange({ bottomMode: m })}
+                idPrefix={`bot-${curve.id}`}
+              />
+            </div>
+            {constraints.bottomMode === "lock" && (
+              <Input
+                type="number"
+                className="h-7 text-xs"
+                value={constraints.bottomValue}
+                onChange={(e) =>
+                  onConstraintChange({
+                    bottomValue: parseFloat(e.target.value) || 0,
+                  })
                 }
               />
-              <Label htmlFor={`fix-bottom-${curve.id}`} className="text-xs">
-                Fix Bottom
-              </Label>
-            </div>
-            <Input
-              type="number"
-              className="h-7 text-xs"
-              value={constraints.bottomValue}
-              disabled={!constraints.fixBottom}
-              onChange={(e) =>
-                onConstraintChange({ bottomValue: parseFloat(e.target.value) || 0 })
-              }
-            />
+            )}
+            {constraints.bottomMode === "range" && (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  className="h-7 text-xs"
+                  placeholder="min"
+                  value={constraints.bottomMin}
+                  onChange={(e) =>
+                    onConstraintChange({
+                      bottomMin: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  className="h-7 text-xs"
+                  placeholder="max"
+                  value={constraints.bottomMax}
+                  onChange={(e) =>
+                    onConstraintChange({
+                      bottomMax: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+            )}
           </div>
 
           {/* Hill Slope */}
-          <div className="space-y-1">
-            <Label className="text-xs">Hill Slope</Label>
-            <Select
-              value={constraints.hillSlope}
-              onValueChange={(v) => onConstraintChange({ hillSlope: v })}
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HILL_SLOPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="rounded-md border bg-background p-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-medium">Hill Slope</Label>
+              <Select
+                value={constraints.hillSlope}
+                onValueChange={(v) => onConstraintChange({ hillSlope: v })}
+              >
+                <SelectTrigger className="h-7 text-xs w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HILL_SLOPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={constraints.hillCustomRange}
+                onChange={(e) =>
+                  onConstraintChange({ hillCustomRange: e.target.checked })
+                }
+                className="h-3.5 w-3.5"
+              />
+              Custom range (overrides bounds)
+            </label>
+            {constraints.hillCustomRange && (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  step="0.1"
+                  className="h-7 text-xs"
+                  placeholder="min"
+                  value={constraints.hillMin}
+                  onChange={(e) =>
+                    onConstraintChange({
+                      hillMin: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  step="0.1"
+                  className="h-7 text-xs"
+                  placeholder="max"
+                  value={constraints.hillMax}
+                  onChange={(e) =>
+                    onConstraintChange({
+                      hillMax: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PerCurveModeToggle({
+  mode,
+  onChange,
+  idPrefix,
+}: {
+  mode: ParamMode;
+  onChange: (m: ParamMode) => void;
+  idPrefix: string;
+}) {
+  const options: ParamMode[] = ["free", "range", "lock"];
+  return (
+    <div className="inline-flex rounded-md border" role="radiogroup">
+      {options.map((opt) => (
+        <button
+          key={`${idPrefix}-${opt}`}
+          type="button"
+          role="radio"
+          aria-checked={mode === opt}
+          onClick={() => onChange(opt)}
+          className={
+            "px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md " +
+            (mode === opt
+              ? "bg-primary text-primary-foreground"
+              : "bg-background hover:bg-muted")
+          }
+        >
+          {opt}
+        </button>
+      ))}
     </div>
   );
 }
@@ -444,6 +590,7 @@ export function DoseResponseChart({
   curves,
   className,
   isInteractive = false,
+  protocolConfig = null,
 }: DoseResponseChartProps) {
   // ── Interactive state ───────────────────────────────────────────────────────
   const { mutate: refit, isPending: isRefitting } = useRefitDoseResponse();
@@ -470,16 +617,51 @@ export function DoseResponseChart({
   // ref for Plotly export (downloadImage)
   const plotContainerRef = useRef<HTMLDivElement>(null);
 
+  // Seed per-curve UI from the protocol's config when provided so the
+  // accordion reflects what the protocol is actually doing — a user who
+  // set Top ∈ [85, 110] at the protocol level should see Range here, not
+  // a misleading "Free". Editing a per-curve value sends an explicit
+  // override; "Reset" clears the override and resnaps to these defaults.
+  const defaultConstraints = (curve: DoseResponseCurve): CurveConstraints => {
+    const cfg = protocolConfig;
+    const topMode: ParamMode =
+      cfg?.top_constraint != null
+        ? "lock"
+        : cfg?.top_constraint_min != null || cfg?.top_constraint_max != null
+          ? "range"
+          : "free";
+    const bottomMode: ParamMode =
+      cfg?.bottom_constraint != null
+        ? "lock"
+        : cfg?.bottom_constraint_min != null ||
+            cfg?.bottom_constraint_max != null
+          ? "range"
+          : "free";
+    const hillCustomRange =
+      cfg?.hill_slope_min != null || cfg?.hill_slope_max != null;
+    return {
+      topMode,
+      topValue: cfg?.top_constraint ?? curve.top,
+      topMin: cfg?.top_constraint_min ?? 85,
+      topMax: cfg?.top_constraint_max ?? 110,
+      bottomMode,
+      bottomValue: cfg?.bottom_constraint ?? curve.bottom,
+      bottomMin: cfg?.bottom_constraint_min ?? -10,
+      bottomMax: cfg?.bottom_constraint_max ?? 10,
+      hillSlope: cfg?.hill_slope_constraint ?? "unconstrained",
+      hillCustomRange,
+      hillMin: cfg?.hill_slope_min ?? 0.9,
+      hillMax: cfg?.hill_slope_max ?? 1.1,
+    };
+  };
+
   const getConstraints = useCallback(
     (curve: DoseResponseCurve): CurveConstraints =>
-      constraintsMap[curve.id] ?? {
-        fixTop: false,
-        topValue: curve.top,
-        fixBottom: false,
-        bottomValue: curve.bottom,
-        hillSlope: "unconstrained",
-      },
-    [constraintsMap]
+      constraintsMap[curve.id] ?? defaultConstraints(curve),
+    // defaultConstraints closes over protocolConfig — re-derive when it
+    // changes so the toggles stay in sync with the protocol.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [constraintsMap, protocolConfig]
   );
 
   const getExcluded = useCallback(
@@ -489,14 +671,32 @@ export function DoseResponseChart({
 
   const callRefit = useCallback(
     (curve: DoseResponseCurve, excluded: Set<number>, constraints: CurveConstraints) => {
+      // Send `override_<param>` so the backend treats this curve's settings
+      // as authoritative for that param (Free included). Only the values
+      // for the active mode ship — the rest go null.
       refit({
         curveId: curve.id,
         input: {
           excluded_point_indices: Array.from(excluded),
           hill_slope_constraint:
             constraints.hillSlope !== "unconstrained" ? constraints.hillSlope : null,
-          top_constraint: constraints.fixTop ? constraints.topValue : null,
-          bottom_constraint: constraints.fixBottom ? constraints.bottomValue : null,
+          override_top: true,
+          top_constraint:
+            constraints.topMode === "lock" ? constraints.topValue : null,
+          top_constraint_min:
+            constraints.topMode === "range" ? constraints.topMin : null,
+          top_constraint_max:
+            constraints.topMode === "range" ? constraints.topMax : null,
+          override_bottom: true,
+          bottom_constraint:
+            constraints.bottomMode === "lock" ? constraints.bottomValue : null,
+          bottom_constraint_min:
+            constraints.bottomMode === "range" ? constraints.bottomMin : null,
+          bottom_constraint_max:
+            constraints.bottomMode === "range" ? constraints.bottomMax : null,
+          override_hill: true,
+          hill_slope_min: constraints.hillCustomRange ? constraints.hillMin : null,
+          hill_slope_max: constraints.hillCustomRange ? constraints.hillMax : null,
         },
       });
     },
@@ -522,15 +722,9 @@ export function DoseResponseChart({
 
   const handleReset = useCallback(
     (curve: DoseResponseCurve) => {
-      const resetConstraints: CurveConstraints = {
-        fixTop: false,
-        topValue: curve.top,
-        fixBottom: false,
-        bottomValue: curve.bottom,
-        hillSlope: "unconstrained",
-      };
       setExcludedMap((prev) => ({ ...prev, [curve.id]: new Set() }));
-      setConstraintsMap((prev) => ({ ...prev, [curve.id]: resetConstraints }));
+      setConstraintsMap((prev) => ({ ...prev, [curve.id]: defaultConstraints(curve) }));
+      // Reset = clear per-curve overrides, fall back to protocol's config.
       refit({ curveId: curve.id, input: { excluded_point_indices: [] } });
     },
     [refit]

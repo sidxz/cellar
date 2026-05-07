@@ -317,16 +317,24 @@ class RecomputeRunResponse(BaseModel):
 class RecomputeRunRequest(BaseModel):
     """Optional per-recompute fit constraint overrides.
 
-    Empty body (or all-null) → use the protocol's configured DoseResponseConfig.
-    Set fields override the protocol defaults for this recompute pass only;
-    they are NOT persisted on the protocol or the run. Useful for sanity-checking
-    the effect of bounds (e.g. clamping Top to 100 for a % Inhibition assay)
-    across every curve in the run without amending the protocol.
+    Empty body (or all flags False) → use the protocol's configured
+    DoseResponseConfig. When ``override_<param>`` is True the popover is
+    authoritative for that param on this recompute (Free / Range / Lock).
+    Overrides are NOT persisted on the protocol or run.
     """
 
+    override_top: bool = False
     top_constraint: float | None = None
+    top_constraint_min: float | None = None
+    top_constraint_max: float | None = None
+    override_bottom: bool = False
     bottom_constraint: float | None = None
+    bottom_constraint_min: float | None = None
+    bottom_constraint_max: float | None = None
+    override_hill: bool = False
     hill_slope_constraint: HillSlopeConstraint | None = None
+    hill_slope_min: float | None = None
+    hill_slope_max: float | None = None
 
 
 @router.post(
@@ -353,9 +361,18 @@ async def recompute_run(
     """
     overrides = (
         FitOverrides(
+            override_top=body.override_top,
             top=body.top_constraint,
+            top_min=body.top_constraint_min,
+            top_max=body.top_constraint_max,
+            override_bottom=body.override_bottom,
             bottom=body.bottom_constraint,
+            bottom_min=body.bottom_constraint_min,
+            bottom_max=body.bottom_constraint_max,
+            override_hill=body.override_hill,
             hill_slope=body.hill_slope_constraint,
+            hill_slope_min=body.hill_slope_min,
+            hill_slope_max=body.hill_slope_max,
         )
         if body is not None and not _all_none(body)
         else None
@@ -368,8 +385,5 @@ async def recompute_run(
 
 
 def _all_none(body: RecomputeRunRequest) -> bool:
-    return (
-        body.top_constraint is None
-        and body.bottom_constraint is None
-        and body.hill_slope_constraint is None
-    )
+    """No-op detector: if no override flag is set, the body has nothing to apply."""
+    return not (body.override_top or body.override_bottom or body.override_hill)

@@ -30,6 +30,12 @@ class DoseResponseConfig:
         - if x_readout_name is set, it must differ from y_readout_name
         - activity_threshold in [0, 100] if set
         - top_constraint > bottom_constraint if both set
+        - lock and range are mutually exclusive (per parameter): cannot set
+          ``top_constraint`` together with ``top_constraint_min`` or
+          ``top_constraint_max``; same for bottom and hill
+        - if both ``*_min`` and ``*_max`` are set, ``min < max``
+        - hill range must not contradict ``hill_slope_constraint`` (e.g.,
+          POSITIVE_ONLY + range straddling 0 is rejected)
     """
 
     curve_type: CurveType
@@ -40,6 +46,19 @@ class DoseResponseConfig:
     normalization_scope: NormalizationScope = NormalizationScope.PER_PLATE
     top_constraint: float | None = None
     bottom_constraint: float | None = None
+    top_constraint_min: float | None = None
+    top_constraint_max: float | None = None
+    bottom_constraint_min: float | None = None
+    bottom_constraint_max: float | None = None
+    hill_slope_min: float | None = None
+    hill_slope_max: float | None = None
+    # Auto-outlier removal: during the second-pass refit, points with
+    # residual > ``outlier_sigma`` × SD of the other residuals are excluded.
+    # ``None`` disables outlier removal entirely; a positive float sets the
+    # threshold (CDD-equivalent default is 3.0). Below the minimum-points
+    # floor (~6 points) the fitter doesn't have enough degrees of freedom
+    # to estimate residual SD, so detection is skipped regardless.
+    outlier_sigma: float | None = 3.0
 
     def __post_init__(self) -> None:
         if not self.y_readout_name or not self.y_readout_name.strip():
@@ -64,4 +83,74 @@ class DoseResponseConfig:
         ):
             raise ValidationError(
                 "DoseResponseConfig top_constraint must be greater than bottom_constraint"
+            )
+
+        if self.top_constraint is not None and (
+            self.top_constraint_min is not None or self.top_constraint_max is not None
+        ):
+            raise ValidationError(
+                "DoseResponseConfig top_constraint cannot be combined with "
+                "top_constraint_min/top_constraint_max — choose lock or range"
+            )
+        if self.bottom_constraint is not None and (
+            self.bottom_constraint_min is not None
+            or self.bottom_constraint_max is not None
+        ):
+            raise ValidationError(
+                "DoseResponseConfig bottom_constraint cannot be combined with "
+                "bottom_constraint_min/bottom_constraint_max — choose lock or range"
+            )
+
+        if (
+            self.top_constraint_min is not None
+            and self.top_constraint_max is not None
+            and self.top_constraint_min >= self.top_constraint_max
+        ):
+            raise ValidationError(
+                "DoseResponseConfig top_constraint_min must be less than top_constraint_max"
+            )
+        if (
+            self.bottom_constraint_min is not None
+            and self.bottom_constraint_max is not None
+            and self.bottom_constraint_min >= self.bottom_constraint_max
+        ):
+            raise ValidationError(
+                "DoseResponseConfig bottom_constraint_min must be less than "
+                "bottom_constraint_max"
+            )
+        if (
+            self.hill_slope_min is not None
+            and self.hill_slope_max is not None
+            and self.hill_slope_min >= self.hill_slope_max
+        ):
+            raise ValidationError(
+                "DoseResponseConfig hill_slope_min must be less than hill_slope_max"
+            )
+
+        if self.hill_slope_constraint == HillSlopeConstraint.POSITIVE_ONLY:
+            if self.hill_slope_min is not None and self.hill_slope_min <= 0:
+                raise ValidationError(
+                    "DoseResponseConfig hill_slope_min contradicts "
+                    "hill_slope_constraint=POSITIVE_ONLY (must be > 0)"
+                )
+            if self.hill_slope_max is not None and self.hill_slope_max <= 0:
+                raise ValidationError(
+                    "DoseResponseConfig hill_slope_max contradicts "
+                    "hill_slope_constraint=POSITIVE_ONLY (must be > 0)"
+                )
+        elif self.hill_slope_constraint == HillSlopeConstraint.NEGATIVE_ONLY:
+            if self.hill_slope_min is not None and self.hill_slope_min >= 0:
+                raise ValidationError(
+                    "DoseResponseConfig hill_slope_min contradicts "
+                    "hill_slope_constraint=NEGATIVE_ONLY (must be < 0)"
+                )
+            if self.hill_slope_max is not None and self.hill_slope_max >= 0:
+                raise ValidationError(
+                    "DoseResponseConfig hill_slope_max contradicts "
+                    "hill_slope_constraint=NEGATIVE_ONLY (must be < 0)"
+                )
+
+        if self.outlier_sigma is not None and self.outlier_sigma <= 0:
+            raise ValidationError(
+                "DoseResponseConfig outlier_sigma must be positive (or None to disable)"
             )

@@ -33,37 +33,88 @@ _MIN_POINTS = 4
 class FitOverrides:
     """Transient per-fit constraint overrides.
 
-    Used by Recompute to apply run-wide bounds (e.g. Top=100 for % Inhibition
-    assays whose top plateau wasn't observed) without persisting them on the
-    protocol or run. Each field, when set, overrides the corresponding field
-    on the protocol's DoseResponseConfig for this fit pass only.
+    Used by Recompute to apply run-wide bounds without persisting them on
+    the protocol or run. Mirrors the protocol's full Free/Range/Lock
+    vocabulary so the popover UI matches the protocol-design surface.
+
+    Each ``override_<param>`` flag, when True, makes the override the
+    authoritative source for that param on this recompute (Free included).
+    When False, the protocol's config carries through unchanged. The
+    matching ``top``/``bottom``/``*_min``/``*_max``/``hill_slope`` fields
+    are read only when the corresponding flag is True; their interpretation
+    is the same as on the protocol:
+
+      - ``top`` set + ``top_min``/``top_max`` unset → Lock
+      - ``top_min`` and/or ``top_max`` set, ``top`` unset → Range
+      - all three unset → Free
     """
 
+    override_top: bool = False
     top: float | None = None
+    top_min: float | None = None
+    top_max: float | None = None
+    override_bottom: bool = False
     bottom: float | None = None
+    bottom_min: float | None = None
+    bottom_max: float | None = None
+    override_hill: bool = False
     hill_slope: HillSlopeConstraint | None = None
+    hill_slope_min: float | None = None
+    hill_slope_max: float | None = None
 
     def is_empty(self) -> bool:
-        return self.top is None and self.bottom is None and self.hill_slope is None
+        return not (self.override_top or self.override_bottom or self.override_hill)
 
     def apply(self, base: DoseResponseConfig) -> DoseResponseConfig:
         if self.is_empty():
             return base
+        if self.override_top:
+            top_lock = self.top
+            top_min = self.top_min
+            top_max = self.top_max
+        else:
+            top_lock = base.top_constraint
+            top_min = base.top_constraint_min
+            top_max = base.top_constraint_max
+
+        if self.override_bottom:
+            bottom_lock = self.bottom
+            bottom_min = self.bottom_min
+            bottom_max = self.bottom_max
+        else:
+            bottom_lock = base.bottom_constraint
+            bottom_min = base.bottom_constraint_min
+            bottom_max = base.bottom_constraint_max
+
+        if self.override_hill:
+            hill_enum = (
+                self.hill_slope
+                if self.hill_slope is not None
+                else HillSlopeConstraint.UNCONSTRAINED
+            )
+            hill_min = self.hill_slope_min
+            hill_max = self.hill_slope_max
+        else:
+            hill_enum = base.hill_slope_constraint
+            hill_min = base.hill_slope_min
+            hill_max = base.hill_slope_max
+
         return DoseResponseConfig(
             curve_type=base.curve_type,
             x_readout_name=base.x_readout_name,
             y_readout_name=base.y_readout_name,
-            hill_slope_constraint=(
-                self.hill_slope
-                if self.hill_slope is not None
-                else base.hill_slope_constraint
-            ),
+            hill_slope_constraint=hill_enum,
             activity_threshold=base.activity_threshold,
             normalization_scope=base.normalization_scope,
-            top_constraint=self.top if self.top is not None else base.top_constraint,
-            bottom_constraint=(
-                self.bottom if self.bottom is not None else base.bottom_constraint
-            ),
+            top_constraint=top_lock,
+            bottom_constraint=bottom_lock,
+            top_constraint_min=top_min,
+            top_constraint_max=top_max,
+            bottom_constraint_min=bottom_min,
+            bottom_constraint_max=bottom_max,
+            hill_slope_min=hill_min,
+            hill_slope_max=hill_max,
+            outlier_sigma=base.outlier_sigma,
         )
 
 
