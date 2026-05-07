@@ -231,6 +231,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
       <CreateRunDialog
         protocolId={protocolId}
+        protocolControlLayouts={protocol?.control_layouts ?? null}
         open={createRunOpen}
         onOpenChange={setCreateRunOpen}
       />
