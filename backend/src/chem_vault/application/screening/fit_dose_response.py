@@ -324,6 +324,7 @@ class FitDoseResponseCurves:
                     raw_data=fitted.raw_data,
                     excluded_points=fitted.excluded_points or [],
                     fit_quality_warnings=list(fitted.fit_quality_warnings),
+                    intercept_values=list(fitted.intercept_values),
                 )
                 await self._curve_repo.save(curve)
                 all_curves.append(curve)
