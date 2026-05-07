@@ -47,11 +47,12 @@ import {
   PROTOCOL_TYPE_LABELS,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
-  READOUT_NORMALIZATION_LABELS,
   type CreateReadoutDefinitionInput,
   type DoseUnit,
   type ProtocolType,
+  type ReadoutNormalization,
 } from "../types";
+import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 
 // Sentinel for the X-axis dropdown that means "use the well's concentration"
 // (mapped to x_readout_name=null in the payload).
@@ -84,7 +85,7 @@ interface ReadoutDefState {
   data_type: string;
   unit: string;
   aggregation: string;
-  normalization: string;
+  normalizations: ReadoutNormalization[];
   is_calculated: boolean;
   calculation_formula: string;
   display_order: number;
@@ -110,7 +111,7 @@ function emptyReadoutDef(order: number): ReadoutDefState {
     data_type: "numeric",
     unit: "",
     aggregation: "none",
-    normalization: "none",
+    normalizations: [],
     is_calculated: false,
     calculation_formula: "",
     display_order: order,
@@ -179,14 +180,26 @@ export function CreateProtocolDialog({
     // Apply readout templates
     if (form.readout_templates.length > 0) {
       setReadoutDefs(
-        form.readout_templates.map((tpl, i) => ({
-          ...emptyReadoutDef(i + 1),
-          name: (tpl.name as string) ?? "",
-          data_type: (tpl.data_type as string) ?? "numeric",
-          unit: (tpl.unit as string) ?? "",
-          aggregation: (tpl.aggregation as string) ?? "none",
-          normalization: (tpl.normalization as string) ?? "none",
-        })),
+        form.readout_templates.map((tpl, i) => {
+          const tplNormalizations = (tpl.normalizations as
+            | ReadoutNormalization[]
+            | undefined);
+          const tplLegacy = (tpl.normalization as string | undefined);
+          const resolvedNormalizations: ReadoutNormalization[] =
+            tplNormalizations && tplNormalizations.length > 0
+              ? tplNormalizations
+              : tplLegacy && tplLegacy !== "none"
+                ? [tplLegacy as ReadoutNormalization]
+                : [];
+          return {
+            ...emptyReadoutDef(i + 1),
+            name: (tpl.name as string) ?? "",
+            data_type: (tpl.data_type as string) ?? "numeric",
+            unit: (tpl.unit as string) ?? "",
+            aggregation: (tpl.aggregation as string) ?? "none",
+            normalizations: resolvedNormalizations,
+          };
+        }),
       );
     }
     // Apply condition templates
@@ -226,10 +239,10 @@ export function CreateProtocolDialog({
     setReadoutDefs((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateReadout = (
+  const updateReadout = <K extends keyof ReadoutDefState>(
     index: number,
-    field: keyof ReadoutDefState,
-    value: string | number | boolean
+    field: K,
+    value: ReadoutDefState[K],
   ) => {
     setReadoutDefs((prev) =>
       prev.map((rd, i) => (i === index ? { ...rd, [field]: value } : rd))
@@ -255,8 +268,7 @@ export function CreateProtocolDialog({
           unit: rd.unit || null,
           aggregation:
             rd.aggregation as CreateReadoutDefinitionInput["aggregation"],
-          normalization:
-            rd.normalization as CreateReadoutDefinitionInput["normalization"],
+          normalizations: rd.normalizations,
           is_calculated: rd.is_calculated,
           calculation_formula: rd.is_calculated
             ? rd.calculation_formula || null
@@ -608,25 +620,12 @@ export function CreateProtocolDialog({
                         </div>
                         <div className="grid gap-1">
                           <Label className="text-xs">Normalization</Label>
-                          <Select
-                            value={rd.normalization}
-                            onValueChange={(v) =>
-                              updateReadout(index, "normalization", v)
+                          <NormalizationCheckboxGroup
+                            value={rd.normalizations}
+                            onChange={(next) =>
+                              updateReadout(index, "normalizations", next)
                             }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(
-                                READOUT_NORMALIZATION_LABELS
-                              ).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>
-                                  {label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          />
                         </div>
                       </div>
 

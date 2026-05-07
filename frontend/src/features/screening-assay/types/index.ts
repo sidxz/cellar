@@ -194,6 +194,10 @@ export interface DoseResponseConfig {
   /** null means "use the well's concentration as the X-axis" (default). */
   x_readout_name: string | null;
   y_readout_name: string;
+  /** Picks which formula's output feeds the fit when the Y readout def emits
+   *  multiple normalized columns (e.g. raw + %inh + z-score). null selects
+   *  the raw layer. Must be in the Y readout's `normalizations` set. */
+  y_normalization?: ReadoutNormalization | null;
   hill_slope_constraint: HillSlopeConstraint;
   activity_threshold: number | null;
   normalization_scope: NormalizationScope;
@@ -235,6 +239,10 @@ export interface ReadoutDefinition {
   unit: string | null;
   aggregation: ReadoutAggregation;
   precision: number | null;
+  /** New canonical: list of formulas this def emits. Empty = raw / no normalization. */
+  normalizations: ReadoutNormalization[];
+  /** Legacy single-value field. Backend emits both for back-compat: use
+   *  `normalizations` going forward. */
   normalization: ReadoutNormalization;
   is_calculated: boolean;
   calculation_formula: string | null;
@@ -439,6 +447,9 @@ export interface CreateReadoutDefinitionInput {
   unit?: string | null;
   aggregation?: ReadoutAggregation;
   precision?: number | null;
+  /** Preferred: list of formulas this def emits. Empty = no normalization. */
+  normalizations?: ReadoutNormalization[];
+  /** Legacy single-value field. Lifted server-side when normalizations is omitted. */
   normalization?: ReadoutNormalization;
   is_calculated?: boolean;
   calculation_formula?: string | null;

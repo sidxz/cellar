@@ -91,6 +91,7 @@ export function useAddReadoutDefinition(protocolId: string) {
       data_type: string;
       unit?: string | null;
       aggregation?: string;
+      normalizations?: string[];
       normalization?: string;
       is_calculated?: boolean;
       calculation_formula?: string | null;
@@ -121,6 +122,7 @@ export function useUpdateReadoutDefinition(protocolId: string) {
         unit?: string | null;
         aggregation?: string;
         precision?: number | null;
+        normalizations?: string[];
         normalization?: string;
         is_calculated?: boolean;
         calculation_formula?: string | null;

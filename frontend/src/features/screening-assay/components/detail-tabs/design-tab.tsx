@@ -58,6 +58,7 @@ import {
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
+import { NormalizationCheckboxGroup } from "../readout-normalization-checkboxes";
 import { showInfo } from "@/shared/lib/toast";
 import {
   CURVE_TYPE_LABELS,
@@ -152,7 +153,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [rdDataType, setRdDataType] = useState("numeric");
   const [rdUnit, setRdUnit] = useState("");
   const [rdAggregation, setRdAggregation] = useState("none");
-  const [rdNormalization, setRdNormalization] = useState("none");
+  const [rdNormalizations, setRdNormalizations] = useState<ReadoutNormalization[]>([]);
   // Dose-response config sub-fields (only used when rdDataType === "dose_response").
   // X-axis sentinel: when drXReadout === WELL_CONC_X, the curve fits against the
   // well's own concentration (the default and most common case). Mapped to
@@ -265,7 +266,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdDataType(rd.data_type);
     setRdUnit(rd.unit ?? "");
     setRdAggregation(rd.aggregation);
-    setRdNormalization(rd.normalization);
+    setRdNormalizations(
+      rd.normalizations ?? (rd.normalization && rd.normalization !== "none"
+        ? [rd.normalization]
+        : []),
+    );
     if (rd.dose_response_config) {
       const cfg = rd.dose_response_config;
       setDrCurveType(cfg.curve_type);
@@ -360,7 +365,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdDataType("numeric");
     setRdUnit("");
     setRdAggregation("none");
-    setRdNormalization("none");
+    setRdNormalizations([]);
     resetDoseResponseFields();
   };
 
@@ -1239,9 +1244,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       ] ?? rd.aggregation}
                     </TableCell>
                     <TableCell>
-                      {READOUT_NORMALIZATION_LABELS[
-                        rd.normalization as ReadoutNormalization
-                      ] ?? rd.normalization}
+                      {(rd.normalizations && rd.normalizations.length > 0)
+                        ? rd.normalizations
+                            .map(
+                              (n) =>
+                                READOUT_NORMALIZATION_LABELS[n as ReadoutNormalization] ??
+                                n,
+                            )
+                            .join(", ")
+                        : "—"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -1653,23 +1664,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Normalization</Label>
-              <Select
-                value={rdNormalization}
-                onValueChange={setRdNormalization}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(READOUT_NORMALIZATION_LABELS).map(
-                    ([val, label]) => (
-                      <SelectItem key={val} value={val}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
+              <NormalizationCheckboxGroup
+                value={rdNormalizations}
+                onChange={setRdNormalizations}
+              />
             </div>
             {renderDoseResponseFields(null)}
           </div>
@@ -1695,7 +1693,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     data_type: rdDataType,
                     unit: rdUnit.trim() || undefined,
                     aggregation: rdAggregation,
-                    normalization: rdNormalization,
+                    normalizations: rdNormalizations,
                     dose_response_config: buildDoseResponseConfig(),
                   },
                   {
@@ -1704,7 +1702,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       setRdDataType("numeric");
                       setRdUnit("");
                       setRdAggregation("none");
-                      setRdNormalization("none");
+                      setRdNormalizations([]);
                       resetDoseResponseFields();
                       setAddReadoutOpen(false);
                     },
@@ -1790,23 +1788,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Normalization</Label>
-              <Select
-                value={rdNormalization}
-                onValueChange={setRdNormalization}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(READOUT_NORMALIZATION_LABELS).map(
-                    ([val, label]) => (
-                      <SelectItem key={val} value={val}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
+              <NormalizationCheckboxGroup
+                value={rdNormalizations}
+                onChange={setRdNormalizations}
+              />
             </div>
             {renderDoseResponseFields(editingReadoutId)}
           </div>
@@ -1832,7 +1817,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       data_type: rdDataType,
                       unit: rdUnit.trim() || null,
                       aggregation: rdAggregation,
-                      normalization: rdNormalization,
+                      normalizations: rdNormalizations,
                       dose_response_config: buildDoseResponseConfig(),
                     },
                   },

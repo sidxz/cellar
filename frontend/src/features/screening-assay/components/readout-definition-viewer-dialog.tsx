@@ -16,15 +16,14 @@ import {
   NORMALIZATION_SCOPE_LABELS,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
-  READOUT_NORMALIZATION_LABELS,
   type CurveType,
   type HillSlopeConstraint,
   type NormalizationScope,
   type ReadoutAggregation,
   type ReadoutDataType,
   type ReadoutDefinition,
-  type ReadoutNormalization,
 } from "../types";
+import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 
 interface ReadoutDefinitionViewerDialogProps {
   readoutDef: ReadoutDefinition | null;
@@ -76,14 +75,20 @@ export function ReadoutDefinitionViewerDialog({
                   ] ?? readoutDef.aggregation
                 }
               />
-              <Field
-                label="Normalization"
-                value={
-                  READOUT_NORMALIZATION_LABELS[
-                    readoutDef.normalization as ReadoutNormalization
-                  ] ?? readoutDef.normalization
-                }
-              />
+            </div>
+            <div className="mt-3 grid gap-1">
+              <Label className="text-xs">Normalization</Label>
+              <div className="rounded-md border bg-background p-2">
+                <NormalizationCheckboxGroup
+                  value={
+                    readoutDef.normalizations ??
+                    (readoutDef.normalization && readoutDef.normalization !== "none"
+                      ? [readoutDef.normalization]
+                      : [])
+                  }
+                  disabled
+                />
+              </div>
             </div>
             {readoutDef.is_calculated && readoutDef.calculation_formula && (
               <div className="mt-3">
