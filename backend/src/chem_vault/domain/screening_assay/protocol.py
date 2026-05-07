@@ -105,6 +105,16 @@ class ReadoutDefinition(Entity):
 
         if not name or not name.strip():
             raise ValidationError("ReadoutDefinition name must not be empty")
+        # Reserved well-metadata names are not measurements and must not be
+        # readouts. Enforced at construction so every creation path (CDD
+        # import, protocol versioning, file imports, manual UI add) gets the
+        # same guarantee — not just `Protocol.add_readout_definition`.
+        if _is_reserved_readout_name(name):
+            raise ValidationError(
+                f"ReadoutDefinition name '{name.strip()}' collides with a "
+                f"reserved well-metadata name. Reserved: "
+                f"{sorted(_RESERVED_READOUT_NAMES)}."
+            )
         if is_calculated and not calculation_formula:
             raise ValidationError(
                 "Calculated readout requires a calculation_formula"
@@ -440,12 +450,8 @@ class Protocol(AggregateRoot):
     def add_readout_definition(self, definition: ReadoutDefinition) -> None:
         """Add a readout definition to this protocol."""
         self._guard_draft()
-        if _is_reserved_readout_name(definition.name):
-            raise ValidationError(
-                f"ReadoutDefinition name '{definition.name}' collides with a "
-                f"reserved well-metadata name. Reserved: "
-                f"{sorted(_RESERVED_READOUT_NAMES)}."
-            )
+        # Reserved-name guard now lives in ReadoutDefinition.__init__ — if we
+        # received `definition` at all, its name passed the check.
         if any(rd.name == definition.name for rd in self.readout_definitions):
             raise ConflictError(
                 f"ReadoutDefinition with name '{definition.name}' already exists"
@@ -543,12 +549,8 @@ class Protocol(AggregateRoot):
         existing = self.readout_definitions[idx]
 
         new_name = (name if name is not None else existing.name).strip()
-        if _is_reserved_readout_name(new_name):
-            raise ValidationError(
-                f"ReadoutDefinition name '{new_name}' collides with a "
-                f"reserved well-metadata name. Reserved: "
-                f"{sorted(_RESERVED_READOUT_NAMES)}."
-            )
+        # Reserved-name guard fires inside the replacement ReadoutDefinition
+        # constructor below — no duplicate check here.
         if any(
             rd.name == new_name and rd.id != definition_id
             for rd in self.readout_definitions

@@ -360,13 +360,15 @@ class TestProtocolDefinitionManagement:
     @pytest.mark.parametrize(
         "name", ["concentration", "Concentration", "DOSE", "well", " batch "]
     )
-    def test_add_readout_with_reserved_name_raises(
+    def test_reserved_name_rejected_at_construction(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, name: str
     ) -> None:
-        protocol = _make_protocol(workspace_id, user_id)
-        bad = _make_readout(protocol.id, name=name)
+        # Reserved-name guard is enforced inside ReadoutDefinition.__init__
+        # so every creation path (CDD import, protocol versioning, manual UI
+        # add) is covered — not just `Protocol.add_readout_definition`. The
+        # entity refuses to construct.
         with pytest.raises(ValidationError, match="reserved well-metadata name"):
-            protocol.add_readout_definition(bad)
+            _make_readout(name=name)
 
     def test_update_readout_to_reserved_name_raises(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID

@@ -131,9 +131,13 @@ class TestReadoutDefinitionDoseResponse:
 
 class TestReadoutDefinitionBatchLink:
     def test_batch_link_creates_successfully(self):
+        # Note: "Batch" alone is a reserved well-metadata name (well.batch_id
+        # already references the well's batch). For a BATCH_LINK readout,
+        # use a name that's clearly a measurement/reference rather than
+        # the well's own metadata.
         rd = ReadoutDefinition(
             protocol_id=_PLACEHOLDER_ID,
-            name="Batch",
+            name="Reference Batch",
             data_type=ReadoutDataType.BATCH_LINK,
         )
         assert rd.data_type == ReadoutDataType.BATCH_LINK
@@ -146,15 +150,18 @@ class TestReadoutDefinitionBatchLink:
 
 class TestProtocolDoseResponseCrossValidation:
     def test_add_dose_response_with_valid_axis_readouts(self):
+        # X readout must be a non-reserved name (the dose itself lives on
+        # well.dose, but a transformed-X readout like "log_dose" is valid
+        # — it's a derivation, not the raw setpoint).
         protocol = _make_protocol(
             readout_definitions=[
-                _make_readout("concentration"),
+                _make_readout("log_dose"),
                 _make_readout("% inhibition"),
             ]
         )
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
-            x_readout_name="concentration",
+            x_readout_name="log_dose",
             y_readout_name="% inhibition",
         )
         dr_readout = ReadoutDefinition(
@@ -173,7 +180,7 @@ class TestProtocolDoseResponseCrossValidation:
         )
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
-            x_readout_name="concentration",
+            x_readout_name="log_dose",
             y_readout_name="% inhibition",
         )
         dr_readout = ReadoutDefinition(
@@ -182,16 +189,16 @@ class TestProtocolDoseResponseCrossValidation:
             data_type=ReadoutDataType.DOSE_RESPONSE,
             dose_response_config=cfg,
         )
-        with pytest.raises(ValidationError, match="X-axis.*concentration"):
+        with pytest.raises(ValidationError, match="X-axis.*log_dose"):
             protocol.add_readout_definition(dr_readout)
 
     def test_add_dose_response_with_missing_y_axis_raises(self):
         protocol = _make_protocol(
-            readout_definitions=[_make_readout("concentration")]
+            readout_definitions=[_make_readout("log_dose")]
         )
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
-            x_readout_name="concentration",
+            x_readout_name="log_dose",
             y_readout_name="% inhibition",
         )
         dr_readout = ReadoutDefinition(
