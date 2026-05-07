@@ -257,3 +257,23 @@ class TestRangeConstraints:
         assert cfg.top_constraint_min == 85.0
         assert cfg.bottom_constraint_max == 10.0
         assert cfg.hill_slope_max == 1.1
+
+
+class TestDoseResponseConfigYNormalization:
+    """y_normalization picks which formula's output to fit against — required
+    when the Y readout def emits multiple normalized columns at once."""
+
+    def test_default_is_none_meaning_raw_layer(self):
+        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+        cfg = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="raw")
+        assert cfg.y_normalization is None
+
+    def test_y_normalization_can_be_set(self):
+        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from chem_vault.domain.screening_assay.enums import ReadoutNormalization
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            y_readout_name="raw AU",
+            y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        )
+        assert cfg.y_normalization == ReadoutNormalization.PERCENT_INHIBITION

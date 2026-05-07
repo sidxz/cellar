@@ -466,18 +466,28 @@ class Protocol(AggregateRoot):
             definition.data_type == ReadoutDataType.DOSE_RESPONSE
             and definition.dose_response_config is not None
         ):
-            existing_names = {rd.name for rd in self.readout_definitions}
+            existing_by_name = {rd.name: rd for rd in self.readout_definitions}
             cfg = definition.dose_response_config
-            if cfg.x_readout_name is not None and cfg.x_readout_name not in existing_names:
+            if cfg.x_readout_name is not None and cfg.x_readout_name not in existing_by_name:
                 raise ValidationError(
                     f"Dose-response X-axis readout '{cfg.x_readout_name}' "
                     "not found among existing readout definitions"
                 )
-            if cfg.y_readout_name not in existing_names:
+            if cfg.y_readout_name not in existing_by_name:
                 raise ValidationError(
                     f"Dose-response Y-axis readout '{cfg.y_readout_name}' "
                     "not found among existing readout definitions"
                 )
+            # When y_normalization is set, the referenced Y readout def must
+            # actually emit that formula.
+            if cfg.y_normalization is not None:
+                y_rd = existing_by_name[cfg.y_readout_name]
+                if cfg.y_normalization not in y_rd.normalizations:
+                    raise ValidationError(
+                        f"Dose-response Y-normalization '{cfg.y_normalization.value}' "
+                        f"is not emitted by readout '{cfg.y_readout_name}' "
+                        f"(emits: {sorted(n.value for n in y_rd.normalizations)})"
+                    )
 
         definition.protocol_id = self.id
         self.readout_definitions.append(definition)

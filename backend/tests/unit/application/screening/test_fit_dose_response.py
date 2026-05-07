@@ -171,6 +171,7 @@ def _rd(
     is_computed: bool,
     molecule_id: uuid.UUID | None = uuid.UUID(int=42),
     batch_id: uuid.UUID | None = uuid.UUID(int=43),
+    normalization_applied: ReadoutNormalization | None = None,
 ) -> ReadoutData:
     return ReadoutData(
         workspace_id=WS,
@@ -181,6 +182,7 @@ def _rd(
         readout_definition_id=readout_definition_id,
         value=QualifiedValue(value=value),
         is_computed=is_computed,
+        normalization_applied=normalization_applied,
     )
 
 
@@ -222,7 +224,8 @@ async def test_normalized_y_uses_only_computed_rows():
         )
         readout_data.append(
             _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
-                value=pct_v, is_computed=True)
+                value=pct_v, is_computed=True,
+                normalization_applied=ReadoutNormalization.PERCENT_INHIBITION)
         )
 
     fitter = _RecordingFitter()
@@ -343,7 +346,8 @@ async def test_normalized_y_no_double_feed_per_concentration():
         )
         readout_data.append(
             _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
-                value=50.0, is_computed=True)
+                value=50.0, is_computed=True,
+                normalization_applied=ReadoutNormalization.PERCENT_INHIBITION)
         )
 
     fitter = _RecordingFitter()
@@ -358,6 +362,78 @@ async def test_normalized_y_no_double_feed_per_concentration():
         points_by_conc.setdefault(p.concentration, []).append(p.response)
     for conc, ys in points_by_conc.items():
         assert len(ys) == 1, f"concentration {conc} got {len(ys)} y-values: {ys}"
+
+
+@pytest.mark.asyncio
+async def test_y_normalization_picks_correct_formula_layer():
+    """Multi-emit normalization: y_normalization tells the fitter which
+    formula's output to feed (e.g. %inh, not z-score) when the Y readout
+    def emits both."""
+    # Y def emits %inh AND z_score; DR config picks %inh.
+    y_def = ReadoutDefinition(
+        protocol_id=uuid.uuid4(),
+        name="raw AU",
+        data_type=ReadoutDataType.NUMERIC,
+        normalizations=frozenset(
+            {
+                ReadoutNormalization.PERCENT_INHIBITION,
+                ReadoutNormalization.Z_SCORE,
+            }
+        ),
+    )
+    ic50_def = ReadoutDefinition(
+        protocol_id=y_def.protocol_id,
+        name="IC50",
+        data_type=ReadoutDataType.DOSE_RESPONSE,
+        dose_response_config=DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="concentration",
+            y_readout_name="raw AU",
+            y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        ),
+    )
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="multi-emit",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[y_def, ic50_def],
+    )
+    y_def = next(rd for rd in protocol.readout_definitions if rd.name == "raw AU")
+
+    concs = [0.01, 0.1, 1.0, 10.0, 100.0]
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=concs
+    )
+
+    pct_y = [5.0, 12.0, 35.0, 75.0, 95.0]
+    z_y = [-2.0, -1.0, 0.0, 1.0, 2.0]
+
+    readout_data: list[ReadoutData] = []
+    for w, pct_v, z_v in zip(wells, pct_y, z_y, strict=True):
+        readout_data.append(_rd(
+            run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
+            value=pct_v, is_computed=True,
+            normalization_applied=ReadoutNormalization.PERCENT_INHIBITION,
+        ))
+        readout_data.append(_rd(
+            run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
+            value=z_v, is_computed=True,
+            normalization_applied=ReadoutNormalization.Z_SCORE,
+        ))
+
+    fitter = _RecordingFitter()
+    use_case = _make_use_case(fitter)
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+    assert isinstance(result, Success)
+
+    points = fitter.calls[0]
+    seen = sorted(p.response for p in points)
+    assert seen == sorted(pct_y)
+    for z_v in z_y:
+        assert z_v not in seen
 
 
 # ---------------------------------------------------------------------------

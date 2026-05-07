@@ -235,13 +235,29 @@ class FitDoseResponseCurves:
                 )
                 continue
 
-            # Per readout def, exactly one value layer is the canonical fit input:
-            # post-normalization for normalized readouts, the formula output for
-            # calculated readouts, otherwise the raw values.
-            use_computed = (
-                y_rd.normalization != ReadoutNormalization.NONE
-                or y_rd.is_calculated
-            )
+            # Per readout def, exactly one value layer is the canonical fit input.
+            # Selection key:
+            #   * If the def is calculated, fit the computed (formula-output) layer.
+            #   * Else if the def emits any normalization formulas, the fit consumes
+            #     the formula named by ``config.y_normalization``. When that field
+            #     is None, default to the def's first formula (back-compat with the
+            #     pre-multi-emit single-value world).
+            #   * Else (no normalizations on the def), fit the raw layer.
+            target_formula: ReadoutNormalization | None
+            if y_rd.is_calculated:
+                target_formula = None  # filtered by is_computed below
+                use_computed = True
+            elif y_rd.normalizations:
+                if config.y_normalization is not None:
+                    target_formula = config.y_normalization
+                else:
+                    # Pre-multi-emit protocols set normalizations={X} and no
+                    # y_normalization. Pick the (only) formula in the set.
+                    target_formula = next(iter(y_rd.normalizations))
+                use_computed = True
+            else:
+                target_formula = None
+                use_computed = False
 
             # Group readout data by (molecule_id, batch_id)
             groups: dict[tuple[uuid.UUID, uuid.UUID], list[ConcentrationResponsePoint]] = defaultdict(list)
@@ -250,6 +266,13 @@ class FitDoseResponseCurves:
                 if rd.readout_definition_id != y_rd.id:
                     continue
                 if rd.is_computed != use_computed:
+                    continue
+                # If we want a specific formula, the row must be tagged with it.
+                # Calculated readouts are filtered by is_computed alone (no formula).
+                if (
+                    target_formula is not None
+                    and rd.normalization_applied != target_formula
+                ):
                     continue
                 if rd.value is None or rd.well_id is None:
                     continue

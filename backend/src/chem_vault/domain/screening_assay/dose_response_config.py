@@ -8,6 +8,7 @@ from chem_vault.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
     NormalizationScope,
+    ReadoutNormalization,
 )
 from chem_vault.domain.shared.errors import ValidationError
 
@@ -57,6 +58,12 @@ class DoseResponseConfig:
     curve_type: CurveType
     y_readout_name: str
     x_readout_name: str | None = None
+    # When the Y readout def emits multiple normalized columns (e.g. raw +
+    # %inh + z-score), this picks which one feeds the fit. ``None`` selects
+    # the raw layer (rows where ``is_computed=False``). The protocol
+    # aggregate is responsible for cross-validating that the chosen formula
+    # is in the Y readout def's ``normalizations`` set.
+    y_normalization: ReadoutNormalization | None = None
     hill_slope_constraint: HillSlopeConstraint = HillSlopeConstraint.UNCONSTRAINED
     activity_threshold: float | None = None
     normalization_scope: NormalizationScope = NormalizationScope.PER_PLATE
