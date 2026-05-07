@@ -91,7 +91,8 @@ class ReadoutDefinition(Entity):
         unit: str | None = None,
         aggregation: ReadoutAggregation = ReadoutAggregation.NONE,
         precision: int | None = None,
-        normalization: ReadoutNormalization = ReadoutNormalization.NONE,
+        normalizations: frozenset[ReadoutNormalization] | None = None,
+        normalization: ReadoutNormalization | None = None,
         is_calculated: bool = False,
         calculation_formula: str | None = None,
         display_order: int = 0,
@@ -129,18 +130,38 @@ class ReadoutDefinition(Entity):
                 "dose_response_config can only be set for dose_response data type"
             )
 
+        # Resolve normalizations from new (preferred) or legacy (single-value) kwarg.
+        # Both None → empty set (no normalization). Legacy NONE → empty set.
+        if normalizations is not None:
+            resolved_normalizations: frozenset[ReadoutNormalization] = frozenset(
+                normalizations
+            )
+        elif normalization is not None and normalization != ReadoutNormalization.NONE:
+            resolved_normalizations = frozenset({normalization})
+        else:
+            resolved_normalizations = frozenset()
+
         self.protocol_id = protocol_id
         self.name = name.strip()
         self.data_type = data_type
         self.unit = unit
         self.aggregation = aggregation
         self.precision = precision
-        self.normalization = normalization
+        self.normalizations = resolved_normalizations
         self.is_calculated = is_calculated
         self.calculation_formula = calculation_formula
         self.display_order = display_order
         self.pick_list_values = pick_list_values
         self.dose_response_config = dose_response_config
+
+    @property
+    def normalization(self) -> ReadoutNormalization:
+        """Back-compat single-value view of ``normalizations``.
+
+        Returns the first formula in the set, or ``NONE`` when empty.
+        Deprecated — call sites should migrate to ``self.normalizations``.
+        """
+        return next(iter(self.normalizations), ReadoutNormalization.NONE)
 
 
 class ConditionDefinition(Entity):
@@ -494,6 +515,7 @@ class Protocol(AggregateRoot):
         unit: str | None | _UnsetT = _UNSET,
         aggregation: ReadoutAggregation | None = None,
         precision: int | None | _UnsetT = _UNSET,
+        normalizations: frozenset[ReadoutNormalization] | None | _UnsetT = _UNSET,
         normalization: ReadoutNormalization | None = None,
         is_calculated: bool | None = None,
         calculation_formula: str | None | _UnsetT = _UNSET,
@@ -534,6 +556,21 @@ class Protocol(AggregateRoot):
                 f"ReadoutDefinition with name '{new_name}' already exists"
             )
 
+        # Resolve final normalizations set: explicit normalizations= wins, then
+        # legacy single-value normalization=, then carry forward existing.
+        if normalizations is not _UNSET:
+            new_normalizations = (
+                frozenset(normalizations) if normalizations is not None else frozenset()
+            )
+        elif normalization is not None:
+            new_normalizations = (
+                frozenset()
+                if normalization == ReadoutNormalization.NONE
+                else frozenset({normalization})
+            )
+        else:
+            new_normalizations = existing.normalizations
+
         replacement = ReadoutDefinition(
             id=existing.id,
             protocol_id=existing.protocol_id,
@@ -542,7 +579,7 @@ class Protocol(AggregateRoot):
             unit=existing.unit if unit is _UNSET else unit,  # type: ignore[arg-type]
             aggregation=aggregation if aggregation is not None else existing.aggregation,
             precision=existing.precision if precision is _UNSET else precision,  # type: ignore[arg-type]
-            normalization=normalization if normalization is not None else existing.normalization,
+            normalizations=new_normalizations,
             is_calculated=is_calculated if is_calculated is not None else existing.is_calculated,
             calculation_formula=(
                 existing.calculation_formula

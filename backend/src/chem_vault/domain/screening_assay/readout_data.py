@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from chem_vault.domain.screening_assay.enums import ReadoutNormalization
 from chem_vault.domain.shared.entity import Entity
 from chem_vault.domain.shared.value_objects import QualifiedValue
 
@@ -33,6 +34,7 @@ class ReadoutData(Entity):
         value_text: str | None = None,
         is_outlier: bool = False,
         is_computed: bool = False,
+        normalization_applied: ReadoutNormalization | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -48,3 +50,6 @@ class ReadoutData(Entity):
         self.value_text = value_text
         self.is_outlier = is_outlier
         self.is_computed = is_computed
+        # Identifies which normalization formula produced this row.
+        # None for raw rows (is_computed=False); the formula for computed rows.
+        self.normalization_applied = normalization_applied
