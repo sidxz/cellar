@@ -112,7 +112,11 @@ class ReadoutDefinitionResponse(BaseModel):
     unit: str | None = None
     aggregation: str
     precision: int | None = None
-    normalization: str
+    # Preferred: list of normalization formulas. Empty list means raw / no normalization.
+    normalizations: list[str] = []
+    # Legacy single-value field. Returns the first formula in the set (or "none"
+    # when empty) so older clients keep working.
+    normalization: str = "none"
     is_calculated: bool
     calculation_formula: str | None = None
     display_order: int
@@ -192,6 +196,7 @@ class ProtocolResponse(BaseModel):
                     unit=rd.unit,
                     aggregation=rd.aggregation.value,
                     precision=rd.precision,
+                    normalizations=sorted(n.value for n in rd.normalizations),
                     normalization=rd.normalization.value,
                     is_calculated=rd.is_calculated,
                     calculation_formula=rd.calculation_formula,
@@ -305,7 +310,10 @@ class AddReadoutDefinitionRequest(BaseModel):
     unit: str | None = None
     aggregation: str = "none"
     precision: int | None = None
-    normalization: str = "none"
+    # Preferred: list of normalization formula names. Empty list = no normalization.
+    normalizations: list[str] | None = None
+    # Legacy single-value field. Lifted into a list when ``normalizations`` is None.
+    normalization: str | None = None
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
@@ -321,6 +329,9 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     unit: str | None = None
     aggregation: str | None = None
     precision: int | None = None
+    # Preferred: list of normalization formulas. Sending [] clears all formulas.
+    normalizations: list[str] | None = None
+    # Legacy single-value field — only honored when ``normalizations`` is omitted.
     normalization: str | None = None
     is_calculated: bool | None = None
     calculation_formula: str | None = None
@@ -519,6 +530,7 @@ async def add_readout_definition(
         unit=body.unit,
         aggregation=body.aggregation,
         precision=body.precision,
+        normalizations=body.normalizations,
         normalization=body.normalization,
         is_calculated=body.is_calculated,
         calculation_formula=body.calculation_formula,
@@ -559,7 +571,7 @@ async def update_readout_definition(
             cmd_kwargs[key] = getattr(body, key)
     for key in (
         "unit", "precision", "calculation_formula",
-        "pick_list_values", "dose_response_config",
+        "normalizations", "pick_list_values", "dose_response_config",
     ):
         if key in sent:
             cmd_kwargs[key] = getattr(body, key)

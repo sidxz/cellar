@@ -23,6 +23,7 @@ from chem_vault.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
     NormalizationScope,
+    ReadoutNormalization,
 )
 
 
@@ -33,10 +34,14 @@ def deserialize_dose_response_config(data: dict[str, Any]) -> DoseResponseConfig
     are violated. Missing classification thresholds fall back to module-level
     defaults so old JSONB rows deserialize cleanly.
     """
+    y_norm_raw = data.get("y_normalization")
     return DoseResponseConfig(
         curve_type=CurveType(data["curve_type"]),
         x_readout_name=data.get("x_readout_name"),
         y_readout_name=data["y_readout_name"],
+        y_normalization=(
+            ReadoutNormalization(y_norm_raw) if y_norm_raw else None
+        ),
         hill_slope_constraint=HillSlopeConstraint(
             data.get("hill_slope_constraint", "unconstrained")
         ),
@@ -71,4 +76,7 @@ def serialize_dose_response_config(config: DoseResponseConfig) -> dict[str, Any]
     raw["curve_type"] = config.curve_type.value
     raw["hill_slope_constraint"] = config.hill_slope_constraint.value
     raw["normalization_scope"] = config.normalization_scope.value
+    raw["y_normalization"] = (
+        config.y_normalization.value if config.y_normalization is not None else None
+    )
     return raw
