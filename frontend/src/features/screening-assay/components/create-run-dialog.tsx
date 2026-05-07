@@ -23,7 +23,11 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useCreateRun } from "../hooks/use-runs";
 import { usePlateTemplates } from "../hooks/use-plate-templates";
-import { PLATE_FORMAT_LABELS, type PlateFormat } from "../types";
+import {
+  PLATE_FORMAT_LABELS,
+  type ConditionDefinition,
+  type PlateFormat,
+} from "../types";
 
 interface CreateRunDialogProps {
   protocolId: string;
@@ -31,6 +35,10 @@ interface CreateRunDialogProps {
    *  ("96" | "384" | ...). When present, the dialog pre-fills format +
    *  template from these defaults instead of starting blank. */
   protocolControlLayouts?: Record<string, string> | null;
+  /** Protocol's declared condition definitions — one input is rendered
+   *  per definition so the screener can record run-time variables
+   *  (Cell Line, Incubation Time, ATP Concentration, etc.). */
+  conditionDefinitions?: ConditionDefinition[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -55,6 +63,7 @@ function suggestedFormat(
 export function CreateRunDialog({
   protocolId,
   protocolControlLayouts,
+  conditionDefinitions,
   open,
   onOpenChange,
 }: CreateRunDialogProps) {
@@ -64,6 +73,11 @@ export function CreateRunDialog({
   const [plateFormat, setPlateFormat] = useState<string>("96");
   const [plateTemplateId, setPlateTemplateId] = useState<string>("");
   const [notes, setNotes] = useState("");
+  // Keyed by condition definition name — matches the storage shape on
+  // Run.conditions (see runs-tab valueGetter which reads name → value).
+  const [conditionValues, setConditionValues] = useState<
+    Record<string, string>
+  >({});
 
   // Whenever the dialog opens, re-seed format + template from the
   // protocol's configured control layouts. The deps include `open` so
@@ -76,6 +90,7 @@ export function CreateRunDialog({
     setPlateTemplateId(protocolControlLayouts?.[fmt] ?? "");
     setRunDate(todayISO());
     setNotes("");
+    setConditionValues({});
   }, [open, protocolControlLayouts]);
 
   // When the user manually changes the plate format, re-suggest a
@@ -101,6 +116,21 @@ export function CreateRunDialog({
     plateTemplateId !== "__none__" &&
     protocolControlLayouts[plateFormat] === plateTemplateId;
 
+  // Build the conditions payload: skip empty values, append unit (if
+  // declared on the definition) so storage shape matches existing data
+  // ("ATP Concentration": "10 uM", "Cell Line": "HeLa").
+  const buildConditionsPayload = (): Record<string, string> | null => {
+    if (!conditionDefinitions || conditionDefinitions.length === 0) return null;
+    const out: Record<string, string> = {};
+    for (const cd of conditionDefinitions) {
+      const raw = (conditionValues[cd.name] ?? "").trim();
+      if (!raw) continue;
+      const unit = cd.unit?.trim();
+      out[cd.name] = unit ? `${raw} ${unit}` : raw;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  };
+
   const handleSubmit = () => {
     createMutation.mutate(
       {
@@ -112,6 +142,7 @@ export function CreateRunDialog({
             ? plateTemplateId
             : null,
         notes: notes || null,
+        conditions: buildConditionsPayload(),
       },
       {
         onSuccess: () => {
@@ -206,6 +237,69 @@ export function CreateRunDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {conditionDefinitions && conditionDefinitions.length > 0 && (
+            <div className="grid gap-3 rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium">Conditions</p>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Run-time variables declared on the protocol. Leave blank if
+                not recorded.
+              </p>
+              {conditionDefinitions.map((cd) => {
+                const value = conditionValues[cd.name] ?? "";
+                const setValue = (v: string) =>
+                  setConditionValues((prev) => ({ ...prev, [cd.name]: v }));
+                const labelText = cd.unit
+                  ? `${cd.name} (${cd.unit})`
+                  : cd.name;
+                return (
+                  <div key={cd.id} className="grid gap-1">
+                    <Label className="text-xs">{labelText}</Label>
+                    {cd.data_type === "pick_list" &&
+                    cd.pick_list_values &&
+                    cd.pick_list_values.length > 0 ? (
+                      <Select
+                        value={value || "__none__"}
+                        onValueChange={(v) =>
+                          setValue(v === "__none__" ? "" : v)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">
+                            (not recorded)
+                          </SelectItem>
+                          {cd.pick_list_values.map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        type={cd.data_type === "numeric" ? "number" : "text"}
+                        inputMode={
+                          cd.data_type === "numeric" ? "decimal" : undefined
+                        }
+                        placeholder={
+                          cd.data_type === "numeric"
+                            ? cd.unit
+                              ? `e.g. 10 (${cd.unit})`
+                              : "e.g. 10"
+                            : undefined
+                        }
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

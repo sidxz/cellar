@@ -149,6 +149,22 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
           <StatusBadge status={params.value} />
         ),
       },
+      {
+        headerName: "Notes",
+        field: "notes",
+        flex: 1,
+        minWidth: 160,
+        cellRenderer: (params: ICellRendererParams<Run>) => {
+          const text = params.value as string | null;
+          if (!text)
+            return <span className="text-muted-foreground">&mdash;</span>;
+          return (
+            <span className="text-sm" title={text}>
+              {text.length > 80 ? `${text.slice(0, 80)}...` : text}
+            </span>
+          );
+        },
+      },
     ],
     [memberName, orgName]
   );
