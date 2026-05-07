@@ -81,12 +81,7 @@ export function ReadoutDefinitionViewerDialog({
               <Label className="text-xs">Normalization</Label>
               <div className="rounded-md border bg-background p-2">
                 <NormalizationCheckboxGroup
-                  value={
-                    readoutDef.normalizations ??
-                    (readoutDef.normalization && readoutDef.normalization !== "none"
-                      ? [readoutDef.normalization]
-                      : [])
-                  }
+                  value={readoutDef.normalizations ?? []}
                   disabled
                 />
               </div>

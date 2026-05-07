@@ -15,7 +15,7 @@ export interface MappedReadout {
   data_type: string;
   unit: string | null;
   aggregation: string;
-  normalization: string;
+  normalizations: string[];
   precision: number | null;
   pick_list_values: string[] | null;
   has_dose_response_config: boolean;

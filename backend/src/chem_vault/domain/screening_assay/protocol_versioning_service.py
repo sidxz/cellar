@@ -55,7 +55,7 @@ class ProtocolVersioningService:
                 unit=rd.unit,
                 aggregation=rd.aggregation,
                 precision=rd.precision,
-                normalization=rd.normalization,
+                normalizations=rd.normalizations,
                 is_calculated=rd.is_calculated,
                 calculation_formula=rd.calculation_formula,
                 display_order=rd.display_order,

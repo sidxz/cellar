@@ -248,7 +248,7 @@ class TestReadoutDefinition:
             data_type=ReadoutDataType.NUMERIC,
         )
         assert rd.aggregation == ReadoutAggregation.NONE
-        assert rd.normalization == ReadoutNormalization.NONE
+        assert rd.normalizations == frozenset()
         assert rd.is_calculated is False
         assert rd.calculation_formula is None
         assert rd.display_order == 0
@@ -411,14 +411,14 @@ class TestProtocolDefinitionManagement:
     ) -> None:
         protocol = _make_protocol(workspace_id, user_id)
         rd = protocol.readout_definitions[0]
-        assert rd.normalization == ReadoutNormalization.NONE
+        assert rd.normalizations == frozenset()
 
         protocol.update_readout_definition(
             rd.id, normalization=ReadoutNormalization.PERCENT_INHIBITION
         )
         updated = protocol.readout_definitions[0]
         assert updated.id == rd.id  # same id, replaced object
-        assert updated.normalization == ReadoutNormalization.PERCENT_INHIBITION
+        assert updated.normalizations == frozenset({ReadoutNormalization.PERCENT_INHIBITION})
         # other fields preserved
         assert updated.name == rd.name
 

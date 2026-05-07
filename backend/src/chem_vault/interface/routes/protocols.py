@@ -112,11 +112,8 @@ class ReadoutDefinitionResponse(BaseModel):
     unit: str | None = None
     aggregation: str
     precision: int | None = None
-    # Preferred: list of normalization formulas. Empty list means raw / no normalization.
+    # List of normalization formulas this readout def emits. Empty = raw / no normalization.
     normalizations: list[str] = []
-    # Legacy single-value field. Returns the first formula in the set (or "none"
-    # when empty) so older clients keep working.
-    normalization: str = "none"
     is_calculated: bool
     calculation_formula: str | None = None
     display_order: int
@@ -197,7 +194,6 @@ class ProtocolResponse(BaseModel):
                     aggregation=rd.aggregation.value,
                     precision=rd.precision,
                     normalizations=sorted(n.value for n in rd.normalizations),
-                    normalization=rd.normalization.value,
                     is_calculated=rd.is_calculated,
                     calculation_formula=rd.calculation_formula,
                     display_order=rd.display_order,

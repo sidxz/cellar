@@ -14,6 +14,7 @@ import {
   type DoseResponseCurve,
   type ReadoutData,
   type ReadoutDefinition,
+  type ReadoutNormalization,
 } from "../types";
 
 interface ReadoutDataTableProps {
@@ -46,19 +47,27 @@ interface PivotRow {
 const valueKey = (defId: string, isComputed: boolean) =>
   `${defId}::${isComputed ? "c" : "r"}`;
 
+/** First non-NONE normalization on a readout def, or null. When a def emits
+ * multiple formulas (e.g. raw + %inh + z-score) we surface the first as the
+ * primary label; other layers can be added later if needed. */
+function primaryNormalization(rd: ReadoutDefinition): ReadoutNormalization | null {
+  return rd.normalizations?.find((n) => n !== "none") ?? null;
+}
+
 /** Display label for the post-normalization layer of a readout def.
  * E.g. "raw AU" + PERCENT_INHIBITION → "raw AU — % Inhibition". */
 function computedLayerHeader(rd: ReadoutDefinition): string {
   if (rd.is_calculated) return rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
-  if (rd.normalization && rd.normalization !== "none") {
-    const label = READOUT_NORMALIZATION_LABELS[rd.normalization] ?? rd.normalization;
+  const norm = primaryNormalization(rd);
+  if (norm) {
+    const label = READOUT_NORMALIZATION_LABELS[norm] ?? norm;
     return `${rd.name} — ${label}`;
   }
   return rd.name;
 }
 
 function hasComputedLayer(rd: ReadoutDefinition): boolean {
-  return rd.is_calculated || (rd.normalization && rd.normalization !== "none");
+  return rd.is_calculated || primaryNormalization(rd) !== null;
 }
 
 /** Format a value with qualifier prefix: "85.2", "<12.7", ">1000" */
@@ -327,13 +336,18 @@ export function ReadoutDataTable({
       if (hasComputedLayer(rd)) {
         cols.push({
           headerName: computedLayerHeader(rd),
-          headerTooltip: rd.is_calculated && rd.calculation_formula
-            ? `Calculated: ${rd.calculation_formula}`
-            : rd.normalization && rd.normalization !== "none"
-            ? `Per-plate normalization (${
-                READOUT_NORMALIZATION_LABELS[rd.normalization] ?? rd.normalization
-              }) of ${rd.name}`
-            : undefined,
+          headerTooltip: (() => {
+            if (rd.is_calculated && rd.calculation_formula) {
+              return `Calculated: ${rd.calculation_formula}`;
+            }
+            const norm = primaryNormalization(rd);
+            if (norm) {
+              return `Per-plate normalization (${
+                READOUT_NORMALIZATION_LABELS[norm] ?? norm
+              }) of ${rd.name}`;
+            }
+            return undefined;
+          })(),
           colId: `${rd.id}::computed`,
           width: 140,
           cellClass: "text-right tabular-nums italic",

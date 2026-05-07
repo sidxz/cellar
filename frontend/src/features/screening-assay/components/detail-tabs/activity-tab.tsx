@@ -898,7 +898,11 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                             curves={compoundCurves}
                             isInteractive={false}
                             protocolConfig={drDef?.dose_response_config ?? null}
-                            yReadoutNormalization={yDef?.normalization ?? null}
+                            yReadoutNormalization={
+                              drDef?.dose_response_config?.y_normalization ??
+                              yDef?.normalizations?.find((n) => n !== "none") ??
+                              null
+                            }
                           />
                           <div className="rounded-lg border">
                         <table className="w-full text-sm">

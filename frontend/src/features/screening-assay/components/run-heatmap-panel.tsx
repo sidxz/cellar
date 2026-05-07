@@ -62,7 +62,7 @@ const DOSE_OPTION_ID = "__well_dose__";
  *  normalization OR is itself a calculated field. Matches the canonical
  *  layer-selection logic in `fit_dose_response.py` (Bug 1 fix). */
 function hasComputedLayer(def: ReadoutDefinition): boolean {
-  return def.normalization !== "none" || def.is_calculated;
+  return def.is_calculated || (def.normalizations?.some((n) => n !== "none") ?? false);
 }
 
 function computedUnitLabel(normalization: ReadoutNormalization): string {
@@ -267,7 +267,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const computedUnit = isDose
     ? "Concentration"
     : selectedDef
-      ? computedUnitLabel(selectedDef.normalization)
+      ? computedUnitLabel(
+          selectedDef.normalizations?.find((n) => n !== "none") ?? "none",
+        )
       : "Computed";
 
   return (

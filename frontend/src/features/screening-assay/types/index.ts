@@ -260,11 +260,8 @@ export interface ReadoutDefinition {
   unit: string | null;
   aggregation: ReadoutAggregation;
   precision: number | null;
-  /** New canonical: list of formulas this def emits. Empty = raw / no normalization. */
+  /** List of formulas this def emits. Empty = raw / no normalization. */
   normalizations: ReadoutNormalization[];
-  /** Legacy single-value field. Backend emits both for back-compat: use
-   *  `normalizations` going forward. */
-  normalization: ReadoutNormalization;
   is_calculated: boolean;
   calculation_formula: string | null;
   display_order: number;

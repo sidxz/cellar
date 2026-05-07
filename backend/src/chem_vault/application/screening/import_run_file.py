@@ -1160,8 +1160,9 @@ def _validate_controls_required(
     templates: dict[PlateFormat, dict[str, WellType]],
 ) -> list[str]:
     needs_controls = any(
-        _normalization_requires_controls(rd.normalization)
+        _normalization_requires_controls(n)
         for rd in protocol.readout_definitions
+        for n in rd.normalizations
     )
     if not needs_controls:
         return []

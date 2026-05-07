@@ -721,7 +721,11 @@ export function RunDoseResponseResults({
                       curves={viewingCurves}
                       isInteractive={!run.is_locked}
                       protocolConfig={drDef?.dose_response_config ?? null}
-                      yReadoutNormalization={yDef?.normalization ?? null}
+                      yReadoutNormalization={
+                        drDef?.dose_response_config?.y_normalization ??
+                        yDef?.normalizations?.find((n) => n !== "none") ??
+                        null
+                      }
                     />
                   );
                 })()}

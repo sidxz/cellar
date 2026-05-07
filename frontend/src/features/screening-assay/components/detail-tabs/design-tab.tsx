@@ -248,7 +248,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   } | null => {
     const y = protocol.readout_definitions.find((r) => r.name === yReadoutName);
     if (!y) return null;
-    switch (y.normalization) {
+    const primary = y.normalizations?.find((n) => n !== "none") ?? "none";
+    switch (primary) {
       case "percent_inhibition":
       case "percent_activation":
       case "percent_control":
@@ -272,11 +273,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdDataType(rd.data_type);
     setRdUnit(rd.unit ?? "");
     setRdAggregation(rd.aggregation);
-    setRdNormalizations(
-      rd.normalizations ?? (rd.normalization && rd.normalization !== "none"
-        ? [rd.normalization]
-        : []),
-    );
+    setRdNormalizations(rd.normalizations ?? []);
     if (rd.dose_response_config) {
       const cfg = rd.dose_response_config;
       setDrCurveType(cfg.curve_type);

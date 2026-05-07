@@ -154,15 +154,6 @@ class ReadoutDefinition(Entity):
         self.pick_list_values = pick_list_values
         self.dose_response_config = dose_response_config
 
-    @property
-    def normalization(self) -> ReadoutNormalization:
-        """Back-compat single-value view of ``normalizations``.
-
-        Returns the first formula in the set, or ``NONE`` when empty.
-        Deprecated — call sites should migrate to ``self.normalizations``.
-        """
-        return next(iter(self.normalizations), ReadoutNormalization.NONE)
-
 
 class ConditionDefinition(Entity):
     """Defines an experimental variable for categorizing runs.

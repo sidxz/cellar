@@ -15,6 +15,7 @@ from chem_vault.application.cdd_import.mapper import (
     MappingWarning,
 )
 from chem_vault.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImportQuery
+from chem_vault.domain.screening_assay.enums import ReadoutNormalization
 from chem_vault.interface.dependencies import (
     AuthDep,
     ImportCddProtocolDep,
@@ -42,7 +43,7 @@ class MappedReadoutResponse(BaseModel):
     data_type: str
     unit: str | None = None
     aggregation: str
-    normalization: str
+    normalizations: list[str] = []
     precision: int | None = None
     pick_list_values: list[str] | None = None
     has_dose_response_config: bool
@@ -55,7 +56,11 @@ class MappedReadoutResponse(BaseModel):
             data_type=r.data_type.value,
             unit=r.unit,
             aggregation=r.aggregation.value,
-            normalization=r.normalization.value,
+            normalizations=(
+                [r.normalization.value]
+                if r.normalization != ReadoutNormalization.NONE
+                else []
+            ),
             precision=r.precision,
             pick_list_values=r.pick_list_values,
             has_dose_response_config=r.dose_response_config is not None,
