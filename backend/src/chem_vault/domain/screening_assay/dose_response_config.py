@@ -7,10 +7,50 @@ from dataclasses import dataclass
 from chem_vault.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
+    InterceptBasis,
+    InterceptKind,
     NormalizationScope,
     ReadoutNormalization,
 )
 from chem_vault.domain.shared.errors import ValidationError
+
+
+@dataclass(frozen=True)
+class InterceptSpec:
+    """One intercept derived from a fitted dose-response curve.
+
+    ``level`` semantics depend on ``basis``:
+
+    * ``RELATIVE_PERCENT``: percent (0, 100) between bottom (0%) and top
+      (100%). IC50 = 50, IC90 = 90, EC50 = 50, EC90 = 90.
+    * ``ABSOLUTE``: an absolute Y value the curve must cross (rare).
+
+    ``kind`` (IC vs EC) flips the direction of the response threshold:
+    for IC, ``response_target = top - level/100 * (top - bottom)``; for EC,
+    ``response_target = bottom + level/100 * (top - bottom)``.
+    """
+
+    kind: InterceptKind
+    level: float
+    basis: InterceptBasis = InterceptBasis.RELATIVE_PERCENT
+    label: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.basis == InterceptBasis.RELATIVE_PERCENT
+            and not (0 < self.level < 100)
+        ):
+            raise ValidationError(
+                f"InterceptSpec relative percent must be in (0, 100), got {self.level}"
+            )
+
+    @property
+    def display_label(self) -> str:
+        if self.label:
+            return self.label
+        if self.basis == InterceptBasis.RELATIVE_PERCENT:
+            return f"{self.kind.value.upper()}{self.level:g}"
+        return f"{self.kind.value.upper()}@{self.level:g}"
 
 
 # Single source of truth for the auto-outlier-removal default sigma threshold.
@@ -89,6 +129,11 @@ class DoseResponseConfig:
     full_top_min: float = DEFAULT_FULL_TOP_MIN
     full_bottom_max: float = DEFAULT_FULL_BOTTOM_MAX
     partial_r2_min: float = DEFAULT_PARTIAL_R2_MIN
+    # Intercepts to compute from the same Hill fit. Empty defaults to a single
+    # 50% intercept derived from ``curve_type`` (IC50 -> IC50, EC50 -> EC50,
+    # etc.) so back-compat with existing single-intercept protocols is
+    # automatic. Multi-intercept protocols set this to (IC50, IC90) etc.
+    intercepts: tuple[InterceptSpec, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.y_readout_name or not self.y_readout_name.strip():
@@ -197,3 +242,32 @@ class DoseResponseConfig:
             raise ValidationError(
                 "DoseResponseConfig full_top_min must be greater than full_bottom_max"
             )
+
+        # Default intercept set from curve_type when none provided.
+        if not self.intercepts:
+            default_kind = (
+                InterceptKind.IC
+                if self.curve_type == CurveType.IC50
+                else InterceptKind.EC
+            )
+            object.__setattr__(
+                self,
+                "intercepts",
+                (
+                    InterceptSpec(
+                        kind=default_kind,
+                        level=50.0,
+                        basis=InterceptBasis.RELATIVE_PERCENT,
+                    ),
+                ),
+            )
+
+        # Reject exact duplicates on (kind, level, basis).
+        seen: set[tuple[InterceptKind, float, InterceptBasis]] = set()
+        for spec in self.intercepts:
+            key = (spec.kind, spec.level, spec.basis)
+            if key in seen:
+                raise ValidationError(
+                    f"DoseResponseConfig has duplicate intercept spec {key}"
+                )
+            seen.add(key)

@@ -136,6 +136,37 @@ class CurveType(StrEnum):
     TD50 = "td50"
 
 
+class InterceptKind(StrEnum):
+    """Direction language for an intercept on a dose-response curve.
+
+    - ``IC`` (Inhibition concentration): for decreasing curves; ``ICN`` is the
+      concentration at which the response has dropped N% below the upper
+      plateau toward the lower plateau (e.g. IC50 = halfway down).
+    - ``EC`` (Effective concentration): for increasing curves; ``ECN`` is the
+      concentration at which the response has risen N% above the lower
+      plateau toward the upper plateau.
+
+    Industry standard: CDD, GraphPad Prism, Genedata. Both kinds resolve to
+    the same Hill inverse — only the direction of measurement differs.
+    """
+
+    IC = "ic"
+    EC = "ec"
+
+
+class InterceptBasis(StrEnum):
+    """How an intercept's ``level`` is interpreted on the curve.
+
+    - ``RELATIVE_PERCENT``: ``level`` is a percent (0..100) of the response
+      window between bottom and top — CDD's "relative (%)" mode. IC50 = 50,
+      IC90 = 90.
+    - ``ABSOLUTE``: ``level`` is an absolute Y value the curve must cross.
+    """
+
+    RELATIVE_PERCENT = "relative_percent"
+    ABSOLUTE = "absolute"
+
+
 class CurveClass(StrEnum):
     """Shape classification of a dose-response curve."""
 

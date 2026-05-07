@@ -7,7 +7,10 @@ from typing import Any, Protocol, runtime_checkable
 
 from returns.result import Result
 
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+from chem_vault.domain.screening_assay.dose_response_config import (
+    DoseResponseConfig,
+    InterceptSpec,
+)
 from chem_vault.domain.screening_assay.enums import CurveClass
 from chem_vault.domain.shared.errors import DomainError
 
@@ -22,6 +25,23 @@ class ConcentrationResponsePoint:
 
 
 @dataclass(frozen=True)
+class InterceptValue:
+    """One computed intercept derived from the same Hill fit.
+
+    ``value`` is the concentration in linear space (not log) at which the
+    curve crosses the response threshold defined by ``spec``. ``at_bound``
+    is True when the response threshold is outside ``[bottom, top]`` — the
+    curve never reaches it; ``value`` is NaN in that case.
+    """
+
+    spec: InterceptSpec
+    value: float
+    confidence_interval_low: float | None
+    confidence_interval_high: float | None
+    at_bound: bool = False
+
+
+@dataclass(frozen=True)
 class FittedCurveResult:
     """Output of 4PL curve fitting — all parameters needed to create a DoseResponseCurve.
 
@@ -30,6 +50,10 @@ class FittedCurveResult:
     pushed EC50 against its bound, IC50 unreliable), ``ec50_outside_dose_range``
     (extrapolation), ``low_r_squared``. The frontend renders each as an amber
     badge on the curve summary.
+
+    ``intercept_values`` are the per-spec results when the config asks for
+    multiple intercepts (e.g. IC50 + IC90). The first entry's ``value``
+    matches the headline ``fitted_value`` for back-compat.
     """
 
     fitted_value: float
@@ -47,6 +71,7 @@ class FittedCurveResult:
     raw_data: list[dict[str, Any]]
     excluded_points: list[dict[str, Any]] = field(default_factory=list)
     fit_quality_warnings: list[str] = field(default_factory=list)
+    intercept_values: tuple[InterceptValue, ...] = ()
 
 
 @runtime_checkable

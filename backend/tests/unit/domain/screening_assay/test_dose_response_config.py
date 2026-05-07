@@ -259,6 +259,70 @@ class TestRangeConstraints:
         assert cfg.hill_slope_max == 1.1
 
 
+class TestDoseResponseConfigIntercepts:
+    """``intercepts`` lets one Hill fit produce multiple intercept values
+    (IC50 + IC90 + ...). Empty defaults to a single 50% intercept derived
+    from the curve type for back-compat."""
+
+    def test_default_single_intercept_from_curve_type_ic50(self):
+        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from chem_vault.domain.screening_assay.enums import InterceptKind, InterceptBasis
+        cfg = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="raw")
+        assert len(cfg.intercepts) == 1
+        only = cfg.intercepts[0]
+        assert only.kind == InterceptKind.IC
+        assert only.level == 50.0
+        assert only.basis == InterceptBasis.RELATIVE_PERCENT
+
+    def test_default_single_intercept_from_curve_type_ec50(self):
+        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from chem_vault.domain.screening_assay.enums import InterceptKind
+        cfg = DoseResponseConfig(curve_type=CurveType.EC50, y_readout_name="raw")
+        assert cfg.intercepts[0].kind == InterceptKind.EC
+        assert cfg.intercepts[0].level == 50.0
+
+    def test_explicit_multi_intercepts_preserved(self):
+        from chem_vault.domain.screening_assay.dose_response_config import (
+            DoseResponseConfig,
+            InterceptSpec,
+        )
+        from chem_vault.domain.screening_assay.enums import InterceptKind
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            y_readout_name="raw",
+            intercepts=(
+                InterceptSpec(InterceptKind.IC, 50),
+                InterceptSpec(InterceptKind.IC, 90),
+            ),
+        )
+        assert len(cfg.intercepts) == 2
+        assert cfg.intercepts[1].level == 90.0
+
+    def test_relative_percent_out_of_range_rejected(self):
+        from chem_vault.domain.screening_assay.dose_response_config import InterceptSpec
+        from chem_vault.domain.screening_assay.enums import InterceptKind, InterceptBasis
+        with pytest.raises(ValidationError):
+            InterceptSpec(InterceptKind.IC, 150, basis=InterceptBasis.RELATIVE_PERCENT)
+        with pytest.raises(ValidationError):
+            InterceptSpec(InterceptKind.IC, 0, basis=InterceptBasis.RELATIVE_PERCENT)
+
+    def test_duplicate_intercepts_rejected(self):
+        from chem_vault.domain.screening_assay.dose_response_config import (
+            DoseResponseConfig,
+            InterceptSpec,
+        )
+        from chem_vault.domain.screening_assay.enums import InterceptKind
+        with pytest.raises(ValidationError):
+            DoseResponseConfig(
+                curve_type=CurveType.IC50,
+                y_readout_name="raw",
+                intercepts=(
+                    InterceptSpec(InterceptKind.IC, 50),
+                    InterceptSpec(InterceptKind.IC, 50),
+                ),
+            )
+
+
 class TestDoseResponseConfigYNormalization:
     """y_normalization picks which formula's output to fit against — required
     when the Y readout def emits multiple normalized columns at once."""

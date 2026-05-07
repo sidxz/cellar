@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from chem_vault.domain.screening_assay.curve_fitting import InterceptValue
 from chem_vault.domain.screening_assay.enums import CurveClass, CurveType
 from chem_vault.domain.shared.entity import Entity
 from chem_vault.domain.shared.errors import ValidationError
@@ -45,6 +46,7 @@ class DoseResponseCurve(Entity):
         raw_data: list[dict[str, Any]] | None = None,
         excluded_points: list[dict[str, Any]] | None = None,
         fit_quality_warnings: list[str] | None = None,
+        intercept_values: list[InterceptValue] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -75,3 +77,7 @@ class DoseResponseCurve(Entity):
         self.raw_data = raw_data or []
         self.excluded_points = excluded_points
         self.fit_quality_warnings = list(fit_quality_warnings or [])
+        # Per-spec intercepts derived from the same Hill fit (e.g. IC50, IC90).
+        # Empty list = legacy single-intercept curve; readers fall back to
+        # ``fitted_value`` for the headline.
+        self.intercept_values = list(intercept_values or [])
