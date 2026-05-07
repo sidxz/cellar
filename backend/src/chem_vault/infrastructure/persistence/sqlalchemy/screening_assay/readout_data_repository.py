@@ -9,6 +9,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 
+from chem_vault.domain.screening_assay.enums import ReadoutNormalization
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.shared.enums import Qualifier
 from chem_vault.domain.shared.value_objects import QualifiedValue
@@ -309,6 +310,11 @@ class SQLAlchemyReadoutDataRepository:
             value_text=model.value_text,
             is_outlier=model.is_outlier,
             is_computed=model.is_computed,
+            normalization_applied=(
+                ReadoutNormalization(model.normalization_applied)
+                if model.normalization_applied
+                else None
+            ),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -328,6 +334,11 @@ class SQLAlchemyReadoutDataRepository:
             value_text=entity.value_text,
             is_outlier=entity.is_outlier,
             is_computed=entity.is_computed,
+            normalization_applied=(
+                entity.normalization_applied.value
+                if entity.normalization_applied is not None
+                else None
+            ),
         )
 
     @staticmethod
@@ -342,3 +353,8 @@ class SQLAlchemyReadoutDataRepository:
         model.value_text = entity.value_text
         model.is_outlier = entity.is_outlier
         model.is_computed = entity.is_computed
+        model.normalization_applied = (
+            entity.normalization_applied.value
+            if entity.normalization_applied is not None
+            else None
+        )

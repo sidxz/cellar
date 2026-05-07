@@ -22,6 +22,7 @@ from sqlalchemy import (
     Table,
     Text,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -174,8 +175,11 @@ class ReadoutDefinitionModel(Base, EntityModelMixin):
         String(30), nullable=False, server_default="none"
     )
     precision: Mapped[int | None] = mapped_column(Integer)
-    normalization: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default="none"
+    # JSONB array of normalization formula names (CDD parity: one readout def
+    # can emit multiple views, e.g. ["percent_inhibition", "z_score"]).
+    # Empty array means no normalization.
+    normalizations: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     is_calculated: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
@@ -351,6 +355,10 @@ class ReadoutDataModel(Base, EntityModelMixin, WorkspaceIdMixin):
     is_computed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # Tags which normalization formula produced this row (NULL for raw rows).
+    # Permits multiple computed rows per (well, readout_def) — one per formula —
+    # when a readout def emits multiple views like %inh + z-score.
+    normalization_applied: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     __table_args__ = (
         Index("ix_readout_data_run", "run_id"),

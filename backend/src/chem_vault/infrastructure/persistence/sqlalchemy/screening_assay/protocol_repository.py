@@ -223,7 +223,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 unit=rd.unit,
                 aggregation=ReadoutAggregation(rd.aggregation),
                 precision=rd.precision,
-                normalization=ReadoutNormalization(rd.normalization),
+                normalizations=frozenset(
+                    ReadoutNormalization(v) for v in (rd.normalizations or [])
+                ),
                 is_calculated=rd.is_calculated,
                 calculation_formula=rd.calculation_formula,
                 display_order=rd.display_order,
@@ -405,7 +407,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             unit=rd.unit,
             aggregation=rd.aggregation.value,
             precision=rd.precision,
-            normalization=rd.normalization.value,
+            normalizations=sorted(n.value for n in rd.normalizations),
             is_calculated=rd.is_calculated,
             calculation_formula=rd.calculation_formula,
             display_order=rd.display_order,
