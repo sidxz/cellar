@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 
 import pytest
@@ -380,7 +381,19 @@ class TestRangeConstraints:
         (0.001 to 100 µM, 11 points). The optimizer cannot observe the
         upper plateau, so without ranges the fit is wildly under-determined;
         with CDD's ranges it converges near IC50 = 70.
+
+        Also asserts the multi-intercept feature (Phase I): with
+        intercepts=(IC50, IC90), the fitter emits both values from the same
+        Hill fit. IC90 must land outside the tested dose range (the curve
+        plateaus around IC50) but still produce a finite extrapolated
+        value — not at_bound — because Top=110 means a 90% level (=99) is
+        reachable on the asymptote.
         """
+        from chem_vault.domain.screening_assay.dose_response_config import (
+            InterceptSpec,
+        )
+        from chem_vault.domain.screening_assay.enums import InterceptKind
+
         points = _generate_inhibition_data(
             ic50=70.0,
             hill=1.0,
@@ -399,6 +412,10 @@ class TestRangeConstraints:
             bottom_constraint_max=10.0,
             hill_slope_min=0.9,
             hill_slope_max=1.1,
+            intercepts=(
+                InterceptSpec(InterceptKind.IC, 50),
+                InterceptSpec(InterceptKind.IC, 90),
+            ),
         )
         fitted = self.fitter.fit(points, cfg).unwrap()
         assert 55.0 <= fitted.fitted_value <= 90.0, (
@@ -406,6 +423,20 @@ class TestRangeConstraints:
         )
         assert fitted.r_squared > 0.95
         assert 0.9 <= fitted.hill_slope <= 1.1
+
+        # Both intercepts present and ordered by spec.
+        assert len(fitted.intercept_values) == 2
+        ic50 = fitted.intercept_values[0]
+        ic90 = fitted.intercept_values[1]
+        assert ic50.spec.level == 50
+        assert ic90.spec.level == 90
+        # IC90 needs more drug than IC50 for a rising inhibition curve.
+        assert ic90.value > ic50.value
+        # Top fits ≥ 90 (well inside [85, 110]) so IC90 is reachable on the
+        # 4PL asymptote — finite, not at_bound, even though it's an
+        # extrapolation past the highest tested dose (100 µM).
+        assert not ic90.at_bound
+        assert math.isfinite(ic90.value)
 
     def test_lock_and_range_mutually_exclusive_at_construction(self):
         """Domain-layer ValidationError, not a runtime fitter error."""
