@@ -1235,6 +1235,70 @@ export function DoseResponseChart({
       });
     }
 
+    // Additional intercepts (e.g. IC90 alongside the primary IC50). The first
+    // entry of intercept_values is the primary (already drawn above as the
+    // cross-hair); slice(1) gives the extras. Skip at-bound / non-finite —
+    // the curve doesn't reach that response level so a vertical line would
+    // be misleading. Different dash style ("longdash" vs the primary's "dot")
+    // keeps the primary visually distinct.
+    if (
+      showCrossHair &&
+      !degenerate &&
+      curve.intercept_values &&
+      curve.intercept_values.length > 1
+    ) {
+      for (const iv of curve.intercept_values.slice(1)) {
+        if (iv.at_bound || !Number.isFinite(iv.value)) continue;
+        const yLevel =
+          iv.spec.basis === "relative_percent"
+            ? curve.bottom + iv.spec.level * (curve.top - curve.bottom)
+            : iv.spec.level;
+        const label =
+          iv.spec.label ??
+          `${iv.spec.kind.toUpperCase()}${iv.spec.level
+            .toString()
+            .replace(/\.0$/, "")}`;
+        shapes.push({
+          type: "line",
+          xref: "x",
+          x0: iv.value,
+          x1: iv.value,
+          yref: "paper",
+          y0: 0,
+          y1: 1,
+          line: { color, width: 1, dash: "longdash" },
+          opacity: 0.45,
+        });
+        traces.push({
+          type: "scatter",
+          mode: "markers",
+          x: [iv.value],
+          y: [yLevel],
+          marker: {
+            color,
+            size: 8,
+            line: { color: CHART_AXIS.tick, width: 1 },
+            symbol: "diamond",
+          },
+          showlegend: false,
+          hovertemplate: `${label} = ${iv.value.toPrecision(3)}${unitLabel}<extra></extra>`,
+        });
+        annotations.push({
+          x: Math.log10(iv.value),
+          y: yLevel,
+          xref: "x",
+          yref: "y",
+          text: `<b>${label}</b>`,
+          showarrow: false,
+          font: { color, size: 10 },
+          xanchor: "left",
+          yanchor: "bottom",
+          xshift: 4,
+          yshift: 2,
+        });
+      }
+    }
+
     // Plateau lines: horizontal dashed at top and bottom asymptotes
     if (showPlateaus && !degenerate) {
       shapes.push({
