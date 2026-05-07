@@ -8,21 +8,18 @@ from typing import Annotated
 from fastapi import APIRouter, File, Query, UploadFile
 from pydantic import BaseModel
 
-from chem_vault.application.screening.get_plate_map import GetPlateMap, GetPlateMapQuery
+from chem_vault.application.screening.fit_dose_response import FitOverrides
+from chem_vault.application.screening.get_plate_map import GetPlateMapQuery
 from chem_vault.application.screening.import_run_readouts import (
-    ImportRunReadouts,
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
 )
 from chem_vault.application.screening.plate_setup import (
     CompoundAssignment,
-    ParsePlateMapFile,
     ParsedPlateMap,
-    SetUpRunPlate,
     SetUpRunPlateCommand,
 )
-from chem_vault.application.screening.readout_calculation_engine import ReadoutCalculationEngine
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.screening_assay.enums import HillSlopeConstraint
 from chem_vault.interface.dependencies import (
     AuthDep,
     GetPlateMapDep,
@@ -317,6 +314,21 @@ class RecomputeRunResponse(BaseModel):
     computed_readouts: int
 
 
+class RecomputeRunRequest(BaseModel):
+    """Optional per-recompute fit constraint overrides.
+
+    Empty body (or all-null) → use the protocol's configured DoseResponseConfig.
+    Set fields override the protocol defaults for this recompute pass only;
+    they are NOT persisted on the protocol or the run. Useful for sanity-checking
+    the effect of bounds (e.g. clamping Top to 100 for a % Inhibition assay)
+    across every curve in the run without amending the protocol.
+    """
+
+    top_constraint: float | None = None
+    bottom_constraint: float | None = None
+    hill_slope_constraint: HillSlopeConstraint | None = None
+
+
 @router.post(
     "/runs/{run_id}/recompute",
     response_model=RecomputeRunResponse,
@@ -326,6 +338,7 @@ async def recompute_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     engine: ReadoutCalculationEngineDep,
+    body: RecomputeRunRequest | None = None,
 ) -> RecomputeRunResponse:
     """Re-run the readout calculation pipeline on a run's existing raw data.
 
@@ -333,7 +346,30 @@ async def recompute_run(
     dose-response curves before recomputing. Useful when a normalization
     formula or computed readout definition has changed and the persisted
     computed values need to be regenerated without re-importing the file.
+
+    The optional body allows transient per-run constraint overrides on the
+    dose-response fits (top/bottom plateau bounds, hill slope). Overrides
+    apply to this recompute pass only and are not stored.
     """
-    result = await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+    overrides = (
+        FitOverrides(
+            top=body.top_constraint,
+            bottom=body.bottom_constraint,
+            hill_slope=body.hill_slope_constraint,
+        )
+        if body is not None and not _all_none(body)
+        else None
+    )
+    result = await engine.compute_for_run(
+        run_id, workspace_id=auth.workspace_id, fit_overrides=overrides
+    )
     computed = result_to_response(result)
     return RecomputeRunResponse(computed_readouts=len(computed))
+
+
+def _all_none(body: RecomputeRunRequest) -> bool:
+    return (
+        body.top_constraint is None
+        and body.bottom_constraint is None
+        and body.hill_slope_constraint is None
+    )

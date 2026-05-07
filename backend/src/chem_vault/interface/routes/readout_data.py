@@ -125,6 +125,7 @@ class DoseResponseCurveResponse(BaseModel):
     curve_class: str | None = None
     raw_data: list[dict[str, Any]] | None = None
     excluded_points: list[dict[str, Any]] | None = None
+    fit_quality_warnings: list[str] = []
 
     @classmethod
     def from_domain(
@@ -163,6 +164,7 @@ class DoseResponseCurveResponse(BaseModel):
             curve_class=c.curve_class.value if c.curve_class else None,
             raw_data=c.raw_data or None,
             excluded_points=c.excluded_points,
+            fit_quality_warnings=list(getattr(c, "fit_quality_warnings", []) or []),
         )
 
 

@@ -154,6 +154,7 @@ class SQLAlchemyDoseResponseCurveRepository:
         model.curve_class = entity.curve_class.value if entity.curve_class else None
         model.raw_data = entity.raw_data
         model.excluded_points = entity.excluded_points
+        model.fit_quality_warnings = entity.fit_quality_warnings
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(DoseResponseCurveModel).where(
@@ -194,6 +195,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             curve_class=CurveClass(model.curve_class) if model.curve_class else None,
             raw_data=model.raw_data,
             excluded_points=model.excluded_points,
+            fit_quality_warnings=model.fit_quality_warnings or [],
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -219,4 +221,5 @@ class SQLAlchemyDoseResponseCurveRepository:
             curve_class=entity.curve_class.value if entity.curve_class else None,
             raw_data=entity.raw_data,
             excluded_points=entity.excluded_points,
+            fit_quality_warnings=entity.fit_quality_warnings,
         )

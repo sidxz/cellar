@@ -35,6 +35,7 @@ import {
   X_AXIS_FALLBACK_MAX_RATIO,
   X_AXIS_FLOOR,
   PLOT_MARKER,
+  generate4PLPoints,
 } from "../lib/dose-response-display";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,10 +57,11 @@ interface CurveConstraints {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * A curve has no meaningful sigmoid to draw when it's classified Inactive
- * or when the fit failed (degenerate parameters). In those cases we render
- * data points only — drawing a horizontal mid-line implies a fit that isn't
- * there.
+ * A curve has no meaningful sigmoid to draw when classified Inactive or
+ * the fit produced degenerate parameters. ``ec50_at_bound`` curves are
+ * still rendered (with an amber warning badge) so the user can see the
+ * data and the extrapolated fit; only truly inactive / zero curves are
+ * suppressed here.
  */
 function isDegenerateFit(curve: DoseResponseCurve): boolean {
   return (
@@ -70,26 +72,16 @@ function isDegenerateFit(curve: DoseResponseCurve): boolean {
   );
 }
 
-/** Generate 100-point 4PL sigmoid on log scale between min/max concentration */
+/** Plotly-friendly wrapper around the shared 4PL evaluator. Kept as a
+ *  thin function so existing callers don't need to thread the curve
+ *  destructure through ``generate4PLPoints``. */
 function generate4PLCurve(
   curve: DoseResponseCurve,
   xMin: number,
-  xMax: number
+  xMax: number,
 ): { x: number[]; y: number[] } {
-  const { fitted_value, hill_slope, top, bottom } = curve;
-  const logMin = Math.log10(xMin);
-  const logMax = Math.log10(xMax);
-  const xs: number[] = [];
-  const ys: number[] = [];
-
-  for (let i = 0; i <= CURVE_FIT_POINTS; i++) {
-    const logX = logMin + (logMax - logMin) * (i / CURVE_FIT_POINTS);
-    const x = Math.pow(10, logX);
-    const y = bottom + (top - bottom) / (1 + Math.pow(x / fitted_value, hill_slope));
-    xs.push(x);
-    ys.push(y);
-  }
-  return { x: xs, y: ys };
+  const { x, y } = generate4PLPoints(curve, xMin, xMax, CURVE_FIT_POINTS + 1);
+  return { x, y };
 }
 
 /** Extract (concentration, response) pairs from raw_data / excluded_points */
@@ -331,6 +323,13 @@ interface SummaryCardProps {
   isClassifying: boolean;
 }
 
+/** Map fit-quality warning codes to user-facing labels. */
+const FIT_WARNING_LABELS: Record<string, string> = {
+  ec50_at_bound: "Hit dose-range bound — IC50 unreliable",
+  ec50_outside_dose_range: "IC50 outside tested doses",
+  low_r_squared: "Low R²",
+};
+
 function SummaryCard({
   curve,
   excludedCount,
@@ -341,6 +340,9 @@ function SummaryCard({
 }: SummaryCardProps) {
   const [showClassify, setShowClassify] = useState(false);
   const includedCount = totalPoints - excludedCount;
+
+  const warnings = curve.fit_quality_warnings ?? [];
+  const isExtrapolated = warnings.includes("ec50_at_bound");
 
   return (
     <Card key={curve.id} className="py-4">
@@ -357,6 +359,9 @@ function SummaryCard({
           {CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
           {" = "}
           {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
+          {isExtrapolated && (
+            <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>
+          )}
         </p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
           <span className={cn("font-medium", rSquaredColor(curve.r_squared))}>
@@ -414,6 +419,20 @@ function SummaryCard({
             </div>
           )}
         </div>
+        {warnings.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {warnings.map((code) => (
+              <Badge
+                key={code}
+                variant="outline"
+                className="text-xs border-amber-400/60 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                title={code}
+              >
+                ⚠️ {FIT_WARNING_LABELS[code] ?? code}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -44,6 +44,7 @@ class DoseResponseCurve(Entity):
         curve_class: CurveClass | None = None,
         raw_data: list[dict[str, Any]] | None = None,
         excluded_points: list[dict[str, Any]] | None = None,
+        fit_quality_warnings: list[str] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -73,3 +74,4 @@ class DoseResponseCurve(Entity):
         self.curve_class = curve_class
         self.raw_data = raw_data or []
         self.excluded_points = excluded_points
+        self.fit_quality_warnings = list(fit_quality_warnings or [])

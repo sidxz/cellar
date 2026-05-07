@@ -151,6 +151,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [drNormalizationScope, setDrNormalizationScope] =
     useState<NormalizationScope>("per_plate");
   const [drActivityThreshold, setDrActivityThreshold] = useState("");
+  const [drTopConstraint, setDrTopConstraint] = useState("");
+  const [drBottomConstraint, setDrBottomConstraint] = useState("");
 
   const resetDoseResponseFields = () => {
     setDrCurveType("ic50");
@@ -159,6 +161,28 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setDrHillConstraint("unconstrained");
     setDrNormalizationScope("per_plate");
     setDrActivityThreshold("");
+    setDrTopConstraint("");
+    setDrBottomConstraint("");
+  };
+
+  // Y readouts with bounded normalization (% Inhibition/Activation/Control)
+  // are theoretically capped at [0, 100]. Suggest those bounds as defaults
+  // so the 4PL fitter doesn't escape into chemically meaningless territory
+  // (e.g. Top=137% on partial curves that never reach the upper plateau).
+  // Raw signal and z-score have no natural bounds → no suggestion.
+  const suggestedBoundsForY = (
+    yReadoutName: string,
+  ): { top: number; bottom: number } | null => {
+    const y = protocol.readout_definitions.find((r) => r.name === yReadoutName);
+    if (!y) return null;
+    switch (y.normalization) {
+      case "percent_inhibition":
+      case "percent_activation":
+      case "percent_control":
+        return { top: 100, bottom: 0 };
+      default:
+        return null;
+    }
   };
 
   const openEditReadout = (rdId: string) => {
@@ -178,6 +202,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       setDrActivityThreshold(
         rd.dose_response_config.activity_threshold != null
           ? String(rd.dose_response_config.activity_threshold)
+          : "",
+      );
+      setDrTopConstraint(
+        rd.dose_response_config.top_constraint != null
+          ? String(rd.dose_response_config.top_constraint)
+          : "",
+      );
+      setDrBottomConstraint(
+        rd.dose_response_config.bottom_constraint != null
+          ? String(rd.dose_response_config.bottom_constraint)
           : "",
       );
     } else {
@@ -209,9 +243,22 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       activity_threshold: drActivityThreshold
         ? parseFloat(drActivityThreshold)
         : null,
-      top_constraint: null,
-      bottom_constraint: null,
+      top_constraint:
+        drTopConstraint !== "" ? parseFloat(drTopConstraint) : null,
+      bottom_constraint:
+        drBottomConstraint !== "" ? parseFloat(drBottomConstraint) : null,
     };
+  };
+
+  // When the Y readout changes, prefill Top/Bottom with sensible bounds for
+  // its normalization — but only if the user hasn't already typed something.
+  // Lets the dialog feel pre-configured without clobbering explicit choices.
+  const handleDrYReadoutChange = (newY: string) => {
+    setDrYReadout(newY);
+    const suggested = suggestedBoundsForY(newY);
+    if (!suggested) return;
+    if (drTopConstraint === "") setDrTopConstraint(String(suggested.top));
+    if (drBottomConstraint === "") setDrBottomConstraint(String(suggested.bottom));
   };
 
   /** Numeric readouts available as X/Y axis candidates, optionally excluding one. */
@@ -265,7 +312,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           </div>
           <div className="grid gap-1">
             <Label className="text-xs">Y-Axis Readout</Label>
-            <Select value={drYReadout} onValueChange={setDrYReadout}>
+            <Select value={drYReadout} onValueChange={handleDrYReadoutChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Select..." />
               </SelectTrigger>
@@ -330,6 +377,62 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               value={drActivityThreshold}
               onChange={(e) => setDrActivityThreshold(e.target.value)}
             />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-1">
+            <Label className="text-xs">Top Constraint</Label>
+            <Input
+              type="number"
+              placeholder="leave empty = unconstrained"
+              value={drTopConstraint}
+              onChange={(e) => setDrTopConstraint(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Bottom Constraint</Label>
+            <Input
+              type="number"
+              placeholder="leave empty = unconstrained"
+              value={drBottomConstraint}
+              onChange={(e) => setDrBottomConstraint(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end pb-1">
+            {(() => {
+              const suggested = suggestedBoundsForY(drYReadout);
+              if (!suggested) {
+                return (
+                  <p className="text-xs text-muted-foreground leading-tight">
+                    Bounds the 4PL fit. Leave empty for raw signals;
+                    set Top=100, Bottom=0 for % readouts.
+                  </p>
+                );
+              }
+              const alreadySuggested =
+                drTopConstraint === String(suggested.top) &&
+                drBottomConstraint === String(suggested.bottom);
+              return (
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs text-muted-foreground leading-tight">
+                    Suggested for this readout: Top={suggested.top}, Bottom=
+                    {suggested.bottom}.
+                  </p>
+                  {!alreadySuggested && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline-offset-2 hover:underline self-start"
+                      onClick={() => {
+                        setDrTopConstraint(String(suggested.top));
+                        setDrBottomConstraint(String(suggested.bottom));
+                      }}
+                    >
+                      Use suggested
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import type { CurveClass, CurveParams } from "../types";
 import { CURVE_QUALITY_COLORS, CURVE_DEFAULT_COLOR, CHART_AXIS } from "@/shared/lib/chart-colors";
+import { generate4PLPoints } from "../lib/dose-response-display";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -107,13 +108,15 @@ export function DoseResponseSparkline({
   const toSvgY = (yVal: number) => mt + (1 - (yVal - yMin) / yRange) * plotH;
 
   const N = 30;
-  const curvePoints: string[] = [];
-  for (let i = 0; i < N; i++) {
-    const logX = logMin + (logRange * i) / (N - 1);
-    const x = Math.pow(10, logX);
-    const y = bottom + (top - bottom) / (1 + Math.pow(x / fitted_value, hill_slope));
-    curvePoints.push(`${toSvgX(logX).toFixed(1)},${toSvgY(y).toFixed(1)}`);
-  }
+  const { y: ys, logX: logXs } = generate4PLPoints(
+    { top, bottom, fitted_value, hill_slope },
+    Math.pow(10, logMin),
+    Math.pow(10, logMax),
+    N,
+  );
+  const curvePoints = ys.map(
+    (y, i) => `${toSvgX(logXs[i]).toFixed(1)},${toSvgY(y).toFixed(1)}`,
+  );
 
   const xTicks = logTicks(logMin, logMax);
   const ic50SvgX = toSvgX(Math.log10(fitted_value));

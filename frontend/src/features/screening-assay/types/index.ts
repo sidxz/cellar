@@ -362,6 +362,9 @@ export interface DoseResponseCurve {
   curve_class: CurveClass | null;
   raw_data: Array<Record<string, unknown>> | null;
   excluded_points: Array<Record<string, unknown>> | null;
+  /** Machine-readable fit-quality codes; rendered as amber badges.
+   *  Known values: "ec50_at_bound", "ec50_outside_dose_range", "low_r_squared". */
+  fit_quality_warnings?: string[];
 }
 
 // ─── Plate Template ─────────────────────────────────────────────────────────

@@ -157,13 +157,30 @@ interface RecomputeResponse {
   computed_readouts: number;
 }
 
+export interface RecomputeOverrides {
+  top_constraint?: number | null;
+  bottom_constraint?: number | null;
+  hill_slope_constraint?:
+    | "unconstrained"
+    | "negative_only"
+    | "positive_only"
+    | "fixed_at_one"
+    | null;
+}
+
+export interface RecomputeRunArgs {
+  runId: string;
+  overrides?: RecomputeOverrides;
+}
+
 export function useRecomputeRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (runId: string) =>
+    mutationFn: ({ runId, overrides }: RecomputeRunArgs) =>
       customInstance<RecomputeResponse>({
         url: `/api/v1/runs/${runId}/recompute`,
         method: "POST",
+        ...(overrides ? { data: overrides } : {}),
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: RUNS_KEY });

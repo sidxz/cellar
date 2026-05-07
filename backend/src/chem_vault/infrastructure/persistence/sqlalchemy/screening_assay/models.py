@@ -384,6 +384,7 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     curve_class: Mapped[str | None] = mapped_column(String(20))
     raw_data: Mapped[list | None] = mapped_column(JSONB)
     excluded_points: Mapped[list | None] = mapped_column(JSONB)
+    fit_quality_warnings: Mapped[list | None] = mapped_column(JSONB)
 
     __table_args__ = (
         Index("ix_drc_run", "run_id"),

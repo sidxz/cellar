@@ -39,7 +39,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/shared/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { MemberName, ProtocolName } from "@/shared/components/entity-name";
@@ -88,6 +101,43 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [unlockReason, setUnlockReason] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+
+  // Per-run fit constraint overrides for Recompute. Empty fields = use the
+  // protocol's configured DoseResponseConfig. Set fields override the
+  // protocol defaults for THIS recompute pass only — not persisted.
+  const [recomputePopoverOpen, setRecomputePopoverOpen] = useState(false);
+  const [recomputeTop, setRecomputeTop] = useState("");
+  const [recomputeBottom, setRecomputeBottom] = useState("");
+  const [recomputeHill, setRecomputeHill] = useState<string>("__protocol__");
+
+  const handleRecompute = (withOverrides: boolean) => {
+    if (!withOverrides) {
+      recomputeMutation.mutate({ runId });
+      return;
+    }
+    const overrides = {
+      top_constraint:
+        recomputeTop !== "" ? parseFloat(recomputeTop) : null,
+      bottom_constraint:
+        recomputeBottom !== "" ? parseFloat(recomputeBottom) : null,
+      hill_slope_constraint:
+        recomputeHill === "__protocol__"
+          ? null
+          : (recomputeHill as
+              | "unconstrained"
+              | "negative_only"
+              | "positive_only"
+              | "fixed_at_one"),
+    };
+    recomputeMutation.mutate(
+      { runId, overrides },
+      {
+        onSuccess: () => {
+          setRecomputePopoverOpen(false);
+        },
+      },
+    );
+  };
 
   const handleDelete = () => {
     const protocolId = query.data?.protocol_id;
@@ -223,16 +273,124 @@ export function RunDetail({ runId }: RunDetailProps) {
                 </Button>
               )}
               {!r.is_locked && r.plate_count > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => recomputeMutation.mutate(runId)}
-                  disabled={recomputeMutation.isPending}
-                  title="Re-run normalization, replicate aggregation, calculated readouts, and dose-response fitting on existing raw data"
-                >
-                  <Calculator className="mr-2 h-4 w-4" />
-                  {recomputeMutation.isPending ? "Recomputing..." : "Recompute"}
-                </Button>
+                <div className="inline-flex">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleRecompute(false)}
+                    disabled={recomputeMutation.isPending}
+                    title="Re-run normalization, replicate aggregation, calculated readouts, and dose-response fitting on existing raw data"
+                    className="rounded-r-none border-r-0"
+                  >
+                    <Calculator className="mr-2 h-4 w-4" />
+                    {recomputeMutation.isPending
+                      ? "Recomputing..."
+                      : "Recompute"}
+                  </Button>
+                  <Popover
+                    open={recomputePopoverOpen}
+                    onOpenChange={setRecomputePopoverOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={recomputeMutation.isPending}
+                        title="Recompute with one-time fit constraint overrides"
+                        className="rounded-l-none px-2"
+                      >
+                        ▾
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-80 space-y-3"
+                      align="end"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">
+                          Override fit constraints
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          One-time bounds for this recompute. Empty fields
+                          use the protocol&apos;s defaults. Not saved on
+                          the run or the protocol.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-1">
+                          <Label className="text-xs">Top</Label>
+                          <Input
+                            type="number"
+                            placeholder="e.g., 100"
+                            value={recomputeTop}
+                            onChange={(e) =>
+                              setRecomputeTop(e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <Label className="text-xs">Bottom</Label>
+                          <Input
+                            type="number"
+                            placeholder="e.g., 0"
+                            value={recomputeBottom}
+                            onChange={(e) =>
+                              setRecomputeBottom(e.target.value)
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-1">
+                        <Label className="text-xs">Hill Slope</Label>
+                        <Select
+                          value={recomputeHill}
+                          onValueChange={setRecomputeHill}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__protocol__">
+                              (use protocol default)
+                            </SelectItem>
+                            <SelectItem value="unconstrained">
+                              Unconstrained
+                            </SelectItem>
+                            <SelectItem value="negative_only">
+                              Negative only
+                            </SelectItem>
+                            <SelectItem value="positive_only">
+                              Positive only
+                            </SelectItem>
+                            <SelectItem value="fixed_at_one">
+                              Fixed at -1
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setRecomputeTop("");
+                            setRecomputeBottom("");
+                            setRecomputeHill("__protocol__");
+                          }}
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleRecompute(true)}
+                          disabled={recomputeMutation.isPending}
+                        >
+                          Recompute with overrides
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
               )}
               {(status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0 && (
                 <Button

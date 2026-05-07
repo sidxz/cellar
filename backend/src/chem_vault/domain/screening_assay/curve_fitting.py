@@ -23,7 +23,14 @@ class ConcentrationResponsePoint:
 
 @dataclass(frozen=True)
 class FittedCurveResult:
-    """Output of 4PL curve fitting — all parameters needed to create a DoseResponseCurve."""
+    """Output of 4PL curve fitting — all parameters needed to create a DoseResponseCurve.
+
+    ``fit_quality_warnings`` holds machine-readable codes flagged by the fitter
+    when the result deserves a caveat — e.g. ``ec50_at_bound`` (the optimizer
+    pushed EC50 against its bound, IC50 unreliable), ``ec50_outside_dose_range``
+    (extrapolation), ``low_r_squared``. The frontend renders each as an amber
+    badge on the curve summary.
+    """
 
     fitted_value: float
     hill_slope: float
@@ -36,6 +43,7 @@ class FittedCurveResult:
     num_points: int
     raw_data: list[dict[str, Any]]
     excluded_points: list[dict[str, Any]] = field(default_factory=list)
+    fit_quality_warnings: list[str] = field(default_factory=list)
 
 
 @runtime_checkable

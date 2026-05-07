@@ -197,7 +197,38 @@ Closing the issue automatically moves it to "Done" on the project board.
 
 ## Current Session Notes
 
-> ### Handoff (2026-05-05, branch: `fe2`) — IC50 fitting still broken; four real bugs identified, NOT yet fixed
+> ### Resolved (2026-05-07) — four IC50/import bugs from the 2026-05-05 handoff are all fixed
+>
+> All four issues called out in the prior handoff have landed on `fe2` and
+> verified manually against the NadD file. Keeping a short pointer here in
+> case anyone comes back asking; the verbose handoff that used to live at
+> this position has been pruned.
+>
+> 1. **Curves all 0 / Inactive / R²=0** — fixed in `6f81e1f`. `fit_dose_response.py`
+>    now selects the canonical value layer (raw vs `is_computed`) per readout
+>    def, so the 4PL optimizer stops being fed two y-values per dose point.
+> 2. **Plate Map UI broken on multi-plate runs** — backend response shape
+>    realigned in `6f81e1f`; tab-strip-per-plate UI in `3248235`. `PlateMapResponse`
+>    now returns `plates: PlateData[]` with per-plate summary; frontend renders
+>    one heatmap per plate.
+> 3. **Scientist text vanishing during import** — Text-readout support shipped
+>    end-to-end across `0933a62` / `33b7d83` / `fbd35bb` / `c9ad8c3` / `873f118`.
+>    Long-format normalizer carries `dict[uuid, float | str]`; importer dispatches
+>    on `data_type` to write `value` vs `value_text`.
+> 4. **`concentration` readout def em-dash on Readout Data** — addressed by the
+>    protocol-edit work (`4f4a21d`, `ef3862c`) plus making `x_readout_name`
+>    optional so X is sourced implicitly from `well.concentration`.
+>
+> Net follow-ons since: `fbdc6e3` refactor, `3d93b39` rdr fix, `fdc7af5` dr.
+>
+> ---
+>
+> ### Stale handoff below — preserved only for archaeology, do NOT act on it
+>
+> The block that used to live here described the four bugs as still open
+> with a "no shortcuts" mandate. It is OBSOLETE as of 2026-05-07.
+>
+> ### Original handoff (2026-05-05) — superseded
 >
 > #### ⚠️ Mandate for the next session
 >

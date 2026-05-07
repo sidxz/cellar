@@ -3,6 +3,7 @@
  * Used for embedding sparkline images in Excel exports.
  */
 import { CHART_COLORS, CHART_CANVAS } from "@/shared/lib/chart-colors";
+import { generate4PLPoints } from "@/features/screening-assay/lib/dose-response-display";
 
 interface CurveImageParams {
   hill_slope: number;
@@ -88,17 +89,20 @@ export function renderCurveToBase64(
     ctx.globalAlpha = 1;
   }
 
-  // Fitted sigmoid
+  // Fitted sigmoid — shared Prism 4PL evaluator keeps this in lock-step
+  // with the chart and sparkline.
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  const N = 50;
-  for (let i = 0; i < N; i++) {
-    const logX = logMin + (logRange * i) / (N - 1);
-    const x = Math.pow(10, logX);
-    const y = bottom + (top - bottom) / (1 + Math.pow(x / fitted_value, hill_slope));
-    const cx = toX(logX);
-    const cy = toY(y);
+  const { y: ys, logX: logXs } = generate4PLPoints(
+    { top, bottom, fitted_value, hill_slope },
+    Math.pow(10, logMin),
+    Math.pow(10, logMax),
+    50,
+  );
+  for (let i = 0; i < ys.length; i++) {
+    const cx = toX(logXs[i]);
+    const cy = toY(ys[i]);
     if (i === 0) ctx.moveTo(cx, cy);
     else ctx.lineTo(cx, cy);
   }

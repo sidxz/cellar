@@ -19,13 +19,16 @@ from collections import defaultdict
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.screening.fit_dose_response import (
+    FitDoseResponseCurves,
+    FitOverrides,
+)
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import (
     ReadoutAggregation,
     ReadoutNormalization,
     WellType,
 )
-from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
 from chem_vault.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from chem_vault.domain.screening_assay.plate_normalizer import PlateNormalizer
 from chem_vault.domain.screening_assay.plate_quality import PlateQualityCalculator
@@ -77,7 +80,11 @@ class ReadoutCalculationEngine:
         self._plate_quality = plate_quality
 
     async def compute_for_run(
-        self, run_id: uuid.UUID, *, workspace_id: uuid.UUID
+        self,
+        run_id: uuid.UUID,
+        *,
+        workspace_id: uuid.UUID,
+        fit_overrides: FitOverrides | None = None,
     ) -> Result[list[ReadoutData], DomainError]:
         """Execute the full computation pipeline for *run_id*.
 
@@ -87,9 +94,13 @@ class ReadoutCalculationEngine:
         """
         if self._uow.is_active:
             # Caller owns the transaction; they will commit.
-            return await self._execute(run_id, workspace_id=workspace_id)
+            return await self._execute(
+                run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
+            )
         async with self._uow:
-            result = await self._execute(run_id, workspace_id=workspace_id)
+            result = await self._execute(
+                run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
+            )
             # Computed readouts and qc_metrics live in the session until we
             # commit. Without this commit they were silently rolled back on
             # context exit.
@@ -98,7 +109,11 @@ class ReadoutCalculationEngine:
             return result
 
     async def _execute(
-        self, run_id: uuid.UUID, *, workspace_id: uuid.UUID
+        self,
+        run_id: uuid.UUID,
+        *,
+        workspace_id: uuid.UUID,
+        fit_overrides: FitOverrides | None = None,
     ) -> Result[list[ReadoutData], DomainError]:
         # ------------------------------------------------------------------
         # 1. Load context + workspace ownership check
@@ -330,6 +345,7 @@ class ReadoutCalculationEngine:
                 run=run,
                 protocol=protocol,
                 readout_data=raw_data + computed,
+                overrides=fit_overrides,
             )
 
         # ------------------------------------------------------------------

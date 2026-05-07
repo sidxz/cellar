@@ -93,6 +93,7 @@ class RefitDoseResponseCurve:
             curve.curve_class = fitted.curve_class
             curve.raw_data = fitted.raw_data
             curve.excluded_points = fitted.excluded_points
+            curve.fit_quality_warnings = list(fitted.fit_quality_warnings)
 
             await self._curve_repo.save(curve)
             await self._uow.commit()
