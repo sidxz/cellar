@@ -96,6 +96,14 @@ class ProtocolVersioningService:
             condition_definitions=cloned_conditions,
             control_layouts=dict(parent.control_layouts) if parent.control_layouts else None,
             ontology_annotations=copy.deepcopy(parent.ontology_annotations) if parent.ontology_annotations else None,
+            # Hit criteria are quality gates the screener tuned for this
+            # protocol — versions inherit them so the new draft starts with
+            # the same gates and the user can tweak from there.
+            recommended_hit_criteria=(
+                copy.deepcopy(parent.recommended_hit_criteria)
+                if parent.recommended_hit_criteria
+                else None
+            ),
         )
         # NOTE: Parent is NOT retired here. It stays ACTIVE until the new
         # version is published. PublishProtocol use case retires the parent.

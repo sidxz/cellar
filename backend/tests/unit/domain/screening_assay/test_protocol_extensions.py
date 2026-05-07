@@ -192,6 +192,39 @@ class TestProtocolDoseResponseCrossValidation:
         with pytest.raises(ValidationError, match="X-axis.*log_dose"):
             protocol.add_readout_definition(dr_readout)
 
+    def test_update_dose_response_with_missing_x_axis_raises(self):
+        """update_readout_definition mirrors add's cross-readout validation
+        — pointing the X axis at a non-existent readout must fail at update
+        time, not silently accept it and break the fitter at runtime."""
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="log_dose",
+            y_readout_name="% inhibition",
+        )
+        ic50_def = ReadoutDefinition(
+            protocol_id=_PLACEHOLDER_ID,
+            name="IC50",
+            data_type=ReadoutDataType.DOSE_RESPONSE,
+            dose_response_config=cfg,
+        )
+        protocol = _make_protocol(
+            readout_definitions=[
+                _make_readout("log_dose"),
+                _make_readout("% inhibition"),
+                ic50_def,
+            ]
+        )
+        # Try updating IC50 to point X at a readout that doesn't exist.
+        bad_cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="ghost_readout",
+            y_readout_name="% inhibition",
+        )
+        with pytest.raises(ValidationError, match="X-axis.*ghost_readout"):
+            protocol.update_readout_definition(
+                ic50_def.id, dose_response_config=bad_cfg
+            )
+
     def test_add_dose_response_with_missing_y_axis_raises(self):
         protocol = _make_protocol(
             readout_definitions=[_make_readout("log_dose")]
@@ -337,6 +370,81 @@ class TestProtocolVersioningNewFields:
         assert new_protocol.control_layouts["96"] == tpl_id
         # Verify it's a copy
         assert new_protocol.control_layouts is not protocol.control_layouts
+
+    def test_versioning_clones_dose_unit_and_pos_control_signal(self):
+        """The dose unit + POS control direction are protocol-wide
+        conventions; new versions inherit them so runs of the new draft
+        speak the same vocabulary as the parent."""
+        from chem_vault.domain.screening_assay.enums import PosControlSignal
+        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+            ProtocolVersioningService,
+        )
+        from chem_vault.domain.shared.enums import ConcentrationUnit
+
+        protocol = _make_protocol()
+        protocol.dose_unit = ConcentrationUnit.NM
+        protocol.pos_control_signal = PosControlSignal.LOW
+        protocol.publish()
+        svc = ProtocolVersioningService()
+        new_protocol = svc.create_new_version(protocol)
+        assert new_protocol.dose_unit == ConcentrationUnit.NM
+        assert new_protocol.pos_control_signal == PosControlSignal.LOW
+
+    def test_versioning_clones_ontology_annotations(self):
+        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+            ProtocolVersioningService,
+        )
+        from chem_vault.domain.shared.ontology import OntologyTerm
+
+        protocol = _make_protocol()
+        protocol.ontology_annotations = {
+            "assay_type": [
+                OntologyTerm(
+                    term_id="OBI:0001146",
+                    label="cell-based assay",
+                    ontology_source="OBI",
+                    uri="http://purl.obolibrary.org/obo/OBI_0001146",
+                )
+            ]
+        }
+        protocol.publish()
+        svc = ProtocolVersioningService()
+        new_protocol = svc.create_new_version(protocol)
+        assert "assay_type" in new_protocol.ontology_annotations
+        assert new_protocol.ontology_annotations["assay_type"][0].term_id == "OBI:0001146"
+        # Verify deep copy — mutating the new version's annotations must
+        # not bleed into the parent.
+        assert new_protocol.ontology_annotations is not protocol.ontology_annotations
+
+    def test_versioning_clones_recommended_hit_criteria(self):
+        """Hit criteria are tuned QC gates; new versions inherit them so
+        the screener doesn't have to re-tune from scratch on every
+        version."""
+        from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
+        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+            ProtocolVersioningService,
+        )
+
+        rd = _make_readout("% Inhibition")
+        protocol = _make_protocol(readout_definitions=[rd])
+        criteria = [
+            HitCriterion(
+                readout_name="% Inhibition",
+                operator="gte",
+                value=50.0,
+            )
+        ]
+        protocol.set_recommended_hit_criteria(criteria)
+        protocol.publish()
+        svc = ProtocolVersioningService()
+        new_protocol = svc.create_new_version(protocol)
+        assert new_protocol.recommended_hit_criteria is not None
+        assert len(new_protocol.recommended_hit_criteria) == 1
+        assert new_protocol.recommended_hit_criteria[0].value == 50.0
+        # Verify deep copy
+        assert (
+            new_protocol.recommended_hit_criteria[0].value == 50.0
+        )
 
 
 # ---------------------------------------------------------------------------

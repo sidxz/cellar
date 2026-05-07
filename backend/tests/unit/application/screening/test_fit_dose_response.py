@@ -99,11 +99,16 @@ def _make_protocol_with_y(
     y_is_calculated: bool = False,
 ) -> tuple[Protocol, ReadoutDefinition, ReadoutDefinition]:
     """Build a protocol with one numeric Y readout + one DOSE_RESPONSE IC50."""
+    y_norms = (
+        frozenset({y_normalization})
+        if y_normalization != ReadoutNormalization.NONE
+        else frozenset()
+    )
     y_kwargs: dict = dict(
         protocol_id=uuid.uuid4(),
         name="raw AU",
         data_type=ReadoutDataType.NUMERIC,
-        normalization=y_normalization,
+        normalizations=y_norms,
         is_calculated=y_is_calculated,
     )
     if y_is_calculated:
@@ -553,3 +558,45 @@ async def test_fit_failures_surface_in_warnings():
     assert any(str(bad_mol) in w for w in fit_result.warnings), (
         f"warnings did not name failed molecule: {fit_result.warnings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# FitOverrides preserves multi-emit + multi-intercept fields
+# ---------------------------------------------------------------------------
+
+
+def test_fit_overrides_preserves_y_normalization_and_intercepts():
+    """Recompute (FitOverrides.apply) tweaks constraints — it must not
+    silently drop the protocol's `y_normalization` selection or `intercepts`
+    list. Otherwise IC50+IC90 protocols collapse to IC50-only after a
+    refit and the y-layer selection reverts to the default."""
+    from chem_vault.application.screening.fit_dose_response import FitOverrides
+    from chem_vault.domain.screening_assay.dose_response_config import (
+        InterceptSpec,
+    )
+    from chem_vault.domain.screening_assay.enums import InterceptKind
+
+    base = DoseResponseConfig(
+        curve_type=CurveType.IC50,
+        x_readout_name=None,
+        y_readout_name="raw AU",
+        y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        intercepts=(
+            InterceptSpec(InterceptKind.IC, 50),
+            InterceptSpec(InterceptKind.IC, 90),
+        ),
+    )
+    # Apply a non-empty override that touches Top only.
+    overrides = FitOverrides(override_top=True, top=100.0)
+    result = overrides.apply(base)
+
+    assert result.y_normalization == ReadoutNormalization.PERCENT_INHIBITION, (
+        "FitOverrides.apply must preserve y_normalization"
+    )
+    assert result.intercepts is not None
+    assert len(result.intercepts) == 2, (
+        "FitOverrides.apply must preserve all intercepts"
+    )
+    assert result.intercepts[1].level == 90
+    # And the override actually applied.
+    assert result.top_constraint == 100.0

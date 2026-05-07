@@ -117,6 +117,12 @@ class FitOverrides:
             curve_type=base.curve_type,
             x_readout_name=base.x_readout_name,
             y_readout_name=base.y_readout_name,
+            # Multi-emit + multi-intercept fields must flow through unchanged
+            # — Recompute's contract is "tweak constraints, not what we
+            # report." Dropping them silently turned protocol-level
+            # IC50+IC90 into IC50-only after any refit.
+            y_normalization=base.y_normalization,
+            intercepts=base.intercepts,
             hill_slope_constraint=hill_enum,
             activity_threshold=base.activity_threshold,
             normalization_scope=base.normalization_scope,
