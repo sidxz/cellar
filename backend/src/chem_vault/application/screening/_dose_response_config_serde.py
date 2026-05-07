@@ -18,10 +18,13 @@ from chem_vault.domain.screening_assay.dose_response_config import (
     DEFAULT_OUTLIER_SIGMA,
     DEFAULT_PARTIAL_R2_MIN,
     DoseResponseConfig,
+    InterceptSpec,
 )
 from chem_vault.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
+    InterceptBasis,
+    InterceptKind,
     NormalizationScope,
     ReadoutNormalization,
 )
@@ -35,6 +38,16 @@ def deserialize_dose_response_config(data: dict[str, Any]) -> DoseResponseConfig
     defaults so old JSONB rows deserialize cleanly.
     """
     y_norm_raw = data.get("y_normalization")
+    raw_intercepts = data.get("intercepts") or ()
+    intercepts = tuple(
+        InterceptSpec(
+            kind=InterceptKind(spec["kind"]),
+            level=float(spec["level"]),
+            basis=InterceptBasis(spec.get("basis", "relative_percent")),
+            label=spec.get("label"),
+        )
+        for spec in raw_intercepts
+    )
     return DoseResponseConfig(
         curve_type=CurveType(data["curve_type"]),
         x_readout_name=data.get("x_readout_name"),
@@ -42,6 +55,7 @@ def deserialize_dose_response_config(data: dict[str, Any]) -> DoseResponseConfig
         y_normalization=(
             ReadoutNormalization(y_norm_raw) if y_norm_raw else None
         ),
+        intercepts=intercepts,
         hill_slope_constraint=HillSlopeConstraint(
             data.get("hill_slope_constraint", "unconstrained")
         ),
@@ -79,4 +93,13 @@ def serialize_dose_response_config(config: DoseResponseConfig) -> dict[str, Any]
     raw["y_normalization"] = (
         config.y_normalization.value if config.y_normalization is not None else None
     )
+    raw["intercepts"] = [
+        {
+            "kind": spec.kind.value,
+            "level": spec.level,
+            "basis": spec.basis.value,
+            "label": spec.label,
+        }
+        for spec in config.intercepts
+    ]
     return raw

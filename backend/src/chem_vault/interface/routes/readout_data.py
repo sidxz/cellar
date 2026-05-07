@@ -98,6 +98,21 @@ class ReadoutDataResponse(BaseModel):
         )
 
 
+class InterceptSpecModel(BaseModel):
+    kind: str  # "ic" | "ec"
+    level: float
+    basis: str = "relative_percent"
+    label: str | None = None
+
+
+class InterceptValueModel(BaseModel):
+    spec: InterceptSpecModel
+    value: float
+    confidence_interval_low: float | None = None
+    confidence_interval_high: float | None = None
+    at_bound: bool = False
+
+
 class DoseResponseCurveResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -126,6 +141,9 @@ class DoseResponseCurveResponse(BaseModel):
     raw_data: list[dict[str, Any]] | None = None
     excluded_points: list[dict[str, Any]] | None = None
     fit_quality_warnings: list[str] = []
+    # Per-spec intercepts derived from the same Hill fit. The first entry's
+    # ``value`` mirrors ``fitted_value`` for back-compat.
+    intercept_values: list[InterceptValueModel] = []
 
     @classmethod
     def from_domain(
@@ -165,6 +183,21 @@ class DoseResponseCurveResponse(BaseModel):
             raw_data=c.raw_data or None,
             excluded_points=c.excluded_points,
             fit_quality_warnings=list(getattr(c, "fit_quality_warnings", []) or []),
+            intercept_values=[
+                InterceptValueModel(
+                    spec=InterceptSpecModel(
+                        kind=iv.spec.kind.value,
+                        level=iv.spec.level,
+                        basis=iv.spec.basis.value,
+                        label=iv.spec.label,
+                    ),
+                    value=iv.value,
+                    confidence_interval_low=iv.confidence_interval_low,
+                    confidence_interval_high=iv.confidence_interval_high,
+                    at_bound=iv.at_bound,
+                )
+                for iv in (getattr(c, "intercept_values", []) or [])
+            ],
         )
 
 
