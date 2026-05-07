@@ -357,7 +357,7 @@ export function RunImportWizard({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[min(95vw,1200px)] max-w-[1200px] sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import Run File</DialogTitle>
           <DialogDescription>
