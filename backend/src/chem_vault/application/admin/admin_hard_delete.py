@@ -89,9 +89,10 @@ class AdminHardDelete:
         if entry is None:
             return Failure(NotFoundError("entity_type", input.entity_type))
 
-        repo = entry.repo_resolver(self._container)
-
         async with self._uow:
+            # Resolve the repo inside the active UoW so the adapter shares
+            # the same transaction (repo_resolver signature: (container, uow)).
+            repo = entry.repo_resolver(self._container, self._uow)
             obj = await repo.find_by_id(input.workspace_id, input.entity_id)
             if obj is None:
                 return Failure(NotFoundError(input.entity_type, str(input.entity_id)))

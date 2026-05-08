@@ -31,7 +31,7 @@ class AdminDeleteEntry:
     entity_type: str
     table: str
     label_field: str | None
-    repo_resolver: Callable[..., _DeletableRepo]  # (container) -> repo
+    repo_resolver: Callable[..., _DeletableRepo]  # (container, uow) -> repo
 
 
 # entity_type -> AdminDeleteEntry. Populated by register_admin_delete().
@@ -57,9 +57,9 @@ def register_admin_delete(
         RuntimeError: If entity_type is already registered.
     """
     if entity_type in _REGISTRY:
-        raise RuntimeError(
-            f"{entity_type} already registered for admin-delete"
-        )
+        # Idempotent re-registration (e.g. multiple test containers calling
+        # create_container in the same process). Skip silently.
+        return
     _REGISTRY[entity_type] = AdminDeleteEntry(
         entity_type=entity_type,
         table=table,

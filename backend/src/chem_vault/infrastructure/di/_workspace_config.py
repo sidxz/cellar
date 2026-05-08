@@ -322,8 +322,8 @@ def register_workspace_config(container: Container) -> None:
         async def delete(self, workspace_id, id):
             await self._r.delete(workspace_id, id)
 
-    def _resolve_vocab(c: Container):
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
+    def _resolve_vocab(c: Container, uow):
+        # `uow` is the caller's active UoW (already entered); share its session.
         return _VocabularyAdapter(SQLAlchemyControlledVocabularyRepository(uow))
 
     register_admin_delete(

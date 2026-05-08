@@ -48,6 +48,8 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from chem_vault.interface.routes.collections import router as collection_router
     from chem_vault.interface.routes.saved_searches import router as saved_search_router
     from chem_vault.interface.routes.search import router as search_router
+    from chem_vault.interface.routes.audit import router as audit_router
+    from chem_vault.interface.routes.admin_delete import router as admin_delete_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -60,6 +62,8 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(collection_router)
     app.include_router(saved_search_router)
     app.include_router(search_router)
+    app.include_router(audit_router)
+    app.include_router(admin_delete_router)
 
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth
@@ -97,7 +101,21 @@ async def api_app(
 
 @pytest.fixture
 async def client(api_app: FastAPI) -> AsyncIterator[AsyncClient]:
-    """Async HTTP client for API tests."""
+    """Async HTTP client for API tests (admin auth)."""
     transport = ASGITransport(app=api_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+async def editor_client(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client scoped to an editor role (for 403 tests)."""
+    editor_auth = FakeAuth(role="editor", workspace_id=workspace_id, user_id=user_id)
+    app = _create_test_app(database_url, editor_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
