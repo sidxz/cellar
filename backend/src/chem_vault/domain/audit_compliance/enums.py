@@ -29,6 +29,7 @@ class OperationType(StrEnum):
     FORMULATION_BATCH_RELEASE = "formulation_batch_release"
     STABILITY_RECORDING = "stability_recording"
     MARKUSH_DEFINITION = "markush_definition"
+    ADMIN_HARD_DELETE = "admin_hard_delete"
 
 
 class ActorType(StrEnum):
