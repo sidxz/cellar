@@ -6,10 +6,12 @@ intentionally skipped — search results are projection-only.
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
 import sqlalchemy as sa
+import structlog
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,6 +21,7 @@ from chem_vault.domain.sar_analysis.similarity_metric import (
     SimilarityMetric,
     Tanimoto,
     Tversky,
+    serialize_metric,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
@@ -31,6 +34,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.sear
     _compute_query_bytes,
 )
 
+log = structlog.get_logger(__name__)
 
 _SORT_FIELDS: dict[str, Any] = {
     "name": MoleculeModel.name,
@@ -179,10 +183,23 @@ class SQLAlchemyMoleculeReader:
             if limit is not None:
                 stmt = stmt.limit(limit)
 
+            start = time.perf_counter()
             result = await session.execute(stmt)
+            rows = result.all()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+
+            log.debug(
+                "similarity_query",
+                algorithm=algorithm_name,
+                metric=serialize_metric(effective_metric),
+                threshold=effective_threshold,
+                results_returned=len(rows),
+                elapsed_ms=round(elapsed_ms, 2),
+            )
+
             return [
                 (model_to_molecule(row[0]), float(row[1]))
-                for row in result.all()
+                for row in rows
             ]
 
     async def search_by_query(
