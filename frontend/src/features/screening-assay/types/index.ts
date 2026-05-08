@@ -328,6 +328,12 @@ export interface Protocol {
   ontology_annotations: Record<string, OntologyAnnotationTerm[]> | null;
   project_ids: string[];
   recommended_hit_criteria: HitCriterion[] | null;
+  /** Workflow-state freeze gate, orthogonal to status. While locked,
+   *  every mutation API returns 409 until ``unlock`` is called. */
+  is_locked: boolean;
+  locked_by: string | null;
+  lock_reason: string | null;
+  locked_at: string | null;
 }
 
 export interface Target {

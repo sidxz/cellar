@@ -69,6 +69,38 @@ export function useRetireProtocol() {
   });
 }
 
+export function useLockProtocol() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${id}/lock`,
+        method: "POST",
+        data: { reason },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Protocol locked");
+    },
+  });
+}
+
+export function useUnlockProtocol() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      customInstance<Protocol>({
+        url: `/api/v1/protocols/${id}/unlock`,
+        method: "POST",
+        data: { reason },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Protocol unlocked");
+    },
+  });
+}
+
 export function useVersionProtocol() {
   const qc = useQueryClient();
   return useMutation({

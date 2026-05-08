@@ -8,6 +8,8 @@ import {
   Copy,
   FlaskConical,
   LayoutDashboard,
+  Lock,
+  LockOpen,
   Paperclip,
   Pencil,
   Plus,
@@ -36,12 +38,14 @@ import {
 } from "@/shared/components/ui/dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
 import {
+  useDeleteProtocol,
+  useLockProtocol,
   useProtocol,
   usePublishProtocol,
   useRetireProtocol,
-  useVersionProtocol,
+  useUnlockProtocol,
   useUpdateProtocol,
-  useDeleteProtocol,
+  useVersionProtocol,
 } from "../hooks/use-protocols";
 import { CreateRunDialog } from "./create-run-dialog";
 import { OverviewTab, ActivityTab, DesignTab, RunsTab, FilesTab } from "./detail-tabs";
@@ -63,6 +67,8 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const versionMutation = useVersionProtocol();
   const updateMutation = useUpdateProtocol(protocolId);
   const deleteMutation = useDeleteProtocol();
+  const lockMutation = useLockProtocol();
+  const unlockMutation = useUnlockProtocol();
 
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined") {
@@ -82,6 +88,9 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockReason, setLockReason] = useState("");
+  const [lockMode, setLockMode] = useState<"lock" | "unlock">("lock");
 
   const query = { data: protocol, isLoading };
 
@@ -99,9 +108,19 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         notFoundMessage="Protocol not found."
         actions={(p) => {
           const s = p.status as ProtocolStatus;
+          const locked = p.is_locked;
+          // While locked, hide all destructive/state-changing actions
+          // except the unlock toggle. New Run is always allowed —
+          // running an experiment doesn't mutate protocol metadata.
           return (
             <>
-              {s === "draft" && (
+              {s === "active" && (
+                <Button size="sm" onClick={() => setCreateRunOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Run
+                </Button>
+              )}
+              {s === "draft" && !locked && (
                 <>
                   <Button
                     size="sm"
@@ -143,15 +162,8 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   </Button>
                 </>
               )}
-              {s === "active" && (
+              {s === "active" && !locked && (
                 <>
-                  <Button
-                    size="sm"
-                    onClick={() => setCreateRunOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Run
-                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -176,6 +188,34 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     {retireMutation.isPending ? "Retiring..." : "Retire"}
                   </Button>
                 </>
+              )}
+              {s !== "retired" && (
+                <Button
+                  size="sm"
+                  variant={locked ? "default" : "outline"}
+                  title={
+                    locked
+                      ? `Locked: ${p.lock_reason ?? ""}`
+                      : "Lock to freeze metadata for review / submission"
+                  }
+                  onClick={() => {
+                    setLockMode(locked ? "unlock" : "lock");
+                    setLockReason("");
+                    setLockOpen(true);
+                  }}
+                >
+                  {locked ? (
+                    <>
+                      <LockOpen className="mr-2 h-4 w-4" />
+                      Unlock
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="mr-2 h-4 w-4" />
+                      Lock
+                    </>
+                  )}
+                </Button>
               )}
             </>
           );
@@ -236,6 +276,62 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         open={createRunOpen}
         onOpenChange={setCreateRunOpen}
       />
+
+      {/* Lock / Unlock dialog — captures the audit-log reason. */}
+      <Dialog open={lockOpen} onOpenChange={setLockOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {lockMode === "lock" ? "Lock Protocol" : "Unlock Protocol"}
+            </DialogTitle>
+            <DialogDescription>
+              {lockMode === "lock"
+                ? "Freeze the protocol's metadata. While locked, no edits, additions, or status changes are allowed until you unlock."
+                : "Release the freeze so the protocol can be edited again. Reason is recorded in the audit log."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label>Reason</Label>
+            <Textarea
+              placeholder={
+                lockMode === "lock"
+                  ? "e.g. FDA submission window, locked for external review"
+                  : "e.g. Review complete, resuming edits"
+              }
+              value={lockReason}
+              onChange={(e) => setLockReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLockOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const mut = lockMode === "lock" ? lockMutation : unlockMutation;
+                mut.mutate(
+                  { id: protocolId, reason: lockReason.trim() },
+                  { onSuccess: () => setLockOpen(false) },
+                );
+              }}
+              disabled={
+                !lockReason.trim() ||
+                lockMutation.isPending ||
+                unlockMutation.isPending
+              }
+            >
+              {lockMode === "lock"
+                ? lockMutation.isPending
+                  ? "Locking..."
+                  : "Lock"
+                : unlockMutation.isPending
+                  ? "Unlocking..."
+                  : "Unlock"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Draft Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
