@@ -9,6 +9,7 @@ from returns.result import Result
 
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.shared.value_objects import ChemicalStructure, ComputedDescriptors
+from chem_vault.infrastructure.rdkit.fingerprint_generator import Fingerprints
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ class ProcessedStructureDTO:
 
     structure: ChemicalStructure
     descriptors: ComputedDescriptors
-    fingerprints: dict[str, bytes]
+    fingerprints: Fingerprints
     qc_result: QCResultDTO
     detected_salt: DetectedSaltDTO | None = None
 

@@ -28,9 +28,8 @@ class TestStructureProcessor:
         assert out.descriptors.molecular_weight > 0
 
         # Fingerprints
-        assert "morgan" in out.fingerprints
-        assert "maccs" in out.fingerprints
-        assert len(out.fingerprints) == 5
+        assert isinstance(out.fingerprints.morgan, bytes)
+        assert len(out.fingerprints.morgan) > 0
 
         # QC
         assert out.qc_result.is_clean

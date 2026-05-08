@@ -76,7 +76,7 @@ class StructureProcessor:
         descriptors = self._descriptor_calc.calculate(std_mol.mol)
 
         # 4. Generate fingerprints
-        fingerprints = self._fp_gen.generate_all(std_mol.mol)
+        fingerprints = self._fp_gen.compute(std_mol.mol)
 
         # 5. Build domain VOs
         structure = ChemicalStructure(
