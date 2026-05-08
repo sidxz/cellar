@@ -1,18 +1,12 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/shared/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
-import {
-  PICK_LIST_COLORS,
-  resolvePickListColor,
-} from "../lib/pick-list-colors";
+import { Plus, Trash2 } from "lucide-react";
+import { useRef } from "react";
+import { PICK_LIST_COLORS, resolvePickListColor } from "../lib/pick-list-colors";
 import type { PickListValue } from "../types";
 
 interface PickListEditorProps {
@@ -36,12 +30,25 @@ export function PickListEditor({
   disabled = false,
   className,
 }: PickListEditorProps) {
+  // Stable per-row keys so middle-deletes don't shift focus / popover state
+  // onto a different row. Resized in lockstep with the value array.
+  const keysRef = useRef<string[]>([]);
+  while (keysRef.current.length < value.length) {
+    keysRef.current.push(
+      `${Date.now()}-${keysRef.current.length}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+  }
+  if (keysRef.current.length > value.length) {
+    keysRef.current = keysRef.current.slice(0, value.length);
+  }
+
   const updateAt = (i: number, patch: Partial<PickListValue>) => {
     const next = value.slice();
     next[i] = { ...next[i], ...patch };
     onChange(next);
   };
   const removeAt = (i: number) => {
+    keysRef.current = keysRef.current.filter((_, j) => j !== i);
     onChange(value.filter((_, j) => j !== i));
   };
   const append = () => {
@@ -58,7 +65,7 @@ export function PickListEditor({
       {value.map((v, i) => {
         const resolved = resolvePickListColor(v.label || "—", v.color);
         return (
-          <div key={i} className="flex items-center gap-2">
+          <div key={keysRef.current[i]} className="flex items-center gap-2">
             <Input
               value={v.label}
               onChange={(e) => updateAt(i, { label: e.target.value })}
@@ -84,16 +91,10 @@ export function PickListEditor({
                     disabled && "cursor-not-allowed opacity-50",
                   )}
                 >
-                  <span
-                    className={cn("h-4 w-4 rounded-full", resolved.dot)}
-                  />
+                  <span className={cn("h-4 w-4 rounded-full", resolved.dot)} />
                 </button>
               </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className="w-auto p-2"
-                sideOffset={4}
-              >
+              <PopoverContent align="end" className="w-auto p-2" sideOffset={4}>
                 <div className="grid grid-cols-4 gap-2">
                   {PICK_LIST_COLORS.map((c) => (
                     <button
@@ -138,13 +139,7 @@ export function PickListEditor({
           </div>
         );
       })}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={append}
-        disabled={disabled}
-      >
+      <Button type="button" variant="outline" size="sm" onClick={append} disabled={disabled}>
         <Plus className="mr-1 h-3.5 w-3.5" /> Add value
       </Button>
     </div>

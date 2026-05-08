@@ -81,15 +81,17 @@ export function ExportToolbar({ gridRef, filename, excelEnhancer }: ExportToolba
         worksheet.addRow(row);
       }
 
-      // Auto-width columns
-      worksheet.columns.forEach((col, i) => {
-        const headerLen = String(headers[i] ?? "").length;
-        let maxLen = headerLen;
-        displayRows.forEach((row) => {
+      // Auto-width columns. Single pass: O(rows × columns) only walks each
+      // cell once total, instead of once per (row, column) pair.
+      const maxLens = headers.map((h) => String(h ?? "").length);
+      for (const row of displayRows) {
+        for (let i = 0; i < maxLens.length; i++) {
           const cellLen = String(row[i] ?? "").length;
-          if (cellLen > maxLen) maxLen = cellLen;
-        });
-        col.width = Math.min(Math.max(maxLen + 2, 10), 40);
+          if (cellLen > maxLens[i]) maxLens[i] = cellLen;
+        }
+      }
+      worksheet.columns.forEach((col, i) => {
+        col.width = Math.min(Math.max(maxLens[i] + 2, 10), 40);
       });
 
       // Call enhancer if provided (adds images, extra sheets, etc.)

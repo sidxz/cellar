@@ -1,5 +1,7 @@
 "use client";
 
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,27 +9,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
 import { resolvePickListColor } from "../lib/pick-list-colors";
+import { CLASSIFICATION_THRESHOLD_DEFAULTS } from "../lib/readout-constants";
 import {
   CURVE_TYPE_LABELS,
+  type CurveType,
   HILL_SLOPE_CONSTRAINT_LABELS,
+  type HillSlopeConstraint,
   NORMALIZATION_SCOPE_LABELS,
+  type NormalizationScope,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
-  type CurveType,
-  type HillSlopeConstraint,
-  type NormalizationScope,
   type ReadoutAggregation,
   type ReadoutDataType,
   type ReadoutDefinition,
 } from "../types";
-import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { InterceptsEditor } from "./intercepts-editor";
+import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 
 interface ReadoutDefinitionViewerDialogProps {
   readoutDef: ReadoutDefinition | null;
@@ -36,11 +37,10 @@ interface ReadoutDefinitionViewerDialogProps {
 }
 
 /**
- * Read-only modal showing the full configuration for a readout definition,
- * styled like CDD's "View Readout Definition" dialog. All inputs are
- * `disabled` (greyed but visually preserved), so the viewer feels like an
- * Edit dialog the user just isn't editing — preserving the spatial mental
- * model when comparing to the writable form.
+ * Read-only modal showing the full configuration for a readout definition.
+ * All inputs are `disabled` (greyed but visually preserved), so the viewer
+ * feels like an Edit dialog the user just isn't editing — preserving the
+ * spatial mental model when comparing to the writable form.
  */
 export function ReadoutDefinitionViewerDialog({
   readoutDef,
@@ -65,18 +65,16 @@ export function ReadoutDefinitionViewerDialog({
               <Field
                 label="Data Type"
                 value={
-                  READOUT_DATA_TYPE_LABELS[
-                    readoutDef.data_type as ReadoutDataType
-                  ] ?? readoutDef.data_type
+                  READOUT_DATA_TYPE_LABELS[readoutDef.data_type as ReadoutDataType] ??
+                  readoutDef.data_type
                 }
               />
               <Field label="Unit" value={readoutDef.unit ?? ""} />
               <Field
                 label="Aggregation"
                 value={
-                  READOUT_AGGREGATION_LABELS[
-                    readoutDef.aggregation as ReadoutAggregation
-                  ] ?? readoutDef.aggregation
+                  READOUT_AGGREGATION_LABELS[readoutDef.aggregation as ReadoutAggregation] ??
+                  readoutDef.aggregation
                 }
               />
             </div>
@@ -91,10 +89,7 @@ export function ReadoutDefinitionViewerDialog({
             <div className="mt-3 grid gap-1">
               <Label className="text-xs">Normalization</Label>
               <div className="rounded-md border bg-background p-2">
-                <NormalizationCheckboxGroup
-                  value={readoutDef.normalizations ?? []}
-                  disabled
-                />
+                <NormalizationCheckboxGroup value={readoutDef.normalizations ?? []} disabled />
               </div>
             </div>
             {readoutDef.is_calculated && readoutDef.calculation_formula && (
@@ -106,26 +101,25 @@ export function ReadoutDefinitionViewerDialog({
                 />
               </div>
             )}
-            {readoutDef.pick_list_values &&
-              readoutDef.pick_list_values.length > 0 && (
-                <div className="mt-3 grid gap-1">
-                  <Label className="text-xs">Pick List Values</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {readoutDef.pick_list_values.map((v) => {
-                      const c = resolvePickListColor(v.label, v.color);
-                      return (
-                        <Badge
-                          key={v.label}
-                          variant="outline"
-                          className={cn("text-xs", c.bg, c.text)}
-                        >
-                          {v.label}
-                        </Badge>
-                      );
-                    })}
-                  </div>
+            {readoutDef.pick_list_values && readoutDef.pick_list_values.length > 0 && (
+              <div className="mt-3 grid gap-1">
+                <Label className="text-xs">Pick List Values</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {readoutDef.pick_list_values.map((v) => {
+                    const c = resolvePickListColor(v.label, v.color);
+                    return (
+                      <Badge
+                        key={v.label}
+                        variant="outline"
+                        className={cn("text-xs", c.bg, c.text)}
+                      >
+                        {v.label}
+                      </Badge>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+            )}
           </Section>
 
           {/* ── Dose-Response sections (only when configured) ─────── */}
@@ -135,27 +129,20 @@ export function ReadoutDefinitionViewerDialog({
                 <div className="grid grid-cols-2 gap-3">
                   <Field
                     label="Curve Type"
-                    value={
-                      CURVE_TYPE_LABELS[cfg.curve_type as CurveType] ??
-                      cfg.curve_type
-                    }
+                    value={CURVE_TYPE_LABELS[cfg.curve_type as CurveType] ?? cfg.curve_type}
                   />
                   <Field label="Y readout" value={cfg.y_readout_name} />
                   <Field
                     label="Normalization Scope"
                     value={
-                      NORMALIZATION_SCOPE_LABELS[
-                        cfg.normalization_scope as NormalizationScope
-                      ] ?? cfg.normalization_scope
+                      NORMALIZATION_SCOPE_LABELS[cfg.normalization_scope as NormalizationScope] ??
+                      cfg.normalization_scope
                     }
                   />
                   {/* X readout shown only when overridden — default is
                       well.dose, not interesting to show. */}
                   {cfg.x_readout_name && (
-                    <Field
-                      label="X readout (override)"
-                      value={cfg.x_readout_name}
-                    />
+                    <Field label="X readout (override)" value={cfg.x_readout_name} />
                   )}
                 </div>
               </Section>
@@ -183,8 +170,7 @@ export function ReadoutDefinitionViewerDialog({
                         ] ?? cfg.hill_slope_constraint
                       }
                     />
-                    {(cfg.hill_slope_min != null ||
-                      cfg.hill_slope_max != null) && (
+                    {(cfg.hill_slope_min != null || cfg.hill_slope_max != null) && (
                       <RangeField
                         label="Hill custom range"
                         min={cfg.hill_slope_min}
@@ -193,18 +179,15 @@ export function ReadoutDefinitionViewerDialog({
                     )}
                   </div>
                   {cfg.activity_threshold != null && (
-                    <Field
-                      label="Activity Threshold (%)"
-                      value={String(cfg.activity_threshold)}
-                    />
+                    <Field label="Activity Threshold (%)" value={String(cfg.activity_threshold)} />
                   )}
                 </div>
               </Section>
 
               <Section title="Data Calculations">
                 <p className="text-xs text-muted-foreground mb-2 leading-tight">
-                  Intercepts derived from the same Hill fit. Empty list
-                  defaults to a single 50% intercept of the curve type.
+                  Intercepts derived from the same Hill fit. Empty list defaults to a single 50%
+                  intercept of the curve type.
                 </p>
                 <InterceptsEditor
                   value={cfg.intercepts ?? []}
@@ -220,44 +203,41 @@ export function ReadoutDefinitionViewerDialog({
                     value={cfg.outlier_sigma != null ? "Enabled" : "Disabled"}
                   />
                   {cfg.outlier_sigma != null && (
-                    <Field
-                      label="Threshold (× SD)"
-                      value={String(cfg.outlier_sigma)}
-                    />
+                    <Field label="Threshold (× SD)" value={String(cfg.outlier_sigma)} />
                   )}
                 </div>
               </Section>
 
               <Section title="Classification thresholds">
                 <p className="text-xs text-muted-foreground mb-3 leading-tight">
-                  Defaults are calibrated for % readouts. Raw-signal assays
-                  may have these overridden per-protocol.
+                  Defaults are calibrated for % readouts. Raw-signal assays may have these
+                  overridden per-protocol.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <ClassificationThresholdField
                     label="Inactive cutoff (max response)"
                     value={cfg.inactive_threshold}
-                    defaultValue={30}
+                    defaultValue={CLASSIFICATION_THRESHOLD_DEFAULTS.inactiveCutoff}
                   />
                   <ClassificationThresholdField
                     label="Full curve · min R²"
                     value={cfg.full_r2_min}
-                    defaultValue={0.8}
+                    defaultValue={CLASSIFICATION_THRESHOLD_DEFAULTS.fullR2Min}
                   />
                   <ClassificationThresholdField
                     label="Full curve · min Top"
                     value={cfg.full_top_min}
-                    defaultValue={80}
+                    defaultValue={CLASSIFICATION_THRESHOLD_DEFAULTS.fullTopMin}
                   />
                   <ClassificationThresholdField
                     label="Full curve · max Bottom"
                     value={cfg.full_bottom_max}
-                    defaultValue={20}
+                    defaultValue={CLASSIFICATION_THRESHOLD_DEFAULTS.fullBottomMax}
                   />
                   <ClassificationThresholdField
                     label="Partial curve · min R²"
                     value={cfg.partial_r2_min}
-                    defaultValue={0.6}
+                    defaultValue={CLASSIFICATION_THRESHOLD_DEFAULTS.partialR2Min}
                   />
                 </div>
               </Section>
@@ -308,9 +288,7 @@ function Field({
         readOnly
         aria-readonly="true"
         value={value}
-        className={
-          "bg-muted cursor-not-allowed " + (monospace ? "font-mono text-xs" : "")
-        }
+        className={`bg-muted cursor-not-allowed ${monospace ? "font-mono text-xs" : ""}`}
       />
     </div>
   );
@@ -337,12 +315,11 @@ function ParamRow({
           {(["free", "range", "lock"] as const).map((m) => (
             <span
               key={m}
-              className={
-                "px-2.5 py-1 capitalize first:rounded-l-md last:rounded-r-md " +
-                (m === mode
+              className={`px-2.5 py-1 capitalize first:rounded-l-md last:rounded-r-md ${
+                m === mode
                   ? "bg-primary text-primary-foreground"
-                  : "bg-background text-muted-foreground")
-              }
+                  : "bg-background text-muted-foreground"
+              }`}
             >
               {m}
             </span>
@@ -376,9 +353,7 @@ function ParamRow({
         </div>
       )}
       {mode === "free" && (
-        <p className="text-xs text-muted-foreground">
-          Optimizer chooses freely from the data.
-        </p>
+        <p className="text-xs text-muted-foreground">Optimizer chooses freely from the data.</p>
       )}
     </div>
   );
@@ -403,11 +378,7 @@ function ClassificationThresholdField({
     <div className="grid gap-1">
       <Label className="text-xs">
         {label}
-        {isDefault && (
-          <span className="ml-1 font-normal text-muted-foreground">
-            (default)
-          </span>
-        )}
+        {isDefault && <span className="ml-1 font-normal text-muted-foreground">(default)</span>}
       </Label>
       <Input
         readOnly

@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
+import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
 import {
-  Card,
-  CardContent,
-} from "@/shared/components/ui/card";
+  type ProtocolForm,
+  useProtocolForms,
+} from "@/features/workspace-config/hooks/use-protocol-forms";
+import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
+import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
+import { SearchableSelect } from "@/shared/components/searchable-select";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent } from "@/shared/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,65 +31,33 @@ import {
 import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
-import { useProtocolForms, type ProtocolForm } from "@/features/workspace-config/hooks/use-protocol-forms";
-import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
-import {
-  OntologySearchInput,
-  type OntologyTerm,
-} from "@/shared/components/ontology-search-input";
-import { useProjects } from "@/features/research-organization/hooks/use-projects";
-import { SearchableSelect } from "@/shared/components/searchable-select";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
 import {
+  VISIBLE_READOUT_DATA_TYPES,
+  WELL_CONC_X,
+  isReservedReadoutName,
+} from "../lib/readout-constants";
+import {
   CURVE_TYPE_LABELS,
+  type CreateReadoutDefinitionInput,
   DOSE_UNIT_LABELS,
+  type DoseUnit,
   HILL_SLOPE_CONSTRAINT_LABELS,
   NORMALIZATION_SCOPE_LABELS,
   PROTOCOL_TYPE_LABELS,
-  READOUT_AGGREGATION_LABELS,
-  READOUT_DATA_TYPE_LABELS,
-  type CreateReadoutDefinitionInput,
-  type DoseUnit,
   type PickListValue,
   type ProtocolType,
+  READOUT_AGGREGATION_LABELS,
+  READOUT_DATA_TYPE_LABELS,
   type ReadoutNormalization,
 } from "../types";
 import { FormulaInput } from "./formula-input";
-import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { PickListEditor } from "./pick-list-editor";
-
-// Sentinel for the X-axis dropdown that means "use the well's concentration"
-// (mapped to x_readout_name=null in the payload).
-const WELL_CONC_X = "__well_concentration__";
-
-// FE-visible subset of the readout data-type enum. File / Date / Batch
-// Link are dropped from the picker — they're either run-level metadata
-// chem-vault already models elsewhere (run.run_date, well.batch_id) or
-// per-run attachments. The BE enum keeps them for legacy hydration.
-const VISIBLE_READOUT_DATA_TYPES: readonly string[] = [
-  "numeric",
-  "text",
-  "pick_list",
-  "dose_response",
-] as const;
-
-// Reserved readout-definition names that collide with built-in well metadata.
-// Kept in sync with backend domain.screening_assay.protocol._RESERVED_READOUT_NAMES.
-const RESERVED_READOUT_NAMES: ReadonlySet<string> = new Set([
-  "concentration",
-  "dose",
-  "well",
-  "plate",
-  "batch",
-  "compound",
-]);
-
-function isReservedReadoutName(name: string): boolean {
-  return RESERVED_READOUT_NAMES.has(name.trim().toLowerCase());
-}
+import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 
 interface CreateProtocolDialogProps {
   open: boolean;
@@ -156,9 +128,8 @@ export function CreateProtocolDialog({
   const { data: ontologySlots } = useOntologySlots();
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
-  const crossProtocolNames = (allProtocols ?? []).map((p) => p.name);
-  const categoryTerms =
-    vocabularies?.find((v) => v.name === "Protocol Categories")?.terms ?? [];
+  const crossProtocolNames = useMemo(() => (allProtocols ?? []).map((p) => p.name), [allProtocols]);
+  const categoryTerms = vocabularies?.find((v) => v.name === "Protocol Categories")?.terms ?? [];
 
   const [selectedFormId, setSelectedFormId] = useState<string>("");
   const [name, setName] = useState("");
@@ -167,14 +138,12 @@ export function CreateProtocolDialog({
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [doseUnit, setDoseUnit] = useState<DoseUnit>("uM");
-  const [readoutDefs, setReadoutDefs] = useState<ReadoutDefState[]>([
-    emptyReadoutDef(1),
-  ]);
+  const [readoutDefs, setReadoutDefs] = useState<ReadoutDefState[]>([emptyReadoutDef(1)]);
   const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
   const [conditionDefs, setConditionDefs] = useState<ConditionDefState[]>([]);
-  const [ontologyAnnotations, setOntologyAnnotations] = useState<
-    Record<string, OntologyTerm[]>
-  >({});
+  const [ontologyAnnotations, setOntologyAnnotations] = useState<Record<string, OntologyTerm[]>>(
+    {},
+  );
 
   const resetForm = () => {
     setSelectedFormId("");
@@ -198,10 +167,8 @@ export function CreateProtocolDialog({
     if (form.readout_templates.length > 0) {
       setReadoutDefs(
         form.readout_templates.map((tpl, i) => {
-          const tplNormalizations = (tpl.normalizations as
-            | ReadoutNormalization[]
-            | undefined);
-          const tplLegacy = (tpl.normalization as string | undefined);
+          const tplNormalizations = tpl.normalizations as ReadoutNormalization[] | undefined;
+          const tplLegacy = tpl.normalization as string | undefined;
           const resolvedNormalizations: ReadoutNormalization[] =
             tplNormalizations && tplNormalizations.length > 0
               ? tplNormalizations
@@ -261,62 +228,51 @@ export function CreateProtocolDialog({
     field: K,
     value: ReadoutDefState[K],
   ) => {
-    setReadoutDefs((prev) =>
-      prev.map((rd, i) => (i === index ? { ...rd, [field]: value } : rd))
-    );
+    setReadoutDefs((prev) => prev.map((rd, i) => (i === index ? { ...rd, [field]: value } : rd)));
   };
 
   const validReadouts = readoutDefs.filter((rd) => rd.name.trim());
-  const hasReservedReadoutName = validReadouts.some((rd) =>
-    isReservedReadoutName(rd.name)
-  );
+  const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
   const canSubmit =
-    name.trim() &&
-    validReadouts.length > 0 &&
-    !hasReservedReadoutName &&
-    !createMutation.isPending;
+    name.trim() && validReadouts.length > 0 && !hasReservedReadoutName && !createMutation.isPending;
 
   const handleSubmit = () => {
-    const readout_definitions: CreateReadoutDefinitionInput[] =
-      validReadouts.map((rd) => {
-        const base: CreateReadoutDefinitionInput = {
-          name: rd.name.trim(),
-          data_type: rd.data_type as CreateReadoutDefinitionInput["data_type"],
-          unit: rd.unit || null,
-          aggregation:
-            rd.aggregation as CreateReadoutDefinitionInput["aggregation"],
-          normalizations: rd.normalizations,
-          is_calculated: rd.is_calculated,
-          calculation_formula: rd.is_calculated
-            ? rd.calculation_formula || null
+    const readout_definitions: CreateReadoutDefinitionInput[] = validReadouts.map((rd) => {
+      const base: CreateReadoutDefinitionInput = {
+        name: rd.name.trim(),
+        data_type: rd.data_type as CreateReadoutDefinitionInput["data_type"],
+        unit: rd.unit || null,
+        aggregation: rd.aggregation as CreateReadoutDefinitionInput["aggregation"],
+        normalizations: rd.normalizations,
+        is_calculated: rd.is_calculated,
+        calculation_formula: rd.is_calculated ? rd.calculation_formula || null : null,
+        display_order: rd.display_order,
+      };
+      if (rd.data_type === "pick_list") {
+        const cleaned = rd.pick_list_values
+          .filter((v) => v.label.trim())
+          .map((v) => ({ label: v.label.trim(), color: v.color || null }));
+        if (cleaned.length > 0) {
+          base.pick_list_values = cleaned;
+        }
+      }
+      if (rd.data_type === "dose_response" && rd.dr_y_readout) {
+        base.dose_response_config = {
+          curve_type: rd.dr_curve_type,
+          x_readout_name:
+            rd.dr_x_readout === WELL_CONC_X || !rd.dr_x_readout ? null : rd.dr_x_readout,
+          y_readout_name: rd.dr_y_readout,
+          hill_slope_constraint: rd.dr_hill_constraint,
+          activity_threshold: rd.dr_activity_threshold
+            ? Number.parseFloat(rd.dr_activity_threshold)
             : null,
-          display_order: rd.display_order,
-        };
-        if (rd.data_type === "pick_list") {
-          const cleaned = rd.pick_list_values
-            .filter((v) => v.label.trim())
-            .map((v) => ({ label: v.label.trim(), color: v.color || null }));
-          if (cleaned.length > 0) {
-            base.pick_list_values = cleaned;
-          }
-        }
-        if (rd.data_type === "dose_response" && rd.dr_y_readout) {
-          base.dose_response_config = {
-            curve_type: rd.dr_curve_type,
-            x_readout_name:
-              rd.dr_x_readout === WELL_CONC_X || !rd.dr_x_readout
-                ? null
-                : rd.dr_x_readout,
-            y_readout_name: rd.dr_y_readout,
-            hill_slope_constraint: rd.dr_hill_constraint,
-            activity_threshold: rd.dr_activity_threshold ? parseFloat(rd.dr_activity_threshold) : null,
-            normalization_scope: rd.dr_normalization_scope,
-            top_constraint: null,
-            bottom_constraint: null,
-          } as CreateReadoutDefinitionInput["dose_response_config"];
-        }
-        return base;
-      });
+          normalization_scope: rd.dr_normalization_scope,
+          top_constraint: null,
+          bottom_constraint: null,
+        } as CreateReadoutDefinitionInput["dose_response_config"];
+      }
+      return base;
+    });
 
     const condition_definitions = conditionDefs
       .filter((cd) => cd.name.trim())
@@ -353,7 +309,7 @@ export function CreateProtocolDialog({
           onOpenChange(false);
           resetForm();
         },
-      }
+      },
     );
   };
 
@@ -420,13 +376,11 @@ export function CreateProtocolDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(PROTOCOL_TYPE_LABELS).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    )
-                  )}
+                  {Object.entries(PROTOCOL_TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -445,10 +399,7 @@ export function CreateProtocolDialog({
 
           <div className="grid gap-2">
             <Label>Dose Unit</Label>
-            <Select
-              value={doseUnit}
-              onValueChange={(v) => setDoseUnit(v as DoseUnit)}
-            >
+            <Select value={doseUnit} onValueChange={(v) => setDoseUnit(v as DoseUnit)}>
               <SelectTrigger className="w-48">
                 <SelectValue />
               </SelectTrigger>
@@ -461,8 +412,8 @@ export function CreateProtocolDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Canonical unit for all wells and IC50 fits of runs of this
-              protocol. Picked once at protocol design time.
+              Canonical unit for all wells and IC50 fits of runs of this protocol. Picked once at
+              protocol design time.
             </p>
           </div>
 
@@ -513,18 +464,14 @@ export function CreateProtocolDialog({
               <Separator />
               <Label className="text-base font-semibold">
                 Ontology Annotations{" "}
-                <span className="text-xs font-normal text-muted-foreground">
-                  (optional)
-                </span>
+                <span className="text-xs font-normal text-muted-foreground">(optional)</span>
               </Label>
               <div className="space-y-3">
                 {ontologySlots.map((slot) => (
                   <div key={slot.id} className="grid gap-1.5">
                     <Label className="text-xs">
                       {slot.label}
-                      {slot.is_required && (
-                        <span className="ml-1 text-destructive">*</span>
-                      )}
+                      {slot.is_required && <span className="ml-1 text-destructive">*</span>}
                     </Label>
                     <OntologySearchInput
                       ontologySources={slot.ontology_sources}
@@ -549,9 +496,7 @@ export function CreateProtocolDialog({
 
           {/* Readout Definitions */}
           <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold">
-              Readout Definitions
-            </Label>
+            <Label className="text-base font-semibold">Readout Definitions</Label>
             <Button type="button" variant="outline" size="sm" onClick={addReadout}>
               <Plus className="mr-2 h-4 w-4" />
               Add Readout
@@ -570,15 +515,12 @@ export function CreateProtocolDialog({
                           <Input
                             placeholder="e.g., % Inhibition"
                             value={rd.name}
-                            onChange={(e) =>
-                              updateReadout(index, "name", e.target.value)
-                            }
+                            onChange={(e) => updateReadout(index, "name", e.target.value)}
                           />
                           {isReservedReadoutName(rd.name) && (
                             <p className="text-[11px] text-destructive">
-                              Reserved well-metadata name — pick a different
-                              readout name (well concentration, batch, and
-                              compound are tracked on the well, not as
+                              Reserved well-metadata name — pick a different readout name (well
+                              concentration, batch, and compound are tracked on the well, not as
                               readouts).
                             </p>
                           )}
@@ -587,9 +529,7 @@ export function CreateProtocolDialog({
                           <Label className="text-xs">Data Type</Label>
                           <Select
                             value={rd.data_type}
-                            onValueChange={(v) =>
-                              updateReadout(index, "data_type", v)
-                            }
+                            onValueChange={(v) => updateReadout(index, "data_type", v)}
                           >
                             <SelectTrigger>
                               <SelectValue />
@@ -618,9 +558,7 @@ export function CreateProtocolDialog({
                           <Label className="text-xs">Allowed Values</Label>
                           <PickListEditor
                             value={rd.pick_list_values}
-                            onChange={(next) =>
-                              updateReadout(index, "pick_list_values", next)
-                            }
+                            onChange={(next) => updateReadout(index, "pick_list_values", next)}
                           />
                         </div>
                       )}
@@ -635,18 +573,14 @@ export function CreateProtocolDialog({
                             <Input
                               placeholder="e.g., nM"
                               value={rd.unit}
-                              onChange={(e) =>
-                                updateReadout(index, "unit", e.target.value)
-                              }
+                              onChange={(e) => updateReadout(index, "unit", e.target.value)}
                             />
                           </div>
                           <div className="grid gap-1">
                             <Label className="text-xs">Aggregation</Label>
                             <Select
                               value={rd.aggregation}
-                              onValueChange={(v) =>
-                                updateReadout(index, "aggregation", v)
-                              }
+                              onValueChange={(v) => updateReadout(index, "aggregation", v)}
                             >
                               <SelectTrigger>
                                 <SelectValue />
@@ -657,7 +591,7 @@ export function CreateProtocolDialog({
                                     <SelectItem key={value} value={value}>
                                       {label}
                                     </SelectItem>
-                                  )
+                                  ),
                                 )}
                               </SelectContent>
                             </Select>
@@ -666,9 +600,7 @@ export function CreateProtocolDialog({
                             <Label className="text-xs">Normalization</Label>
                             <NormalizationCheckboxGroup
                               value={rd.normalizations}
-                              onChange={(next) =>
-                                updateReadout(index, "normalizations", next)
-                              }
+                              onChange={(next) => updateReadout(index, "normalizations", next)}
                             />
                           </div>
                         </div>
@@ -690,21 +622,15 @@ export function CreateProtocolDialog({
                           <Label className="text-xs">Formula</Label>
                           <FormulaInput
                             value={rd.calculation_formula}
-                            onChange={(next) =>
-                              updateReadout(
-                                index,
-                                "calculation_formula",
-                                next,
-                              )
-                            }
+                            onChange={(next) => updateReadout(index, "calculation_formula", next)}
                             availableReadoutNames={readoutDefs
                               .filter((other, i) => i !== index && other.name.trim())
                               .map((r) => r.name.trim())}
                             protocolNames={crossProtocolNames}
                           />
                           <p className="text-[11px] text-muted-foreground">
-                            Use other readout names as variables. Type{" "}
-                            <code>@</code> for cross-protocol.
+                            Use other readout names as variables. Type <code>@</code> for
+                            cross-protocol.
                           </p>
                         </div>
                       )}
@@ -720,10 +646,14 @@ export function CreateProtocolDialog({
                                 value={rd.dr_curve_type}
                                 onValueChange={(v) => updateReadout(index, "dr_curve_type", v)}
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
                                 <SelectContent>
                                   {Object.entries(CURVE_TYPE_LABELS).map(([v, l]) => (
-                                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                                    <SelectItem key={v} value={v}>
+                                      {l}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -734,13 +664,20 @@ export function CreateProtocolDialog({
                                 value={rd.dr_x_readout}
                                 onValueChange={(v) => updateReadout(index, "dr_x_readout", v)}
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value={WELL_CONC_X}>
                                     (use well concentration)
                                   </SelectItem>
                                   {readoutDefs
-                                    .filter((other, i) => i !== index && other.name.trim() && other.data_type === "numeric")
+                                    .filter(
+                                      (other, i) =>
+                                        i !== index &&
+                                        other.name.trim() &&
+                                        other.data_type === "numeric",
+                                    )
                                     .map((other) => (
                                       <SelectItem key={other.name} value={other.name.trim()}>
                                         {other.name}
@@ -755,10 +692,17 @@ export function CreateProtocolDialog({
                                 value={rd.dr_y_readout}
                                 onValueChange={(v) => updateReadout(index, "dr_y_readout", v)}
                               >
-                                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
                                 <SelectContent>
                                   {readoutDefs
-                                    .filter((other, i) => i !== index && other.name.trim() && other.data_type === "numeric")
+                                    .filter(
+                                      (other, i) =>
+                                        i !== index &&
+                                        other.name.trim() &&
+                                        other.data_type === "numeric",
+                                    )
                                     .map((other) => (
                                       <SelectItem key={other.name} value={other.name.trim()}>
                                         {other.name}
@@ -775,10 +719,14 @@ export function CreateProtocolDialog({
                                 value={rd.dr_hill_constraint}
                                 onValueChange={(v) => updateReadout(index, "dr_hill_constraint", v)}
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
                                 <SelectContent>
                                   {Object.entries(HILL_SLOPE_CONSTRAINT_LABELS).map(([v, l]) => (
-                                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                                    <SelectItem key={v} value={v}>
+                                      {l}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -787,12 +735,18 @@ export function CreateProtocolDialog({
                               <Label className="text-xs">Normalization</Label>
                               <Select
                                 value={rd.dr_normalization_scope}
-                                onValueChange={(v) => updateReadout(index, "dr_normalization_scope", v)}
+                                onValueChange={(v) =>
+                                  updateReadout(index, "dr_normalization_scope", v)
+                                }
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
                                 <SelectContent>
                                   {Object.entries(NORMALIZATION_SCOPE_LABELS).map(([v, l]) => (
-                                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                                    <SelectItem key={v} value={v}>
+                                      {l}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -837,7 +791,8 @@ export function CreateProtocolDialog({
           {/* Condition Definitions */}
           <div className="flex items-center justify-between">
             <Label className="text-base font-semibold">
-              Conditions <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              Conditions{" "}
+              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
             </Label>
             <Button
               type="button"
@@ -861,7 +816,7 @@ export function CreateProtocolDialog({
                       value={cd.name}
                       onChange={(e) =>
                         setConditionDefs((prev) =>
-                          prev.map((c, i) => (i === index ? { ...c, name: e.target.value } : c))
+                          prev.map((c, i) => (i === index ? { ...c, name: e.target.value } : c)),
                         )
                       }
                     />
@@ -872,11 +827,13 @@ export function CreateProtocolDialog({
                       value={cd.data_type}
                       onValueChange={(v) =>
                         setConditionDefs((prev) =>
-                          prev.map((c, i) => (i === index ? { ...c, data_type: v } : c))
+                          prev.map((c, i) => (i === index ? { ...c, data_type: v } : c)),
                         )
                       }
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="text">Text</SelectItem>
                         <SelectItem value="numeric">Numeric</SelectItem>
@@ -891,7 +848,7 @@ export function CreateProtocolDialog({
                       value={cd.unit}
                       onChange={(e) =>
                         setConditionDefs((prev) =>
-                          prev.map((c, i) => (i === index ? { ...c, unit: e.target.value } : c))
+                          prev.map((c, i) => (i === index ? { ...c, unit: e.target.value } : c)),
                         )
                       }
                     />

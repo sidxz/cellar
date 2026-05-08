@@ -1,7 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { Button } from "@/shared/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Activity,
   Archive,
@@ -18,25 +30,8 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import { Textarea } from "@/shared/components/ui/textarea";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/shared/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
-import { DetailShell } from "@/shared/components/detail-shell";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   useDeleteProtocol,
   useLockProtocol,
@@ -47,9 +42,9 @@ import {
   useUpdateProtocol,
   useVersionProtocol,
 } from "../hooks/use-protocols";
-import { CreateRunDialog } from "./create-run-dialog";
-import { OverviewTab, ActivityTab, DesignTab, RunsTab, FilesTab } from "./detail-tabs";
 import type { ProtocolStatus } from "../types";
+import { CreateRunDialog } from "./create-run-dialog";
+import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -101,9 +96,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
-        breadcrumbTrail={() => [
-          { label: "Protocols", href: "/assays" },
-        ]}
+        breadcrumbTrail={() => [{ label: "Protocols", href: "/assays" }]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
         actions={(p) => {
@@ -138,23 +131,19 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => versionMutation.mutate(protocolId)}
+                    onClick={() => versionMutation.mutate({ id: protocolId })}
                     disabled={versionMutation.isPending}
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     {versionMutation.isPending ? "Duplicating..." : "Duplicate"}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setDeleteOpen(true)}
-                  >
+                  <Button size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => publishMutation.mutate(protocolId)}
+                    onClick={() => publishMutation.mutate({ id: protocolId })}
                     disabled={publishMutation.isPending}
                   >
                     <Send className="mr-2 h-4 w-4" />
@@ -167,7 +156,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => versionMutation.mutate(protocolId)}
+                    onClick={() => versionMutation.mutate({ id: protocolId })}
                     disabled={versionMutation.isPending}
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
@@ -179,7 +168,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     onClick={() =>
                       retireMutation.mutate({
                         id: protocolId,
-                        reason: "Retired by user",
+                        data: { reason: "Retired by user" },
                       })
                     }
                     disabled={retireMutation.isPending}
@@ -281,9 +270,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
       <Dialog open={lockOpen} onOpenChange={setLockOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {lockMode === "lock" ? "Lock Protocol" : "Unlock Protocol"}
-            </DialogTitle>
+            <DialogTitle>{lockMode === "lock" ? "Lock Protocol" : "Unlock Protocol"}</DialogTitle>
             <DialogDescription>
               {lockMode === "lock"
                 ? "Freeze the protocol's metadata. While locked, no edits, additions, or status changes are allowed until you unlock."
@@ -311,15 +298,11 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               onClick={() => {
                 const mut = lockMode === "lock" ? lockMutation : unlockMutation;
                 mut.mutate(
-                  { id: protocolId, reason: lockReason.trim() },
+                  { id: protocolId, data: { reason: lockReason.trim() } },
                   { onSuccess: () => setLockOpen(false) },
                 );
               }}
-              disabled={
-                !lockReason.trim() ||
-                lockMutation.isPending ||
-                unlockMutation.isPending
-              }
+              disabled={!lockReason.trim() || lockMutation.isPending || unlockMutation.isPending}
             >
               {lockMode === "lock"
                 ? lockMutation.isPending
@@ -338,17 +321,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Protocol</DialogTitle>
-            <DialogDescription>
-              Update this draft protocol&apos;s metadata.
-            </DialogDescription>
+            <DialogDescription>Update this draft protocol&apos;s metadata.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Name</Label>
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="grid gap-2">
               <Label>Description</Label>
@@ -377,7 +355,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     description: editDescription || null,
                     category: editCategory || null,
                   },
-                  { onSuccess: () => setEditOpen(false) }
+                  { onSuccess: () => setEditOpen(false) },
                 );
               }}
               disabled={!editName.trim() || updateMutation.isPending}

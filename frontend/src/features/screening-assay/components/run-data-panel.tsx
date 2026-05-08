@@ -32,6 +32,8 @@ const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }>
   poor: { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" },
 };
 
+const VALID_TABS = ["readout", "plate-map", "heat-map", "dose-response", "qc", "files"];
+
 // ─── QC Metrics Panel (inline) ────────────────────────────────────────────────
 
 interface QcMetricsPanelProps {
@@ -173,14 +175,13 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const doseUnit = plateMap?.dose_unit ?? "uM";
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
 
-  const validTabs = ["readout", "plate-map", "heat-map", "dose-response", "qc", "files"];
   const [activeTab, setActiveTab] = useState("readout");
 
   // Sync from URL hash on mount + hash changes
   useEffect(() => {
     const syncHash = () => {
       const tab = window.location.hash.replace("#", "");
-      if (validTabs.includes(tab)) setActiveTab(tab);
+      if (VALID_TABS.includes(tab)) setActiveTab(tab);
     };
     syncHash();
     window.addEventListener("hashchange", syncHash);

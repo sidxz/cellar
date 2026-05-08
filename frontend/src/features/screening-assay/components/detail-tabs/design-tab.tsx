@@ -1,15 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
+import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/shared/components/ui/collapsible";
 import {
   Card,
   CardContent,
@@ -17,6 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -27,8 +26,6 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Switch } from "@/shared/components/ui/switch";
-import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -36,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -44,101 +42,107 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import {
-  useProtocols,
-  useAddReadoutDefinition,
-  useRemoveReadoutDefinition,
-  useUpdateReadoutDefinition,
-  useAddConditionDefinition,
-  useRemoveConditionDefinition,
-  useUpdateConditionDefinition,
-  useSetControlLayout,
-  useRemoveControlLayout,
-  useSetOntologyAnnotation,
-  useRemoveOntologyAnnotation,
-  useUpdateProtocol,
-} from "../../hooks/use-protocols";
-import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
-import {
-  OntologySearchInput,
-  type OntologyTerm,
-} from "@/shared/components/ontology-search-input";
-import { usePlateTemplates } from "../../hooks/use-plate-templates";
-import { ConditionGroupTable } from "../condition-group-table";
-import { FormulaInput } from "../formula-input";
-import { PickListEditor } from "../pick-list-editor";
-import { PlateMapView } from "../plate-map-view";
-import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
-import { NormalizationCheckboxGroup } from "../readout-normalization-checkboxes";
-import { resolvePickListColor } from "../../lib/pick-list-colors";
+import { Textarea } from "@/shared/components/ui/textarea";
 import { showInfo } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
+import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { usePlateTemplates } from "../../hooks/use-plate-templates";
+import {
+  useAddConditionDefinition,
+  useAddReadoutDefinition,
+  useProtocols,
+  useRemoveConditionDefinition,
+  useRemoveControlLayout,
+  useRemoveOntologyAnnotation,
+  useRemoveReadoutDefinition,
+  useSetControlLayout,
+  useSetOntologyAnnotation,
+  useUpdateConditionDefinition,
+  useUpdateProtocol,
+  useUpdateReadoutDefinition,
+} from "../../hooks/use-protocols";
+import { resolvePickListColor } from "../../lib/pick-list-colors";
+import {
+  PERCENT_FIT_RANGES,
+  VISIBLE_READOUT_DATA_TYPES,
+  WELL_CONC_X,
+  isReservedReadoutName,
+} from "../../lib/readout-constants";
 import {
   CURVE_TYPE_LABELS,
+  type CurveType,
   HILL_SLOPE_CONSTRAINT_LABELS,
+  type HillSlopeConstraint,
+  type InterceptSpec,
   NORMALIZATION_SCOPE_LABELS,
+  type NormalizationScope,
   PLATE_FORMAT_LABELS,
   POS_CONTROL_SIGNAL_LABELS,
-  READOUT_AGGREGATION_LABELS,
-  READOUT_DATA_TYPE_LABELS,
-  READOUT_NORMALIZATION_LABELS,
-  type CurveType,
-  type HillSlopeConstraint,
-  type NormalizationScope,
   type PickListValue,
   type PlateFormat,
   type PosControlSignal,
   type Protocol,
   type ProtocolStatus,
-  type InterceptSpec,
+  READOUT_AGGREGATION_LABELS,
+  READOUT_DATA_TYPE_LABELS,
+  READOUT_NORMALIZATION_LABELS,
   type ReadoutAggregation,
   type ReadoutDataType,
   type ReadoutNormalization,
 } from "../../types";
+import { ConditionGroupTable } from "../condition-group-table";
+import { FormulaInput } from "../formula-input";
 import { InterceptsEditor } from "../intercepts-editor";
-
-// Reserved readout-definition names that collide with built-in well metadata.
-// Kept in sync with backend domain.screening_assay.protocol._RESERVED_READOUT_NAMES.
-const RESERVED_READOUT_NAMES: ReadonlySet<string> = new Set([
-  "concentration",
-  "dose",
-  "well",
-  "plate",
-  "batch",
-  "compound",
-]);
-
-function isReservedReadoutName(name: string): boolean {
-  return RESERVED_READOUT_NAMES.has(name.trim().toLowerCase());
-}
+import { PickListEditor } from "../pick-list-editor";
+import { PlateMapView } from "../plate-map-view";
+import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
+import { NormalizationCheckboxGroup } from "../readout-normalization-checkboxes";
 
 function isFiniteValue(s: string): boolean {
   if (s.trim() === "") return false;
-  const v = parseFloat(s);
+  const v = Number.parseFloat(s);
   return Number.isFinite(v);
 }
 
 function isFiniteRange(minS: string, maxS: string): boolean {
   if (!isFiniteValue(minS) || !isFiniteValue(maxS)) return false;
-  return parseFloat(minS) < parseFloat(maxS);
+  return Number.parseFloat(minS) < Number.parseFloat(maxS);
 }
 
-// Sentinel for the X-axis dropdown that means "use the well's concentration"
-// (mapped to x_readout_name=null in the payload).
-const WELL_CONC_X = "__well_concentration__";
+type ParamMode = "free" | "range" | "lock";
+const PARAM_MODES: ParamMode[] = ["free", "range", "lock"];
 
-// Readout data types surfaced in the Add/Edit dialog dropdown. The BE
-// enum still carries File / Date / Batch Link for legacy hydration, but
-// they don't fit chem-vault's model (see audit notes): File is per-run
-// attachment territory, Date is run.run_date, Batch Link duplicates
-// well.batch_id. We trim them from the FE so chemists can't pick types
-// the system has no real workflow for.
-const VISIBLE_READOUT_DATA_TYPES: readonly string[] = [
-  "numeric",
-  "text",
-  "pick_list",
-  "dose_response",
-] as const;
+// Tiny segmented control reused by Top and Bottom param blocks.
+function ParamModeToggle({
+  mode,
+  onChange,
+  idPrefix,
+}: {
+  mode: ParamMode;
+  onChange: (m: ParamMode) => void;
+  idPrefix: string;
+}) {
+  return (
+    <div className="inline-flex rounded-md border" role="radiogroup">
+      {PARAM_MODES.map((opt) => (
+        <button
+          key={`${idPrefix}-${opt}`}
+          type="button"
+          role="radio"
+          aria-checked={mode === opt}
+          onClick={() => onChange(opt)}
+          className={`px-2.5 py-1 text-xs capitalize first:rounded-l-md last:rounded-r-md ${
+            mode === opt ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // DesignTab
@@ -170,10 +174,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // (names only; cross-protocol formulas reference them by name).
   const { data: allProtocols } = useProtocols();
   const protocolNames = useMemo(
-    () =>
-      (allProtocols ?? [])
-        .filter((p) => p.id !== protocolId)
-        .map((p) => p.name),
+    () => (allProtocols ?? []).filter((p) => p.id !== protocolId).map((p) => p.name),
     [allProtocols, protocolId],
   );
   const addConditionDef = useAddConditionDefinition(protocolId);
@@ -211,15 +212,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [drCurveType, setDrCurveType] = useState<CurveType>("ic50");
   const [drXReadout, setDrXReadout] = useState<string>(WELL_CONC_X);
   const [drYReadout, setDrYReadout] = useState("");
-  const [drHillConstraint, setDrHillConstraint] =
-    useState<HillSlopeConstraint>("unconstrained");
-  const [drNormalizationScope, setDrNormalizationScope] =
-    useState<NormalizationScope>("per_plate");
+  const [drHillConstraint, setDrHillConstraint] = useState<HillSlopeConstraint>("unconstrained");
+  const [drNormalizationScope, setDrNormalizationScope] = useState<NormalizationScope>("per_plate");
   const [drActivityThreshold, setDrActivityThreshold] = useState("");
-  // Top/Bottom now have a tri-state mode (Phase B). Lock and Range are
-  // mutually exclusive in the domain; the mode field is the UI's source of
-  // truth and decides which of the *Constraint* / *Min* / *Max* fields ship.
-  type ParamMode = "free" | "range" | "lock";
+  // Top/Bottom now have a tri-state mode. Lock and Range are mutually
+  // exclusive in the domain; the mode field is the UI's source of truth
+  // and decides which of the *Constraint* / *Min* / *Max* fields ship.
   const [drTopMode, setDrTopMode] = useState<ParamMode>("free");
   const [drTopConstraint, setDrTopConstraint] = useState("");
   const [drTopMin, setDrTopMin] = useState("");
@@ -279,21 +277,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   };
 
   // Y readouts with bounded normalization (% Inhibition/Activation/Control)
-  // get CDD's IC50calc default ranges: Top ∈ [85, 110], Bottom ∈ [-10, 10],
-  // Hill ∈ [0.9, 1.1]. Ranges (not hard locks) let the optimizer pick a
-  // data-consistent plateau when the upper plateau isn't observed in the
-  // dose range — the difference between IC50 = 39 µM (lock at 85) and
-  // IC50 = 70 µM (range up to 110) on partial curves.
-  const suggestedRangesForY = (
-    yReadoutName: string,
-  ): {
-    topMin: number;
-    topMax: number;
-    bottomMin: number;
-    bottomMax: number;
-    hillMin: number;
-    hillMax: number;
-  } | null => {
+  // get standard sigmoidal default ranges. Ranges (not hard locks) let the
+  // optimizer pick a data-consistent plateau when the upper plateau isn't
+  // observed in the dose range — the difference between IC50 = 39 µM
+  // (lock at 85) and IC50 = 70 µM (range up to 110) on partial curves.
+  const suggestedRangesForY = (yReadoutName: string): typeof PERCENT_FIT_RANGES | null => {
     const y = protocol.readout_definitions.find((r) => r.name === yReadoutName);
     if (!y) return null;
     const primary = y.normalizations?.find((n) => n !== "none") ?? "none";
@@ -301,14 +289,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       case "percent_inhibition":
       case "percent_activation":
       case "percent_control":
-        return {
-          topMin: 85,
-          topMax: 110,
-          bottomMin: -10,
-          bottomMax: 10,
-          hillMin: 0.9,
-          hillMax: 1.1,
-        };
+        return PERCENT_FIT_RANGES;
       default:
         return null;
     }
@@ -333,9 +314,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       setDrYReadout(cfg.y_readout_name);
       setDrHillConstraint(cfg.hill_slope_constraint);
       setDrNormalizationScope(cfg.normalization_scope);
-      setDrActivityThreshold(
-        cfg.activity_threshold != null ? String(cfg.activity_threshold) : "",
-      );
+      setDrActivityThreshold(cfg.activity_threshold != null ? String(cfg.activity_threshold) : "");
 
       // Top: lock takes precedence; else range; else free.
       if (cfg.top_constraint != null) {
@@ -343,10 +322,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setDrTopConstraint(String(cfg.top_constraint));
         setDrTopMin("");
         setDrTopMax("");
-      } else if (
-        cfg.top_constraint_min != null ||
-        cfg.top_constraint_max != null
-      ) {
+      } else if (cfg.top_constraint_min != null || cfg.top_constraint_max != null) {
         setDrTopMode("range");
         setDrTopConstraint("");
         setDrTopMin(cfg.top_constraint_min != null ? String(cfg.top_constraint_min) : "");
@@ -363,18 +339,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setDrBottomConstraint(String(cfg.bottom_constraint));
         setDrBottomMin("");
         setDrBottomMax("");
-      } else if (
-        cfg.bottom_constraint_min != null ||
-        cfg.bottom_constraint_max != null
-      ) {
+      } else if (cfg.bottom_constraint_min != null || cfg.bottom_constraint_max != null) {
         setDrBottomMode("range");
         setDrBottomConstraint("");
-        setDrBottomMin(
-          cfg.bottom_constraint_min != null ? String(cfg.bottom_constraint_min) : "",
-        );
-        setDrBottomMax(
-          cfg.bottom_constraint_max != null ? String(cfg.bottom_constraint_max) : "",
-        );
+        setDrBottomMin(cfg.bottom_constraint_min != null ? String(cfg.bottom_constraint_min) : "");
+        setDrBottomMax(cfg.bottom_constraint_max != null ? String(cfg.bottom_constraint_max) : "");
       } else {
         setDrBottomMode("free");
         setDrBottomConstraint("");
@@ -382,8 +351,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setDrBottomMax("");
       }
 
-      const hasHillRange =
-        cfg.hill_slope_min != null || cfg.hill_slope_max != null;
+      const hasHillRange = cfg.hill_slope_min != null || cfg.hill_slope_max != null;
       setDrHillCustomRange(hasHillRange);
       setDrHillMin(cfg.hill_slope_min != null ? String(cfg.hill_slope_min) : "");
       setDrHillMax(cfg.hill_slope_max != null ? String(cfg.hill_slope_max) : "");
@@ -393,21 +361,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       setDrOutlierSigma(sigma != null ? String(sigma) : "3");
 
       // Classification thresholds — empty string = "inherit backend default".
-      setDrInactiveThreshold(
-        cfg.inactive_threshold != null ? String(cfg.inactive_threshold) : "",
-      );
-      setDrFullR2Min(
-        cfg.full_r2_min != null ? String(cfg.full_r2_min) : "",
-      );
-      setDrFullTopMin(
-        cfg.full_top_min != null ? String(cfg.full_top_min) : "",
-      );
-      setDrFullBottomMax(
-        cfg.full_bottom_max != null ? String(cfg.full_bottom_max) : "",
-      );
-      setDrPartialR2Min(
-        cfg.partial_r2_min != null ? String(cfg.partial_r2_min) : "",
-      );
+      setDrInactiveThreshold(cfg.inactive_threshold != null ? String(cfg.inactive_threshold) : "");
+      setDrFullR2Min(cfg.full_r2_min != null ? String(cfg.full_r2_min) : "");
+      setDrFullTopMin(cfg.full_top_min != null ? String(cfg.full_top_min) : "");
+      setDrFullBottomMax(cfg.full_bottom_max != null ? String(cfg.full_bottom_max) : "");
+      setDrPartialR2Min(cfg.partial_r2_min != null ? String(cfg.partial_r2_min) : "");
       setDrIntercepts(cfg.intercepts ?? []);
     } else {
       resetDoseResponseFields();
@@ -435,7 +393,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const buildDoseResponseConfig = (): Record<string, unknown> | null => {
     if (rdDataType !== "dose_response") return null;
     if (!drYReadout) return null;
-    const parseOrNull = (s: string) => (s !== "" ? parseFloat(s) : null);
+    const parseOrNull = (s: string) => (s !== "" ? Number.parseFloat(s) : null);
     return {
       curve_type: drCurveType,
       x_readout_name: drXReadout === WELL_CONC_X ? null : drXReadout,
@@ -444,19 +402,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       normalization_scope: drNormalizationScope,
       activity_threshold: parseOrNull(drActivityThreshold),
       top_constraint: drTopMode === "lock" ? parseOrNull(drTopConstraint) : null,
-      bottom_constraint:
-        drBottomMode === "lock" ? parseOrNull(drBottomConstraint) : null,
+      bottom_constraint: drBottomMode === "lock" ? parseOrNull(drBottomConstraint) : null,
       top_constraint_min: drTopMode === "range" ? parseOrNull(drTopMin) : null,
       top_constraint_max: drTopMode === "range" ? parseOrNull(drTopMax) : null,
-      bottom_constraint_min:
-        drBottomMode === "range" ? parseOrNull(drBottomMin) : null,
-      bottom_constraint_max:
-        drBottomMode === "range" ? parseOrNull(drBottomMax) : null,
+      bottom_constraint_min: drBottomMode === "range" ? parseOrNull(drBottomMin) : null,
+      bottom_constraint_max: drBottomMode === "range" ? parseOrNull(drBottomMax) : null,
       hill_slope_min: drHillCustomRange ? parseOrNull(drHillMin) : null,
       hill_slope_max: drHillCustomRange ? parseOrNull(drHillMax) : null,
-      outlier_sigma: drOutlierEnabled
-        ? parseOrNull(drOutlierSigma) ?? 3.0
-        : null,
+      outlier_sigma: drOutlierEnabled ? (parseOrNull(drOutlierSigma) ?? 3.0) : null,
       // Classification thresholds — omit when empty so the backend keeps its
       // default. Otherwise ship the explicit override.
       ...(drInactiveThreshold !== "" && {
@@ -480,8 +433,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     };
   };
 
-  // When the Y readout changes, prefill Top/Bottom/Hill with CDD-style ranges
-  // for its normalization — but only if the user hasn't already chosen
+  // When the Y readout changes, prefill Top/Bottom/Hill with the suggested
+  // ranges for its normalization — but only if the user hasn't already chosen
   // something. Lets the dialog feel pre-configured without clobbering
   // explicit choices.
   const handleDrYReadoutChange = (newY: string) => {
@@ -508,11 +461,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       injected = true;
     }
     if (injected) {
-      showInfo("Auto-filled CDD ranges for % readout");
+      showInfo("Applied suggested ranges for % readout");
     }
   };
 
-  /** Apply CDD-style ranges to Top, Bottom, Hill in one click. */
+  /** Apply suggested ranges to Top, Bottom, Hill in one click. */
   const applySuggestedRanges = () => {
     const suggested = suggestedRangesForY(drYReadout);
     if (!suggested) return;
@@ -530,57 +483,44 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // Range-mode validation. Empty inputs become NaN via parseFloat — we
   // refuse to ship those to the backend. Min<Max required.
   const drTopRangeError =
-    rdDataType === "dose_response" &&
-    drTopMode === "range" &&
-    !isFiniteRange(drTopMin, drTopMax);
+    rdDataType === "dose_response" && drTopMode === "range" && !isFiniteRange(drTopMin, drTopMax);
   const drBottomRangeError =
     rdDataType === "dose_response" &&
     drBottomMode === "range" &&
     !isFiniteRange(drBottomMin, drBottomMax);
   const drTopLockError =
-    rdDataType === "dose_response" &&
-    drTopMode === "lock" &&
-    !isFiniteValue(drTopConstraint);
+    rdDataType === "dose_response" && drTopMode === "lock" && !isFiniteValue(drTopConstraint);
   const drBottomLockError =
-    rdDataType === "dose_response" &&
-    drBottomMode === "lock" &&
-    !isFiniteValue(drBottomConstraint);
+    rdDataType === "dose_response" && drBottomMode === "lock" && !isFiniteValue(drBottomConstraint);
   const drHillRangeError =
-    rdDataType === "dose_response" &&
-    drHillCustomRange &&
-    !isFiniteRange(drHillMin, drHillMax);
+    rdDataType === "dose_response" && drHillCustomRange && !isFiniteRange(drHillMin, drHillMax);
 
   // Classification threshold validation. Empty = inherit default = OK.
   // When set: numeric required, R² fields ∈ (0, 1], full_top_min must be
   // strictly greater than full_bottom_max so the FULL band is non-empty.
   const isFiniteUnitInterval = (s: string): boolean => {
     if (s.trim() === "") return true; // empty inherits default
-    const v = parseFloat(s);
+    const v = Number.parseFloat(s);
     return Number.isFinite(v) && v > 0 && v <= 1;
   };
   const drInactiveThresholdError =
     rdDataType === "dose_response" &&
     drInactiveThreshold !== "" &&
     !isFiniteValue(drInactiveThreshold);
-  const drFullR2MinError =
-    rdDataType === "dose_response" && !isFiniteUnitInterval(drFullR2Min);
+  const drFullR2MinError = rdDataType === "dose_response" && !isFiniteUnitInterval(drFullR2Min);
   const drPartialR2MinError =
     rdDataType === "dose_response" && !isFiniteUnitInterval(drPartialR2Min);
   const drFullTopMinError =
-    rdDataType === "dose_response" &&
-    drFullTopMin !== "" &&
-    !isFiniteValue(drFullTopMin);
+    rdDataType === "dose_response" && drFullTopMin !== "" && !isFiniteValue(drFullTopMin);
   const drFullBottomMaxError =
-    rdDataType === "dose_response" &&
-    drFullBottomMax !== "" &&
-    !isFiniteValue(drFullBottomMax);
+    rdDataType === "dose_response" && drFullBottomMax !== "" && !isFiniteValue(drFullBottomMax);
   const drFullPlateauOrderError =
     rdDataType === "dose_response" &&
     drFullTopMin !== "" &&
     drFullBottomMax !== "" &&
     isFiniteValue(drFullTopMin) &&
     isFiniteValue(drFullBottomMax) &&
-    parseFloat(drFullTopMin) <= parseFloat(drFullBottomMax);
+    Number.parseFloat(drFullTopMin) <= Number.parseFloat(drFullBottomMax);
   const drFormInvalid =
     drTopRangeError ||
     drBottomRangeError ||
@@ -604,6 +544,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     if (rdDataType !== "dose_response") return null;
     const candidates = axisCandidates(excludeId);
     const xIsAdvanced = drXReadout !== WELL_CONC_X;
+    const suggested = suggestedRangesForY(drYReadout);
     return (
       <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
         <p className="text-xs font-medium">Dose-Response Configuration</p>
@@ -615,10 +556,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1">
             <Label className="text-xs">Curve Type</Label>
-            <Select
-              value={drCurveType}
-              onValueChange={(v) => setDrCurveType(v as CurveType)}
-            >
+            <Select value={drCurveType} onValueChange={(v) => setDrCurveType(v as CurveType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -652,9 +590,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <span aria-hidden>▸</span>
             Advanced — X axis source
             {xIsAdvanced ? null : (
-              <span className="ml-1 italic opacity-70">
-                (default: well concentration)
-              </span>
+              <span className="ml-1 italic opacity-70">(default: well concentration)</span>
             )}
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
@@ -665,9 +601,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={WELL_CONC_X}>
-                    (use well concentration — default)
-                  </SelectItem>
+                  <SelectItem value={WELL_CONC_X}>(use well concentration — default)</SelectItem>
                   {candidates.map((name) => (
                     <SelectItem key={name} value={name}>
                       {name}
@@ -676,10 +610,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Pick a different readout only when the X axis is a
-                derivation (e.g. log-concentration computed by a
-                calculated readout). 99% of dose-response fits use the
-                well's recorded concentration.
+                Pick a different readout only when the X axis is a derivation (e.g.
+                log-concentration computed by a calculated readout). 99% of dose-response fits use
+                the well's recorded concentration.
               </p>
             </div>
           </CollapsibleContent>
@@ -689,9 +622,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <Label className="text-xs">Hill Slope</Label>
             <Select
               value={drHillConstraint}
-              onValueChange={(v) =>
-                setDrHillConstraint(v as HillSlopeConstraint)
-              }
+              onValueChange={(v) => setDrHillConstraint(v as HillSlopeConstraint)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -709,9 +640,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <Label className="text-xs">Normalization Scope</Label>
             <Select
               value={drNormalizationScope}
-              onValueChange={(v) =>
-                setDrNormalizationScope(v as NormalizationScope)
-              }
+              onValueChange={(v) => setDrNormalizationScope(v as NormalizationScope)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -741,11 +670,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <div className="grid gap-2 rounded-md border bg-background p-3">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-medium">Top (upper plateau)</Label>
-            <ParamModeToggle
-              mode={drTopMode}
-              onChange={setDrTopMode}
-              idPrefix="top"
-            />
+            <ParamModeToggle mode={drTopMode} onChange={setDrTopMode} idPrefix="top" />
           </div>
           {drTopMode === "lock" && (
             <>
@@ -756,9 +681,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 onChange={(e) => setDrTopConstraint(e.target.value)}
                 className="max-w-xs"
               />
-              {drTopLockError && (
-                <p className="text-xs text-destructive">Enter a numeric value.</p>
-              )}
+              {drTopLockError && <p className="text-xs text-destructive">Enter a numeric value.</p>}
             </>
           )}
           {drTopMode === "range" && (
@@ -797,11 +720,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <div className="grid gap-2 rounded-md border bg-background p-3">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-medium">Bottom (lower plateau)</Label>
-            <ParamModeToggle
-              mode={drBottomMode}
-              onChange={setDrBottomMode}
-              idPrefix="bottom"
-            />
+            <ParamModeToggle mode={drBottomMode} onChange={setDrBottomMode} idPrefix="bottom" />
           </div>
           {drBottomMode === "lock" && (
             <>
@@ -912,55 +831,39 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 onChange={(e) => setDrOutlierSigma(e.target.value)}
                 className="max-w-[6rem]"
               />
-              <span className="text-xs text-muted-foreground">
-                × SD of residuals (CDD default: 3)
-              </span>
+              <span className="text-xs text-muted-foreground">× SD of residuals (default: 3)</span>
             </div>
           )}
           {!drOutlierEnabled && (
             <p className="text-xs text-muted-foreground">
-              Disabled — fitter will not auto-flag points; manual exclusion
-              still works.
+              Disabled — fitter will not auto-flag points; manual exclusion still works.
             </p>
           )}
         </div>
 
-        {/* CDD-style suggestion banner. */}
-        {(() => {
-          const suggested = suggestedRangesForY(drYReadout);
-          if (!suggested) {
-            return (
-              <p className="text-xs text-muted-foreground leading-tight">
-                Lock and Range are mutually exclusive. Leave both at Free for
-                raw-signal readouts; use Range for percent-normalized
-                readouts.
-              </p>
-            );
-          }
-          return (
-            <div className="flex items-start justify-between gap-3 rounded-md border border-dashed bg-muted/40 p-2">
-              <p className="text-xs text-muted-foreground leading-tight">
-                Suggested for this readout: Top ∈ [{suggested.topMin},{" "}
-                {suggested.topMax}], Bottom ∈ [{suggested.bottomMin},{" "}
-                {suggested.bottomMax}], Hill ∈ [{suggested.hillMin},{" "}
-                {suggested.hillMax}].
-              </p>
-              <button
-                type="button"
-                disabled={!suggested}
-                title={
-                  suggested
-                    ? "Apply CDD-style ranges to Top, Bottom, and Hill"
-                    : "Suggested ranges only apply to %-normalized readouts"
-                }
-                className="shrink-0 text-xs text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
-                onClick={applySuggestedRanges}
-              >
-                Use suggested
-              </button>
-            </div>
-          );
-        })()}
+        {/* Suggested-ranges banner. */}
+        {!suggested ? (
+          <p className="text-xs text-muted-foreground leading-tight">
+            Lock and Range are mutually exclusive. Leave both at Free for raw-signal readouts; use
+            Range for percent-normalized readouts.
+          </p>
+        ) : (
+          <div className="flex items-start justify-between gap-3 rounded-md border border-dashed bg-muted/40 p-2">
+            <p className="text-xs text-muted-foreground leading-tight">
+              Suggested for this readout: Top ∈ [{suggested.topMin}, {suggested.topMax}], Bottom ∈ [
+              {suggested.bottomMin}, {suggested.bottomMax}], Hill ∈ [{suggested.hillMin},{" "}
+              {suggested.hillMax}].
+            </p>
+            <button
+              type="button"
+              title="Apply suggested ranges to Top, Bottom, and Hill"
+              className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+              onClick={applySuggestedRanges}
+            >
+              Use suggested
+            </button>
+          </div>
+        )}
 
         {/* Classification thresholds — collapsed by default. Defaults match
             the backend (30 / 0.8 / 80 / 20 / 0.6) calibrated for % readouts.
@@ -976,8 +879,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           </summary>
           <div className="space-y-3 px-3 pb-3 pt-1">
             <p className="text-xs text-muted-foreground leading-tight">
-              Defaults are calibrated for % readouts. Override for raw-signal
-              assays (fluorescence, luminescence, HTRF, etc.).
+              Defaults are calibrated for % readouts. Override for raw-signal assays (fluorescence,
+              luminescence, HTRF, etc.).
             </p>
             <div className="grid gap-1">
               <Label className="text-xs">Inactive cutoff</Label>
@@ -993,8 +896,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Compounds with max response below this are flagged INACTIVE
-                without fitting.
+                Compounds with max response below this are flagged INACTIVE without fitting.
               </p>
               {drInactiveThresholdError && (
                 <p className="text-xs text-destructive">
@@ -1051,8 +953,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 className="max-w-[8rem]"
               />
               <p className="text-[11px] text-muted-foreground">
-                Fitted bottom plateau must be below this for FULL
-                classification.
+                Fitted bottom plateau must be below this for FULL classification.
               </p>
               {drFullBottomMaxError && (
                 <p className="text-xs text-destructive">
@@ -1062,8 +963,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             {drFullPlateauOrderError && (
               <p className="text-xs text-destructive">
-                Full curve · min Top must be greater than Full curve · max
-                Bottom.
+                Full curve · min Top must be greater than Full curve · max Bottom.
               </p>
             )}
             <div className="grid gap-1">
@@ -1079,8 +979,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 className="max-w-[8rem]"
               />
               <p className="text-[11px] text-muted-foreground">
-                R² required to qualify as a PARTIAL curve. Below this,
-                classified INACTIVE.
+                R² required to qualify as a PARTIAL curve. Below this, classified INACTIVE.
               </p>
               {drPartialR2MinError && (
                 <p className="text-xs text-destructive">
@@ -1097,9 +996,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           </summary>
           <div className="mt-3 space-y-2">
             <p className="text-[11px] text-muted-foreground">
-              Each row is one intercept derived from the same Hill fit
-              (e.g. IC50, IC90). Empty list defaults to a single 50%
-              intercept of the curve type.
+              Each row is one intercept derived from the same Hill fit (e.g. IC50, IC90). Empty list
+              defaults to a single 50% intercept of the curve type.
             </p>
             <InterceptsEditor
               value={drIntercepts}
@@ -1111,40 +1009,6 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       </div>
     );
   };
-
-  // Tiny segmented control reused by Top and Bottom param blocks.
-  function ParamModeToggle({
-    mode,
-    onChange,
-    idPrefix,
-  }: {
-    mode: "free" | "range" | "lock";
-    onChange: (m: "free" | "range" | "lock") => void;
-    idPrefix: string;
-  }) {
-    const options: ("free" | "range" | "lock")[] = ["free", "range", "lock"];
-    return (
-      <div className="inline-flex rounded-md border" role="radiogroup">
-        {options.map((opt) => (
-          <button
-            key={`${idPrefix}-${opt}`}
-            type="button"
-            role="radio"
-            aria-checked={mode === opt}
-            onClick={() => onChange(opt)}
-            className={
-              "px-2.5 py-1 text-xs capitalize first:rounded-l-md last:rounded-r-md " +
-              (mode === opt
-                ? "bg-primary text-primary-foreground"
-                : "bg-background hover:bg-muted")
-            }
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
-    );
-  }
 
   // --- Condition form fields ---
   const [cdName, setCdName] = useState("");
@@ -1179,21 +1043,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <Card>
           <CardHeader>
             <CardTitle>Ontology Annotations</CardTitle>
-            <CardDescription>
-              Controlled vocabulary terms for this protocol.
-            </CardDescription>
+            <CardDescription>Controlled vocabulary terms for this protocol.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {ontologySlots.map((slot) => {
-              const currentTerms =
-                protocol.ontology_annotations?.[slot.name] ?? [];
+              const currentTerms = protocol.ontology_annotations?.[slot.name] ?? [];
               return (
                 <div key={slot.id} className="space-y-1">
                   <Label className="text-sm font-medium">
                     {slot.label}
-                    {slot.is_required && (
-                      <span className="ml-1 text-destructive">*</span>
-                    )}
+                    {slot.is_required && <span className="ml-1 text-destructive">*</span>}
                   </Label>
 
                   {canStructurallyEdit ? (
@@ -1232,9 +1091,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No terms assigned.
-                    </p>
+                    <p className="text-sm text-muted-foreground">No terms assigned.</p>
                   )}
                 </div>
               );
@@ -1248,16 +1105,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Readout Definitions</CardTitle>
-            <CardDescription>
-              Measured values captured for each compound in a run.
-            </CardDescription>
+            <CardDescription>Measured values captured for each compound in a run.</CardDescription>
           </div>
           {canAddMetadata && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setAddReadoutOpen(true)}
-            >
+            <Button size="sm" variant="outline" onClick={() => setAddReadoutOpen(true)}>
               <Plus className="mr-1 h-4 w-4" />
               Add
             </Button>
@@ -1265,9 +1116,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         </CardHeader>
         <CardContent>
           {protocol.readout_definitions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No readout definitions yet.
-            </p>
+            <p className="text-sm text-muted-foreground">No readout definitions yet.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -1284,9 +1133,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               <TableBody>
                 {protocol.readout_definitions.map((rd, idx) => (
                   <TableRow key={rd.id}>
-                    <TableCell className="text-muted-foreground">
-                      {idx + 1}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell>
                       <button
                         type="button"
@@ -1298,17 +1145,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       </button>
                       {rd.dose_response_config && (
                         <span className="ml-2 text-xs text-muted-foreground">
-                          (
-                          {
-                            CURVE_TYPE_LABELS[
-                              rd.dose_response_config
-                                .curve_type as CurveType
-                            ]
-                          }
-                          :{" "}
-                          {rd.dose_response_config.x_readout_name ??
-                            "well concentration"}{" "}
-                          vs {rd.dose_response_config.y_readout_name})
+                          ({CURVE_TYPE_LABELS[rd.dose_response_config.curve_type as CurveType]}:{" "}
+                          {rd.dose_response_config.x_readout_name ?? "well concentration"} vs{" "}
+                          {rd.dose_response_config.y_readout_name})
                         </span>
                       )}
                       {rd.is_calculated && rd.calculation_formula && (
@@ -1316,65 +1155,49 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                           className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground italic"
                           title={`Computed from formula: ${rd.calculation_formula}`}
                         >
-                          ƒ <code className="font-mono not-italic">
+                          ƒ{" "}
+                          <code className="font-mono not-italic">
                             {rd.calculation_formula.length > 40
-                              ? rd.calculation_formula.slice(0, 40) + "…"
+                              ? `${rd.calculation_formula.slice(0, 40)}…`
                               : rd.calculation_formula}
                           </code>
                         </span>
                       )}
-                      {rd.pick_list_values &&
-                        rd.pick_list_values.length > 0 && (
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {rd.pick_list_values.map((v) => {
-                              const c = resolvePickListColor(v.label, v.color);
-                              return (
-                                <Badge
-                                  key={v.label}
-                                  variant="outline"
-                                  className={cn(
-                                    "text-[10px]",
-                                    c.bg,
-                                    c.text,
-                                  )}
-                                >
-                                  {v.label}
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        )}
+                      {rd.pick_list_values && rd.pick_list_values.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {rd.pick_list_values.map((v) => {
+                            const c = resolvePickListColor(v.label, v.color);
+                            return (
+                              <Badge
+                                key={v.label}
+                                variant="outline"
+                                className={cn("text-[10px]", c.bg, c.text)}
+                              >
+                                {v.label}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
-                      {READOUT_DATA_TYPE_LABELS[
-                        rd.data_type as ReadoutDataType
-                      ] ?? rd.data_type}
+                      {READOUT_DATA_TYPE_LABELS[rd.data_type as ReadoutDataType] ?? rd.data_type}
                       {rd.dose_response_config && (
                         <span className="ml-1 text-xs text-muted-foreground">
-                          (
-                          {
-                            CURVE_TYPE_LABELS[
-                              rd.dose_response_config
-                                .curve_type as CurveType
-                            ]
-                          }
-                          )
+                          ({CURVE_TYPE_LABELS[rd.dose_response_config.curve_type as CurveType]})
                         </span>
                       )}
                     </TableCell>
                     <TableCell>{rd.unit ?? "\u2014"}</TableCell>
                     <TableCell>
-                      {READOUT_AGGREGATION_LABELS[
-                        rd.aggregation as ReadoutAggregation
-                      ] ?? rd.aggregation}
+                      {READOUT_AGGREGATION_LABELS[rd.aggregation as ReadoutAggregation] ??
+                        rd.aggregation}
                     </TableCell>
                     <TableCell>
-                      {(rd.normalizations && rd.normalizations.length > 0)
+                      {rd.normalizations && rd.normalizations.length > 0
                         ? rd.normalizations
                             .map(
-                              (n) =>
-                                READOUT_NORMALIZATION_LABELS[n as ReadoutNormalization] ??
-                                n,
+                              (n) => READOUT_NORMALIZATION_LABELS[n as ReadoutNormalization] ?? n,
                             )
                             .join(", ")
                         : "—"}
@@ -1410,9 +1233,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
-                            disabled={
-                              protocol.readout_definitions.length <= 1
-                            }
+                            disabled={protocol.readout_definitions.length <= 1}
                             onClick={() => removeReadoutDef.mutate(rd.id)}
                             title="Delete"
                           >
@@ -1434,16 +1255,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Condition Definitions</CardTitle>
-            <CardDescription>
-              Experimental conditions that vary between runs.
-            </CardDescription>
+            <CardDescription>Experimental conditions that vary between runs.</CardDescription>
           </div>
           {canAddMetadata && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setAddConditionOpen(true)}
-            >
+            <Button size="sm" variant="outline" onClick={() => setAddConditionOpen(true)}>
               <Plus className="mr-1 h-4 w-4" />
               Add
             </Button>
@@ -1451,9 +1266,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         </CardHeader>
         <CardContent>
           {protocol.condition_definitions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No condition definitions yet.
-            </p>
+            <p className="text-sm text-muted-foreground">No condition definitions yet.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -1468,9 +1281,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 {protocol.condition_definitions.map((cd) => (
                   <TableRow key={cd.id}>
                     <TableCell className="font-medium">{cd.name}</TableCell>
-                    <TableCell className="capitalize">
-                      {cd.data_type}
-                    </TableCell>
+                    <TableCell className="capitalize">{cd.data_type}</TableCell>
                     <TableCell>{cd.unit ?? "\u2014"}</TableCell>
                     {canStructurallyEdit && (
                       <TableCell>
@@ -1487,9 +1298,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() =>
-                              removeConditionDef.mutate(cd.id)
-                            }
+                            onClick={() => removeConditionDef.mutate(cd.id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1510,9 +1319,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           <div>
             <CardTitle>Control Layouts</CardTitle>
             <CardDescription>
-              Plate templates for positive/negative controls per plate format.
-              Required for runs that use control-based normalization (e.g.,
-              % Inhibition).
+              Plate templates for positive/negative controls per plate format. Required for runs
+              that use control-based normalization (e.g., % Inhibition).
             </CardDescription>
           </div>
           <Button asChild size="sm" variant="outline">
@@ -1524,59 +1332,38 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Existing layouts */}
-          {protocol.control_layouts &&
-          Object.keys(protocol.control_layouts).length > 0 ? (
+          {protocol.control_layouts && Object.keys(protocol.control_layouts).length > 0 ? (
             <div className="space-y-3">
-              {Object.entries(protocol.control_layouts).map(
-                ([format, templateId]) => {
-                  const tmpl = plateTemplates?.find(
-                    (pt) => pt.id === templateId,
-                  );
-                  return (
-                    <div
-                      key={format}
-                      className="rounded-md border px-3 py-2 space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">
-                          {PLATE_FORMAT_LABELS[format as PlateFormat] ??
-                            `${format}-well`}{" "}
-                          &rarr;{" "}
-                          <span className="font-medium">
-                            {tmpl?.name ?? templateId}
-                          </span>
-                        </span>
-                        {canStructurallyEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() =>
-                              removeControlLayout.mutate(format)
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                      {/* Read-only preview of the template — same color
-                          vocabulary as the editor + Plate Templates page,
-                          so chemists recognize the layout instantly. */}
-                      {tmpl && (
-                        <PlateMapView
-                          format={tmpl.format}
-                          templateMap={tmpl.template_map}
-                        />
+              {Object.entries(protocol.control_layouts).map(([format, templateId]) => {
+                const tmpl = plateTemplates?.find((pt) => pt.id === templateId);
+                return (
+                  <div key={format} className="rounded-md border px-3 py-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">
+                        {PLATE_FORMAT_LABELS[format as PlateFormat] ?? `${format}-well`} &rarr;{" "}
+                        <span className="font-medium">{tmpl?.name ?? templateId}</span>
+                      </span>
+                      {canStructurallyEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => removeControlLayout.mutate(format)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       )}
                     </div>
-                  );
-                },
-              )}
+                    {/* Read-only preview of the template — same color
+                          vocabulary as the editor + Plate Templates page,
+                          so chemists recognize the layout instantly. */}
+                    {tmpl && <PlateMapView format={tmpl.format} templateMap={tmpl.template_map} />}
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              No control layouts configured.
-            </p>
+            <p className="text-sm text-muted-foreground">No control layouts configured.</p>
           )}
 
           {/* Add form — additive, allowed on unlocked ACTIVE for new
@@ -1584,117 +1371,100 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               requires DRAFT (would change Z′ interpretation of prior
               runs); we filter the format dropdown to those not yet
               configured so users can't accidentally try. */}
-          {canAddMetadata && (
-            <>
-              {plateTemplates && plateTemplates.length === 0 ? (
-                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                  No plate templates exist in this workspace yet. Create one
-                  first — define which wells are positive/negative controls
-                  for each plate format.
-                  <div className="mt-2">
-                    <Button asChild size="sm">
-                      <Link href="/assays/plate-templates">
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        Create Plate Template
-                      </Link>
-                    </Button>
-                  </div>
+          {canAddMetadata &&
+            (plateTemplates && plateTemplates.length === 0 ? (
+              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                No plate templates exist in this workspace yet. Create one first — define which
+                wells are positive/negative controls for each plate format.
+                <div className="mt-2">
+                  <Button asChild size="sm">
+                    <Link href="/assays/plate-templates">
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Create Plate Template
+                    </Link>
+                  </Button>
                 </div>
-              ) : (() => {
-                const configuredFormats = Object.keys(
-                  protocol.control_layouts ?? {},
-                );
+              </div>
+            ) : (
+              (() => {
+                const configuredFormats = Object.keys(protocol.control_layouts ?? {});
                 // On non-DRAFT, filter to formats not already configured —
                 // the BE rejects replacing on ACTIVE. On DRAFT, any
                 // format is fair game (replace included).
                 const availableFormats = isDraft
                   ? Object.keys(PLATE_FORMAT_LABELS)
-                  : Object.keys(PLATE_FORMAT_LABELS).filter(
-                      (f) => !configuredFormats.includes(f),
-                    );
+                  : Object.keys(PLATE_FORMAT_LABELS).filter((f) => !configuredFormats.includes(f));
                 if (availableFormats.length === 0) {
                   return (
                     <p className="text-sm text-muted-foreground">
-                      All plate formats already have a layout configured.
-                      To replace an existing layout, create a new version.
+                      All plate formats already have a layout configured. To replace an existing
+                      layout, create a new version.
                     </p>
                   );
                 }
                 return (
-                <div className="flex items-end gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Format</Label>
-                    <Select
-                      value={
-                        availableFormats.includes(clFormat)
-                          ? clFormat
-                          : availableFormats[0]
-                      }
-                      onValueChange={(v) => {
-                        setClFormat(v);
-                        setClTemplateId("");
-                      }}
-                    >
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableFormats.map((val) => (
-                          <SelectItem key={val} value={val}>
-                            {
-                              PLATE_FORMAT_LABELS[
-                                val as keyof typeof PLATE_FORMAT_LABELS
-                              ]
-                            }
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Template</Label>
-                    <Select
-                      value={clTemplateId}
-                      onValueChange={setClTemplateId}
-                    >
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Select template..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(plateTemplates ?? [])
-                          .filter((pt) => pt.format === clFormat)
-                          .map((pt) => (
-                            <SelectItem key={pt.id} value={pt.id}>
-                              {pt.name}
+                  <div className="flex items-end gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Format</Label>
+                      <Select
+                        value={availableFormats.includes(clFormat) ? clFormat : availableFormats[0]}
+                        onValueChange={(v) => {
+                          setClFormat(v);
+                          setClTemplateId("");
+                        }}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableFormats.map((val) => (
+                            <SelectItem key={val} value={val}>
+                              {PLATE_FORMAT_LABELS[val as keyof typeof PLATE_FORMAT_LABELS]}
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={!clTemplateId}
-                    onClick={() => {
-                      setControlLayout.mutate(
-                        {
-                          plate_format: clFormat,
-                          template_id: clTemplateId,
-                        },
-                        {
-                          onSuccess: () => {
-                            setClTemplateId("");
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Template</Label>
+                      <Select value={clTemplateId} onValueChange={setClTemplateId}>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Select template..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(plateTemplates ?? [])
+                            .filter((pt) => pt.format === clFormat)
+                            .map((pt) => (
+                              <SelectItem key={pt.id} value={pt.id}>
+                                {pt.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={!clTemplateId}
+                      onClick={() => {
+                        setControlLayout.mutate(
+                          {
+                            plate_format: clFormat,
+                            template_id: clTemplateId,
                           },
-                        },
-                      );
-                    }}
-                  >
-                    Set Layout
-                  </Button>
-                </div>
+                          {
+                            onSuccess: () => {
+                              setClTemplateId("");
+                            },
+                          },
+                        );
+                      }}
+                    >
+                      Set Layout
+                    </Button>
+                  </div>
                 );
-              })()}
-            </>
-          )}
+              })()
+            ))}
         </CardContent>
       </Card>
 
@@ -1703,10 +1473,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <CardHeader>
           <CardTitle>Control Convention</CardTitle>
           <CardDescription>
-            Tells the calculation engine which control well produces high raw
-            signal. Drives % Inhibition / % Activation / % Control / Z-Score
-            formula dispatch and the heatmap legend. Editable after publish —
-            re-run Recompute on each run after changing.
+            Tells the calculation engine which control well produces high raw signal. Drives %
+            Inhibition / % Activation / % Control / Z-Score formula dispatch and the heatmap legend.
+            Editable after publish — re-run Recompute on each run after changing.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1736,9 +1505,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               </Select>
             </div>
             {updateProtocol.isPending && (
-              <span className="pb-2 text-xs text-muted-foreground">
-                Saving…
-              </span>
+              <span className="pb-2 text-xs text-muted-foreground">Saving…</span>
             )}
           </div>
         </CardContent>
@@ -1767,9 +1534,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Readout Definition</DialogTitle>
-            <DialogDescription>
-              Define a new measured value for this protocol.
-            </DialogDescription>
+            <DialogDescription>Define a new measured value for this protocol.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
@@ -1781,19 +1546,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               />
               {isReservedReadoutName(rdName) && (
                 <p className="text-xs text-destructive">
-                  &lsquo;{rdName.trim()}&rsquo; is a reserved well-metadata name
-                  and cannot be used as a readout. The well&apos;s concentration,
-                  batch, and compound are tracked on the well itself, not as
-                  readouts.
+                  &lsquo;{rdName.trim()}&rsquo; is a reserved well-metadata name and cannot be used
+                  as a readout. The well&apos;s concentration, batch, and compound are tracked on
+                  the well itself, not as readouts.
                 </p>
               )}
             </div>
             <div className="space-y-1">
               <Label>
-                Description{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
+                Description <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Textarea
                 value={rdDescription}
@@ -1824,10 +1585,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             {rdDataType === "pick_list" ? (
               <div className="space-y-1">
                 <Label>Allowed Values</Label>
-                <PickListEditor
-                  value={rdPickListValues}
-                  onChange={setRdPickListValues}
-                />
+                <PickListEditor value={rdPickListValues} onChange={setRdPickListValues} />
               </div>
             ) : (
               <>
@@ -1864,14 +1622,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     <FormulaInput
                       value={rdCalculationFormula}
                       onChange={setRdCalculationFormula}
-                      availableReadoutNames={protocol.readout_definitions.map(
-                        (rd) => rd.name,
-                      )}
+                      availableReadoutNames={protocol.readout_definitions.map((rd) => rd.name)}
                       protocolNames={protocolNames}
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      Use other readout names as variables. Type{" "}
-                      <code>@</code> for cross-protocol.
+                      Use other readout names as variables. Type <code>@</code> for cross-protocol.
                     </p>
                   </div>
                 )}
@@ -1879,21 +1634,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <>
                     <div className="space-y-1">
                       <Label>Aggregation</Label>
-                      <Select
-                        value={rdAggregation}
-                        onValueChange={setRdAggregation}
-                      >
+                      <Select value={rdAggregation} onValueChange={setRdAggregation}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                            ([val, label]) => (
-                              <SelectItem key={val} value={val}>
-                                {label}
-                              </SelectItem>
-                            ),
-                          )}
+                          {Object.entries(READOUT_AGGREGATION_LABELS).map(([val, label]) => (
+                            <SelectItem key={val} value={val}>
+                              {label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1911,10 +1661,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             {renderDoseResponseFields(null)}
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddReadoutOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setAddReadoutOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -1925,9 +1672,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 (rdDataType === "dose_response" && !drYReadout) ||
                 (rdDataType === "pick_list" &&
                   rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
-                (rdDataType === "numeric" &&
-                  rdIsCalculated &&
-                  !rdCalculationFormula.trim()) ||
+                (rdDataType === "numeric" && rdIsCalculated && !rdCalculationFormula.trim()) ||
                 drFormInvalid
               }
               onClick={() => {
@@ -1950,11 +1695,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     aggregation: isCalc ? "none" : rdAggregation,
                     normalizations: isCalc ? [] : rdNormalizations,
                     is_calculated: isCalc,
-                    calculation_formula: isCalc
-                      ? rdCalculationFormula.trim() || null
-                      : null,
-                    pick_list_values:
-                      rdDataType === "pick_list" ? cleanedPickList : undefined,
+                    calculation_formula: isCalc ? rdCalculationFormula.trim() || null : null,
+                    pick_list_values: rdDataType === "pick_list" ? cleanedPickList : undefined,
                     dose_response_config: buildDoseResponseConfig(),
                   },
                   {
@@ -2007,17 +1749,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               />
               {isReservedReadoutName(rdName) && (
                 <p className="text-xs text-destructive">
-                  &lsquo;{rdName.trim()}&rsquo; is a reserved well-metadata name
-                  and cannot be used as a readout.
+                  &lsquo;{rdName.trim()}&rsquo; is a reserved well-metadata name and cannot be used
+                  as a readout.
                 </p>
               )}
             </div>
             <div className="space-y-1">
               <Label>
-                Description{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
+                Description <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Textarea
                 value={rdDescription}
@@ -2028,11 +1767,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Data Type</Label>
-              <Select
-                value={rdDataType}
-                onValueChange={setRdDataType}
-                disabled={!isDraft}
-              >
+              <Select value={rdDataType} onValueChange={setRdDataType} disabled={!isDraft}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -2062,10 +1797,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               <>
                 <div className="space-y-1">
                   <Label>Unit</Label>
-                  <Input
-                    value={rdUnit}
-                    onChange={(e) => setRdUnit(e.target.value)}
-                  />
+                  <Input value={rdUnit} onChange={(e) => setRdUnit(e.target.value)} />
                 </div>
                 {/* Calculated toggle — structural (changing the formula
                     on ACTIVE would silently shift computed values across
@@ -2098,8 +1830,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       disabled={!isDraft}
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      Use other readout names as variables. Type{" "}
-                      <code>@</code> for cross-protocol.
+                      Use other readout names as variables. Type <code>@</code> for cross-protocol.
                     </p>
                   </div>
                 )}
@@ -2116,13 +1847,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                            ([val, label]) => (
-                              <SelectItem key={val} value={val}>
-                                {label}
-                              </SelectItem>
-                            ),
-                          )}
+                          {Object.entries(READOUT_AGGREGATION_LABELS).map(([val, label]) => (
+                            <SelectItem key={val} value={val}>
+                              {label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -2163,9 +1892,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 (rdDataType === "dose_response" && !drYReadout) ||
                 (rdDataType === "pick_list" &&
                   rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
-                (rdDataType === "numeric" &&
-                  rdIsCalculated &&
-                  !rdCalculationFormula.trim()) ||
+                (rdDataType === "numeric" && rdIsCalculated && !rdCalculationFormula.trim()) ||
                 drFormInvalid
               }
               onClick={() => {
@@ -2188,11 +1915,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       aggregation: isCalc ? "none" : rdAggregation,
                       normalizations: isCalc ? [] : rdNormalizations,
                       is_calculated: isCalc,
-                      calculation_formula: isCalc
-                        ? rdCalculationFormula.trim() || null
-                        : null,
-                      pick_list_values:
-                        rdDataType === "pick_list" ? cleanedPickList : null,
+                      calculation_formula: isCalc ? rdCalculationFormula.trim() || null : null,
+                      pick_list_values: rdDataType === "pick_list" ? cleanedPickList : null,
                       dose_response_config: buildDoseResponseConfig(),
                     },
                   },
@@ -2247,10 +1971,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddConditionOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setAddConditionOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -2290,17 +2011,13 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           <DialogHeader>
             <DialogTitle>Edit Condition Definition</DialogTitle>
             <DialogDescription>
-              Update fields on this condition. Only available while the
-              protocol is in draft.
+              Update fields on this condition. Only available while the protocol is in draft.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
               <Label>Name</Label>
-              <Input
-                value={cdName}
-                onChange={(e) => setCdName(e.target.value)}
-              />
+              <Input value={cdName} onChange={(e) => setCdName(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label>Data Type</Label>
@@ -2317,10 +2034,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Unit</Label>
-              <Input
-                value={cdUnit}
-                onChange={(e) => setCdUnit(e.target.value)}
-              />
+              <Input value={cdUnit} onChange={(e) => setCdUnit(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
@@ -2353,9 +2067,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
       <ReadoutDefinitionViewerDialog
         readoutDef={
           viewingReadoutId
-            ? protocol.readout_definitions.find(
-                (rd) => rd.id === viewingReadoutId,
-              ) ?? null
+            ? (protocol.readout_definitions.find((rd) => rd.id === viewingReadoutId) ?? null)
             : null
         }
         open={viewingReadoutId !== null}

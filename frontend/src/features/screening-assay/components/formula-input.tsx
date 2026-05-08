@@ -1,20 +1,13 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
 import { Input } from "@/shared/components/ui/input";
 import { cn } from "@/shared/lib/utils";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type FormulaSuggestion,
   buildSuggestions,
   tokenAtCursor,
   validateFormula,
-  type FormulaSuggestion,
 } from "../lib/formula-tokens";
 
 /** Rich formula input for calculated readouts.
@@ -63,10 +56,7 @@ export function FormulaInput({
   // the popover without losing their typing position.
   const [dismissed, setDismissed] = useState(false);
 
-  const token = useMemo(
-    () => tokenAtCursor(value, cursorPos),
-    [value, cursorPos],
-  );
+  const token = useMemo(() => tokenAtCursor(value, cursorPos), [value, cursorPos]);
   const suggestions = useMemo(
     () => buildSuggestions(token, availableReadoutNames, protocolNames),
     [token, availableReadoutNames, protocolNames],
@@ -76,8 +66,7 @@ export function FormulaInput({
     [value, availableReadoutNames],
   );
 
-  const showPopover =
-    !disabled && !dismissed && suggestions.length > 0 && token.kind !== "none";
+  const showPopover = !disabled && !dismissed && suggestions.length > 0 && token.kind !== "none";
 
   // Reset active index whenever suggestions change so we don't point past
   // the end of the new list.
@@ -89,10 +78,7 @@ export function FormulaInput({
   useEffect(() => {
     if (!showPopover) return;
     function onDoc(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setDismissed(true);
       }
     }
@@ -138,9 +124,7 @@ export function FormulaInput({
       setActiveIdx((i) => (i + 1) % suggestions.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIdx(
-        (i) => (i - 1 + suggestions.length) % suggestions.length,
-      );
+      setActiveIdx((i) => (i - 1 + suggestions.length) % suggestions.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
       commit(suggestions[activeIdx]);
@@ -161,11 +145,8 @@ export function FormulaInput({
     if (validation.unknownIdentifiers.length > 0) {
       validationLine = (
         <p className="text-[11px] text-destructive">
-          Unknown:{" "}
-          <code className="font-mono">
-            {validation.unknownIdentifiers.join(", ")}
-          </code>{" "}
-          — not a readout in this protocol or a math function.
+          Unknown: <code className="font-mono">{validation.unknownIdentifiers.join(", ")}</code> —
+          not a readout in this protocol or a math function.
         </p>
       );
     } else {
@@ -181,18 +162,13 @@ export function FormulaInput({
         parts.push("includes cross-protocol reference (resolved at read)");
       }
       validationLine = (
-        <p className="text-[11px] text-muted-foreground">
-          ✓ {parts.join(" · ") || "valid syntax"}
-        </p>
+        <p className="text-[11px] text-muted-foreground">✓ {parts.join(" · ") || "valid syntax"}</p>
       );
     }
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={cn("relative space-y-1", className)}
-    >
+    <div ref={containerRef} className={cn("relative space-y-1", className)}>
       <Input
         ref={inputRef}
         value={value}
@@ -206,11 +182,6 @@ export function FormulaInput({
         }}
         onSelect={handleSelect}
         onKeyDown={handleKeyDown}
-        onBlur={() => {
-          // Delay so click-on-suggestion fires first (mousedown sets a
-          // flag we don't have yet — keep simple by relying on the
-          // mousedown click-outside handler instead).
-        }}
         disabled={disabled}
         placeholder={placeholder}
         className="font-mono text-sm"

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateProtocolInput, Protocol } from "../types";
 
 const PROTOCOLS_KEY = ["protocols"];
@@ -42,76 +42,13 @@ export const useCreateProtocol = protocolHooks.useCreate;
 export const useUpdateProtocol = protocolHooks.useUpdate;
 export const useDeleteProtocol = protocolHooks.useDelete;
 
-// --- State transitions (callers pass plain id string) ---
+// --- State transitions ---
 
-export function usePublishProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}/publish`,
-        method: "POST",
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol published"); },
-  });
-}
-
-export function useRetireProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string | null }) =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}/retire`,
-        method: "POST",
-        data: { reason },
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Protocol retired"); },
-  });
-}
-
-export function useLockProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}/lock`,
-        method: "POST",
-        data: { reason },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
-      showSuccess("Protocol locked");
-    },
-  });
-}
-
-export function useUnlockProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}/unlock`,
-        method: "POST",
-        data: { reason },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
-      showSuccess("Protocol unlocked");
-    },
-  });
-}
-
-export function useVersionProtocol() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<Protocol>({
-        url: `/api/v1/protocols/${id}/version`,
-        method: "POST",
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("New version created"); },
-  });
-}
+export const usePublishProtocol = () => protocolHooks.useAction("publish", "Protocol published");
+export const useRetireProtocol = () => protocolHooks.useAction("retire", "Protocol retired");
+export const useLockProtocol = () => protocolHooks.useAction("lock", "Protocol locked");
+export const useUnlockProtocol = () => protocolHooks.useAction("unlock", "Protocol unlocked");
+export const useVersionProtocol = () => protocolHooks.useAction("version", "New version created");
 
 // --- Readout definitions (nested under protocol) ---
 
@@ -137,7 +74,10 @@ export function useAddReadoutDefinition(protocolId: string) {
         method: "POST",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Readout definition added"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Readout definition added");
+    },
   });
 }
 
@@ -170,7 +110,10 @@ export function useUpdateReadoutDefinition(protocolId: string) {
         method: "PUT",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Readout definition updated"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Readout definition updated");
+    },
   });
 }
 
@@ -182,7 +125,10 @@ export function useRemoveReadoutDefinition(protocolId: string) {
         url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
         method: "DELETE",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Readout definition removed"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Readout definition removed");
+    },
   });
 }
 
@@ -202,7 +148,10 @@ export function useAddConditionDefinition(protocolId: string) {
         method: "POST",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Condition definition added"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Condition definition added");
+    },
   });
 }
 
@@ -226,7 +175,10 @@ export function useUpdateConditionDefinition(protocolId: string) {
         method: "PUT",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Condition definition updated"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Condition definition updated");
+    },
   });
 }
 
@@ -238,7 +190,10 @@ export function useRemoveConditionDefinition(protocolId: string) {
         url: `/api/v1/protocols/${protocolId}/condition-definitions/${definitionId}`,
         method: "DELETE",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Condition definition removed"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Condition definition removed");
+    },
   });
 }
 
@@ -253,7 +208,10 @@ export function useSetControlLayout(protocolId: string) {
         method: "PUT",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Control layout set"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Control layout set");
+    },
   });
 }
 
@@ -265,7 +223,10 @@ export function useRemoveControlLayout(protocolId: string) {
         url: `/api/v1/protocols/${protocolId}/control-layouts/${plateFormat}`,
         method: "DELETE",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Control layout removed"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Control layout removed");
+    },
   });
 }
 
@@ -290,7 +251,10 @@ export function useSetOntologyAnnotation(protocolId: string) {
         method: "PUT",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Annotation updated"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Annotation updated");
+    },
   });
 }
 
@@ -303,6 +267,9 @@ export function useRemoveOntologyAnnotation(protocolId: string) {
         method: "DELETE",
         params: { slot_name: slotName },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }); showSuccess("Annotation removed"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Annotation removed");
+    },
   });
 }

@@ -1,12 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
-import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
-import { GROUP_PALETTE, CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
-import { Skeleton } from "@/shared/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -17,27 +13,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Download, ImageIcon } from "lucide-react";
+import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
+import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
-import {
-  type DoseResponseConfig,
-  type DoseResponseCurve,
-  type CurveType,
-  type CurveClass,
-  CURVE_TYPE_LABELS,
-  CURVE_CLASS_LABELS,
-} from "../types";
-import { useRefitDoseResponse, useClassifyDoseResponse } from "../hooks/use-refit-dose-response";
+import { Download, ImageIcon } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
 import {
   CURVE_FIT_POINTS,
-  X_AXIS_MIN_RATIO,
-  X_AXIS_MAX_RATIO,
-  X_AXIS_FALLBACK_MIN_RATIO,
-  X_AXIS_FALLBACK_MAX_RATIO,
-  X_AXIS_FLOOR,
   PLOT_MARKER,
+  X_AXIS_FALLBACK_MAX_RATIO,
+  X_AXIS_FALLBACK_MIN_RATIO,
+  X_AXIS_FLOOR,
+  X_AXIS_MAX_RATIO,
+  X_AXIS_MIN_RATIO,
   generate4PLPoints,
 } from "../lib/dose-response-display";
+import { PERCENT_FIT_RANGES } from "../lib/readout-constants";
+import {
+  CURVE_CLASS_LABELS,
+  CURVE_TYPE_LABELS,
+  type CurveClass,
+  type CurveType,
+  type DoseResponseConfig,
+  type DoseResponseCurve,
+} from "../types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ interface CurveConstraints {
 
 function parseInputOrNull(s: string): number | null {
   if (s.trim() === "") return null;
-  const v = parseFloat(s);
+  const v = Number.parseFloat(s);
   return Number.isFinite(v) ? v : null;
 }
 
@@ -94,7 +94,8 @@ function isRangeValid(min: number | null, max: number | null): boolean {
 function constraintsValid(c: CurveConstraints): boolean {
   if (c.topMode === "lock" && (c.topValue == null || !Number.isFinite(c.topValue))) return false;
   if (c.topMode === "range" && !isRangeValid(c.topMin, c.topMax)) return false;
-  if (c.bottomMode === "lock" && (c.bottomValue == null || !Number.isFinite(c.bottomValue))) return false;
+  if (c.bottomMode === "lock" && (c.bottomValue == null || !Number.isFinite(c.bottomValue)))
+    return false;
   if (c.bottomMode === "range" && !isRangeValid(c.bottomMin, c.bottomMax)) return false;
   if (c.hillCustomRange && !isRangeValid(c.hillMin, c.hillMax)) return false;
   return true;
@@ -131,20 +132,22 @@ function generate4PLCurve(
 }
 
 /** Extract (concentration, response) pairs from raw_data / excluded_points */
-function extractPoints(
-  points: Array<Record<string, unknown>> | null
-): { x: number[]; y: number[]; reasons: (string | null)[] } {
+function extractPoints(points: Array<Record<string, unknown>> | null): {
+  x: number[];
+  y: number[];
+  reasons: (string | null)[];
+} {
   if (!points || points.length === 0) return { x: [], y: [], reasons: [] };
   const xs: number[] = [];
   const ys: number[] = [];
   const reasons: (string | null)[] = [];
   for (const pt of points) {
-    const conc = pt["concentration"] ?? pt["x"];
-    const resp = pt["response"] ?? pt["y"];
+    const conc = pt.concentration ?? pt.x;
+    const resp = pt.response ?? pt.y;
     if (typeof conc === "number" && typeof resp === "number") {
       xs.push(conc);
       ys.push(resp);
-      reasons.push(typeof pt["reason"] === "string" ? pt["reason"] : null);
+      reasons.push(typeof pt.reason === "string" ? pt.reason : null);
     }
   }
   return { x: xs, y: ys, reasons };
@@ -153,7 +156,7 @@ function extractPoints(
 /** Group points by concentration, return mean ± SD arrays for error bars */
 function computeReplicateStats(
   x: number[],
-  y: number[]
+  y: number[],
 ): {
   meanX: number[];
   meanY: number[];
@@ -170,7 +173,7 @@ function computeReplicateStats(
   for (let i = 0; i < x.length; i++) {
     const key = x[i].toPrecision(10);
     if (!groups.has(key)) groups.set(key, { conc: x[i], responses: [] });
-    groups.get(key)!.responses.push(y[i]);
+    groups.get(key)?.responses.push(y[i]);
   }
 
   const meanX: number[] = [];
@@ -186,8 +189,7 @@ function computeReplicateStats(
 
     if (responses.length > 1) {
       const variance =
-        responses.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) /
-        (responses.length - 1);
+        responses.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (responses.length - 1);
       sdY.push(Math.sqrt(variance));
     } else {
       sdY.push(0);
@@ -216,9 +218,7 @@ function rSquaredColor(r2: number): string {
  *  CDD's [85,110]/[-10,10]/[0.9,1.1] defaults are calibrated for. */
 function isPercentNormalization(norm: string | null | undefined): boolean {
   return (
-    norm === "percent_inhibition" ||
-    norm === "percent_activation" ||
-    norm === "percent_control"
+    norm === "percent_inhibition" || norm === "percent_activation" || norm === "percent_control"
   );
 }
 
@@ -243,25 +243,23 @@ function defaultConstraintsFor(
   const bottomMode: ParamMode =
     cfg?.bottom_constraint != null
       ? "lock"
-      : cfg?.bottom_constraint_min != null ||
-          cfg?.bottom_constraint_max != null
+      : cfg?.bottom_constraint_min != null || cfg?.bottom_constraint_max != null
         ? "range"
         : "free";
-  const hillCustomRange =
-    cfg?.hill_slope_min != null || cfg?.hill_slope_max != null;
+  const hillCustomRange = cfg?.hill_slope_min != null || cfg?.hill_slope_max != null;
   return {
     topMode,
     topValue: cfg?.top_constraint ?? curve.top,
-    topMin: cfg?.top_constraint_min ?? (isPercentY ? 85 : null),
-    topMax: cfg?.top_constraint_max ?? (isPercentY ? 110 : null),
+    topMin: cfg?.top_constraint_min ?? (isPercentY ? PERCENT_FIT_RANGES.topMin : null),
+    topMax: cfg?.top_constraint_max ?? (isPercentY ? PERCENT_FIT_RANGES.topMax : null),
     bottomMode,
     bottomValue: cfg?.bottom_constraint ?? curve.bottom,
-    bottomMin: cfg?.bottom_constraint_min ?? (isPercentY ? -10 : null),
-    bottomMax: cfg?.bottom_constraint_max ?? (isPercentY ? 10 : null),
+    bottomMin: cfg?.bottom_constraint_min ?? (isPercentY ? PERCENT_FIT_RANGES.bottomMin : null),
+    bottomMax: cfg?.bottom_constraint_max ?? (isPercentY ? PERCENT_FIT_RANGES.bottomMax : null),
     hillSlope: cfg?.hill_slope_constraint ?? "unconstrained",
     hillCustomRange,
-    hillMin: cfg?.hill_slope_min ?? (isPercentY ? 0.9 : null),
-    hillMax: cfg?.hill_slope_max ?? (isPercentY ? 1.1 : null),
+    hillMin: cfg?.hill_slope_min ?? (isPercentY ? PERCENT_FIT_RANGES.hillMin : null),
+    hillMax: cfg?.hill_slope_max ?? (isPercentY ? PERCENT_FIT_RANGES.hillMax : null),
   };
 }
 
@@ -302,11 +300,14 @@ function CurveControls({
   const topRangeError =
     constraints.topMode === "range" && !isRangeValid(constraints.topMin, constraints.topMax);
   const topLockError =
-    constraints.topMode === "lock" && (constraints.topValue == null || !Number.isFinite(constraints.topValue));
+    constraints.topMode === "lock" &&
+    (constraints.topValue == null || !Number.isFinite(constraints.topValue));
   const bottomRangeError =
-    constraints.bottomMode === "range" && !isRangeValid(constraints.bottomMin, constraints.bottomMax);
+    constraints.bottomMode === "range" &&
+    !isRangeValid(constraints.bottomMin, constraints.bottomMax);
   const bottomLockError =
-    constraints.bottomMode === "lock" && (constraints.bottomValue == null || !Number.isFinite(constraints.bottomValue));
+    constraints.bottomMode === "lock" &&
+    (constraints.bottomValue == null || !Number.isFinite(constraints.bottomValue));
   const hillRangeError =
     constraints.hillCustomRange && !isRangeValid(constraints.hillMin, constraints.hillMax);
 
@@ -485,9 +486,7 @@ function CurveControls({
               <input
                 type="checkbox"
                 checked={constraints.hillCustomRange}
-                onChange={(e) =>
-                  onConstraintChange({ hillCustomRange: e.target.checked })
-                }
+                onChange={(e) => onConstraintChange({ hillCustomRange: e.target.checked })}
                 className="h-3.5 w-3.5"
               />
               Custom range (overrides bounds)
@@ -550,12 +549,9 @@ function PerCurveModeToggle({
           role="radio"
           aria-checked={mode === opt}
           onClick={() => onChange(opt)}
-          className={
-            "px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md " +
-            (mode === opt
-              ? "bg-primary text-primary-foreground"
-              : "bg-background hover:bg-muted")
-          }
+          className={`px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md ${
+            mode === opt ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+          }`}
         >
           {opt}
         </button>
@@ -612,18 +608,14 @@ function SummaryCard({
           {CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
           {" = "}
           {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
-          {isExtrapolated && (
-            <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>
-          )}
+          {isExtrapolated && <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>}
         </p>
         {curve.intercept_values && curve.intercept_values.length > 1 && (
           <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground pt-0.5">
             {curve.intercept_values.slice(1).map((iv, idx) => {
               const label =
                 iv.spec.label ??
-                `${iv.spec.kind.toUpperCase()}${iv.spec.level
-                  .toString()
-                  .replace(/\.0$/, "")}`;
+                `${iv.spec.kind.toUpperCase()}${iv.spec.level.toString().replace(/\.0$/, "")}`;
               if (iv.at_bound || !Number.isFinite(iv.value)) {
                 return (
                   <span
@@ -637,16 +629,13 @@ function SummaryCard({
               }
               return (
                 <span key={idx} className="rounded border px-1.5 py-0.5">
-                  {label} ={" "}
-                  {Number(iv.value.toPrecision(4))} {curve.fitted_unit}
-                  {iv.confidence_interval_low != null &&
-                    iv.confidence_interval_high != null && (
-                      <span className="ml-1 opacity-70">
-                        [
-                        {iv.confidence_interval_low.toPrecision(3)}–
-                        {iv.confidence_interval_high.toPrecision(3)}]
-                      </span>
-                    )}
+                  {label} = {Number(iv.value.toPrecision(4))} {curve.fitted_unit}
+                  {iv.confidence_interval_low != null && iv.confidence_interval_high != null && (
+                    <span className="ml-1 opacity-70">
+                      [{iv.confidence_interval_low.toPrecision(3)}–
+                      {iv.confidence_interval_high.toPrecision(3)}]
+                    </span>
+                  )}
                 </span>
               );
             })}
@@ -661,7 +650,8 @@ function SummaryCard({
           <span className="font-mono">Bottom = {curve.bottom.toFixed(1)}%</span>
           {curve.confidence_interval_low != null && curve.confidence_interval_high != null && (
             <span className="font-mono">
-              CI: {curve.confidence_interval_low.toPrecision(3)}–{curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
+              CI: {curve.confidence_interval_low.toPrecision(3)}–
+              {curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
             </span>
           )}
           {isInteractive && (
@@ -693,7 +683,7 @@ function SummaryCard({
                       disabled={isClassifying}
                       className={cn(
                         "flex w-full items-center px-3 py-1.5 text-xs hover:bg-accent transition-colors",
-                        curve.curve_class === cc && "font-medium text-primary"
+                        curve.curve_class === cc && "font-medium text-primary",
                       )}
                       onClick={() => {
                         onClassify(curve.id, cc);
@@ -783,12 +773,12 @@ export function DoseResponseChart({
     (curve: DoseResponseCurve): CurveConstraints =>
       constraintsMap[curve.id] ??
       defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
-    [constraintsMap, protocolConfig, yReadoutNormalization]
+    [constraintsMap, protocolConfig, yReadoutNormalization],
   );
 
   const getExcluded = useCallback(
     (curveId: string): Set<number> => excludedMap[curveId] ?? new Set(),
-    [excludedMap]
+    [excludedMap],
   );
 
   const callRefit = useCallback(
@@ -803,26 +793,20 @@ export function DoseResponseChart({
           hill_slope_constraint:
             constraints.hillSlope !== "unconstrained" ? constraints.hillSlope : null,
           override_top: true,
-          top_constraint:
-            constraints.topMode === "lock" ? constraints.topValue : null,
-          top_constraint_min:
-            constraints.topMode === "range" ? constraints.topMin : null,
-          top_constraint_max:
-            constraints.topMode === "range" ? constraints.topMax : null,
+          top_constraint: constraints.topMode === "lock" ? constraints.topValue : null,
+          top_constraint_min: constraints.topMode === "range" ? constraints.topMin : null,
+          top_constraint_max: constraints.topMode === "range" ? constraints.topMax : null,
           override_bottom: true,
-          bottom_constraint:
-            constraints.bottomMode === "lock" ? constraints.bottomValue : null,
-          bottom_constraint_min:
-            constraints.bottomMode === "range" ? constraints.bottomMin : null,
-          bottom_constraint_max:
-            constraints.bottomMode === "range" ? constraints.bottomMax : null,
+          bottom_constraint: constraints.bottomMode === "lock" ? constraints.bottomValue : null,
+          bottom_constraint_min: constraints.bottomMode === "range" ? constraints.bottomMin : null,
+          bottom_constraint_max: constraints.bottomMode === "range" ? constraints.bottomMax : null,
           override_hill: true,
           hill_slope_min: constraints.hillCustomRange ? constraints.hillMin : null,
           hill_slope_max: constraints.hillCustomRange ? constraints.hillMax : null,
         },
       });
     },
-    [refit]
+    [refit],
   );
 
   const handleConstraintChange = useCallback(
@@ -842,7 +826,7 @@ export function DoseResponseChart({
         callRefit(curve, getExcluded(curve.id), next);
       }, 500);
     },
-    [getConstraints, getExcluded, callRefit]
+    [getConstraints, getExcluded, callRefit],
   );
 
   const handleReset = useCallback(
@@ -850,23 +834,19 @@ export function DoseResponseChart({
       setExcludedMap((prev) => ({ ...prev, [curve.id]: new Set() }));
       setConstraintsMap((prev) => ({
         ...prev,
-        [curve.id]: defaultConstraintsFor(
-          curve,
-          protocolConfig,
-          yReadoutNormalization,
-        ),
+        [curve.id]: defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
       }));
       // Reset = clear per-curve overrides, fall back to protocol's config.
       refit({ curveId: curve.id, input: { excluded_point_indices: [] } });
     },
-    [refit, protocolConfig, yReadoutNormalization]
+    [refit, protocolConfig, yReadoutNormalization],
   );
 
   const handleClassify = useCallback(
     (curveId: string, curveClass: string) => {
       classify({ curveId, input: { curve_class: curveClass } });
     },
-    [classify]
+    [classify],
   );
 
   // ── Early return ────────────────────────────────────────────────────────────
@@ -900,11 +880,8 @@ export function DoseResponseChart({
     // Prefer the canonical registration number (CV-NNNNN) for trace labels
     // — analysts identify compounds by reg id, not free-text name. Fall back
     // to the molecule name only when the curve carries no reg id.
-    const compoundLabel =
-      curve.registration_number ?? curve.molecule_name ?? null;
-    const label = compoundLabel
-      ? `${compoundLabel} (${curveTypeLabel})`
-      : curveTypeLabel;
+    const compoundLabel = curve.registration_number ?? curve.molecule_name ?? null;
+    const label = compoundLabel ? `${compoundLabel} (${curveTypeLabel})` : curveTypeLabel;
 
     // Merge server excluded_points back into raw_data for interactive mode:
     // In interactive mode we manage exclusions locally.
@@ -929,45 +906,44 @@ export function DoseResponseChart({
       manualExcludedY = serverIncluded.y.filter((_, idx) => localExcluded.has(idx));
       // server excluded -> split by reason
       autoExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       autoExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       manualExcludedX = [
         ...manualExcludedX,
-        ...serverExcluded.x.filter(
-          (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
-        ),
+        ...serverExcluded.x.filter((_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"),
       ];
       manualExcludedY = [
         ...manualExcludedY,
-        ...serverExcluded.y.filter(
-          (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
-        ),
+        ...serverExcluded.y.filter((_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"),
       ];
     } else {
       includedX = serverIncluded.x;
       includedY = serverIncluded.y;
       autoExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       autoExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       manualExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma",
       );
       manualExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma",
       );
     }
 
     // Filter out NaN/non-positive values: log10 explodes on them and
     // `fitted_value` may be NaN/0 for degenerate fits.
     const finiteFitted = Number.isFinite(curve.fitted_value) && curve.fitted_value > 0;
-    const allX = [...serverIncluded.x, ...serverExcluded.x, ...(finiteFitted ? [curve.fitted_value] : [])]
-      .filter((v) => Number.isFinite(v) && v > 0);
+    const allX = [
+      ...serverIncluded.x,
+      ...serverExcluded.x,
+      ...(finiteFitted ? [curve.fitted_value] : []),
+    ].filter((v) => Number.isFinite(v) && v > 0);
     let xMin: number;
     let xMax: number;
     if (allX.length > 0) {
@@ -986,7 +962,7 @@ export function DoseResponseChart({
     // Compute replicate stats for error bars
     const { meanX, meanY, sdY, replicateX, replicateY } = computeReplicateStats(
       includedX,
-      includedY
+      includedY,
     );
     const hasReplicates = replicateX.length > 0;
 
@@ -1028,9 +1004,7 @@ export function DoseResponseChart({
           color,
           size: isInteractive ? PLOT_MARKER.POINT_SIZE_INTERACTIVE : PLOT_MARKER.POINT_SIZE_STATIC,
           symbol: "circle",
-          line: isInteractive
-            ? { color: "rgba(255,255,255,0.3)", width: 1 }
-            : undefined,
+          line: isInteractive ? { color: "rgba(255,255,255,0.3)", width: 1 } : undefined,
         },
         ...(hasReplicates && {
           error_y: {
@@ -1060,7 +1034,12 @@ export function DoseResponseChart({
         legendgroup: group,
         x: manualExcludedX,
         y: manualExcludedY,
-        marker: { color, size: PLOT_MARKER.EXCLUDED_SIZE, symbol: "x", opacity: PLOT_MARKER.MANUAL_EXCLUDED_OPACITY },
+        marker: {
+          color,
+          size: PLOT_MARKER.EXCLUDED_SIZE,
+          symbol: "x",
+          opacity: PLOT_MARKER.MANUAL_EXCLUDED_OPACITY,
+        },
         showlegend: false,
         hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to include</i><extra></extra>"
@@ -1077,7 +1056,12 @@ export function DoseResponseChart({
         legendgroup: group,
         x: autoExcludedX,
         y: autoExcludedY,
-        marker: { color, size: PLOT_MARKER.EXCLUDED_SIZE, symbol: "diamond", opacity: PLOT_MARKER.AUTO_EXCLUDED_OPACITY },
+        marker: {
+          color,
+          size: PLOT_MARKER.EXCLUDED_SIZE,
+          symbol: "diamond",
+          opacity: PLOT_MARKER.AUTO_EXCLUDED_OPACITY,
+        },
         showlegend: false,
         hovertemplate:
           "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Auto-excluded (3\u03c3 outlier)</i><extra></extra>",
@@ -1196,7 +1180,7 @@ export function DoseResponseChart({
       const constraints = getConstraints(curve);
       callRefit(curve, currentExcluded, constraints);
     },
-    [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve]
+    [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve],
   );
 
   // Build overlay shapes and annotations based on toggle state
@@ -1214,24 +1198,54 @@ export function DoseResponseChart({
     // Suppress for inactive/degenerate fits — the EC50 isn't meaningful.
     if (showCrossHair && !degenerate) {
       shapes.push({
-        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
-        line: { color, width: 1, dash: "dot" }, opacity: 0.4,
+        type: "line",
+        xref: "paper",
+        x0: 0,
+        x1: 1,
+        yref: "y",
+        y0: midY,
+        y1: midY,
+        line: { color, width: 1, dash: "dot" },
+        opacity: 0.4,
       });
       shapes.push({
-        type: "line", xref: "x", x0: ec50, x1: ec50, yref: "paper", y0: 0, y1: 1,
-        line: { color, width: 1, dash: "dot" }, opacity: 0.4,
+        type: "line",
+        xref: "x",
+        x0: ec50,
+        x1: ec50,
+        yref: "paper",
+        y0: 0,
+        y1: 1,
+        line: { color, width: 1, dash: "dot" },
+        opacity: 0.4,
       });
       traces.push({
-        type: "scatter", mode: "markers", x: [ec50], y: [midY],
-        marker: { color: CHART_COLORS.warning, size: 10, line: { color: CHART_COLORS.error, width: 2 }, symbol: "circle" },
+        type: "scatter",
+        mode: "markers",
+        x: [ec50],
+        y: [midY],
+        marker: {
+          color: CHART_COLORS.warning,
+          size: 10,
+          line: { color: CHART_COLORS.error, width: 2 },
+          symbol: "circle",
+        },
         showlegend: false,
         hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
       });
       annotations.push({
-        x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
+        x: Math.log10(ec50),
+        y: midY,
+        xref: "x",
+        yref: "y",
         text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-        showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: CHART_COLORS.error,
-        ax: 0, ay: -35, font: { color: CHART_COLORS.error, size: 11 },
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 0.8,
+        arrowcolor: CHART_COLORS.error,
+        ax: 0,
+        ay: -35,
+        font: { color: CHART_COLORS.error, size: 11 },
       });
     }
 
@@ -1255,9 +1269,7 @@ export function DoseResponseChart({
             : iv.spec.level;
         const label =
           iv.spec.label ??
-          `${iv.spec.kind.toUpperCase()}${iv.spec.level
-            .toString()
-            .replace(/\.0$/, "")}`;
+          `${iv.spec.kind.toUpperCase()}${iv.spec.level.toString().replace(/\.0$/, "")}`;
         shapes.push({
           type: "line",
           xref: "x",
@@ -1302,22 +1314,46 @@ export function DoseResponseChart({
     // Plateau lines: horizontal dashed at top and bottom asymptotes
     if (showPlateaus && !degenerate) {
       shapes.push({
-        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.top, y1: curve.top,
-        line: { color, width: 1, dash: "dash" }, opacity: 0.3,
+        type: "line",
+        xref: "paper",
+        x0: 0,
+        x1: 1,
+        yref: "y",
+        y0: curve.top,
+        y1: curve.top,
+        line: { color, width: 1, dash: "dash" },
+        opacity: 0.3,
       });
       shapes.push({
-        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.bottom, y1: curve.bottom,
-        line: { color, width: 1, dash: "dash" }, opacity: 0.3,
+        type: "line",
+        xref: "paper",
+        x0: 0,
+        x1: 1,
+        yref: "y",
+        y0: curve.bottom,
+        y1: curve.bottom,
+        line: { color, width: 1, dash: "dash" },
+        opacity: 0.3,
       });
       annotations.push({
-        x: 1, y: curve.top, xref: "paper", yref: "y",
-        text: `Top: ${curve.top.toFixed(1)}%`, showarrow: false,
-        font: { color, size: 9 }, xanchor: "right",
+        x: 1,
+        y: curve.top,
+        xref: "paper",
+        yref: "y",
+        text: `Top: ${curve.top.toFixed(1)}%`,
+        showarrow: false,
+        font: { color, size: 9 },
+        xanchor: "right",
       });
       annotations.push({
-        x: 1, y: curve.bottom, xref: "paper", yref: "y",
-        text: `Bottom: ${curve.bottom.toFixed(1)}%`, showarrow: false,
-        font: { color, size: 9 }, xanchor: "right",
+        x: 1,
+        y: curve.bottom,
+        xref: "paper",
+        yref: "y",
+        text: `Bottom: ${curve.bottom.toFixed(1)}%`,
+        showarrow: false,
+        font: { color, size: 9 },
+        xanchor: "right",
       });
     }
   }
@@ -1329,7 +1365,9 @@ export function DoseResponseChart({
     plot_bgcolor: "transparent",
     font: { color: CHART_AXIS.tick },
     xaxis: {
-      title: { text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration" },
+      title: {
+        text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration",
+      },
       type: "log" as const,
       gridcolor: "rgba(113,113,122,0.2)",
       zerolinecolor: "rgba(113,113,122,0.3)",
@@ -1379,7 +1417,10 @@ export function DoseResponseChart({
           <>
             <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
               <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox checked={showCrossHair} onCheckedChange={(v) => setShowCrossHair(v === true)} />
+                <Checkbox
+                  checked={showCrossHair}
+                  onCheckedChange={(v) => setShowCrossHair(v === true)}
+                />
                 {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1387,7 +1428,10 @@ export function DoseResponseChart({
                 95% CI band
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox checked={showPlateaus} onCheckedChange={(v) => setShowPlateaus(v === true)} />
+                <Checkbox
+                  checked={showPlateaus}
+                  onCheckedChange={(v) => setShowPlateaus(v === true)}
+                />
                 Top/Bottom
               </label>
             </div>
@@ -1397,7 +1441,9 @@ export function DoseResponseChart({
                 size="sm"
                 className="h-7 px-2 text-xs"
                 onClick={() => {
-                  const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
+                  const plotEl = plotContainerRef.current?.querySelector(
+                    ".js-plotly-plot",
+                  ) as HTMLElement | null;
                   if (plotEl) {
                     getPlotlyGlobal()?.downloadImage?.(plotEl, {
                       format: "png",
@@ -1416,7 +1462,9 @@ export function DoseResponseChart({
                 size="sm"
                 className="h-7 px-2 text-xs"
                 onClick={() => {
-                  const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
+                  const plotEl = plotContainerRef.current?.querySelector(
+                    ".js-plotly-plot",
+                  ) as HTMLElement | null;
                   if (plotEl) {
                     getPlotlyGlobal()?.downloadImage?.(plotEl, {
                       format: "svg",
@@ -1466,8 +1514,7 @@ export function DoseResponseChart({
       {/* Summary cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {curves.map((curve) => {
-          const totalPoints =
-            (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
+          const totalPoints = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
           const localExcluded = getExcluded(curve.id);
           return (
             <SummaryCard

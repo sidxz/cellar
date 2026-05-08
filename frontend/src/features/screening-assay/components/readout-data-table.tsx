@@ -82,6 +82,25 @@ function formatValue(row: ReadoutData): string {
   return `${prefix}${row.value_numeric.toFixed(3)}`;
 }
 
+/** Aliases for a row from its enriched name + synonyms, deduped against the
+ * registration number so the Compound column doesn't echo Aliases. */
+function buildAliases(row: ReadoutData): string[] {
+  const aliases: string[] = [];
+  if (
+    row.molecule_name &&
+    row.molecule_name !== row.registration_number &&
+    !aliases.includes(row.molecule_name)
+  ) {
+    aliases.push(row.molecule_name);
+  }
+  for (const s of row.synonyms ?? []) {
+    if (s && s !== row.registration_number && !aliases.includes(s)) {
+      aliases.push(s);
+    }
+  }
+  return aliases;
+}
+
 export function ReadoutDataTable({
   runId,
   protocolId,
@@ -92,7 +111,7 @@ export function ReadoutDataTable({
   const { data: curves } = useDoseResponseByRun(runId);
   const { data: protocol } = useProtocol(protocolId);
 
-  const readoutDefs = protocol?.readout_definitions ?? [];
+  const readoutDefs = useMemo(() => protocol?.readout_definitions ?? [], [protocol]);
 
   // Map dose-response readout def id -> {(molecule_id::batch_id) -> curve}.
   // The IC50 column on the readout-data table reads the per-(mol,batch)
@@ -124,26 +143,6 @@ export function ReadoutDataTable({
     }
     return map;
   }, [curves, readoutDefs]);
-
-  /** Build aliases for a row from its (already enriched) name + synonyms,
-   * deduped against the registration number so the Compound column doesn't
-   * echo the same value as Aliases. */
-  const buildAliases = (row: ReadoutData): string[] => {
-    const aliases: string[] = [];
-    if (
-      row.molecule_name &&
-      row.molecule_name !== row.registration_number &&
-      !aliases.includes(row.molecule_name)
-    ) {
-      aliases.push(row.molecule_name);
-    }
-    for (const s of row.synonyms ?? []) {
-      if (s && s !== row.registration_number && !aliases.includes(s)) {
-        aliases.push(s);
-      }
-    }
-    return aliases;
-  };
 
   // Pivot readout data into rows
   const pivotRows = useMemo<PivotRow[]>(() => {
