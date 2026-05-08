@@ -197,6 +197,9 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
         raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
     generalized = bool(criterion.get("generalized", False))
 
+    # asyncpg binds sa.String as VARCHAR, but qmol_from_smarts and
+    # mol_from_smiles expect cstring. Untyped binding (no `type_=sa.String`)
+    # lets Postgres infer/cast freely.
     if generalized:
         sql = (
             "mol_from_smiles(smiles) @>> "
@@ -209,7 +212,7 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
         # of 535/719). qmol_from_smarts already handles aromaticity perception
         # correctly for the @> operator path.
         sql = "mol_from_smiles(smiles) @> qmol_from_smarts(:q)"
-    return text(sql).bindparams(sa.bindparam("q", value=query_text, type_=sa.String))
+    return text(sql).bindparams(q=query_text)
 
 
 def _parse_metric(payload: dict[str, Any]) -> object:
@@ -310,6 +313,7 @@ def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
         )
     else:
         # FCFP: cartridge function is consistent on both sides.
+        # Untyped binding so asyncpg sends as text; Postgres casts to cstring.
         if isinstance(metric, Tanimoto):
             sql = f"{column} % {fn}(mol_from_smiles(:sim_q){radius_arg})"
         elif isinstance(metric, Tversky):
@@ -319,9 +323,7 @@ def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
             )
         else:
             raise ValueError(f"Unknown metric: {metric!r}")
-        return text(sql).bindparams(
-            sa.bindparam("sim_q", value=smiles, type_=sa.String)
-        )
+        return text(sql).bindparams(sim_q=smiles)
 
 
 def _activity_clause(
