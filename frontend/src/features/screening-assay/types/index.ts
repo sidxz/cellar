@@ -664,39 +664,6 @@ export interface PlateMapResponse {
   plates: PlateData[];
 }
 
-export interface CompoundAssignment {
-  molecule_ref: string;
-  batch_ref?: string | null;
-  well_positions: string[];
-}
-
-export interface ParsedPlateMap {
-  assignments: CompoundAssignment[];
-  unresolved: string[];
-  row_count: number;
-}
-
-export interface PlateSetupInput {
-  compound_assignments: CompoundAssignment[];
-  plate_number?: number;
-  concentration_series?: number[];
-  concentration_unit?: string;
-}
-
-export interface PlateSetupResult {
-  plate_id: string;
-  wells_created: number;
-  compounds_assigned: number;
-  unresolved: string[];
-}
-
-export interface ImportReadoutsResult {
-  total_rows: number;
-  matched: number;
-  unmatched: number;
-  readouts_created: number;
-}
-
 // ─── Hit Criteria + Protocol Stats + Activity ───────────────────────────────
 
 export interface HitCriterion {

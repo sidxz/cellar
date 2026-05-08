@@ -26,7 +26,6 @@ import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
-import { PlateSetupDialog } from "./plate-setup-dialog";
 import { ReadoutDataTable } from "./readout-data-table";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
@@ -196,7 +195,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
   const [addDoseResponseOpen, setAddDoseResponseOpen] = useState(false);
   const [editQcOpen, setEditQcOpen] = useState(false);
-  const [plateSetupOpen, setPlateSetupOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
 
   const plates = plateMap?.plates ?? [];
@@ -292,19 +290,12 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               <div className="space-y-3">
                 <PlateHeatmap format={run.plate_format as PlateFormat} />
                 {!run.is_locked && (
-                  <div className="flex justify-center gap-2">
+                  <div className="flex justify-center">
                     <Button
                       size="sm"
                       onClick={() => setRunImportWizardOpen(true)}
                     >
                       <Upload className="mr-2 h-4 w-4" /> Import Run File
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setPlateSetupOpen(true)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Set Up Plate
                     </Button>
                   </div>
                 )}
@@ -315,21 +306,12 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                   No plate map has been configured for this run.
                 </p>
                 {!run.is_locked && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => setRunImportWizardOpen(true)}
-                    >
-                      <Upload className="mr-2 h-4 w-4" /> Import Run File
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setPlateSetupOpen(true)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Set Up Plate
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setRunImportWizardOpen(true)}
+                  >
+                    <Upload className="mr-2 h-4 w-4" /> Import Run File
+                  </Button>
                 )}
               </div>
             )}
@@ -396,11 +378,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         run={run}
         open={editQcOpen}
         onOpenChange={setEditQcOpen}
-      />
-      <PlateSetupDialog
-        runId={run.id}
-        open={plateSetupOpen}
-        onOpenChange={setPlateSetupOpen}
       />
       <RunImportWizard
         runId={run.id}
