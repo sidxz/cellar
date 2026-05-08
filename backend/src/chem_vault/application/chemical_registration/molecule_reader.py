@@ -47,7 +47,8 @@ class MoleculeReader(Protocol):
         project_ids: list[uuid.UUID] | None = None,
         sort_by: str | None = None,
         sort_dir: str | None = None,
-    ) -> list[Molecule]: ...
+        include_similarity_score: bool = False,
+    ) -> list[Molecule] | list[tuple[Molecule, float | None]]: ...
 
     async def count_by_query(
         self,

@@ -31,3 +31,4 @@ class EnrichedPageResult(Generic[T]):
     next_cursor: str | None = None
     activity_data: dict | None = None
     total_count: int | None = None
+    similarity_scores: dict[uuid.UUID, float] | None = None  # NEW: keyed by molecule id

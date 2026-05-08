@@ -129,6 +129,7 @@ class MoleculeResponse(BaseModel):
     originating_org_id: uuid.UUID
     identifiers: list[IdentifierResponse]
     version: int
+    similarity_score: float | None = None  # set only on similarity-search rows
 
     @classmethod
     def from_domain(cls, mol: Molecule) -> MoleculeResponse:

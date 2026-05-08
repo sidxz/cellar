@@ -212,7 +212,8 @@ class SQLAlchemyMoleculeReader:
         project_ids: list[uuid.UUID] | None = None,
         sort_by: str | None = None,
         sort_dir: str | None = None,
-    ) -> list[Molecule]:
+        include_similarity_score: bool = False,
+    ) -> list[Molecule] | list[tuple[Molecule, float | None]]:
         """Compound search using a structured query dict.
 
         Supports configurable sorting via ``sort_by`` / ``sort_dir``. Uses
@@ -221,10 +222,26 @@ class SQLAlchemyMoleculeReader:
         ``drc:{protocol_id}:{curve_type}`` orders by the best (lowest)
         ``fitted_value`` from DoseResponseCurve for that protocol+type;
         compounds without data sort last (NULLS LAST).
+
+        When ``include_similarity_score=True``, returns
+        ``list[tuple[Molecule, float | None]]`` instead of ``list[Molecule]``.
+        The score is ``None`` if no similarity criterion is present in the query
+        (the flag becomes a no-op for non-similarity searches).  When a
+        similarity criterion is found, results are ordered by score DESC unless
+        ``sort_by`` is explicitly provided.
         """
+        sim_criterion = _find_first_similarity_criterion(query.get("criteria", []))
+        project_score = include_similarity_score and sim_criterion is not None
+
         async with self._session_factory() as session:
             await _set_similarity_threshold(session, query)
-            stmt = _build_base_stmt(workspace_id, query, project_ids=project_ids)
+
+            if project_score:
+                stmt = _build_base_stmt_with_score(
+                    workspace_id, query, sim_criterion, project_ids=project_ids
+                )
+            else:
+                stmt = _build_base_stmt(workspace_id, query, project_ids=project_ids)
 
             descending = sort_dir == "desc"
             drc_sort = _parse_drc_sort(sort_by)
@@ -234,6 +251,9 @@ class SQLAlchemyMoleculeReader:
                 stmt = _apply_drc_sort(
                     stmt, workspace_id, protocol_id, curve_type, descending
                 )
+            elif project_score and sort_by is None:
+                # Default: order by similarity score DESC (most similar first)
+                stmt = stmt.order_by(text("similarity DESC"))
             else:
                 sort_col = _SORT_FIELDS.get(sort_by) if sort_by else None
                 if sort_col is not None:
@@ -250,6 +270,18 @@ class SQLAlchemyMoleculeReader:
                 stmt = stmt.limit(limit)
 
             result = await session.execute(stmt)
+
+            if project_score:
+                rows = result.all()
+                return [(model_to_molecule(row[0]), float(row[1])) for row in rows]
+
+            if include_similarity_score:
+                # include_similarity_score=True but no similarity criterion — no-op
+                return [
+                    (model_to_molecule(m), None)
+                    for m in result.scalars()
+                ]
+
             return [model_to_molecule(m) for m in result.scalars()]
 
     async def count_by_query(
@@ -381,6 +413,117 @@ def _parse_drc_sort(sort_by: str | None) -> tuple[uuid.UUID, str] | None:
     if not curve_type:
         return None
     return protocol_id, curve_type
+
+
+def _find_first_similarity_criterion(
+    criteria: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Walk criteria (and nested groups) and return the first similarity structure
+    criterion encountered, or None.
+    """
+    for criterion in criteria:
+        ctype = criterion.get("type")
+        if ctype == "structure":
+            kind = criterion.get("kind") or criterion.get("search_type")
+            if kind == "similarity":
+                return criterion
+        elif ctype == "group":
+            found = _find_first_similarity_criterion(criterion.get("criteria", []))
+            if found is not None:
+                return found
+    return None
+
+
+def _build_score_clause(criterion: dict[str, Any]):
+    """Build a ``text()`` score expression (aliased ``similarity``) for a similarity criterion.
+
+    Returns a SQLAlchemy ``text()`` element with bound params already attached,
+    ready to be added to a ``select()`` projection.  Mirrors the logic in
+    ``search_similarity`` / ``_similarity_clause`` so the score column always
+    matches what the WHERE clause computes.
+    """
+    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+        _resolve_algorithm_and_metric,
+    )
+
+    smiles = criterion["smiles"]
+    algorithm_name, metric, _threshold = _resolve_algorithm_and_metric(criterion)
+
+    registry = FingerprintRegistry.default()
+    algo = registry.get(algorithm_name)
+    column = algo.column_name
+    fn = algo.cartridge_query_fn
+    radius_arg = ", 2" if fn == "featmorganbv_fp" else ""
+
+    q_bytes = _compute_query_bytes(algorithm_name, smiles)
+
+    if q_bytes is not None:
+        # Morgan path: Python-computed bytes, same format as the stored column.
+        if isinstance(metric, Tanimoto):
+            score_sql = (
+                f"tanimoto_sml({column}, bfp_from_binary_text(:sim_score_bytes))"
+                " AS similarity"
+            )
+        elif isinstance(metric, Tversky):
+            score_sql = (
+                f"tversky_sml({column}, bfp_from_binary_text(:sim_score_bytes), "
+                f"{metric.alpha}, {metric.beta}) AS similarity"
+            )
+        else:
+            raise ValueError(f"Unknown metric: {metric!r}")
+        return text(score_sql).bindparams(
+            sa.bindparam("sim_score_bytes", value=q_bytes, type_=sa.LargeBinary)
+        )
+    else:
+        # FCFP path: cartridge function handles both write and read side.
+        if isinstance(metric, Tanimoto):
+            score_sql = (
+                f"tanimoto_sml({column}, "
+                f"{fn}(mol_from_smiles(CAST(:sim_score_q AS cstring)){radius_arg}))"
+                " AS similarity"
+            )
+        elif isinstance(metric, Tversky):
+            score_sql = (
+                f"tversky_sml({column}, "
+                f"{fn}(mol_from_smiles(CAST(:sim_score_q AS cstring)){radius_arg}), "
+                f"{metric.alpha}, {metric.beta}) AS similarity"
+            )
+        else:
+            raise ValueError(f"Unknown metric: {metric!r}")
+        return text(score_sql).bindparams(sim_score_q=smiles)
+
+
+def _build_base_stmt_with_score(
+    workspace_id: uuid.UUID,
+    query: dict[str, Any],
+    sim_criterion: dict[str, Any],
+    *,
+    project_ids: list[uuid.UUID] | None = None,
+):
+    """Like ``_build_base_stmt`` but adds a similarity score projection column."""
+    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+        _project_clause,
+        compose_criteria,
+    )
+
+    score_clause = _build_score_clause(sim_criterion)
+    where_clause = compose_criteria(query, workspace_id=workspace_id)
+
+    stmt = select(MoleculeModel, score_clause).where(
+        MoleculeModel.workspace_id == workspace_id,
+        MoleculeModel.merged_into_id.is_(None),
+    )
+
+    # Similarity queries always need a non-null smiles
+    stmt = stmt.where(MoleculeModel.smiles.is_not(None))
+
+    if where_clause is not None:
+        stmt = stmt.where(where_clause)
+
+    if project_ids is not None:
+        stmt = stmt.where(_project_clause({"project_ids": list(project_ids)}, workspace_id))
+
+    return stmt
 
 
 def _apply_drc_sort(

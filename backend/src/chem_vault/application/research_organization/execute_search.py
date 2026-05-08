@@ -71,10 +71,12 @@ class ExecuteSearch:
             else:
                 query_dict = input.query  # type: ignore[assignment]
 
+            has_similarity = _query_has_similarity(query_dict.get("criteria", []))
+
             # Delegate to reader — fetch limit + 1 for next_cursor detection
             fetch_limit = input.limit + 1
             try:
-                molecules = await self._mol_reader.search_by_query(
+                raw_results = await self._mol_reader.search_by_query(
                     input.workspace_id,
                     query_dict,
                     cursor_id=input.cursor_id,
@@ -82,9 +84,24 @@ class ExecuteSearch:
                     project_ids=input.project_ids,
                     sort_by=input.sort_by,
                     sort_dir=input.sort_dir,
+                    include_similarity_score=has_similarity,
                 )
             except ValueError as e:
                 return Failure(ValidationError(str(e)))
+
+            # Unpack tuples when similarity scores are present
+            similarity_scores: dict[uuid.UUID, float] | None = None
+            if has_similarity:
+                pairs = raw_results  # list[tuple[Molecule, float | None]]
+                molecules: list[Molecule] = []
+                sim_map: dict[uuid.UUID, float] = {}
+                for mol, score in pairs:  # type: ignore[misc]
+                    molecules.append(mol)
+                    if score is not None:
+                        sim_map[mol.id] = score
+                similarity_scores = sim_map if sim_map else None
+            else:
+                molecules = raw_results  # type: ignore[assignment]
 
             # Total count — only on first page to avoid repeated full scans
             total_count: int | None = None
@@ -102,6 +119,10 @@ class ExecuteSearch:
             next_cursor: str | None = None
             if len(molecules) > input.limit:
                 molecules = molecules[: input.limit]
+                if similarity_scores:
+                    # Trim scores to match the trimmed molecule list
+                    kept_ids = {m.id for m in molecules}
+                    similarity_scores = {k: v for k, v in similarity_scores.items() if k in kept_ids}
                 next_cursor = str(molecules[-1].id)
 
             # Saved-search write-back: record run metadata on first page only.
@@ -132,5 +153,25 @@ class ExecuteSearch:
                     next_cursor=next_cursor,
                     activity_data=activity_data,
                     total_count=total_count,
+                    similarity_scores=similarity_scores,
                 )
             )
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+def _query_has_similarity(criteria: list[dict]) -> bool:
+    """Return True if any criterion (recursively) is a similarity structure search."""
+    for c in criteria:
+        ctype = c.get("type")
+        if ctype == "structure":
+            kind = c.get("kind") or c.get("search_type")
+            if kind == "similarity":
+                return True
+        elif ctype == "group":
+            if _query_has_similarity(c.get("criteria", [])):
+                return True
+    return False

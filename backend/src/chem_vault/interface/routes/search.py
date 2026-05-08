@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, TypeAdapter, model_validator
 from rdkit import Chem
 
 from chem_vault.application.research_organization.execute_search import ExecuteSearchQuery
+from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.sar_analysis.search_modes import SearchMode
 from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from chem_vault.interface.dependencies import AuthDep, ExecuteSearchDep
@@ -145,6 +146,16 @@ class ExecuteSearchResponse(BaseModel):
     total_count: int | None = None
 
 
+def _attach_score(
+    m: Molecule, scores: dict[uuid.UUID, float] | None
+) -> MoleculeResponse:
+    """Build a MoleculeResponse and attach similarity_score when available."""
+    resp = MoleculeResponse.from_domain(m)
+    if scores is not None and m.id in scores:
+        resp = resp.model_copy(update={"similarity_score": round(scores[m.id], 4)})
+    return resp
+
+
 @router.post("/execute", response_model=ExecuteSearchResponse)
 async def execute_search(
     body: ExecuteSearchBody,
@@ -168,7 +179,7 @@ async def execute_search(
     )
     page = result_to_response(await use_case(q, auth=auth))
     return ExecuteSearchResponse(
-        items=[MoleculeResponse.from_domain(m) for m in page.items],
+        items=[_attach_score(m, page.similarity_scores) for m in page.items],
         next_cursor=page.next_cursor,
         activity_data=page.activity_data,
         total_count=page.total_count,

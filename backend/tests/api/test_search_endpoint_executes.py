@@ -204,3 +204,99 @@ class TestQuickSearchEndpointExecutes:
             params={"search_type": "exact", "query": "c1ccccc1"},
         )
         assert resp.status_code == 200, resp.text
+
+
+class TestSimilarityScorePassthrough:
+    """Verify similarity_score is wired from the cartridge through to the JSON response."""
+
+    async def test_similarity_search_response_includes_scores(
+        self,
+        client: AsyncClient,
+        benzene_registered: str,
+    ) -> None:
+        """Self-match should return similarity_score ≈ 1.0."""
+        resp = await client.post(
+            "/api/v1/search/execute",
+            json={
+                "query": {
+                    "criteria": [
+                        {
+                            "type": "structure",
+                            "kind": "similarity",
+                            "smiles": "c1ccccc1",
+                            "mode": "similar",
+                        }
+                    ],
+                    "logic": "and",
+                }
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        items = resp.json()["items"]
+        assert items, "expected at least one result (benzene self-match)"
+
+        self_match = next(
+            (it for it in items if it["id"] == benzene_registered), None
+        )
+        assert self_match is not None, "benzene not in results"
+        score = self_match.get("similarity_score")
+        assert score is not None, "similarity_score should be set for similarity search"
+        assert abs(score - 1.0) < 0.01, f"self-match score should be ~1.0, got {score}"
+
+    async def test_legacy_similarity_search_includes_scores(
+        self,
+        client: AsyncClient,
+        benzene_registered: str,
+    ) -> None:
+        """Legacy {search_type: similarity} shape also carries scores."""
+        resp = await client.post(
+            "/api/v1/search/execute",
+            json={
+                "query": {
+                    "criteria": [
+                        {
+                            "type": "structure",
+                            "search_type": "similarity",
+                            "smiles": "c1ccccc1",
+                            "threshold": 0.5,
+                        }
+                    ],
+                    "logic": "and",
+                }
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        items = resp.json()["items"]
+        assert items, "expected at least one result"
+        self_match = next(
+            (it for it in items if it["id"] == benzene_registered), None
+        )
+        assert self_match is not None, "benzene not in results"
+        assert self_match.get("similarity_score") is not None
+
+    async def test_substructure_search_omits_score(
+        self,
+        client: AsyncClient,
+        benzene_registered: str,
+    ) -> None:
+        """Non-similarity searches should return similarity_score=None."""
+        resp = await client.post(
+            "/api/v1/search/execute",
+            json={
+                "query": {
+                    "criteria": [
+                        {
+                            "type": "structure",
+                            "kind": "substructure",
+                            "smiles_or_smarts": "c1ccccc1",
+                        }
+                    ],
+                    "logic": "and",
+                }
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        items = resp.json()["items"]
+        assert all(
+            it.get("similarity_score") is None for it in items
+        ), "substructure search must not populate similarity_score"
