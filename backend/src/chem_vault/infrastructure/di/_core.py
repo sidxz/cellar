@@ -20,6 +20,7 @@ from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
 from chem_vault.infrastructure.persistence.database import create_engine, create_session_factory
 from chem_vault.infrastructure.persistence.settings import DatabaseSettings
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from chem_vault.infrastructure.rdkit.structure_processor import StructureProcessor
 from chem_vault.infrastructure.secrets.chain_provider import ChainSecretProvider
 from chem_vault.infrastructure.secrets.env_provider import EnvSecretProvider
@@ -76,6 +77,9 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
     # --- Structure Processor (RDKit) ---
     container.define(StructureProcessor, Singleton(StructureProcessor))
     container.define(StructureProcessorProtocol, lambda c: c[StructureProcessor])
+
+    # --- Fingerprint Registry ---
+    container.define(FingerprintRegistry, Singleton(FingerprintRegistry.default))
 
     # --- Curve Fitting ---
     container.define(LmfitCurveFitter, Singleton(LmfitCurveFitter))
