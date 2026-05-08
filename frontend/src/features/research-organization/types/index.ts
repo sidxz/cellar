@@ -161,7 +161,19 @@ export interface UpdateSavedSearchInput {
 
 // ─── Search types ───────────────────────────────────────────────────────────
 
-export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch" | "project" | "selectivity" | "group" | "custom_field";
+export type CriterionType =
+  | "text"
+  | "property"
+  | "structure"
+  | "activity"
+  | "collection"
+  | "keyword_list"
+  | "run_date"
+  | "batch"
+  | "project"
+  | "selectivity"
+  | "group"
+  | "custom_field";
 export type CustomFieldMode = "text" | "numeric";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
@@ -183,13 +195,22 @@ export interface PropertyCriterion {
   max?: number;
 }
 
+export type SearchMode = "similar" | "scaffold_hop" | "fragment_in_target";
+
 export interface StructureCriterion {
   type: "structure";
-  search_type: StructureSearchType;
+  // Two-way compat: keep search_type for legacy criteria, add `kind`
+  search_type: StructureSearchType; // kept for compat — same values as kind
+  kind?: StructureSearchType; // mirrors search_type going forward
   smarts?: string;
   smiles?: string;
+  smiles_or_smarts?: string; // new substructure field
   threshold?: number;
   inchi_key?: string;
+  // New similarity fields:
+  mode?: SearchMode;
+  // New substructure field:
+  generalized?: boolean;
 }
 
 export interface ActivityCriterion {
@@ -284,7 +305,15 @@ export interface SearchQuery {
   logic?: "and" | "or";
 }
 
-export type SortField = "name" | "registration_number" | "molecular_weight" | "logp" | "tpsa" | "hbd" | "hba" | "created_at";
+export type SortField =
+  | "name"
+  | "registration_number"
+  | "molecular_weight"
+  | "logp"
+  | "tpsa"
+  | "hbd"
+  | "hba"
+  | "created_at";
 export type SortDir = "asc" | "desc";
 
 export interface ExecuteSearchInput {

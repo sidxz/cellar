@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { StructureEditorDialog, StructureRenderer } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import { StructureRenderer, StructureEditorDialog } from "@/shared/components/chemistry";
-import type { StructureCriterion, StructureSearchType } from "../../types";
+import { Pencil } from "lucide-react";
+import { useState } from "react";
+import { useSearchAlgorithms } from "../../hooks/use-search-algorithms";
+import type { SearchMode, StructureCriterion, StructureSearchType } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -21,39 +22,78 @@ const PLACEHOLDERS: Record<StructureSearchType, string> = {
   similarity: "e.g. CCO",
 };
 
+// Fallback mode metadata if the /search/algorithms call hasn't returned yet.
+const FALLBACK_MODES: {
+  name: SearchMode;
+  label: string;
+  description: string;
+  default_threshold: number;
+}[] = [
+  {
+    name: "similar",
+    label: "Similar",
+    description: "Find molecules with the same overall shape",
+    default_threshold: 0.7,
+  },
+  {
+    name: "scaffold_hop",
+    label: "Scaffold hop",
+    description: "Looser match — bioisosteric replacements",
+    default_threshold: 0.55,
+  },
+  {
+    name: "fragment_in_target",
+    label: "Contains my fragment",
+    description: "Big molecules that contain features of this query",
+    default_threshold: 0.7,
+  },
+];
+
 function defaultStructureCriterion(): StructureCriterion {
   return {
     type: "structure",
     search_type: "substructure",
+    kind: "substructure",
     smarts: "",
     smiles: undefined,
+    smiles_or_smarts: undefined,
     threshold: 0.7,
     inchi_key: undefined,
+    mode: undefined,
+    generalized: false,
   };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getInputValue(c: StructureCriterion): string {
-  if (c.search_type === "substructure") return c.smarts ?? "";
+  if (c.search_type === "substructure") return c.smiles_or_smarts ?? c.smarts ?? "";
   if (c.search_type === "similarity") return c.smiles ?? "";
   return c.inchi_key ?? "";
 }
 
 function setInputValue(c: StructureCriterion, value: string): StructureCriterion {
-  if (c.search_type === "substructure") return { ...c, smarts: value };
+  if (c.search_type === "substructure") {
+    // Mirror to both fields for safety with downstream consumers.
+    return { ...c, smiles_or_smarts: value, smarts: value };
+  }
   if (c.search_type === "similarity") return { ...c, smiles: value };
   return { ...c, inchi_key: value };
 }
 
 function getPreviewSmiles(c: StructureCriterion): string | undefined {
-  if (c.search_type === "substructure") return c.smarts || undefined;
+  if (c.search_type === "substructure") {
+    const v = c.smiles_or_smarts ?? c.smarts;
+    return v || undefined;
+  }
   if (c.search_type === "similarity") return c.smiles || undefined;
   return undefined;
 }
 
 function hasValue(c: StructureCriterion): boolean {
-  if (c.search_type === "substructure") return (c.smarts?.length ?? 0) > 0;
+  if (c.search_type === "substructure") {
+    return ((c.smiles_or_smarts ?? c.smarts)?.length ?? 0) > 0;
+  }
   if (c.search_type === "similarity") return (c.smiles?.length ?? 0) > 0;
   return (c.inchi_key?.length ?? 0) > 0;
 }
@@ -67,8 +107,11 @@ interface StructureSectionProps {
 
 export function StructureSection({ criterion, onChange }: StructureSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false);
+  const { data: algorithmsData } = useSearchAlgorithms();
+  const modes = algorithmsData?.modes ?? FALLBACK_MODES;
 
   const c = criterion ?? defaultStructureCriterion();
+  const currentMode = c.mode ?? "similar";
   const previewSmiles = getPreviewSmiles(c);
   const inputValue = getInputValue(c);
   const isStructureMode = c.search_type !== "exact";
@@ -76,7 +119,21 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
   const filled = hasValue(c);
 
   function handleTypeChange(type: StructureSearchType) {
-    onChange({ ...defaultStructureCriterion(), search_type: type });
+    const base: StructureCriterion = {
+      ...defaultStructureCriterion(),
+      search_type: type,
+      kind: type,
+    };
+    if (type === "similarity") {
+      base.mode = "similar";
+      base.threshold = modes.find((m) => m.name === "similar")?.default_threshold ?? 0.7;
+    }
+    onChange(base);
+  }
+
+  function handleModeChange(mode: SearchMode) {
+    const m = modes.find((x) => x.name === mode);
+    onChange({ ...c, mode, threshold: m?.default_threshold ?? c.threshold ?? 0.7 });
   }
 
   function handleInputChange(value: string) {
@@ -88,8 +145,12 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
   }
 
   function handleThresholdChange(value: string) {
-    const pct = Math.min(100, Math.max(0, parseInt(value, 10) || 0));
+    const pct = Math.min(100, Math.max(0, Number.parseInt(value, 10) || 0));
     onChange({ ...c, threshold: pct / 100 });
+  }
+
+  function handleGeneralizedToggle(checked: boolean) {
+    onChange({ ...c, generalized: checked });
   }
 
   function handleClear() {
@@ -155,6 +216,54 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
           );
         })}
       </div>
+
+      {/* Mode radios for similarity */}
+      {c.search_type === "similarity" && (
+        <div className="space-y-1 pl-1">
+          {modes.map((m) => {
+            const active = currentMode === m.name;
+            return (
+              <label
+                key={m.name}
+                className={`flex cursor-pointer items-start gap-2 text-sm select-none ${
+                  active ? "text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="similarity-mode"
+                  value={m.name}
+                  checked={active}
+                  onChange={() => handleModeChange(m.name as SearchMode)}
+                  className="mt-0.5 accent-primary"
+                />
+                <span>
+                  <span className="font-medium">{m.label}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{m.description}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Generalized substructure toggle */}
+      {c.search_type === "substructure" && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm select-none pl-1">
+          <input
+            type="checkbox"
+            checked={c.generalized ?? false}
+            onChange={(e) => handleGeneralizedToggle(e.target.checked)}
+            className="accent-primary"
+          />
+          <span>
+            Allow tautomer / link-node matches
+            <span className="ml-2 text-xs text-muted-foreground">
+              (uses <code>@&gt;&gt;</code> with <code>mol_to_xqmol</code>)
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* Structure preview */}
       {previewSmiles && previewSmiles.length >= 2 && (
