@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from returns.result import Failure, Result, Success
@@ -14,6 +14,8 @@ from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.domain.sar_analysis.search_modes import SearchMode
+from chem_vault.domain.sar_analysis.similarity_metric import SimilarityMetric
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 
 
@@ -28,7 +30,12 @@ class SearchMoleculesQuery(Query):
     workspace_id: uuid.UUID
     search_type: str
     query: str
-    threshold: float = 0.7
+    threshold: float | None = None
+    mode: SearchMode = SearchMode.SIMILAR
+    algorithm: str | None = None
+    metric: SimilarityMetric | None = None
+    cursor_id: uuid.UUID | None = None
+    limit: int | None = None
 
 
 @dataclass(frozen=True)
@@ -79,7 +86,7 @@ class SearchMolecules:
         if not input.query or not input.query.strip():
             return Failure(ValidationError("Search query must not be empty"))
 
-        if not (0.0 <= input.threshold <= 1.0):
+        if input.threshold is not None and not (0.0 <= input.threshold <= 1.0):
             return Failure(ValidationError("Similarity threshold must be between 0.0 and 1.0"))
 
         async with self._uow:
@@ -94,7 +101,12 @@ class SearchMolecules:
                 scored = await self._reader.search_similarity(
                     input.workspace_id,
                     input.query.strip(),
+                    mode=input.mode,
                     threshold=input.threshold,
+                    algorithm=input.algorithm,
+                    metric=input.metric,
+                    cursor_id=input.cursor_id,
+                    limit=input.limit,
                 )
                 return Success(
                     [SimilarityResult(mol, sim) for mol, sim in scored]

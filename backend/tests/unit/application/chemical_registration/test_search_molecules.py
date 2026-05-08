@@ -127,7 +127,16 @@ class FakeMoleculeReader:
         return [m for m in self._repo._store.values() if m.workspace_id == workspace_id]
 
     async def search_similarity(
-        self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
+        self,
+        workspace_id: uuid.UUID,
+        smiles: str,
+        *,
+        mode: Any = None,
+        threshold: float | None = None,
+        algorithm: str | None = None,
+        metric: Any = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[tuple[Molecule, float]]:
         return [
             (m, 0.85)

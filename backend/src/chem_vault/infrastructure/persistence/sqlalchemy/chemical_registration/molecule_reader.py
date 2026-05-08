@@ -14,12 +14,19 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from chem_vault.domain.chemical_registration.molecule import Molecule
+from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
+from chem_vault.domain.sar_analysis.similarity_metric import (
+    SimilarityMetric,
+    Tanimoto,
+    Tversky,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_mapping import (
     model_to_molecule,
 )
+from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 
 _SORT_FIELDS: dict[str, Any] = {
@@ -59,35 +66,73 @@ class SQLAlchemyMoleculeReader:
             return [model_to_molecule(m) for m in result.scalars()]
 
     async def search_similarity(
-        self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
+        self,
+        workspace_id: uuid.UUID,
+        smiles: str,
+        *,
+        mode: SearchMode = SearchMode.SIMILAR,
+        threshold: float | None = None,
+        algorithm: str | None = None,
+        metric: SimilarityMetric | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[tuple[Molecule, float]]:
-        """Similarity search using pre-computed ``morgan_bfp`` with GiST index."""
-        safe_threshold = float(threshold)
-        if not (0.0 <= safe_threshold <= 1.0):
+        """Similarity search with mode-driven defaults + algorithm/metric overrides."""
+        defaults = MODE_DEFAULTS[mode]
+        algorithm_name = algorithm or defaults.algorithm
+        effective_metric = metric if metric is not None else defaults.metric
+        effective_threshold = float(
+            threshold if threshold is not None else defaults.threshold
+        )
+        if not (0.0 <= effective_threshold <= 1.0):
             raise ValueError(
-                f"Tanimoto threshold must be between 0 and 1, got {safe_threshold}"
+                f"threshold must be in [0,1], got {effective_threshold}"
             )
 
+        registry = FingerprintRegistry.default()
+        algo = registry.get(algorithm_name)
+        column = algo.column_name
+        fn = algo.cartridge_query_fn
+        radius_arg = ", 2" if fn == "featmorganbv_fp" else ""
+
         async with self._session_factory() as session:
-            await session.execute(
-                text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
-            )
-            stmt = (
-                select(
-                    MoleculeModel,
-                    text(
-                        "tanimoto_sml(morgan_bfp, morganbv_fp(mol_from_smiles(:q))) AS similarity"
-                    ),
+            if isinstance(effective_metric, Tanimoto):
+                await session.execute(
+                    text(f"SET rdkit.tanimoto_threshold = {effective_threshold}")
                 )
+                score_sql = (
+                    f"tanimoto_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}))"
+                    " AS similarity"
+                )
+                where_sql = f"{column} % {fn}(mol_from_smiles(:q){radius_arg})"
+            elif isinstance(effective_metric, Tversky):
+                score_sql = (
+                    f"tversky_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}), "
+                    f"{effective_metric.alpha}, {effective_metric.beta}) AS similarity"
+                )
+                where_sql = (
+                    f"tversky_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}), "
+                    f"{effective_metric.alpha}, {effective_metric.beta})"
+                    f" >= {effective_threshold}"
+                )
+            else:
+                raise ValueError(f"Unknown metric: {effective_metric!r}")
+
+            stmt = (
+                select(MoleculeModel, text(score_sql))
                 .where(
                     MoleculeModel.workspace_id == workspace_id,
                     MoleculeModel.merged_into_id.is_(None),
-                    text("morgan_bfp % morganbv_fp(mol_from_smiles(:q))"),
+                    text(where_sql),
                 )
                 .params(q=smiles)
                 .order_by(text("similarity DESC"))
-                .limit(100)
             )
+            if cursor_id is not None:
+                stmt = stmt.where(MoleculeModel.id > cursor_id)
+            if limit is not None:
+                stmt = stmt.limit(limit)
+
             result = await session.execute(stmt)
             return [
                 (model_to_molecule(row[0]), float(row[1]))

@@ -12,6 +12,8 @@ import uuid
 from typing import Any, Protocol, runtime_checkable
 
 from chem_vault.domain.chemical_registration.molecule import Molecule
+from chem_vault.domain.sar_analysis.search_modes import SearchMode
+from chem_vault.domain.sar_analysis.similarity_metric import SimilarityMetric
 
 
 @runtime_checkable
@@ -23,7 +25,16 @@ class MoleculeReader(Protocol):
     ) -> list[Molecule]: ...
 
     async def search_similarity(
-        self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
+        self,
+        workspace_id: uuid.UUID,
+        smiles: str,
+        *,
+        mode: SearchMode = SearchMode.SIMILAR,
+        threshold: float | None = None,
+        algorithm: str | None = None,
+        metric: SimilarityMetric | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[tuple[Molecule, float]]: ...
 
     async def search_by_query(
