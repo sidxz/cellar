@@ -39,20 +39,30 @@ MODE_DEFAULTS: dict[SearchMode, ModeConfig] = {
         metric=Tanimoto(),
         threshold=0.7,
         label="Similar",
-        description="Find molecules with the same overall shape",
+        description=(
+            "Tanimoto similarity over Morgan/ECFP4 fingerprints. "
+            "Default for analog discovery and SAR retrieval."
+        ),
     ),
     SearchMode.SCAFFOLD_HOP: ModeConfig(
         algorithm="fcfp",
         metric=Tanimoto(),
         threshold=0.55,
         label="Scaffold hop",
-        description="Looser match — finds bioisosteric replacements",
+        description=(
+            "Tanimoto over feature-class (FCFP4) fingerprints. "
+            "Surfaces bioisosteric replacements that strict similarity may miss."
+        ),
     ),
     SearchMode.FRAGMENT_IN_TARGET: ModeConfig(
         algorithm="morgan",
         metric=Tversky(alpha=1.0, beta=0.0),
         threshold=0.7,
         label="Contains my fragment",
-        description="Big molecules that contain features of this query",
+        description=(
+            "Asymmetric Tversky similarity (α=1, β=0). Ranks targets "
+            "by the fraction of query features they contain — useful for "
+            "fragment-to-lead expansion."
+        ),
     ),
 }
