@@ -1,5 +1,3 @@
-import pytest
-
 from chem_vault.application.admin.admin_delete_registry import (
     AdminDeleteEntry,
     all_entity_types,
@@ -29,15 +27,23 @@ def test_register_and_lookup():
     assert e.repo_resolver is _dummy_resolver
 
 
-def test_double_register_raises():
-    """Test that registering the same entity_type twice raises RuntimeError."""
+def test_double_register_is_idempotent():
+    """Re-registering the same entity_type silently keeps the first entry.
+
+    Idempotence supports test setups that build multiple DI containers in
+    one process; production registers only once at startup.
+    """
+    def _other(_c, _u): return object()
     register_admin_delete(
         entity_type="x", table="x", label_field=None, repo_resolver=_dummy_resolver
     )
-    with pytest.raises(RuntimeError, match="x already registered"):
-        register_admin_delete(
-            entity_type="x", table="x", label_field=None, repo_resolver=_dummy_resolver
-        )
+    register_admin_delete(
+        entity_type="x", table="other", label_field="name", repo_resolver=_other
+    )
+    e = get_entry("x")
+    assert e is not None
+    assert e.table == "x"  # first registration wins
+    assert e.repo_resolver is _dummy_resolver
 
 
 def test_all_entity_types_sorted():
