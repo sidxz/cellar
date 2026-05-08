@@ -200,20 +200,62 @@ def _build_base_stmt(
 
 
 async def _set_similarity_threshold(session: AsyncSession, query: dict[str, Any]) -> None:
-    for criterion in query.get("criteria", []):
-        if (
-            criterion.get("type") == "structure"
-            and criterion.get("search_type") == "similarity"
-        ):
-            safe_threshold = float(criterion.get("threshold", 0.7))
-            if not (0.0 <= safe_threshold <= 1.0):
-                raise ValueError(
-                    f"Tanimoto threshold must be between 0 and 1, got {safe_threshold}"
-                )
-            await session.execute(
-                text(f"SET rdkit.tanimoto_threshold = {safe_threshold}")
-            )
-            break
+    """Set ``rdkit.tanimoto_threshold`` once, based on the first Tanimoto similarity
+    clause encountered (recursively walks groups). No-op for Tversky-only clauses
+    (those use function-form WHERE filters that don't consult the GUC).
+    """
+    threshold = _find_first_tanimoto_threshold(query.get("criteria", []))
+    if threshold is None:
+        return
+    if not (0.0 <= threshold <= 1.0):
+        raise ValueError(f"Tanimoto threshold must be in [0,1], got {threshold}")
+    await session.execute(text(f"SET rdkit.tanimoto_threshold = {threshold}"))
+
+
+def _find_first_tanimoto_threshold(criteria: list[dict[str, Any]]) -> float | None:
+    """Walk criteria (and nested groups) and return the first Tanimoto similarity
+    threshold encountered, or None if no Tanimoto similarity clause exists.
+
+    Returns ``None`` for Tversky clauses (whether via explicit metric or via the
+    fragment_in_target mode default).
+    """
+    for criterion in criteria:
+        ctype = criterion.get("type")
+        if ctype == "structure":
+            kind = criterion.get("kind") or criterion.get("search_type")
+            if kind != "similarity":
+                continue
+
+            # Explicit metric wins.
+            metric_payload = criterion.get("metric")
+            if metric_payload and metric_payload.get("kind") == "tversky":
+                continue
+
+            # If no explicit metric, mode determines metric type.
+            if metric_payload is None:
+                mode = criterion.get("mode")
+                if mode == "fragment_in_target":
+                    continue  # mode default is Tversky
+
+            t = criterion.get("threshold")
+            if t is None:
+                mode = criterion.get("mode")
+                if mode is not None:
+                    from chem_vault.domain.sar_analysis.search_modes import (
+                        MODE_DEFAULTS,
+                        SearchMode,
+                    )
+                    t = MODE_DEFAULTS[SearchMode(mode)].threshold
+                else:
+                    continue
+            return float(t)
+
+        if ctype == "group":
+            nested = _find_first_tanimoto_threshold(criterion.get("criteria", []))
+            if nested is not None:
+                return nested
+
+    return None
 
 
 def _parse_drc_sort(sort_by: str | None) -> tuple[uuid.UUID, str] | None:
