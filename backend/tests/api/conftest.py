@@ -48,6 +48,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from chem_vault.interface.routes.collections import router as collection_router
     from chem_vault.interface.routes.saved_searches import router as saved_search_router
     from chem_vault.interface.routes.search import router as search_router
+    from chem_vault.interface.routes.search_algorithms import router as search_algorithms_router
     from chem_vault.interface.routes.audit import router as audit_router
     from chem_vault.interface.routes.admin_delete import router as admin_delete_router
 
@@ -62,6 +63,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(collection_router)
     app.include_router(saved_search_router)
     app.include_router(search_router)
+    app.include_router(search_algorithms_router)
     app.include_router(audit_router)
     app.include_router(admin_delete_router)
 
