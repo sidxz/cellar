@@ -1,13 +1,24 @@
 import pytest
-from chem_vault.domain.shared.cascade import (
-    CascadeAction, CascadeRule, register_rules, get_rules_for_parent,
+from chem_vault.domain.shared.cascade.actions import CascadeAction
+from chem_vault.infrastructure.cascade.rules import CascadeRule
+from chem_vault.infrastructure.cascade.registry import (
+    register_rules, get_rules_for_parent, all_rules, _clear_for_test,
 )
-from chem_vault.domain.shared.cascade.registry import _clear_for_test
 
 
 @pytest.fixture(autouse=True)
 def _reset():
+    """Snapshot and restore the cascade rule registry around each test.
+
+    Restoration prevents poisoning sibling test files that depend on the
+    rules registered at module import (e.g., test_screening_rules.py).
+    """
+    snapshot = list(all_rules())
     _clear_for_test()
+    yield
+    _clear_for_test()
+    if snapshot:
+        register_rules(*snapshot)
 
 
 def test_register_and_lookup_by_parent():
