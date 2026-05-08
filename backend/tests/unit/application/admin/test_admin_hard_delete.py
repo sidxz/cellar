@@ -4,10 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.admin.admin_delete_registry import (
-    _REGISTRY,
-    register_admin_delete,
-)
+from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 from chem_vault.application.admin.admin_hard_delete import (
     AdminHardDelete,
     AdminHardDeleteCommand,
@@ -18,15 +15,6 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-
-
-@pytest.fixture(autouse=True)
-def _registry_isolation():
-    snapshot = dict(_REGISTRY)
-    _REGISTRY.clear()
-    yield
-    _REGISTRY.clear()
-    _REGISTRY.update(snapshot)
 
 
 def _auth(workspace_id, role="admin"):

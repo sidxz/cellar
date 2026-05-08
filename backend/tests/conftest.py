@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import (
 from testcontainers.postgres import PostgresContainer
 
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from chem_vault.application.admin.admin_delete_registry import _REGISTRY
 from tests.fakes.fake_auth import FakeAuth
 
 RDKIT_IMAGE = "informaticsmatters/rdkit-cartridge-debian:Release_2024_03_3"
@@ -37,25 +36,6 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[no-untyped-def
     for item in items:
         if "/integration/" in str(item.fspath):
             item.add_marker(pytest.mark.integration)
-
-
-# ---------------------------------------------------------------------------
-# Admin delete registry — clear/restore per test
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _admin_delete_registry_isolation() -> Iterator[None]:
-    """Clear and restore admin-delete registry state around each test.
-
-    The registry is populated during DI bootstrap and persists across
-    test runs. This fixture ensures tests don't interfere with each other.
-    """
-    snapshot = dict(_REGISTRY)
-    _REGISTRY.clear()
-    yield
-    _REGISTRY.clear()
-    _REGISTRY.update(snapshot)
 
 
 # ---------------------------------------------------------------------------
