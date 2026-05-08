@@ -285,8 +285,21 @@ class TestProtocolControlLayouts:
         protocol = _make_protocol()
         protocol.remove_control_layout(PlateFormat.F96)  # no error
 
-    def test_set_layout_on_active_protocol_raises(self):
+    def test_set_new_layout_on_active_protocol_succeeds(self):
+        # Adding a layout for a NEW format is safe on unlocked ACTIVE —
+        # existing runs ran on the other formats and are unaffected.
         protocol = _make_protocol()
+        protocol.publish()
+        tpl_id = uuid.uuid4()
+        protocol.set_control_layout(PlateFormat.F96, tpl_id)
+        assert protocol.control_layouts["96"] == tpl_id
+
+    def test_replace_existing_layout_on_active_raises(self):
+        # Replacing the layout for a format that ALREADY has one is
+        # unsafe — any prior run on that format computed Z′ +
+        # normalization against the old layout. Force versioning.
+        protocol = _make_protocol()
+        protocol.set_control_layout(PlateFormat.F96, uuid.uuid4())
         protocol.publish()
         with pytest.raises(ConflictError, match="DRAFT"):
             protocol.set_control_layout(PlateFormat.F96, uuid.uuid4())

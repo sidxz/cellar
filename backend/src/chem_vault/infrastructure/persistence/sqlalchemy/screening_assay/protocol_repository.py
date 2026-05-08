@@ -298,6 +298,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             recommended_hit_criteria=[
                 HitCriterion.from_dict(c) for c in (model.recommended_hit_criteria or [])
             ] or None,
+            is_locked=model.is_locked,
+            locked_by=model.locked_by,
+            lock_reason=model.lock_reason,
+            locked_at=model.locked_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -351,6 +355,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             recommended_hit_criteria=[c.to_dict() for c in aggregate.recommended_hit_criteria]
             if aggregate.recommended_hit_criteria
             else None,
+            is_locked=aggregate.is_locked,
+            locked_by=aggregate.locked_by,
+            lock_reason=aggregate.lock_reason,
+            locked_at=aggregate.locked_at,
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -378,6 +386,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             if aggregate.recommended_hit_criteria
             else None
         )
+        model.is_locked = aggregate.is_locked
+        model.locked_by = aggregate.locked_by
+        model.lock_reason = aggregate.lock_reason
+        model.locked_at = aggregate.locked_at
 
         # Replace owned entity collections
         model.readout_definitions = [

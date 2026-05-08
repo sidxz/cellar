@@ -23,8 +23,10 @@ from chem_vault.domain.screening_assay.hit_criterion import (
 )
 from chem_vault.domain.screening_assay.events import (
     ProtocolCreated,
+    ProtocolLocked,
     ProtocolPublished,
     ProtocolRetired,
+    ProtocolUnlocked,
 )
 from chem_vault.domain.shared.entity import AggregateRoot, Entity
 from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
@@ -241,6 +243,10 @@ class Protocol(AggregateRoot):
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
         recommended_hit_criteria: list[HitCriterion] | None = None,
+        is_locked: bool = False,
+        locked_by: uuid.UUID | None = None,
+        lock_reason: str | None = None,
+        locked_at: datetime | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -272,6 +278,15 @@ class Protocol(AggregateRoot):
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
         self.recommended_hit_criteria: list[HitCriterion] | None = recommended_hit_criteria
+        # Lock state — orthogonal to status. Mirrors Run.is_locked semantics:
+        # an explicit freeze gate, independent of DRAFT/ACTIVE/RETIRED. Used
+        # to hold a protocol still during regulatory review or cross-team
+        # coordination. While locked, even safe-on-ACTIVE additions are
+        # blocked; unlock to make changes.
+        self.is_locked = is_locked
+        self.locked_by = locked_by
+        self.lock_reason = lock_reason
+        self.locked_at = locked_at
 
         # Bind owned entities to this aggregate
         for rd in self.readout_definitions:
@@ -291,11 +306,41 @@ class Protocol(AggregateRoot):
             )
 
     def _guard_draft(self) -> None:
-        """Only DRAFT protocols allow definition modifications."""
+        """Strict guard for STRUCTURAL changes (rename, remove, change
+        data_type / formula / DR config) — DRAFT only. The lock check is
+        included because DRAFT-locked is also a thing (e.g. reviewing a
+        draft before publish).
+        """
+        if self.is_locked:
+            raise ConflictError(
+                f"Protocol is locked. Reason: {self.lock_reason or '(none)'}. "
+                "Unlock to make changes."
+            )
         if self.status != ProtocolStatus.DRAFT:
             raise ConflictError(
                 f"Cannot modify definitions of protocol in '{self.status}' status — "
                 "only DRAFT protocols are editable"
+            )
+
+    def _guard_metadata_mutable(self) -> None:
+        """Permissive guard for SAFE additions and cosmetic edits — DRAFT
+        or unlocked ACTIVE. Used by add_readout_definition,
+        add_condition_definition, set_control_layout (new format only),
+        and the cosmetic-fields branch of update_readout_definition.
+
+        Why ACTIVE qualifies: a published protocol can grow (new readouts,
+        new conditions, new plate format) without invalidating prior runs
+        — they simply don't have data for the new field. Renames and
+        removals still require versioning (those break references).
+        """
+        if self.is_locked:
+            raise ConflictError(
+                f"Protocol is locked. Reason: {self.lock_reason or '(none)'}. "
+                "Unlock to make changes."
+            )
+        if self.status == ProtocolStatus.RETIRED:
+            raise ConflictError(
+                "Cannot modify a retired protocol — version a successor instead"
             )
 
     # ------------------------------------------------------------------
@@ -354,6 +399,10 @@ class Protocol(AggregateRoot):
 
     def publish(self) -> None:
         """Promote a DRAFT protocol to ACTIVE."""
+        if self.is_locked:
+            raise ConflictError(
+                "Cannot publish a locked protocol — unlock first"
+            )
         self._guard_transition(ProtocolStatus.ACTIVE)
         self.status = ProtocolStatus.ACTIVE
         self.updated_at = datetime.now(UTC)
@@ -367,6 +416,10 @@ class Protocol(AggregateRoot):
 
     def retire(self, *, reason: str | None = None) -> None:
         """Retire an ACTIVE protocol."""
+        if self.is_locked:
+            raise ConflictError(
+                "Cannot retire a locked protocol — unlock first"
+            )
         self._guard_transition(ProtocolStatus.RETIRED)
         self.status = ProtocolStatus.RETIRED
         self.updated_at = datetime.now(UTC)
@@ -419,8 +472,9 @@ class Protocol(AggregateRoot):
     # These two — set_pos_control_signal and set_recommended_hit_criteria —
     # intentionally bypass `_guard_draft`. They alter labeling/QC
     # convention without changing what was measured, so versioning is
-    # overkill and historical raw data stays valid. RETIRED still blocks.
-    # All other Protocol mutations require DRAFT.
+    # overkill and historical raw data stays valid. They DO honor the
+    # lock — when a protocol is locked for review, no convention flips
+    # either.
 
     def set_pos_control_signal(self, signal: PosControlSignal) -> None:
         """Set the POS control signal direction.
@@ -432,10 +486,7 @@ class Protocol(AggregateRoot):
         protocol just to fix a labeling slip, which the use case is
         specifically meant to avoid.
         """
-        if self.status == ProtocolStatus.RETIRED:
-            raise ConflictError(
-                "Cannot change pos_control_signal on a retired protocol"
-            )
+        self._guard_metadata_mutable()
         self.pos_control_signal = signal
         self.updated_at = datetime.now(UTC)
 
@@ -447,17 +498,91 @@ class Protocol(AggregateRoot):
         Intentionally NOT draft-guarded — protocol owners set criteria on
         active protocols after publishing.
         """
+        self._guard_metadata_mutable()
         if criteria is not None:
             validate_hit_criteria(criteria)
         self.recommended_hit_criteria = criteria
+
+    # ------------------------------------------------------------------
+    # Locking
+    # ------------------------------------------------------------------
+
+    def lock(self, *, locked_by: uuid.UUID, reason: str) -> None:
+        """Freeze the protocol metadata.
+
+        Locking is orthogonal to the DRAFT/ACTIVE/RETIRED status — it's a
+        workflow gate the screener opts into during regulatory submission,
+        external review, or cross-team coordination ("don't add stuff
+        mid-screen"). While locked, every mutation method raises
+        ConflictError until ``unlock`` is called.
+
+        Cannot lock a RETIRED protocol — retired is already terminal
+        read-only; locking is meaningless there.
+        """
+        if not reason or not reason.strip():
+            raise ValidationError("Lock reason is required")
+        if self.status == ProtocolStatus.RETIRED:
+            raise ConflictError(
+                "Cannot lock a retired protocol — already read-only"
+            )
+        if self.is_locked:
+            raise ConflictError("Protocol is already locked")
+
+        self.is_locked = True
+        self.locked_by = locked_by
+        self.lock_reason = reason.strip()
+        self.locked_at = datetime.now(UTC)
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            ProtocolLocked(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                locked_by=locked_by,
+                lock_reason=reason.strip(),
+            )
+        )
+
+    def unlock(self, *, unlocked_by: uuid.UUID, reason: str) -> None:
+        """Release the lock so the protocol can be mutated again.
+
+        Idempotent on already-unlocked protocols — re-calling is a no-op
+        with a fresh audit entry. The reason is required so the audit
+        log explains why the freeze was lifted.
+        """
+        if not reason or not reason.strip():
+            raise ValidationError("Unlock reason is required")
+        if not self.is_locked:
+            raise ConflictError("Protocol is not locked")
+
+        self.is_locked = False
+        self.locked_by = None
+        self.lock_reason = None
+        self.locked_at = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            ProtocolUnlocked(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                unlocked_by=unlocked_by,
+                reason=reason.strip(),
+            )
+        )
 
     # ------------------------------------------------------------------
     # Readout definition management
     # ------------------------------------------------------------------
 
     def add_readout_definition(self, definition: ReadoutDefinition) -> None:
-        """Add a readout definition to this protocol."""
-        self._guard_draft()
+        """Add a readout definition to this protocol.
+
+        Allowed on DRAFT or unlocked ACTIVE — adding a new readout never
+        invalidates existing runs (they simply lack data for it). Removing
+        or renaming, by contrast, requires versioning (see
+        ``remove_readout_definition``, ``update_readout_definition``).
+        """
+        self._guard_metadata_mutable()
         if is_reserved_readout_name(definition.name):
             raise ValidationError(
                 f"ReadoutDefinition name '{definition.name}' collides with a "
@@ -543,12 +668,22 @@ class Protocol(AggregateRoot):
     ) -> None:
         """Update fields on an existing readout definition.
 
-        Validates the resulting state by reconstructing a ReadoutDefinition
-        in place — same invariants as the constructor (e.g., dose_response
-        requires config, pick_list requires values). Cross-readout name
-        uniqueness is enforced.
+        On DRAFT protocols: any field is editable.
+        On unlocked ACTIVE protocols: only cosmetic fields (display_order,
+        precision, unit) are editable. Structural changes (rename,
+        data_type, aggregation, normalizations, is_calculated/formula,
+        dose_response_config, pick_list_values) require versioning — see
+        ``ProtocolVersioningService.create_new_version``.
+
+        On locked or RETIRED protocols: nothing is editable.
+
+        The structural-diff check is computed against the resulting
+        replacement entity so partial-update sentinels (`_UNSET`) don't
+        accidentally count as changes.
         """
-        self._guard_draft()
+        # Lock + RETIRED gates first — they apply regardless of which
+        # fields are touched.
+        self._guard_metadata_mutable()
 
         idx = next(
             (i for i, d in enumerate(self.readout_definitions) if d.id == definition_id),
@@ -645,6 +780,39 @@ class Protocol(AggregateRoot):
                         f"{sorted(n.value for n in y_def.normalizations)}"
                     )
 
+        # Structural-diff guard for non-DRAFT protocols. Cosmetic fields
+        # (display_order, precision, unit text) can be edited on unlocked
+        # ACTIVE — they only affect display, not the run-data contract.
+        # Structural changes break references on existing runs, so the
+        # only safe path is versioning.
+        if self.status != ProtocolStatus.DRAFT:
+            structural: list[str] = []
+            if replacement.name != existing.name:
+                structural.append(
+                    f"name ('{existing.name}' → '{replacement.name}')"
+                )
+            if replacement.data_type != existing.data_type:
+                structural.append("data_type")
+            if replacement.aggregation != existing.aggregation:
+                structural.append("aggregation")
+            if replacement.normalizations != existing.normalizations:
+                structural.append("normalizations")
+            if replacement.is_calculated != existing.is_calculated:
+                structural.append("is_calculated")
+            if replacement.calculation_formula != existing.calculation_formula:
+                structural.append("calculation_formula")
+            if replacement.pick_list_values != existing.pick_list_values:
+                structural.append("pick_list_values")
+            if replacement.dose_response_config != existing.dose_response_config:
+                structural.append("dose_response_config")
+            if structural:
+                raise ConflictError(
+                    f"Cannot change {', '.join(structural)} on a non-draft "
+                    f"protocol — create a new version. Cosmetic fields "
+                    f"(display_order, precision, unit) are allowed on "
+                    f"unlocked ACTIVE."
+                )
+
         self.readout_definitions[idx] = replacement
         self.updated_at = datetime.now(UTC)
 
@@ -653,8 +821,14 @@ class Protocol(AggregateRoot):
     # ------------------------------------------------------------------
 
     def add_condition_definition(self, definition: ConditionDefinition) -> None:
-        """Add a condition definition to this protocol."""
-        self._guard_draft()
+        """Add a condition definition to this protocol.
+
+        Allowed on DRAFT or unlocked ACTIVE — adding a new condition never
+        invalidates existing runs. They simply lack a value for the new
+        key in their ``conditions`` JSONB. Removing or renaming requires
+        versioning (run records reference conditions by name).
+        """
+        self._guard_metadata_mutable()
         if any(cd.name == definition.name for cd in self.condition_definitions):
             raise ConflictError(
                 f"ConditionDefinition with name '{definition.name}' already exists"
@@ -732,8 +906,20 @@ class Protocol(AggregateRoot):
     def set_control_layout(
         self, plate_format: PlateFormat, template_id: uuid.UUID
     ) -> None:
-        """Set a default control layout (plate template) for a plate format."""
-        self._guard_draft()
+        """Set a default control layout (plate template) for a plate format.
+
+        Adding a layout for a *new* plate format is safe on unlocked ACTIVE —
+        existing runs ran on different formats and are unaffected.
+
+        REPLACING an existing format's layout requires DRAFT — every run
+        that already used this format had its Z′ + normalization computed
+        against the old layout, and silently swapping it would change how
+        Recompute interprets historical data.
+        """
+        if plate_format.value in self.control_layouts:
+            self._guard_draft()
+        else:
+            self._guard_metadata_mutable()
         self.control_layouts[plate_format.value] = template_id
         self.updated_at = datetime.now(UTC)
 

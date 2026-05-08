@@ -138,6 +138,13 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     control_layouts: Mapped[dict | None] = mapped_column(JSONB)
     ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
     recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)
+    # Lock state — orthogonal to status. Mirrors RunModel lock fields.
+    is_locked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    lock_reason: Mapped[str | None] = mapped_column(Text)
 
     # Owned entity collections
     readout_definitions: Mapped[list[ReadoutDefinitionModel]] = relationship(

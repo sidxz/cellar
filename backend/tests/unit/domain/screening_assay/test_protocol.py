@@ -347,14 +347,29 @@ class TestProtocolDefinitionManagement:
         protocol.add_readout_definition(new_rd)
         assert len(protocol.readout_definitions) == 2
 
-    def test_add_readout_to_active_raises(
+    def test_add_readout_to_active_succeeds(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
+        # Adding a new readout to an unlocked ACTIVE protocol is safe —
+        # existing runs simply lack data for the new column. This is the
+        # everyday "I forgot a readout, let me add it" path that used to
+        # force versioning.
         protocol = _make_protocol(workspace_id, user_id)
         protocol.publish()
 
         new_rd = _make_readout(protocol.id, name="% Inhibition")
-        with pytest.raises(ConflictError, match="only DRAFT"):
+        protocol.add_readout_definition(new_rd)
+        assert len(protocol.readout_definitions) == 2
+
+    def test_add_readout_to_locked_active_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.publish()
+        protocol.lock(locked_by=user_id, reason="Regulatory submission window")
+
+        new_rd = _make_readout(protocol.id, name="% Inhibition")
+        with pytest.raises(ConflictError, match="locked"):
             protocol.add_readout_definition(new_rd)
 
     @pytest.mark.parametrize(
@@ -446,14 +461,29 @@ class TestProtocolDefinitionManagement:
         with pytest.raises(ConflictError, match="already exists"):
             protocol.update_readout_definition(rd1.id, name="% Inhibition")
 
-    def test_update_readout_on_active_raises(
+    def test_rename_readout_on_active_raises(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
+        # Rename is structural — Run.conditions and ReadoutData reference
+        # readouts by name/id, so renaming on ACTIVE would orphan
+        # references. Force versioning.
         protocol = _make_protocol(workspace_id, user_id)
         rd = protocol.readout_definitions[0]
         protocol.publish()
-        with pytest.raises(ConflictError, match="only DRAFT"):
+        with pytest.raises(ConflictError, match="non-draft"):
             protocol.update_readout_definition(rd.id, name="Renamed")
+
+    def test_cosmetic_update_readout_on_active_succeeds(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        # display_order / precision are display-only — safe on ACTIVE.
+        protocol = _make_protocol(workspace_id, user_id)
+        rd = protocol.readout_definitions[0]
+        protocol.publish()
+        protocol.update_readout_definition(rd.id, display_order=42, precision=3)
+        updated = protocol.readout_definitions[0]
+        assert updated.display_order == 42
+        assert updated.precision == 3
 
     def test_update_nonexistent_readout_raises(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
@@ -493,14 +523,27 @@ class TestProtocolDefinitionManagement:
         protocol.add_condition_definition(cd)
         assert len(protocol.condition_definitions) == 1
 
-    def test_add_condition_to_active_raises(
+    def test_add_condition_to_active_succeeds(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
+        # Adding a condition to an unlocked ACTIVE protocol is safe —
+        # historical runs simply lack a value for the new key.
         protocol = _make_protocol(workspace_id, user_id)
         protocol.publish()
 
         cd = _make_condition(protocol.id)
-        with pytest.raises(ConflictError, match="only DRAFT"):
+        protocol.add_condition_definition(cd)
+        assert len(protocol.condition_definitions) == 1
+
+    def test_add_condition_to_locked_active_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.publish()
+        protocol.lock(locked_by=user_id, reason="External review pending")
+
+        cd = _make_condition(protocol.id)
+        with pytest.raises(ConflictError, match="locked"):
             protocol.add_condition_definition(cd)
 
     def test_remove_condition_ok(
@@ -608,6 +651,124 @@ class TestProtocolStatusTransitions:
         with pytest.raises(ConflictError, match="Cannot transition"):
             protocol.publish()
         with pytest.raises(ConflictError, match="Cannot transition"):
+            protocol.retire()
+
+
+# ---------------------------------------------------------------------------
+# TestProtocolLocking — lock/unlock + matrix coverage
+# ---------------------------------------------------------------------------
+
+
+class TestProtocolLocking:
+    def test_lock_active_protocol(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.publish()
+        protocol.lock(locked_by=user_id, reason="FDA submission window")
+        assert protocol.is_locked is True
+        assert protocol.locked_by == user_id
+        assert protocol.lock_reason == "FDA submission window"
+        assert protocol.locked_at is not None
+
+    def test_lock_draft_protocol(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        # DRAFT can also be locked — useful for "freeze this draft for a
+        # design review" workflows.
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.lock(locked_by=user_id, reason="Design review")
+        assert protocol.is_locked is True
+
+    def test_lock_retired_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.publish()
+        protocol.retire()
+        with pytest.raises(ConflictError, match="retired"):
+            protocol.lock(locked_by=user_id, reason="x")
+
+    def test_lock_already_locked_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.lock(locked_by=user_id, reason="x")
+        with pytest.raises(ConflictError, match="already locked"):
+            protocol.lock(locked_by=user_id, reason="y")
+
+    def test_lock_requires_reason(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        with pytest.raises(ValidationError, match="Lock reason"):
+            protocol.lock(locked_by=user_id, reason="")
+        with pytest.raises(ValidationError, match="Lock reason"):
+            protocol.lock(locked_by=user_id, reason="   ")
+
+    def test_unlock_clears_state(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.lock(locked_by=user_id, reason="x")
+        protocol.unlock(unlocked_by=user_id, reason="Review complete")
+        assert protocol.is_locked is False
+        assert protocol.locked_by is None
+        assert protocol.lock_reason is None
+        assert protocol.locked_at is None
+
+    def test_unlock_unlocked_raises(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        with pytest.raises(ConflictError, match="not locked"):
+            protocol.unlock(unlocked_by=user_id, reason="x")
+
+    def test_unlock_requires_reason(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.lock(locked_by=user_id, reason="x")
+        with pytest.raises(ValidationError, match="Unlock reason"):
+            protocol.unlock(unlocked_by=user_id, reason="")
+
+    def test_locked_blocks_all_mutations(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        # Lock is a "freeze everything" gate — every mutation method
+        # raises ConflictError until unlocked, including the previously
+        # ACTIVE-mutable set_pos_control_signal /
+        # set_recommended_hit_criteria.
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.publish()
+        protocol.lock(locked_by=user_id, reason="x")
+
+        new_rd = _make_readout(protocol.id, name="% Inhibition")
+        with pytest.raises(ConflictError, match="locked"):
+            protocol.add_readout_definition(new_rd)
+        with pytest.raises(ConflictError, match="locked"):
+            protocol.add_condition_definition(_make_condition(protocol.id))
+        with pytest.raises(ConflictError, match="locked"):
+            from chem_vault.domain.screening_assay.enums import (
+                PosControlSignal,
+            )
+            protocol.set_pos_control_signal(PosControlSignal.LOW)
+
+    def test_locked_blocks_publish(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.lock(locked_by=user_id, reason="design freeze")
+        with pytest.raises(ConflictError, match="locked"):
+            protocol.publish()
+
+    def test_locked_blocks_retire(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        protocol = _make_protocol(workspace_id, user_id)
+        protocol.publish()
+        protocol.lock(locked_by=user_id, reason="x")
+        with pytest.raises(ConflictError, match="locked"):
             protocol.retire()
 
 

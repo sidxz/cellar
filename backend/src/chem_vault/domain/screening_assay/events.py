@@ -36,6 +36,18 @@ class ProtocolRetired(DomainEvent):
     reason: str | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class ProtocolLocked(DomainEvent):
+    locked_by: uuid.UUID
+    lock_reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProtocolUnlocked(DomainEvent):
+    unlocked_by: uuid.UUID
+    reason: str
+
+
 # ---------------------------------------------------------------------------
 # Run events
 # ---------------------------------------------------------------------------
