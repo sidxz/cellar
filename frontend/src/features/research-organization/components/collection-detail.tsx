@@ -41,6 +41,8 @@ import { useProject } from "../hooks/use-projects";
 import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 
 interface CollectionDetailProps {
   collectionId: string;
@@ -52,6 +54,7 @@ interface MoleculeRow {
 
 export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const router = useRouter();
+  const isAdmin = useAuthzHasRole("admin");
   const query = useCollection(collectionId);
   const { data: moleculeIds, isLoading: moleculesLoading } =
     useCollectionMolecules(collectionId);
@@ -160,6 +163,14 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               <Plus className="mr-2 h-4 w-4" />
               Add Molecules
             </Button>
+            {isAdmin && (
+              <AdminDeleteButton
+                entityType="collection"
+                entityId={collectionId}
+                entityLabel={query.data?.name ?? collectionId}
+                onDeleted={() => router.push("/collections")}
+              />
+            )}
           </>
         )}
       >

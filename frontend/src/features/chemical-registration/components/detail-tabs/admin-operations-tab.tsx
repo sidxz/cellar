@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -14,12 +15,16 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
 import { useMergeMolecules } from "../../hooks/use-disclosures";
+import { useMolecule } from "../../hooks/use-molecules";
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 
 interface AdminOperationsTabProps {
   moleculeId: string;
 }
 
 export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
+  const router = useRouter();
+  const { data: molecule } = useMolecule(moleculeId);
   const mergeMutation = useMergeMolecules(moleculeId);
 
   const [targetId, setTargetId] = useState<string | null>(null);
@@ -54,6 +59,28 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Hard delete — cascade removes all dependent rows */}
+      {molecule && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Hard Delete</CardTitle>
+            <CardDescription>
+              Permanently delete this compound and all its dependent data
+              (batches, assay results, identifiers, relationships). Cannot be
+              undone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CascadeDeleteDialog
+              entityType="molecule"
+              entityId={moleculeId}
+              entityLabel={molecule.registration_number ?? moleculeId}
+              onDeleted={() => router.push("/compounds")}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Manual Merge</CardTitle>

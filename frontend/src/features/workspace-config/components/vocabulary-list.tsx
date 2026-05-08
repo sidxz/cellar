@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { BookOpen, Lock, Plus, Trash2, Unlock } from "lucide-react";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { PageHeader } from "@/shared/components/page-header";
@@ -20,10 +22,13 @@ import {
 } from "../hooks/use-vocabularies";
 import type { Vocabulary } from "../types";
 import { VocabularyDialog } from "./vocabulary-dialog";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 
 export function VocabularyList() {
   const { data: vocabs, isLoading } = useVocabularies();
   const deleteMutation = useDeleteVocabulary();
+  const isAdmin = useAuthzHasRole("admin");
+  const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Vocabulary | null>(null);
 
@@ -111,6 +116,16 @@ export function VocabularyList() {
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
+                      )}
+                      {isAdmin && (
+                        <AdminDeleteButton
+                          entityType="vocabulary"
+                          entityId={vocab.id}
+                          entityLabel={vocab.name}
+                          onDeleted={() =>
+                            qc.invalidateQueries({ queryKey: ["vocabularies"] })
+                          }
+                        />
                       )}
                     </div>
                   </TableCell>

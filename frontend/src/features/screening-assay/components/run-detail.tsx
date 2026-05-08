@@ -75,6 +75,8 @@ import {
 } from "../types";
 import { RunDataPanel } from "./run-data-panel";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 
 interface RunDetailProps {
   runId: string;
@@ -82,6 +84,7 @@ interface RunDetailProps {
 
 export function RunDetail({ runId }: RunDetailProps) {
   const router = useRouter();
+  const isAdmin = useAuthzHasRole("admin");
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
   const startMutation = useStartRun();
@@ -591,6 +594,18 @@ export function RunDetail({ runId }: RunDetailProps) {
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                 </Button>
+              )}
+              {isAdmin && (
+                <CascadeDeleteDialog
+                  entityType="run"
+                  entityId={runId}
+                  entityLabel={r.notes ?? runId}
+                  onDeleted={() =>
+                    r.protocol_id
+                      ? router.push(`/assays/protocols/${r.protocol_id}`)
+                      : router.push("/assays")
+                  }
+                />
               )}
             </>
           );

@@ -45,6 +45,8 @@ import {
 import type { ProtocolStatus } from "../types";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -56,6 +58,7 @@ interface ProtocolDetailProps {
 
 export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const router = useRouter();
+  const isAdmin = useAuthzHasRole("admin");
   const { data: protocol, isLoading } = useProtocol(protocolId);
   const publishMutation = usePublishProtocol();
   const retireMutation = useRetireProtocol();
@@ -205,6 +208,14 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     </>
                   )}
                 </Button>
+              )}
+              {isAdmin && (
+                <CascadeDeleteDialog
+                  entityType="protocol"
+                  entityId={protocolId}
+                  entityLabel={p.name}
+                  onDeleted={() => router.push("/assays")}
+                />
               )}
             </>
           );

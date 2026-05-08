@@ -4,12 +4,15 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Play, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
@@ -23,6 +26,7 @@ import { useProjects } from "../hooks/use-projects";
 import { CreateSavedSearchDialog } from "./create-saved-search-dialog";
 import { QuerySummary } from "./search/query-summary";
 import type { SavedSearch, SearchVisibility } from "../types";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 
 function visibilityBadgeVariant(
   visibility: SearchVisibility
@@ -49,38 +53,51 @@ function formatRelativeDate(iso: string): string {
 
 interface RowActionsProps {
   search: SavedSearch;
+  isAdmin: boolean;
   onRun: (search: SavedSearch) => void;
   onEdit: (search: SavedSearch) => void;
   onDelete: (search: SavedSearch) => void;
+  onAdminDeleted: () => void;
 }
 
-function RowActions({ search, onRun, onEdit, onDelete }: RowActionsProps) {
+function RowActions({ search, isAdmin, onRun, onEdit, onDelete, onAdminDeleted }: RowActionsProps) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7">
-          <MoreHorizontal className="h-4 w-4" />
-          <span className="sr-only">Actions</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onRun(search)}>
-          <Play className="mr-2 h-4 w-4" />
-          Run
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onEdit(search)}>
-          <Pencil className="mr-2 h-4 w-4" />
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => onDelete(search)}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex items-center gap-1">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7">
+            <MoreHorizontal className="h-4 w-4" />
+            <span className="sr-only">Actions</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onRun(search)}>
+            <Play className="mr-2 h-4 w-4" />
+            Run
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onEdit(search)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => onDelete(search)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {isAdmin && (
+        <AdminDeleteButton
+          entityType="saved_search"
+          entityId={search.id}
+          entityLabel={search.name}
+          onDeleted={onAdminDeleted}
+        />
+      )}
+    </div>
   );
 }
 
@@ -93,6 +110,8 @@ interface SavedSearchListProps {
 
 export function SavedSearchList({ projectId }: SavedSearchListProps) {
   const router = useRouter();
+  const isAdmin = useAuthzHasRole("admin");
+  const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editSearch, setEditSearch] = useState<SavedSearch | undefined>();
   const [mine, setMine] = useState(false);
@@ -171,7 +190,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
       },
       {
         headerName: "",
-        width: 56,
+        width: isAdmin ? 120 : 56,
         sortable: false,
         resizable: false,
         suppressHeaderMenuButton: true,
@@ -179,14 +198,18 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
           params.data ? (
             <RowActions
               search={params.data}
+              isAdmin={isAdmin}
               onRun={handleRun}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onAdminDeleted={() =>
+                qc.invalidateQueries({ queryKey: ["saved-searches"] })
+              }
             />
           ) : null,
       },
     ],
-    [projectLookup]
+    [projectLookup, isAdmin, qc]
   );
 
   if (error) {
