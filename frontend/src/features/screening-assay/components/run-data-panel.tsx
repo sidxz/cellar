@@ -251,20 +251,9 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
           </div>
         </TabsContent>
 
-        {/* Plate Map */}
+        {/* Plate Map — pure viewer. Ingest lives on the Readout Data tab. */}
         <TabsContent value="plate-map">
           <div className="mt-3 space-y-3">
-            {hasPlateMap && (
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  onClick={() => setRunImportWizardOpen(true)}
-                  disabled={run.is_locked}
-                >
-                  <Upload className="mr-2 h-4 w-4" /> Import Run File
-                </Button>
-              </div>
-            )}
             {hasPlateMap ? (
               plates.length > 1 ? (
                 <Tabs defaultValue={plates[0].plate_id}>
@@ -290,28 +279,35 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               <div className="space-y-3">
                 <PlateHeatmap format={run.plate_format as PlateFormat} />
                 {!run.is_locked && (
-                  <div className="flex justify-center">
-                    <Button
-                      size="sm"
-                      onClick={() => setRunImportWizardOpen(true)}
+                  <p className="text-center text-sm text-muted-foreground">
+                    No data imported yet.{" "}
+                    <button
+                      type="button"
+                      className="text-primary underline-offset-4 hover:underline"
+                      onClick={() => handleTabChange("readout")}
                     >
-                      <Upload className="mr-2 h-4 w-4" /> Import Run File
-                    </Button>
-                  </div>
+                      Import on the Readout Data tab
+                    </button>
+                    .
+                  </p>
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 py-8">
+              <div className="flex flex-col items-center gap-2 py-8">
                 <p className="text-sm text-muted-foreground">
                   No plate map has been configured for this run.
                 </p>
                 {!run.is_locked && (
-                  <Button
-                    size="sm"
-                    onClick={() => setRunImportWizardOpen(true)}
-                  >
-                    <Upload className="mr-2 h-4 w-4" /> Import Run File
-                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    <button
+                      type="button"
+                      className="text-primary underline-offset-4 hover:underline"
+                      onClick={() => handleTabChange("readout")}
+                    >
+                      Import on the Readout Data tab
+                    </button>{" "}
+                    to populate it.
+                  </p>
                 )}
               </div>
             )}
