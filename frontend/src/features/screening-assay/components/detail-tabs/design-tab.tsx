@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/shared/components/ui/badge";
@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import {
+  useProtocols,
   useAddReadoutDefinition,
   useRemoveReadoutDefinition,
   useUpdateReadoutDefinition,
@@ -64,6 +65,7 @@ import {
 } from "@/shared/components/ontology-search-input";
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
+import { FormulaInput } from "../formula-input";
 import { PickListEditor } from "../pick-list-editor";
 import { PlateMapView } from "../plate-map-view";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
@@ -164,6 +166,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const addReadoutDef = useAddReadoutDefinition(protocolId);
   const removeReadoutDef = useRemoveReadoutDefinition(protocolId);
   const updateReadoutDef = useUpdateReadoutDefinition(protocolId);
+  // For @-completion in the formula editor: list of workspace protocols
+  // (names only; cross-protocol formulas reference them by name).
+  const { data: allProtocols } = useProtocols();
+  const protocolNames = useMemo(
+    () =>
+      (allProtocols ?? [])
+        .filter((p) => p.id !== protocolId)
+        .map((p) => p.name),
+    [allProtocols, protocolId],
+  );
   const addConditionDef = useAddConditionDefinition(protocolId);
   const removeConditionDef = useRemoveConditionDefinition(protocolId);
   const updateConditionDef = useUpdateConditionDefinition(protocolId);
@@ -1849,17 +1861,17 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 {rdIsCalculated && rdDataType === "numeric" && (
                   <div className="space-y-1">
                     <Label>Formula</Label>
-                    <Input
-                      className="font-mono text-sm"
-                      placeholder="e.g. 100 * (1 - Raw / Control)"
+                    <FormulaInput
                       value={rdCalculationFormula}
-                      onChange={(e) => setRdCalculationFormula(e.target.value)}
+                      onChange={setRdCalculationFormula}
+                      availableReadoutNames={protocol.readout_definitions.map(
+                        (rd) => rd.name,
+                      )}
+                      protocolNames={protocolNames}
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      Use other readout names as variables. Cross-protocol:
-                      <code className="ml-1">@ProtocolName.ReadoutName</code>.
-                      Math:{" "}
-                      <code>log, log10, sqrt, abs, pow, min, max, exp, pi, e</code>.
+                      Use other readout names as variables. Type{" "}
+                      <code>@</code> for cross-protocol.
                     </p>
                   </div>
                 )}
@@ -2076,18 +2088,18 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 {rdIsCalculated && rdDataType === "numeric" && (
                   <div className="space-y-1">
                     <Label>Formula</Label>
-                    <Input
-                      className="font-mono text-sm"
-                      placeholder="e.g. 100 * (1 - Raw / Control)"
+                    <FormulaInput
                       value={rdCalculationFormula}
-                      onChange={(e) => setRdCalculationFormula(e.target.value)}
+                      onChange={setRdCalculationFormula}
+                      availableReadoutNames={protocol.readout_definitions
+                        .filter((rd) => rd.id !== editingReadoutId)
+                        .map((rd) => rd.name)}
+                      protocolNames={protocolNames}
                       disabled={!isDraft}
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      Use other readout names as variables. Cross-protocol:
-                      <code className="ml-1">@ProtocolName.ReadoutName</code>.
-                      Math:{" "}
-                      <code>log, log10, sqrt, abs, pow, min, max, exp, pi, e</code>.
+                      Use other readout names as variables. Type{" "}
+                      <code>@</code> for cross-protocol.
                     </p>
                   </div>
                 )}

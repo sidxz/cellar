@@ -37,7 +37,7 @@ import {
 import { useProjects } from "@/features/research-organization/hooks/use-projects";
 import { SearchableSelect } from "@/shared/components/searchable-select";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { useCreateProtocol } from "../hooks/use-protocols";
+import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
 import {
   CURVE_TYPE_LABELS,
@@ -53,6 +53,7 @@ import {
   type ProtocolType,
   type ReadoutNormalization,
 } from "../types";
+import { FormulaInput } from "./formula-input";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { PickListEditor } from "./pick-list-editor";
 
@@ -153,6 +154,9 @@ export function CreateProtocolDialog({
   const { data: vocabularies } = useVocabularies();
   const { data: protocolForms } = useProtocolForms();
   const { data: ontologySlots } = useOntologySlots();
+  // For @-completion in the formula editor.
+  const { data: allProtocols } = useProtocols();
+  const crossProtocolNames = (allProtocols ?? []).map((p) => p.name);
   const categoryTerms =
     vocabularies?.find((v) => v.name === "Protocol Categories")?.terms ?? [];
 
@@ -684,20 +688,23 @@ export function CreateProtocolDialog({
                       {rd.is_calculated && (
                         <div className="grid gap-1">
                           <Label className="text-xs">Formula</Label>
-                          <Input
-                            className="font-mono text-xs"
-                            placeholder='e.g., 100 * (1 - Raw / Control)'
+                          <FormulaInput
                             value={rd.calculation_formula}
-                            onChange={(e) =>
+                            onChange={(next) =>
                               updateReadout(
                                 index,
                                 "calculation_formula",
-                                e.target.value
+                                next,
                               )
                             }
+                            availableReadoutNames={readoutDefs
+                              .filter((other, i) => i !== index && other.name.trim())
+                              .map((r) => r.name.trim())}
+                            protocolNames={crossProtocolNames}
                           />
                           <p className="text-[11px] text-muted-foreground">
-                            Use readout names as variables. Cross-protocol: @ProtocolName.ReadoutName
+                            Use other readout names as variables. Type{" "}
+                            <code>@</code> for cross-protocol.
                           </p>
                         </div>
                       )}
