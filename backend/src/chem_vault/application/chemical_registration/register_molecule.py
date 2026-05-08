@@ -327,6 +327,7 @@ class RegisterMolecule:
                     originating_org_id=input.originating_org_id,
                     custom_fields=input.custom_fields,
                 )
+                mol.morgan_fp = processed.fingerprints.morgan
                 self._add_name_and_ids(mol, input, source="name")
                 await self._repo.save(mol)
                 await self._record_disclosure_provenance(

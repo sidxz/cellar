@@ -89,6 +89,7 @@ class Molecule(AggregateRoot):
         descriptors: ComputedDescriptors | None = None,
         predicted_properties: PredictedProperties | None = None,
         molecular_formula: str | None = None,
+        morgan_fp: bytes | None = None,
         structure_image_key: str | None = None,
         sequence: str | None = None,
         stereochemistry: Stereochemistry | None = None,
@@ -121,6 +122,7 @@ class Molecule(AggregateRoot):
         self.descriptors = descriptors
         self.predicted_properties = predicted_properties
         self.molecular_formula = molecular_formula
+        self.morgan_fp: bytes | None = morgan_fp
         self.structure_image_key = structure_image_key
         self.sequence = sequence
         self.stereochemistry = stereochemistry

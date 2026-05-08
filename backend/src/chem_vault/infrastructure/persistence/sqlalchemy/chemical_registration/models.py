@@ -68,10 +68,6 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     # Fingerprints (binary)
     fp_morgan: Mapped[bytes | None] = mapped_column(LargeBinary)
-    fp_rdkit: Mapped[bytes | None] = mapped_column(LargeBinary)
-    fp_maccs: Mapped[bytes | None] = mapped_column(LargeBinary)
-    fp_topological_torsion: Mapped[bytes | None] = mapped_column(LargeBinary)
-    fp_atom_pair: Mapped[bytes | None] = mapped_column(LargeBinary)
 
     # State machines
     structure_status: Mapped[str] = mapped_column(

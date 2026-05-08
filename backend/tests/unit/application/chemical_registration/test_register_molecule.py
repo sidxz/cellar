@@ -18,6 +18,7 @@ from chem_vault.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
     QCResultDTO,
 )
+from chem_vault.infrastructure.rdkit.fingerprint_generator import Fingerprints
 from chem_vault.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMolecule,
@@ -75,7 +76,7 @@ _DESCRIPTORS = ComputedDescriptors(
 _PROCESSED = ProcessedStructureDTO(
     structure=_STRUCTURE,
     descriptors=_DESCRIPTORS,
-    fingerprints={},
+    fingerprints=Fingerprints(morgan=b"\x00" * 256),
     qc_result=QCResultDTO(total_penalty=0, issues=[]),
 )
 

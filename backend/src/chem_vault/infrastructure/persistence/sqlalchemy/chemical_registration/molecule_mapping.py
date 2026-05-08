@@ -103,6 +103,7 @@ def model_to_molecule(model: MoleculeModel) -> Molecule:
         descriptors=descriptors,
         predicted_properties=predicted,
         molecular_formula=model.molecular_formula,
+        morgan_fp=model.fp_morgan,
         structure_image_key=model.structure_image_key,
         sequence=model.sequence,
         stereochemistry=Stereochemistry(model.stereochemistry) if model.stereochemistry else None,
