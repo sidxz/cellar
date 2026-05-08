@@ -135,7 +135,7 @@ from chem_vault.application.admin.admin_delete_registry import register_admin_de
 
 def register_chemical_registration(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
-    import chem_vault.domain.chemical_registration.cascade  # noqa: F401
+    import chem_vault.infrastructure.cascade.rules_chemical_registration  # noqa: F401
 
     # --- Molecule use cases ---
     def _mol_cmd(uc_cls: type):
@@ -502,34 +502,13 @@ def register_chemical_registration(container: Container) -> None:
 
 def build_chemical_registration_admin_repos(uow) -> dict:
     """Build the repo map for chemical-registration Tier-1 admin deletes."""
-    from sqlalchemy import select
     from chem_vault.application.admin._adapter import RepoAdapter
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model import (
-        CompoundFlagModel,
-    )
     from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
         SQLAlchemyCompoundFlagRepository,
     )
 
-    _flag_repo = SQLAlchemyCompoundFlagRepository(uow)
-
-    class _CompoundFlagAdapter:
-        async def find_by_id(self, workspace_id, id):
-            stmt = select(CompoundFlagModel).where(
-                CompoundFlagModel.id == id,
-                CompoundFlagModel.workspace_id == workspace_id,
-            )
-            result = await uow.session.execute(stmt)
-            model = result.scalar_one_or_none()
-            if model is None:
-                return None
-            return _flag_repo._to_domain(model)
-
-        async def delete(self, workspace_id, id):
-            await _flag_repo.delete(workspace_id, id)
-
     return {
-        "compound_flag": _CompoundFlagAdapter(),
+        "compound_flag": RepoAdapter(SQLAlchemyCompoundFlagRepository(uow), find="find_by_id_in_workspace"),
         "molecule_relationship": RepoAdapter(SQLAlchemyMoleculeRelationshipRepository(uow), find="find_by_id_in_workspace"),
         "synthesis_route": RepoAdapter(SQLAlchemySynthesisRouteRepository(uow), find="find_by_id_in_workspace"),
         "molecule": RepoAdapter(SQLAlchemyMoleculeRepository(uow), find="find_by_id_in_workspace"),

@@ -45,6 +45,18 @@ class SQLAlchemyCompoundFlagRepository:
         model.flag_type = flag.flag_type.value
         model.note = flag.note
 
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> CompoundFlag | None:
+        """Load by PK scoped to workspace (used by admin hard-delete)."""
+        stmt = select(CompoundFlagModel).where(
+            CompoundFlagModel.id == id,
+            CompoundFlagModel.workspace_id == workspace_id,
+        )
+        result = await self._uow.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return self._to_domain(model) if model is not None else None
+
     async def delete(self, workspace_id: uuid.UUID, flag_id: uuid.UUID) -> None:
         stmt = delete(CompoundFlagModel).where(
             CompoundFlagModel.id == flag_id,
