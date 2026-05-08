@@ -92,6 +92,9 @@ export interface Molecule {
   originating_org_id: string;
   identifiers: MoleculeIdentifier[];
   version: number;
+  // Set by /api/v1/search/execute on similarity-search rows; null/absent
+  // for substructure/exact/property-only searches.
+  similarity_score?: number | null;
 }
 
 export interface BatchInput {

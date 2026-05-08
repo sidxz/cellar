@@ -13,6 +13,7 @@ import type { MoleculeResponseDisclosedAt } from './moleculeResponseDisclosedAt'
 import type { MoleculeResponseMergedIntoId } from './moleculeResponseMergedIntoId';
 import type { MoleculeResponseCustomFields } from './moleculeResponseCustomFields';
 import type { IdentifierResponse } from './identifierResponse';
+import type { MoleculeResponseSimilarityScore } from './moleculeResponseSimilarityScore';
 
 export interface MoleculeResponse {
   id: string;
@@ -36,4 +37,5 @@ export interface MoleculeResponse {
   originating_org_id: string;
   identifiers: IdentifierResponse[];
   version: number;
+  similarity_score?: MoleculeResponseSimilarityScore;
 }

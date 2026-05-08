@@ -123,6 +123,51 @@ function buildFixedColumns(
   ];
 }
 
+// ─── Similarity column ─────────────────────────────────────────────────────
+
+function similarityBarColor(score: number): string {
+  // Anchored at the same thresholds the literature uses (and that the mode
+  // defaults expose): >=0.85 near-analog, >=0.70 similar, >=0.40 loose.
+  if (score >= 0.85) return "bg-success/70";
+  if (score >= 0.7) return "bg-success/50";
+  if (score >= 0.55) return "bg-yellow-500/60";
+  if (score >= 0.4) return "bg-yellow-500/40";
+  return "bg-muted-foreground/30";
+}
+
+function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
+  return {
+    headerName: "Sim",
+    width: 130,
+    headerTooltip:
+      "Similarity score for this row, computed by the cartridge against the search query. " +
+      "Range 0–1 (1.0 = identical). Algorithm + metric depend on the active mode.",
+    valueGetter: (p) => p.data?.similarity_score ?? null,
+    valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : "—"),
+    cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+      const score = params.data?.similarity_score;
+      if (score == null) {
+        return <span className="text-muted-foreground">—</span>;
+      }
+      const pct = Math.max(0, Math.min(100, score * 100));
+      const color = similarityBarColor(score);
+      return (
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs tabular-nums">
+            {score.toFixed(3)}
+          </span>
+          <div className="h-1.5 w-12 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-full ${color}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      );
+    },
+  };
+}
+
 function buildPropertyColumns(
   visibleProperties: string[],
 ): ColDef<EnrichedMolecule>[] {
@@ -148,10 +193,32 @@ function buildPropertyColumns(
     });
   }
 
+  if (visibleProperties.includes("hbd")) {
+    cols.push({
+      headerName: "HBD",
+      width: 70,
+      headerTooltip: "Hydrogen-bond donors (Lipinski Rule of Five)",
+      valueGetter: (p) => p.data?.descriptors?.hbd ?? null,
+      valueFormatter: (p) => (p.value != null ? String(p.value) : "\u2014"),
+    });
+  }
+
+  if (visibleProperties.includes("hba")) {
+    cols.push({
+      headerName: "HBA",
+      width: 70,
+      headerTooltip: "Hydrogen-bond acceptors (Lipinski Rule of Five)",
+      valueGetter: (p) => p.data?.descriptors?.hba ?? null,
+      valueFormatter: (p) => (p.value != null ? String(p.value) : "\u2014"),
+    });
+  }
+
   if (visibleProperties.includes("tpsa")) {
     cols.push({
       headerName: "TPSA",
       width: 80,
+      headerTooltip:
+        "Topological polar surface area (Veber's rule \u2014 predicts permeability)",
       valueGetter: (p) => p.data?.descriptors?.tpsa ?? null,
       valueFormatter: (p) =>
         p.value != null ? Number(p.value).toFixed(1) : "\u2014",
@@ -276,14 +343,29 @@ export function ResultsGrid({
 
   const rowHeight = ROW_HEIGHTS[reportConfig.imageSize] ?? 150;
 
+  // Show the similarity column only when at least one row actually carries
+  // a score (i.e. the active search was a similarity search). Substructure /
+  // exact / property-only searches return null scores and we hide the column.
+  const hasSimilarityScores = useMemo(
+    () => results.some((r) => r.similarity_score != null),
+    [results],
+  );
+
   const columnDefs = useMemo<(ColDef<EnrichedMolecule> | ColGroupDef)[]>(() => {
     const fixed = buildFixedColumns(reportConfig.imageSize);
+    const sim = hasSimilarityScores ? [buildSimilarityColumn()] : [];
     const props = buildPropertyColumns(
       reportConfig.visibleFields.properties,
     );
     const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols);
-    return [...fixed, ...props, ...protoGroups];
-  }, [reportConfig.imageSize, reportConfig.visibleFields.properties, protocolColumns, protocols]);
+    return [...fixed, ...sim, ...props, ...protoGroups];
+  }, [
+    reportConfig.imageSize,
+    reportConfig.visibleFields.properties,
+    protocolColumns,
+    protocols,
+    hasSimilarityScores,
+  ]);
 
   const defaultColDef = useMemo<ColDef>(
     () => ({

@@ -23,6 +23,8 @@ const PLACEHOLDERS: Record<StructureSearchType, string> = {
 };
 
 // Fallback mode metadata if the /search/algorithms call hasn't returned yet.
+// Keep these in sync with the backend MODE_DEFAULTS in
+// `domain/sar_analysis/search_modes.py`.
 const FALLBACK_MODES: {
   name: SearchMode;
   label: string;
@@ -32,19 +34,22 @@ const FALLBACK_MODES: {
   {
     name: "similar",
     label: "Similar",
-    description: "Find molecules with the same overall shape",
+    description:
+      "Tanimoto similarity over Morgan/ECFP4 fingerprints. Default for analog discovery and SAR retrieval.",
     default_threshold: 0.7,
   },
   {
     name: "scaffold_hop",
     label: "Scaffold hop",
-    description: "Looser match — bioisosteric replacements",
+    description:
+      "Tanimoto over feature-class (FCFP4) fingerprints. Surfaces bioisosteric replacements that strict similarity may miss.",
     default_threshold: 0.55,
   },
   {
     name: "fragment_in_target",
     label: "Contains my fragment",
-    description: "Big molecules that contain features of this query",
+    description:
+      "Asymmetric Tversky similarity (α=1, β=0). Ranks targets by the fraction of query features they contain — useful for fragment-to-lead expansion.",
     default_threshold: 0.7,
   },
 ];

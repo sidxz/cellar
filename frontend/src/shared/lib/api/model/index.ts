@@ -520,6 +520,7 @@ export * from './moleculeResponseDisclosedAt';
 export * from './moleculeResponseInventionDate';
 export * from './moleculeResponseMergedIntoId';
 export * from './moleculeResponseMolecularFormula';
+export * from './moleculeResponseSimilarityScore';
 export * from './moleculeResponseStereochemistry';
 export * from './moleculeResponseStructure';
 export * from './moleculeSummaryResponse';

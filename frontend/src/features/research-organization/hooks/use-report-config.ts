@@ -3,9 +3,13 @@
 import { create } from "zustand";
 import type { ReportConfig, VisibleFields } from "../types";
 
+// Default property columns: Lipinski Rule of Five essentials (MW, LogP, HBD,
+// HBA) plus Veber's TPSA. Single-glance druglikeness scan that med-chem users
+// recognize. See: doi:10.1016/S0169-409X(96)00423-1 (Lipinski 1997),
+// doi:10.1021/jm020017n (Veber 2002).
 const DEFAULT_VISIBLE_FIELDS: VisibleFields = {
   structure: ["structure", "registration_number"],
-  properties: ["molecular_weight", "logp"],
+  properties: ["molecular_weight", "logp", "hbd", "hba", "tpsa"],
   collections: false,
   molecule: ["name", "lifecycle_stage"],
   batch: [],
