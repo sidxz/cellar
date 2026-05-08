@@ -1,15 +1,20 @@
 """CascadeRunner — Tier-2 preview + execute engine.
 
 Walks the per-module cascade registry to build a CascadeNode tree.
-Preview half only — execute engine lands in Task 13.
+Preview half: builds a CascadeNode tree for user confirmation.
+Execute half: snapshots all rows, applies SET NULL + DELETEs, returns AuditEntries.
 """
 from __future__ import annotations
 
+import json
 import uuid
+from datetime import UTC, datetime
 
-from sqlalchemy import Table, func, select
+from sqlalchemy import Table, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chem_vault.domain.audit_compliance.enums import AuditAction
+from chem_vault.domain.audit_compliance.models import AuditEntry
 from chem_vault.domain.shared.cascade import (
     CascadeAction,
     CascadeNode,
@@ -17,6 +22,10 @@ from chem_vault.domain.shared.cascade import (
 )
 from chem_vault.infrastructure.cascade.label_fields import label_for_table
 from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+
+
+class CascadeExecutionError(Exception):
+    """Raised when a BLOCK rule matched at execute time (race after preview)."""
 
 
 SAMPLE_LIMIT = 5
@@ -141,3 +150,161 @@ class CascadeRunner:
             return None
         stmt = select(table.c[label_col]).where(table.c.id == id_)
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # Execute engine
+    # ------------------------------------------------------------------
+
+    async def execute(
+        self,
+        *,
+        parent_table: str,
+        parent_id: uuid.UUID,
+    ) -> list[AuditEntry]:
+        """Execute the cascade. Returns audit entries to attach to the
+        AuditOperation by the caller. Raises CascadeExecutionError if a BLOCK
+        rule matches at execute time (rare race).
+
+        Strategy:
+          1. Topologically collect all rows that will be deleted, in
+             dependency order (deepest descendants first).
+          2. Snapshot each into an AuditEntry.
+          3. Apply: SET NULL for set_null rules, DELETE for cascade rules.
+          4. Finally DELETE the root row.
+        """
+        entries: list[AuditEntry] = []
+        null_ops: list[tuple[str, str, list[uuid.UUID]]] = []  # (table, fk_col, ids)
+        delete_ops: list[tuple[str, list[uuid.UUID]]] = []     # (table, ids)
+
+        await self._collect(
+            parent_table, [parent_id],
+            entries=entries, null_ops=null_ops, delete_ops=delete_ops,
+        )
+
+        # Apply set-null first (so downstream cascades see NULLs already), then deletes.
+        for table_name, fk_col, ids in null_ops:
+            sa_table = Base.metadata.tables[table_name]
+            await self._session.execute(
+                update(sa_table).where(sa_table.c.id.in_(ids)).values(**{fk_col: None})
+            )
+
+        # Delete in reverse topological order: collected list has deepest last.
+        for table_name, ids in reversed(delete_ops):
+            sa_table = Base.metadata.tables[table_name]
+            await self._session.execute(
+                delete(sa_table).where(sa_table.c.id.in_(ids))
+            )
+
+        # Delete the root row last.
+        root_table = Base.metadata.tables[parent_table]
+        await self._session.execute(
+            delete(root_table).where(root_table.c.id == parent_id)
+        )
+        return entries
+
+    async def _collect(
+        self,
+        table: str,
+        parent_ids: list[uuid.UUID],
+        *,
+        entries: list[AuditEntry],
+        null_ops: list[tuple[str, str, list[uuid.UUID]]],
+        delete_ops: list[tuple[str, list[uuid.UUID]]],
+    ) -> None:
+        """Walk the cascade graph from a set of parent rows, gather plans."""
+        sa_table = Base.metadata.tables[table]
+        # Snapshot the parents themselves
+        rows = (
+            await self._session.execute(
+                sa_table.select().where(sa_table.c.id.in_(parent_ids))
+            )
+        ).mappings().all()
+        et, _ = label_for_table(table)
+        now = datetime.now(UTC)
+        for row in rows:
+            entries.append(
+                AuditEntry(
+                    entity_type=et,
+                    entity_id=row["id"],
+                    field_name="*",
+                    action=AuditAction.DELETE,
+                    old_value=json.dumps(dict(row), default=str, sort_keys=True),
+                    new_value=None,
+                    timestamp=now,
+                )
+            )
+        # Now walk children
+        for rule in get_rules_for_parent(table):
+            child_sa = Base.metadata.tables[rule.child_table]
+            if rule.action == CascadeAction.BLOCK:
+                count = (
+                    await self._session.execute(
+                        select(func.count()).select_from(child_sa).where(
+                            child_sa.c[rule.fk_column].in_(parent_ids)
+                        )
+                    )
+                ).scalar_one()
+                if count > 0:
+                    raise CascadeExecutionError(
+                        f"Blocking rule fired: {rule.child_table}.{rule.fk_column}"
+                    )
+                continue
+            if rule.action == CascadeAction.WARN:
+                continue
+            # Association/join tables may have no id column — handle separately.
+            if "id" not in child_sa.c:
+                if rule.action == CascadeAction.CASCADE:
+                    # DELETE directly by FK; no snapshot (join rows carry no
+                    # business data worth auditing individually).
+                    await self._session.execute(
+                        delete(child_sa).where(
+                            child_sa.c[rule.fk_column].in_(parent_ids)
+                        )
+                    )
+                # SET_NULL on a no-id table is structurally unusual but guard anyway.
+                continue
+
+            # Find child IDs
+            child_ids = [
+                row.id
+                for row in (
+                    await self._session.execute(
+                        select(child_sa.c.id).where(
+                            child_sa.c[rule.fk_column].in_(parent_ids)
+                        )
+                    )
+                ).all()
+            ]
+            if not child_ids:
+                continue
+            if rule.action == CascadeAction.SET_NULL:
+                null_ops.append((rule.child_table, rule.fk_column, child_ids))
+                continue
+            # CASCADE — recurse if rule says so, otherwise just snapshot+delete
+            if rule.recurse_into_entity:
+                await self._collect(
+                    rule.child_table, child_ids,
+                    entries=entries, null_ops=null_ops, delete_ops=delete_ops,
+                )
+            else:
+                # Snapshot leaf rows
+                leaf_rows = (
+                    await self._session.execute(
+                        child_sa.select().where(child_sa.c.id.in_(child_ids))
+                    )
+                ).mappings().all()
+                child_et, _ = label_for_table(rule.child_table)
+                now2 = datetime.now(UTC)
+                for row in leaf_rows:
+                    entries.append(
+                        AuditEntry(
+                            entity_type=child_et,
+                            entity_id=row["id"],
+                            field_name="*",
+                            action=AuditAction.DELETE,
+                            old_value=json.dumps(dict(row), default=str, sort_keys=True),
+                            new_value=None,
+                            timestamp=now2,
+                        )
+                    )
+            delete_ops.append((rule.child_table, child_ids))
