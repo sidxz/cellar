@@ -1,39 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Paperclip, Pencil, Plus, Upload } from "lucide-react";
-import { FileUploadZone, AttachmentList } from "@/features/attachment";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { cn } from "@/shared/lib/utils";
+import { Paperclip, Pencil, Upload } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
-import { type Run, type PlateFormat } from "../types";
-import { AddDoseResponseDialog } from "./add-dose-response-dialog";
+import { type ZPrimeQuality, classifyZPrime, readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
+import type { PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
-import { RunDoseResponseResults } from "./run-dr-results";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { ReadoutDataTable } from "./readout-data-table";
+import { RunDoseResponseResults } from "./run-dr-results";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
-import { readPerPlateQc, worstZPrime, classifyZPrime, type ZPrimeQuality } from "../lib/qc-metrics";
 
 const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }> = {
-  excellent: { label: "Excellent", className: "bg-green-500/20 text-green-400 border-green-500/30" },
-  marginal: { label: "Marginal", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+  excellent: {
+    label: "Excellent",
+    className: "bg-green-500/20 text-green-400 border-green-500/30",
+  },
+  marginal: {
+    label: "Marginal",
+    className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+  },
   poor: { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" },
 };
 
@@ -56,9 +51,7 @@ function ZPrimeBadge({ value }: { value: number }) {
 function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
   if (!qcMetrics || Object.keys(qcMetrics).length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        No QC metrics available.
-      </p>
+      <p className="py-8 text-center text-sm text-muted-foreground">No QC metrics available.</p>
     );
   }
 
@@ -67,9 +60,7 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
   const worstZp = worstZPrime(qcMetrics);
 
   // Anything else on qc_metrics that isn't the per-plate z_prime block.
-  const genericEntries = Object.entries(qcMetrics).filter(
-    ([k]) => k !== "z_prime"
-  );
+  const genericEntries = Object.entries(qcMetrics).filter(([k]) => k !== "z_prime");
 
   return (
     <div className="space-y-4">
@@ -82,9 +73,7 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                 {plateIds.length === 1 ? "" : "s"})
               </p>
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold tabular-nums">
-                  {worstZp.toFixed(3)}
-                </span>
+                <span className="text-2xl font-bold tabular-nums">{worstZp.toFixed(3)}</span>
                 <ZPrimeBadge value={worstZp} />
               </div>
             </div>
@@ -100,15 +89,9 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                 <th className="px-3 py-2 text-left font-medium">Plate</th>
                 <th className="px-3 py-2 text-right font-medium">Z&apos;</th>
                 <th className="px-3 py-2 text-right font-medium">S/B</th>
-                <th className="px-3 py-2 text-right font-medium">
-                  POS mean ± SD
-                </th>
-                <th className="px-3 py-2 text-right font-medium">
-                  NEG mean ± SD
-                </th>
-                <th className="px-3 py-2 text-right font-medium">
-                  Classification
-                </th>
+                <th className="px-3 py-2 text-right font-medium">POS mean ± SD</th>
+                <th className="px-3 py-2 text-right font-medium">NEG mean ± SD</th>
+                <th className="px-3 py-2 text-right font-medium">Classification</th>
               </tr>
             </thead>
             <tbody>
@@ -118,14 +101,10 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                   <tr key={pid} className="border-b last:border-b-0">
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {i + 1}
-                      <span className="ml-2 font-mono text-[10px]">
-                        {pid.slice(0, 8)}…
-                      </span>
+                      <span className="ml-2 font-mono text-[10px]">{pid.slice(0, 8)}…</span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {typeof q.z_prime === "number"
-                        ? q.z_prime.toFixed(3)
-                        : "—"}
+                      {typeof q.z_prime === "number" ? q.z_prime.toFixed(3) : "—"}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof q.s2b === "number" ? q.s2b.toFixed(2) : "—"}
@@ -133,18 +112,14 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof q.pos_mean === "number"
                         ? `${q.pos_mean.toFixed(3)}${
-                            typeof q.pos_sd === "number"
-                              ? ` ± ${q.pos_sd.toFixed(3)}`
-                              : ""
+                            typeof q.pos_sd === "number" ? ` ± ${q.pos_sd.toFixed(3)}` : ""
                           }`
                         : "—"}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof q.neg_mean === "number"
                         ? `${q.neg_mean.toFixed(3)}${
-                            typeof q.neg_sd === "number"
-                              ? ` ± ${q.neg_sd.toFixed(3)}`
-                              : ""
+                            typeof q.neg_sd === "number" ? ` ± ${q.neg_sd.toFixed(3)}` : ""
                           }`
                         : "—"}
                     </td>
@@ -170,9 +145,7 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
               </CardHeader>
               <CardContent className="pt-2">
                 <p className="text-sm font-medium tabular-nums">
-                  {typeof value === "number"
-                    ? value.toFixed(3)
-                    : String(value ?? "\u2014")}
+                  {typeof value === "number" ? value.toFixed(3) : String(value ?? "\u2014")}
                 </p>
               </CardContent>
             </Card>
@@ -193,7 +166,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const { data: curves } = useDoseResponseByRun(run.id);
   const { data: plateMap } = usePlateMap(run.id);
 
-  const [addDoseResponseOpen, setAddDoseResponseOpen] = useState(false);
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
 
@@ -238,16 +210,19 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         {/* Readout Data */}
         <TabsContent value="readout">
           <div className="mt-3 space-y-3">
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setRunImportWizardOpen(true)}
-                disabled={run.is_locked}
-              >
-                <Upload className="mr-2 h-4 w-4" /> Import Run File
-              </Button>
-            </div>
-            <ReadoutDataTable runId={run.id} protocolId={run.protocol_id} />
+            <ReadoutDataTable
+              runId={run.id}
+              protocolId={run.protocol_id}
+              toolbarActions={
+                <Button
+                  size="sm"
+                  onClick={() => setRunImportWizardOpen(true)}
+                  disabled={run.is_locked}
+                >
+                  <Upload className="mr-2 h-4 w-4" /> Import Run File
+                </Button>
+              }
+            />
           </div>
         </TabsContent>
 
@@ -322,20 +297,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         {/* Dose-Response */}
         <TabsContent value="dose-response">
           <div className="mt-3 space-y-3">
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setAddDoseResponseOpen(true)}
-                disabled={run.is_locked}
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add Curve
-              </Button>
-            </div>
-            <RunDoseResponseResults
-              run={run}
-              curves={curves ?? []}
-              isLoading={!curves}
-            />
+            <RunDoseResponseResults run={run} curves={curves ?? []} isLoading={!curves} />
           </div>
         </TabsContent>
 
@@ -343,11 +305,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         <TabsContent value="qc">
           <div className="mt-3 space-y-3">
             <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setEditQcOpen(true)}
-                disabled={run.is_locked}
-              >
+              <Button size="sm" onClick={() => setEditQcOpen(true)} disabled={run.is_locked}>
                 <Pencil className="mr-2 h-4 w-4" /> Edit Metrics
               </Button>
             </div>
@@ -364,17 +322,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
       </Tabs>
 
       {/* Dialogs */}
-      <AddDoseResponseDialog
-        runId={run.id}
-        protocolId={run.protocol_id}
-        open={addDoseResponseOpen}
-        onOpenChange={setAddDoseResponseOpen}
-      />
-      <EditQcMetricsDialog
-        run={run}
-        open={editQcOpen}
-        onOpenChange={setEditQcOpen}
-      />
+      <EditQcMetricsDialog run={run} open={editQcOpen} onOpenChange={setEditQcOpen} />
       <RunImportWizard
         runId={run.id}
         protocolId={run.protocol_id}

@@ -275,7 +275,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   return (
     <div className="mt-4 space-y-6">
       <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-muted-foreground">
               Readout
             </label>
@@ -301,16 +301,16 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
           </div>
 
           {layerAvailable && (
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Value
               </label>
-              <div className="inline-flex h-9 rounded-md border p-0.5">
+              <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
                 <Button
                   type="button"
                   size="sm"
                   variant={effectiveLayer === "raw" ? "secondary" : "ghost"}
-                  className="h-8 rounded-sm px-3 text-xs"
+                  className="h-7 rounded-sm px-2.5 text-xs"
                   onClick={() => setLayer("raw")}
                 >
                   Raw
@@ -321,7 +321,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                   variant={
                     effectiveLayer === "normalized" ? "secondary" : "ghost"
                   }
-                  className="h-8 rounded-sm px-3 text-xs"
+                  className="h-7 rounded-sm px-2.5 text-xs"
                   onClick={() => setLayer("normalized")}
                 >
                   {computedUnit}
@@ -330,16 +330,16 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
             </div>
           )}
 
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-muted-foreground">
               Scale
             </label>
-            <div className="inline-flex h-9 rounded-md border p-0.5">
+            <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
               <Button
                 type="button"
                 size="sm"
                 variant={scaleKind === "linear" ? "secondary" : "ghost"}
-                className="h-8 rounded-sm px-3 text-xs"
+                className="h-7 rounded-sm px-2.5 text-xs"
                 onClick={() => setScaleKind("linear")}
               >
                 Linear
@@ -348,7 +348,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 type="button"
                 size="sm"
                 variant={scaleKind === "zscore" ? "secondary" : "ghost"}
-                className="h-8 rounded-sm px-3 text-xs"
+                className="h-7 rounded-sm px-2.5 text-xs"
                 onClick={() => setScaleKind("zscore")}
               >
                 Z-Score

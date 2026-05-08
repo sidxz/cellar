@@ -1,19 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
-import { cn } from "@/shared/lib/utils";
+import { Badge } from "@/shared/components/ui/badge";
 import { groupBy } from "@/shared/lib/group-by";
+import { cn } from "@/shared/lib/utils";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { type ReactNode, useMemo } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
 import { resolvePickListColor } from "../lib/pick-list-colors";
 import {
-  READOUT_NORMALIZATION_LABELS,
   type DoseResponseCurve,
+  READOUT_NORMALIZATION_LABELS,
   type ReadoutData,
   type ReadoutDefinition,
   type ReadoutNormalization,
@@ -23,6 +23,8 @@ interface ReadoutDataTableProps {
   runId: string;
   protocolId: string;
   className?: string;
+  /** Extra controls rendered in the table toolbar (e.g. Import Run File). */
+  toolbarActions?: ReactNode;
 }
 
 interface PivotRow {
@@ -46,8 +48,7 @@ interface PivotRow {
   curves: Map<string, DoseResponseCurve>;
 }
 
-const valueKey = (defId: string, isComputed: boolean) =>
-  `${defId}::${isComputed ? "c" : "r"}`;
+const valueKey = (defId: string, isComputed: boolean) => `${defId}::${isComputed ? "c" : "r"}`;
 
 /** First non-NONE normalization on a readout def, or null. When a def emits
  * multiple formulas (e.g. raw + %inh + z-score) we surface the first as the
@@ -77,8 +78,7 @@ function formatValue(row: ReadoutData): string {
   if (row.value_numeric === null || row.value_numeric === undefined) {
     return row.value_text ?? "\u2014";
   }
-  const prefix =
-    row.value_qualifier && row.value_qualifier !== "=" ? row.value_qualifier : "";
+  const prefix = row.value_qualifier && row.value_qualifier !== "=" ? row.value_qualifier : "";
   return `${prefix}${row.value_numeric.toFixed(3)}`;
 }
 
@@ -86,6 +86,7 @@ export function ReadoutDataTable({
   runId,
   protocolId,
   className,
+  toolbarActions,
 }: ReadoutDataTableProps) {
   const { data, isLoading } = useReadoutDataByRun(runId);
   const { data: curves } = useDoseResponseByRun(runId);
@@ -108,8 +109,7 @@ export function ReadoutDataTable({
       // Pick the curve matching the protocol's dose-response def by curve_type
       const def = readoutDefs.find(
         (rd) =>
-          rd.data_type === "dose_response" &&
-          rd.dose_response_config?.curve_type === c.curve_type,
+          rd.data_type === "dose_response" && rd.dose_response_config?.curve_type === c.curve_type,
       );
       if (!def) continue;
       const inner = map.get(def.id);
@@ -152,13 +152,8 @@ export function ReadoutDataTable({
     // 1. Bucket per-molecule rows (no well_id) — these are calculated
     // readouts that the engine produced once per (mol, batch). They get
     // merged into every well row of the same group below.
-    const perMolRows = data.filter(
-      (row) => row.molecule_id && !row.well_id,
-    );
-    const perMol = groupBy(
-      perMolRows,
-      (row) => `${row.molecule_id}::${row.batch_id ?? ""}`,
-    );
+    const perMolRows = data.filter((row) => row.molecule_id && !row.well_id);
+    const perMol = groupBy(perMolRows, (row) => `${row.molecule_id}::${row.batch_id ?? ""}`);
 
     // 2. Group per-well rows by (molecule, batch, well).
     const groups = new Map<string, PivotRow>();
@@ -243,10 +238,7 @@ export function ReadoutDataTable({
           const visible = aliases.slice(0, 2);
           const overflow = aliases.length - visible.length;
           return (
-            <span
-              className="text-xs text-muted-foreground"
-              title={aliases.join(", ")}
-            >
+            <span className="text-xs text-muted-foreground" title={aliases.join(", ")}>
               {visible.join(" · ")}
               {overflow > 0 && ` +${overflow}`}
             </span>
@@ -267,8 +259,7 @@ export function ReadoutDataTable({
         cols.push({
           headerName: drHeader,
           headerTooltip:
-            rd.description ||
-            "Dose-response fit value — same for every well of a compound",
+            rd.description || "Dose-response fit value — same for every well of a compound",
           colId: rd.id,
           width: 130,
           cellClass: "text-right tabular-nums",
@@ -281,9 +272,7 @@ export function ReadoutDataTable({
             }
             return (
               <span
-                className={cn(
-                  curve.curve_class === "inactive" && "text-muted-foreground",
-                )}
+                className={cn(curve.curve_class === "inactive" && "text-muted-foreground")}
                 title={
                   curve.curve_class
                     ? `${curve.curve_class} · R² = ${curve.r_squared.toFixed(3)}`
@@ -317,23 +306,14 @@ export function ReadoutDataTable({
           },
           cellRenderer: (params: { data: PivotRow | undefined }) => {
             const row = params.data?.values.get(valueKey(rd.id, false));
-            if (!row)
-              return <span className="text-muted-foreground">{"\u2014"}</span>;
+            if (!row) return <span className="text-muted-foreground">{"\u2014"}</span>;
             // Pick-list cells render as a colored Badge using the
             // declared color (or hash-derived fallback when null).
             if (isPickList && row.value_text) {
-              const declared = rd.pick_list_values?.find(
-                (v) => v.label === row.value_text,
-              );
-              const color = resolvePickListColor(
-                row.value_text,
-                declared?.color,
-              );
+              const declared = rd.pick_list_values?.find((v) => v.label === row.value_text);
+              const color = resolvePickListColor(row.value_text, declared?.color);
               return (
-                <Badge
-                  variant="outline"
-                  className={cn("text-xs", color.bg, color.text)}
-                >
+                <Badge variant="outline" className={cn("text-xs", color.bg, color.text)}>
                   {row.value_text}
                 </Badge>
               );
@@ -341,8 +321,7 @@ export function ReadoutDataTable({
             return (
               <span
                 className={cn(
-                  row.is_outlier &&
-                    "text-destructive line-through decoration-destructive/50",
+                  row.is_outlier && "text-destructive line-through decoration-destructive/50",
                 )}
                 title={row.is_outlier ? "Flagged as outlier" : undefined}
               >
@@ -383,18 +362,14 @@ export function ReadoutDataTable({
           },
           cellRenderer: (params: { data: PivotRow | undefined }) => {
             const row = params.data?.values.get(valueKey(rd.id, true));
-            if (!row)
-              return <span className="text-muted-foreground">{"\u2014"}</span>;
+            if (!row) return <span className="text-muted-foreground">{"\u2014"}</span>;
             return (
               <span
                 className={cn(
                   "text-muted-foreground",
-                  row.is_outlier &&
-                    "text-destructive line-through decoration-destructive/50",
+                  row.is_outlier && "text-destructive line-through decoration-destructive/50",
                 )}
-                title={
-                  row.is_outlier ? "Flagged as outlier" : "Calculated value"
-                }
+                title={row.is_outlier ? "Flagged as outlier" : "Calculated value"}
               >
                 {formatValue(row)}
               </span>
@@ -415,6 +390,7 @@ export function ReadoutDataTable({
         height="500px"
         suppressFilters
         exportFilename={`readout-data-${runId}`}
+        toolbarActions={toolbarActions}
         getRowId={(params) => params.data.key}
         emptyState={
           <p className="py-8 text-center text-sm text-muted-foreground">

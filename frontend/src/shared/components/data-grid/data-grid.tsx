@@ -1,21 +1,21 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
-import {
-  AllCommunityModule,
-  ModuleRegistry,
-  type ColDef,
-  type RowClickedEvent,
-  type GridReadyEvent,
-  type SelectionChangedEvent,
-} from "ag-grid-community";
-import { Search } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useGridPreferences } from "@/shared/hooks/use-grid-preferences";
+import {
+  AllCommunityModule,
+  type ColDef,
+  type GridReadyEvent,
+  ModuleRegistry,
+  type RowClickedEvent,
+  type SelectionChangedEvent,
+} from "ag-grid-community";
+import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
+import { Search } from "lucide-react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { chemVaultTheme } from "./ag-grid-theme";
-import { ExportToolbar, type ExcelEnhancer } from "./export-toolbar";
+import { type ExcelEnhancer, ExportToolbar } from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -52,6 +52,13 @@ export interface DataGridProps<TData = unknown>
   suppressSelectColumn?: boolean;
   /** Placeholder for the quick-filter search bar. Set to false to hide. */
   searchPlaceholder?: string | false;
+  /** Extra controls rendered in the toolbar row, to the left of the export
+   *  button. Use for primary actions (Import, New, etc.) so they share the
+   *  same line as the filter and export controls.
+   *
+   *  When provided, the toolbar is rendered even in loading/empty states so
+   *  the action remains reachable when the table has no rows yet. */
+  toolbarActions?: ReactNode;
 }
 
 export function DataGrid<TData = unknown>({
@@ -69,6 +76,7 @@ export function DataGrid<TData = unknown>({
   enableMultiSelect,
   suppressSelectColumn,
   searchPlaceholder = "Filter...",
+  toolbarActions,
   ...rest
 }: DataGridProps<TData>) {
   const selectionEnabled = !!selectionToolbar || !!enableMultiSelect;
@@ -91,7 +99,7 @@ export function DataGrid<TData = unknown>({
       suppressMovable: true,
       minWidth: 80,
     }),
-    [suppressFilters]
+    [suppressFilters],
   );
 
   // Inject header tooltips (so clipped headers show full name on hover) and
@@ -100,7 +108,7 @@ export function DataGrid<TData = unknown>({
     const withTooltips = columnDefs.map((c) =>
       c.headerTooltip == null && typeof c.headerName === "string"
         ? { ...c, headerTooltip: c.headerName }
-        : c
+        : c,
     );
     if (!selectionEnabled || suppressSelectColumn) return withTooltips;
     const selectCol: ColDef<TData> = {
@@ -129,7 +137,7 @@ export function DataGrid<TData = unknown>({
       if (target?.closest("button, a, [role='button']")) return;
       onRowClick(event.data);
     },
-    [onRowClick]
+    [onRowClick],
   );
 
   const handleGridReady = useCallback(
@@ -140,7 +148,7 @@ export function DataGrid<TData = unknown>({
         event.api.sizeColumnsToFit();
       }
     },
-    [hasPrefs, prefs, gridRef]
+    [hasPrefs, prefs, gridRef],
   );
 
   const handleSelectionChanged = useCallback(
@@ -148,45 +156,65 @@ export function DataGrid<TData = unknown>({
       setSelectedRows(event.api.getSelectedRows());
       consumerOnSelectionChanged?.(event);
     },
-    [consumerOnSelectionChanged]
+    [consumerOnSelectionChanged],
   );
+
+  const hasRows = !!rowData?.length;
+  const showSearch = searchPlaceholder !== false && hasRows;
+  const showExport = !!exportFilename && hasRows;
+  const renderToolbar = showSearch || showExport || !!toolbarActions;
+
+  const toolbar = renderToolbar ? (
+    <div className="mb-2 flex items-center gap-2">
+      {showSearch ? (
+        <div className="relative w-64">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={searchPlaceholder as string}
+            value={quickFilter}
+            onChange={(e) => setQuickFilter(e.target.value)}
+            className="h-9 pl-8"
+          />
+        </div>
+      ) : null}
+      <div className="ml-auto flex items-center gap-2">
+        {toolbarActions}
+        {showExport ? (
+          <ExportToolbar
+            gridRef={gridRef}
+            filename={exportFilename!}
+            excelEnhancer={excelEnhancer}
+          />
+        ) : null}
+      </div>
+    </div>
+  ) : null;
 
   if (loading) {
     return (
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
+      <div>
+        {toolbar}
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (!rowData?.length && emptyState) {
-    return <>{emptyState}</>;
+  if (!hasRows && emptyState) {
+    return (
+      <div>
+        {toolbar}
+        {emptyState}
+      </div>
+    );
   }
 
   return (
     <div>
-      {(searchPlaceholder !== false || (exportFilename && rowData?.length)) ? (
-        <div className="mb-2 flex items-center gap-2">
-          {searchPlaceholder !== false && (
-            <div className="relative w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={searchPlaceholder}
-                value={quickFilter}
-                onChange={(e) => setQuickFilter(e.target.value)}
-                className="h-9 pl-8"
-              />
-            </div>
-          )}
-          <div className="ml-auto">
-            {exportFilename && rowData?.length ? (
-              <ExportToolbar gridRef={gridRef} filename={exportFilename} excelEnhancer={excelEnhancer} />
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      {toolbar}
       {selectionToolbar && !enableMultiSelect && selectedRows.length > 0 ? (
         <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
           {selectionToolbar(selectedRows)}
@@ -201,7 +229,9 @@ export function DataGrid<TData = unknown>({
           defaultColDef={defaultColDef}
           onRowClicked={onRowClick ? handleRowClicked : undefined}
           onGridReady={handleGridReady}
-          onSelectionChanged={selectionEnabled ? handleSelectionChanged : consumerOnSelectionChanged}
+          onSelectionChanged={
+            selectionEnabled ? handleSelectionChanged : consumerOnSelectionChanged
+          }
           rowSelection={selectionEnabled ? "multiple" : undefined}
           suppressRowClickSelection={selectionEnabled ? true : undefined}
           tooltipShowDelay={300}

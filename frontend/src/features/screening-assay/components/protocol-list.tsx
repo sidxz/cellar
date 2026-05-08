@@ -118,6 +118,7 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         loading={isLoading}
         height="400px"
         quickFilterText={search}
+        searchPlaceholder={false}
         suppressFilters
         onRowClick={onSelect ? (protocol) => onSelect(protocol.id) : undefined}
         emptyState={

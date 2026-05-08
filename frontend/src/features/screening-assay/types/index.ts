@@ -574,26 +574,6 @@ export interface CreateReadoutDataInput {
   is_outlier?: boolean;
 }
 
-export interface CreateDoseResponseCurveInput {
-  molecule_id: string;
-  batch_id: string;
-  protocol_id: string;
-  run_id: string;
-  curve_type: CurveType;
-  fitted_value: number;
-  fitted_unit: string;
-  hill_slope: number;
-  top: number;
-  bottom: number;
-  r_squared: number;
-  num_points: number;
-  confidence_interval_low?: number | null;
-  confidence_interval_high?: number | null;
-  curve_class?: CurveClass | null;
-  raw_data?: Array<Record<string, unknown>> | null;
-  excluded_points?: Array<Record<string, unknown>> | null;
-}
-
 // ─── Condition Grouping ──────────────────────────────────────────────────────
 
 export interface AggregatedReadoutResponse {
