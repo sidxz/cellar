@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Response
@@ -13,6 +14,12 @@ from chem_vault.application.screening._dose_response_config_serde import (
 )
 from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
 from chem_vault.application.screening.create_protocol import CreateProtocol, CreateProtocolCommand
+from chem_vault.application.screening.lock_protocol import (
+    LockProtocol,
+    LockProtocolCommand,
+    UnlockProtocol,
+    UnlockProtocolCommand,
+)
 from chem_vault.application.screening.create_target import CreateTarget, CreateTargetCommand
 from chem_vault.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
 from chem_vault.application.screening.get_protocol import GetProtocol, GetProtocolQuery, ListProtocols, ListProtocolsQuery
@@ -82,6 +89,7 @@ from chem_vault.interface.dependencies import (
     ListProtocolsByProjectDep,
     ListProtocolsDep,
     ListTargetsDep,
+    LockProtocolDep,
     PublishProtocolDep,
     RemoveConditionDefinitionDep,
     RemoveControlLayoutDep,
@@ -89,6 +97,7 @@ from chem_vault.interface.dependencies import (
     RemoveProtocolFromProjectDep,
     RemoveReadoutDefinitionDep,
     RetireProtocolDep,
+    UnlockProtocolDep,
     SetControlLayoutDep,
     SetOntologyAnnotationDep,
     UpdateProtocolDep,
@@ -152,6 +161,11 @@ class ProtocolResponse(BaseModel):
     ontology_annotations: dict[str, list[dict]] | None = None
     project_ids: list[uuid.UUID] = []
     recommended_hit_criteria: list[dict] | None = None
+    # Lock state — orthogonal to status. Mirrors RunResponse lock fields.
+    is_locked: bool = False
+    locked_by: uuid.UUID | None = None
+    lock_reason: str | None = None
+    locked_at: datetime | None = None
 
     @classmethod
     def from_domain(  # type: ignore[no-untyped-def]
@@ -228,6 +242,10 @@ class ProtocolResponse(BaseModel):
                 if p.recommended_hit_criteria
                 else None
             ),
+            is_locked=p.is_locked,
+            locked_by=p.locked_by,
+            lock_reason=p.lock_reason,
+            locked_at=p.locked_at,
         )
 
 
@@ -433,6 +451,58 @@ async def retire_protocol(
     uc: RetireProtocolDep,
 ) -> ProtocolResponse:
     result = await uc(RetireProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id, reason=body.reason), auth=auth)
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+class LockProtocolRequest(BaseModel):
+    reason: str
+
+
+@router.post(
+    "/protocols/{protocol_id}/lock",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def lock_protocol(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    body: LockProtocolRequest,
+    uc: LockProtocolDep,
+) -> ProtocolResponse:
+    """Freeze the protocol's metadata. While locked, every mutation
+    method raises until ``unlock`` is called. Workflow gate, orthogonal
+    to status — see ``Protocol.lock`` for invariants."""
+    result = await uc(
+        LockProtocolCommand(
+            workspace_id=auth.workspace_id,
+            protocol_id=protocol_id,
+            reason=body.reason,
+        ),
+        auth=auth,
+    )
+    return ProtocolResponse.from_domain(result_to_response(result))
+
+
+@router.post(
+    "/protocols/{protocol_id}/unlock",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def unlock_protocol(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    body: LockProtocolRequest,
+    uc: UnlockProtocolDep,
+) -> ProtocolResponse:
+    """Release the lock. Reason is required for the audit log."""
+    result = await uc(
+        UnlockProtocolCommand(
+            workspace_id=auth.workspace_id,
+            protocol_id=protocol_id,
+            reason=body.reason,
+        ),
+        auth=auth,
+    )
     return ProtocolResponse.from_domain(result_to_response(result))
 
 

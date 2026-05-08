@@ -172,6 +172,7 @@ from chem_vault.application.screening.get_protocol import GetProtocol, ListProto
 from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
 from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
+from chem_vault.application.screening.lock_protocol import LockProtocol, UnlockProtocol
 from chem_vault.application.screening.lock_run import LockRun, UnlockRun
 from chem_vault.application.screening.condition_grouping_service import ConditionGroupingService
 from chem_vault.application.screening.delete_target import DeleteTarget
@@ -479,6 +480,8 @@ GetProtocolDep = Annotated[GetProtocol, Depends(_get_use_case(GetProtocol))]
 ListProtocolsDep = Annotated[ListProtocols, Depends(_get_use_case(ListProtocols))]
 PublishProtocolDep = Annotated[PublishProtocol, Depends(_get_use_case(PublishProtocol))]
 RetireProtocolDep = Annotated[RetireProtocol, Depends(_get_use_case(RetireProtocol))]
+LockProtocolDep = Annotated[LockProtocol, Depends(_get_use_case(LockProtocol))]
+UnlockProtocolDep = Annotated[UnlockProtocol, Depends(_get_use_case(UnlockProtocol))]
 VersionProtocolDep = Annotated[VersionProtocol, Depends(_get_use_case(VersionProtocol))]
 ListProtocolsByProjectDep = Annotated[ListProtocolsByProject, Depends(_get_use_case(ListProtocolsByProject))]
 AddProtocolToProjectDep = Annotated[AddProtocolToProject, Depends(_get_use_case(AddProtocolToProject))]

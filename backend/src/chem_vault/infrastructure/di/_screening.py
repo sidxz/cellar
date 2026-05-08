@@ -75,6 +75,10 @@ from chem_vault.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
 )
+from chem_vault.application.screening.lock_protocol import (
+    LockProtocol,
+    UnlockProtocol,
+)
 from chem_vault.application.screening.manage_protocol import (
     AddProtocolToProject,
     DeleteProtocol,
@@ -209,6 +213,8 @@ def register_screening(container: Container) -> None:
     container.define(ListProtocols, _protocol_query(ListProtocols))
     container.define(PublishProtocol, _protocol_cmd(PublishProtocol))
     container.define(RetireProtocol, _protocol_cmd(RetireProtocol))
+    container.define(LockProtocol, _protocol_cmd(LockProtocol))
+    container.define(UnlockProtocol, _protocol_cmd(UnlockProtocol))
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
     container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
