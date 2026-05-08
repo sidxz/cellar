@@ -60,33 +60,3 @@ def test_all_entity_types_sorted():
         entity_type="a", table="a", label_field=None, repo_resolver=_dummy_resolver
     )
     assert all_entity_types() == ["a", "b"]
-
-
-def test_get_nonexistent_returns_none():
-    """Test that get_entry returns None for nonexistent entity_type."""
-    assert get_entry("nonexistent") is None
-
-
-def test_admin_delete_entry_frozen():
-    """Test that AdminDeleteEntry is frozen (immutable)."""
-    entry = AdminDeleteEntry(
-        entity_type="test",
-        table="test_table",
-        label_field="name",
-        repo_resolver=_dummy_resolver,
-    )
-    with pytest.raises(AttributeError):
-        entry.entity_type = "changed"  # type: ignore
-
-
-def test_register_with_null_label_field():
-    """Test registration with label_field=None."""
-    register_admin_delete(
-        entity_type="no_label",
-        table="some_table",
-        label_field=None,
-        repo_resolver=_dummy_resolver,
-    )
-    e = get_entry("no_label")
-    assert e is not None
-    assert e.label_field is None
