@@ -5,6 +5,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './_algorithmInfo';
+export * from './_algorithmsResponse';
+export * from './_modeInfo';
 export * from './activityItemResponse';
 export * from './activitySummaryResponse';
 export * from './activitySummaryV2Response';

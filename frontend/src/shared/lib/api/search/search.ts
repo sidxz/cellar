@@ -5,20 +5,30 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
-  useMutation
+  useMutation,
+  useQuery
 } from '@tanstack/react-query';
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
   QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
-  UseMutationResult
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
   ExecuteSearchApiV1SearchExecutePostParams,
   ExecuteSearchBody,
   ExecuteSearchResponse,
-  HTTPValidationError
+  HTTPValidationError,
+  _AlgorithmsResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -93,4 +103,99 @@ export const useExecuteSearchApiV1SearchExecutePost = <TError = HTTPValidationEr
 
       return useMutation(mutationOptions, queryClient);
     }
+    /**
+ * Return available search modes and fingerprint algorithms.
+
+This endpoint is metadata-only — no auth dependency, no DB access.
+Frontend uses it to render mode radios and threshold defaults.
+ * @summary List Algorithms
+ */
+export const listAlgorithmsApiV1SearchAlgorithmsGet = (
     
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<_AlgorithmsResponse>(
+      {url: `/api/v1/search/algorithms`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListAlgorithmsApiV1SearchAlgorithmsGetQueryKey = () => {
+    return [
+    `/api/v1/search/algorithms`
+    ] as const;
+    }
+
+    
+export const getListAlgorithmsApiV1SearchAlgorithmsGetQueryOptions = <TData = Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAlgorithmsApiV1SearchAlgorithmsGetQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>> = ({ signal }) => listAlgorithmsApiV1SearchAlgorithmsGet(signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListAlgorithmsApiV1SearchAlgorithmsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>>
+export type ListAlgorithmsApiV1SearchAlgorithmsGetQueryError = unknown
+
+
+export function useListAlgorithmsApiV1SearchAlgorithmsGet<TData = Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAlgorithmsApiV1SearchAlgorithmsGet<TData = Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAlgorithmsApiV1SearchAlgorithmsGet<TData = Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Algorithms
+ */
+
+export function useListAlgorithmsApiV1SearchAlgorithmsGet<TData = Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAlgorithmsApiV1SearchAlgorithmsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListAlgorithmsApiV1SearchAlgorithmsGetQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
