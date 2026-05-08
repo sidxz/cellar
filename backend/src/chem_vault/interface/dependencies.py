@@ -19,6 +19,8 @@ from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from chem_vault.application.admin.admin_hard_delete import AdminHardDelete
+from chem_vault.application.admin.cascade_preview import CascadePreview
+from chem_vault.application.admin.cascade_delete import CascadeDelete
 from chem_vault.application.dashboard.get_dashboard_stats import GetDashboardStats
 from chem_vault.application.attachment.delete_attachment import DeleteAttachment
 from chem_vault.application.attachment.download_attachment import DownloadAttachment
@@ -372,6 +374,8 @@ def _get_use_case(uc_type: type):  # noqa: ANN001
 
 # --- Admin dependencies ---
 AdminHardDeleteDep = Annotated[AdminHardDelete, Depends(_get_use_case(AdminHardDelete))]
+CascadePreviewDep = Annotated[CascadePreview, Depends(_get_use_case(CascadePreview))]
+CascadeDeleteDep  = Annotated[CascadeDelete,  Depends(_get_use_case(CascadeDelete))]
 
 # --- Audit query dependencies ---
 ListAuditOperationsDep = Annotated[ListAuditOperations, Depends(_get_use_case(ListAuditOperations))]
