@@ -102,7 +102,6 @@ async def test_admin_hard_delete_audit_failure_prevents_commit(
         entity_type="vocabulary",
         table="controlled_vocabularies",
         label_field="name",
-        repo_resolver=lambda c, u: fake_repo,
     )
 
     # UoW with a mock session
@@ -122,7 +121,12 @@ async def test_admin_hard_delete_audit_failure_prevents_commit(
         ),
         pytest.raises(RuntimeError, match="audit DB is down"),
     ):
-        uc = AdminHardDelete(uow=fake_uow, audit=fake_audit, container=MagicMock())
+        # repos is a dict mapping entity_type -> repo; no container needed
+        uc = AdminHardDelete(
+            uow=fake_uow,
+            audit=fake_audit,
+            repos={"vocabulary": fake_repo},
+        )
         await uc(
             AdminHardDeleteCommand(
                 workspace_id=workspace_id,
@@ -160,7 +164,6 @@ async def test_cascade_delete_audit_failure_prevents_commit(
         entity_type="protocol",
         table="protocols",
         label_field="name",
-        repo_resolver=lambda c, u: MagicMock(),
     )
 
     fake_session = MagicMock()
@@ -171,10 +174,10 @@ async def test_cascade_delete_audit_failure_prevents_commit(
     fake_audit = MagicMock()
     fake_audit.record = AsyncMock(side_effect=boom)
 
-    # Fake cascade runner that "deletes" successfully and returns entries
+    # Fake cascade service that "deletes" successfully and returns entries
     fake_entries: list = []
-    fake_runner = MagicMock()
-    fake_runner.execute = AsyncMock(return_value=fake_entries)
+    fake_cascade_service = MagicMock()
+    fake_cascade_service.execute = AsyncMock(return_value=fake_entries)
 
     with (
         patch(
@@ -182,16 +185,16 @@ async def test_cascade_delete_audit_failure_prevents_commit(
             new=AsyncMock(return_value=proto_name),
         ),
         patch(
-            "chem_vault.application.admin.cascade_delete.CascadeRunner",
-            return_value=fake_runner,
-        ),
-        patch(
             "chem_vault.application.admin.cascade_delete.TIER2_ENTITY_TYPES",
             new={"protocol"},
         ),
         pytest.raises(RuntimeError, match="audit DB is down"),
     ):
-        uc = CascadeDelete(uow=fake_uow, audit=fake_audit)
+        uc = CascadeDelete(
+            uow=fake_uow,
+            audit=fake_audit,
+            cascade_service=fake_cascade_service,
+        )
         await uc(
             CascadeDeleteCommand(
                 workspace_id=workspace_id,

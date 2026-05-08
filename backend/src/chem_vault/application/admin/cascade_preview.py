@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.admin.admin_delete_registry import get_entry
+from chem_vault.application.admin.cascade_service import CascadeService
 from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -13,7 +14,6 @@ from chem_vault.domain.shared.cascade import CascadeNode
 from chem_vault.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError,
 )
-from chem_vault.infrastructure.cascade.cascade_runner import CascadeRunner
 
 # Tier-2 is gated to these entity types only.
 TIER2_ENTITY_TYPES = frozenset({"protocol", "run", "molecule"})
@@ -27,8 +27,9 @@ class CascadePreviewQuery(Command):
 
 
 class CascadePreview:
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: UnitOfWork, cascade_service: CascadeService) -> None:
         self._uow = uow
+        self._cascade_service = cascade_service
 
     async def __call__(
         self, input: CascadePreviewQuery, auth: AuthContext | None = None,
@@ -44,8 +45,7 @@ class CascadePreview:
             return Failure(NotFoundError("entity_type", input.entity_type))
 
         async with self._uow:
-            runner = CascadeRunner(self._uow.session)  # type: ignore[attr-defined]
-            node = await runner.preview(
+            node = await self._cascade_service.preview(
                 parent_table=entry.table,
                 parent_id=input.entity_id,
                 workspace_id=input.workspace_id,

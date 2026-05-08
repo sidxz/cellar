@@ -7,6 +7,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.admin.admin_delete_registry import get_entry
 from chem_vault.application.admin.cascade_preview import TIER2_ENTITY_TYPES
+from chem_vault.application.admin.cascade_service import CascadeService
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
@@ -15,9 +16,7 @@ from chem_vault.domain.audit_compliance.enums import OperationType
 from chem_vault.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError, ValidationError,
 )
-from chem_vault.infrastructure.cascade.cascade_runner import (
-    CascadeExecutionError, CascadeRunner,
-)
+from chem_vault.infrastructure.cascade.cascade_runner import CascadeExecutionError
 from chem_vault.infrastructure.cascade.label_fields import label_for_table
 
 
@@ -31,9 +30,15 @@ class CascadeDeleteCommand(Command):
 
 
 class CascadeDelete:
-    def __init__(self, uow: UnitOfWork, audit: AuditRecordingService) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        audit: AuditRecordingService,
+        cascade_service: CascadeService,
+    ) -> None:
         self._uow = uow
         self._audit = audit
+        self._cascade_service = cascade_service
 
     async def __call__(
         self, input: CascadeDeleteCommand, auth: AuthContext | None = None,
@@ -53,7 +58,7 @@ class CascadeDelete:
 
         async with self._uow:
             actual_label = await _fetch_label(
-                self._uow.session, entry.table, input.entity_id,  # type: ignore[attr-defined]
+                self._uow.session, entry.table, input.entity_id,
                 workspace_id=input.workspace_id,
             )
             if actual_label is None:
@@ -63,9 +68,8 @@ class CascadeDelete:
                     f"typed_name does not match {input.entity_type} name"
                 ))
 
-            runner = CascadeRunner(self._uow.session)  # type: ignore[attr-defined]
             try:
-                entries = await runner.execute(
+                entries = await self._cascade_service.execute(
                     parent_table=entry.table,
                     parent_id=input.entity_id,
                     workspace_id=input.workspace_id,
@@ -84,7 +88,7 @@ class CascadeDelete:
                 user_id=auth.user_id,
                 reason=input.reason,
                 entries=entries,
-                session=self._uow.session,  # type: ignore[attr-defined]
+                session=self._uow.session,
             )
             await self._uow.commit()
 

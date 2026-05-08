@@ -76,7 +76,6 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_da
     SQLAlchemyReadoutDataRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from chem_vault.application.admin._adapter import RepoAdapter
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 
 
@@ -244,32 +243,29 @@ def register_research_organization(container: Container) -> None:
     container.define(ExecuteSearch, _execute_search)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
-    def _resolve_project(c, uow):
-        return RepoAdapter(SQLAlchemyProjectRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="project",
         table="projects",
         label_field="name",
-        repo_resolver=_resolve_project,
     )
-
-    def _resolve_collection(c, uow):
-        return RepoAdapter(SQLAlchemyCollectionRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="collection",
         table="collections",
         label_field="name",
-        repo_resolver=_resolve_collection,
     )
-
-    def _resolve_saved_search(c, uow):
-        return RepoAdapter(SQLAlchemySavedSearchRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="saved_search",
         table="saved_searches",
         label_field="name",
-        repo_resolver=_resolve_saved_search,
     )
+
+
+def build_research_org_admin_repos(uow) -> dict:
+    """Build the repo map for research-organization Tier-1 admin deletes."""
+    from chem_vault.application.admin._adapter import RepoAdapter
+
+    return {
+        "project": RepoAdapter(SQLAlchemyProjectRepository(uow), find="find_by_id_in_workspace"),
+        "collection": RepoAdapter(SQLAlchemyCollectionRepository(uow), find="find_by_id_in_workspace"),
+        "saved_search": RepoAdapter(SQLAlchemySavedSearchRepository(uow), find="find_by_id_in_workspace"),
+    }

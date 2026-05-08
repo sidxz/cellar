@@ -18,11 +18,14 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Sequence
+from typing import Callable, Sequence
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.admin.admin_delete_registry import get_entry
+from chem_vault.application.admin.admin_delete_registry import (
+    AdminDeletableRepoMap,
+    get_entry,
+)
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
@@ -66,11 +69,18 @@ class AdminHardDelete:
         self,
         uow: UnitOfWork,
         audit: AuditRecordingService,
-        container,  # Lagom Container — used to resolve per-entity repos
+        repos: AdminDeletableRepoMap | Callable[[UnitOfWork], AdminDeletableRepoMap],
     ) -> None:
         self._uow = uow
         self._audit = audit
-        self._container = container
+        # Accept either a pre-built map or a factory callable (UoW → map).
+        # The factory form allows DI to wire repos that need the active session.
+        self._repos = repos
+
+    def _get_repo_map(self, uow: UnitOfWork) -> AdminDeletableRepoMap:
+        if callable(self._repos):
+            return self._repos(uow)
+        return self._repos
 
     async def __call__(
         self,
@@ -90,15 +100,17 @@ class AdminHardDelete:
             return Failure(NotFoundError("entity_type", input.entity_type))
 
         async with self._uow:
-            # Resolve the repo inside the active UoW so the adapter shares
-            # the same transaction (repo_resolver signature: (container, uow)).
-            repo = entry.repo_resolver(self._container, self._uow)
+            repo_map = self._get_repo_map(self._uow)
+            repo = repo_map.get(input.entity_type)
+            if repo is None:
+                return Failure(NotFoundError("entity_type", input.entity_type))
+
             obj = await repo.find_by_id(input.workspace_id, input.entity_id)
             if obj is None:
                 return Failure(NotFoundError(input.entity_type, str(input.entity_id)))
 
             blockers = await find_inbound_references(
-                self._uow.session,  # type: ignore[attr-defined]
+                self._uow.session,
                 parent_table=entry.table,
                 parent_id=input.entity_id,
                 workspace_id=input.workspace_id,
@@ -131,7 +143,7 @@ class AdminHardDelete:
                         timestamp=now,
                     )
                 ],
-                session=self._uow.session,  # type: ignore[attr-defined]
+                session=self._uow.session,
             )
             await self._uow.commit()
 

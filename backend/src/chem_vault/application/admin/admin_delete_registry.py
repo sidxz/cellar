@@ -1,37 +1,40 @@
 """Registry of entity types that support admin hard-delete (Tier 1).
 
-Each entry is a (table_name, RepoProtocol) pair plus a small adapter
-that knows how to fetch+delete from that repo. The adapter signatures
-are uniform: `find_by_id(workspace_id, id)` and `delete(workspace_id, id)`.
+The registry is populated at DI bootstrap time via ``register_admin_delete``.
+It holds **metadata only** — entity_type, table, label_field.
 
-The registry is populated at module import time. New entities opt-in
-by adding an entry here.
+The mapping from entity_type to a usable repo (``AdminDeletableRepoMap``) is
+built at DI bootstrap and injected into ``AdminHardDelete`` directly, removing
+the service-locator anti-pattern that previously lived in ``repo_resolver``.
 """
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Mapping, Protocol
 
 
-class _DeletableRepo(Protocol):
+class AdminDeletableRepo(Protocol):
     """Protocol for repositories that support admin hard-delete."""
 
     async def find_by_id(
         self, workspace_id: uuid.UUID, id: uuid.UUID
-    ) -> Any: ...
+    ) -> object: ...
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
 
+# Type alias — DI populates this mapping and injects it into AdminHardDelete.
+AdminDeletableRepoMap = Mapping[str, AdminDeletableRepo]
+
+
 @dataclass(frozen=True)
 class AdminDeleteEntry:
-    """Registry entry for an admin-deletable entity type."""
+    """Registry entry for an admin-deletable entity type (metadata only)."""
 
     entity_type: str
     table: str
     label_field: str | None
-    repo_resolver: Callable[..., _DeletableRepo]  # (container, uow) -> repo
 
 
 # entity_type -> AdminDeleteEntry. Populated by register_admin_delete().
@@ -43,7 +46,6 @@ def register_admin_delete(
     entity_type: str,
     table: str,
     label_field: str | None,
-    repo_resolver: Callable[..., _DeletableRepo],
 ) -> None:
     """Register an entity type as admin-deletable (Tier 1).
 
@@ -51,10 +53,11 @@ def register_admin_delete(
         entity_type: Unique identifier for the entity type (e.g., "vocabulary").
         table: Database table name.
         label_field: Optional field name for display labels (e.g., "name").
-        repo_resolver: Callable that returns a _DeletableRepo instance.
 
-    Raises:
-        RuntimeError: If entity_type is already registered.
+    Note:
+        Idempotent — re-registration of the same entity_type is a no-op.
+        This supports test setups that call create_container multiple times
+        in one process.
     """
     if entity_type in _REGISTRY:
         # Idempotent re-registration (e.g. multiple test containers calling
@@ -64,7 +67,6 @@ def register_admin_delete(
         entity_type=entity_type,
         table=table,
         label_field=label_field,
-        repo_resolver=repo_resolver,
     )
 
 

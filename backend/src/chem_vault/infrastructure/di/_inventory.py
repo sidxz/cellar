@@ -120,7 +120,6 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.custom_fi
     SQLAlchemyCustomFieldDefinitionRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from chem_vault.application.admin._adapter import RepoAdapter
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 
 
@@ -393,42 +392,35 @@ def register_inventory(container: Container) -> None:
     container.define(ImportPlateDataService, _import_plate_data_service)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
-    def _resolve_batch(c, uow):
-        return RepoAdapter(SQLAlchemyBatchRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="batch",
         table="batches",
         label_field="batch_number",
-        repo_resolver=_resolve_batch,
     )
-
-    def _resolve_sample(c, uow):
-        return RepoAdapter(SQLAlchemySampleRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="sample",
         table="samples",
         label_field="barcode",
-        repo_resolver=_resolve_sample,
     )
-
-    def _resolve_shipment(c, uow):
-        return RepoAdapter(SQLAlchemyShipmentRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="shipment",
         table="shipments",
         label_field="tracking_number",
-        repo_resolver=_resolve_shipment,
     )
-
-    def _resolve_synthesis_request(c, uow):
-        return RepoAdapter(SQLAlchemySynthesisRequestRepository(uow), find="find_by_id_in_workspace")
-
     register_admin_delete(
         entity_type="synthesis_request",
         table="synthesis_requests",
         label_field=None,
-        repo_resolver=_resolve_synthesis_request,
     )
+
+
+def build_inventory_admin_repos(uow) -> dict:
+    """Build the repo map for inventory Tier-1 admin deletes."""
+    from chem_vault.application.admin._adapter import RepoAdapter
+
+    return {
+        "batch": RepoAdapter(SQLAlchemyBatchRepository(uow), find="find_by_id_in_workspace"),
+        "sample": RepoAdapter(SQLAlchemySampleRepository(uow), find="find_by_id_in_workspace"),
+        "shipment": RepoAdapter(SQLAlchemyShipmentRepository(uow), find="find_by_id_in_workspace"),
+        "synthesis_request": RepoAdapter(SQLAlchemySynthesisRequestRepository(uow), find="find_by_id_in_workspace"),
+    }

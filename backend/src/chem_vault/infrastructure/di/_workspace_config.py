@@ -88,9 +88,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from chem_vault.application.admin._adapter import RepoAdapter
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
-from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
 
 
 def register_workspace_config(container: Container) -> None:
@@ -312,6 +310,56 @@ def register_workspace_config(container: Container) -> None:
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
+    register_admin_delete(
+        entity_type="vocabulary",
+        table="controlled_vocabularies",
+        label_field="name",
+    )
+    register_admin_delete(
+        entity_type="registration_form",
+        table="registration_forms",
+        label_field="name",
+    )
+    register_admin_delete(
+        entity_type="protocol_form",
+        table="protocol_forms",
+        label_field="name",
+    )
+    register_admin_delete(
+        entity_type="salt_entry",
+        table="salt_catalog",
+        label_field="code",
+    )
+    register_admin_delete(
+        entity_type="ontology_slot",
+        table="ontology_slot_definitions",
+        label_field="name",
+    )
+    register_admin_delete(
+        entity_type="custom_field",
+        table="custom_field_definitions",
+        label_field="label",
+    )
+    register_admin_delete(
+        entity_type="data_source",
+        table="data_sources",
+        label_field="name",
+    )
+    register_admin_delete(
+        entity_type="api_key",
+        table="external_api_keys",
+        label_field="label",
+    )
+
+
+def build_workspace_config_admin_repos(uow) -> dict:
+    """Build the repo map for workspace-config Tier-1 admin deletes.
+
+    Called at AdminHardDelete invocation time (inside the active UoW) so that
+    each repo shares the caller's transaction session.
+    """
+    from chem_vault.application.admin._adapter import RepoAdapter
+
     class _VocabularyAdapter:
         """Adapts ControlledVocabularyRepository to the admin-delete protocol."""
         def __init__(self, repo):
@@ -323,83 +371,13 @@ def register_workspace_config(container: Container) -> None:
         async def delete(self, workspace_id, id):
             await self._r.delete(workspace_id, id)
 
-    def _resolve_vocab(c: Container, uow):
-        # `uow` is the caller's active UoW (already entered); share its session.
-        return _VocabularyAdapter(SQLAlchemyControlledVocabularyRepository(uow))
-
-    register_admin_delete(
-        entity_type="vocabulary",
-        table="controlled_vocabularies",
-        label_field="name",
-        repo_resolver=_resolve_vocab,
-    )
-
-    def _resolve_registration_form(c, uow):
-        return RepoAdapter(SQLAlchemyRegistrationFormRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="registration_form",
-        table="registration_forms",
-        label_field="name",
-        repo_resolver=_resolve_registration_form,
-    )
-
-    def _resolve_protocol_form(c, uow):
-        return RepoAdapter(SQLAlchemyProtocolFormRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="protocol_form",
-        table="protocol_forms",
-        label_field="name",
-        repo_resolver=_resolve_protocol_form,
-    )
-
-    def _resolve_salt_entry(c, uow):
-        return RepoAdapter(SQLAlchemySaltEntryRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="salt_entry",
-        table="salt_catalog",
-        label_field="code",
-        repo_resolver=_resolve_salt_entry,
-    )
-
-    def _resolve_ontology_slot(c, uow):
-        return RepoAdapter(SQLAlchemyOntologySlotDefinitionRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="ontology_slot",
-        table="ontology_slot_definitions",
-        label_field="name",
-        repo_resolver=_resolve_ontology_slot,
-    )
-
-    def _resolve_custom_field(c, uow):
-        return RepoAdapter(SQLAlchemyCustomFieldDefinitionRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="custom_field",
-        table="custom_field_definitions",
-        label_field="label",
-        repo_resolver=_resolve_custom_field,
-    )
-
-    def _resolve_data_source(c, uow):
-        return RepoAdapter(SQLAlchemyDataSourceRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="data_source",
-        table="data_sources",
-        label_field="name",
-        repo_resolver=_resolve_data_source,
-    )
-
-    def _resolve_api_key(c, uow):
-        return RepoAdapter(SQLAlchemyExternalApiKeyRepository(uow), find="find_by_id_in_workspace")
-
-    register_admin_delete(
-        entity_type="api_key",
-        table="external_api_keys",
-        label_field="label",
-        repo_resolver=_resolve_api_key,
-    )
+    return {
+        "vocabulary": _VocabularyAdapter(SQLAlchemyControlledVocabularyRepository(uow)),
+        "registration_form": RepoAdapter(SQLAlchemyRegistrationFormRepository(uow), find="find_by_id_in_workspace"),
+        "protocol_form": RepoAdapter(SQLAlchemyProtocolFormRepository(uow), find="find_by_id_in_workspace"),
+        "salt_entry": RepoAdapter(SQLAlchemySaltEntryRepository(uow), find="find_by_id_in_workspace"),
+        "ontology_slot": RepoAdapter(SQLAlchemyOntologySlotDefinitionRepository(uow), find="find_by_id_in_workspace"),
+        "custom_field": RepoAdapter(SQLAlchemyCustomFieldDefinitionRepository(uow), find="find_by_id_in_workspace"),
+        "data_source": RepoAdapter(SQLAlchemyDataSourceRepository(uow), find="find_by_id_in_workspace"),
+        "api_key": RepoAdapter(SQLAlchemyExternalApiKeyRepository(uow), find="find_by_id_in_workspace"),
+    }

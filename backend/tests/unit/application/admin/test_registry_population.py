@@ -27,7 +27,6 @@ def test_vocabulary_registered_after_di_init(test_settings: DatabaseSettings):
     assert entry.entity_type == "vocabulary"
     assert entry.table == "controlled_vocabularies"
     assert entry.label_field == "name"
-    assert entry.repo_resolver is not None
 
 
 def test_all_expected_entities_registered(test_settings: DatabaseSettings):
