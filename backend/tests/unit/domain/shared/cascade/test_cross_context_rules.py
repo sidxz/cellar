@@ -7,9 +7,9 @@ to keep the tests fast and DB-free.
 
 
 def test_batches_cascade_under_molecule():
-    """inventory/cascade.py must register a CASCADE rule for batches → molecules."""
-    import chem_vault.domain.inventory.cascade  # noqa: F401
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    """rules_inventory.py must register a CASCADE rule for batches → molecules."""
+    import chem_vault.infrastructure.cascade.rules_inventory  # noqa: F401
+    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
 
     rules = get_rules_for_parent("molecules")
     assert any(
@@ -19,13 +19,13 @@ def test_batches_cascade_under_molecule():
 
 
 def test_saved_searches_set_null_under_project():
-    """research_organization/cascade.py must register a SET_NULL rule for
+    """rules_research_organization.py must register a SET_NULL rule for
     saved_searches.project_id → projects.
 
     Note: the spec originally referenced protocols; the actual FK is to projects.
     """
-    import chem_vault.domain.research_organization.cascade  # noqa: F401
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    import chem_vault.infrastructure.cascade.rules_research_organization  # noqa: F401
+    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
 
     rules = get_rules_for_parent("projects")
     assert any(

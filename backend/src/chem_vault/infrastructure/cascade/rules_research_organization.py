@@ -14,11 +14,9 @@ Schema notes / deviations from plan:
 - CollectionModel.project_id → projects.id (ondelete=SET NULL) — added.
 - ProjectMemberModel.project_id → projects.id (ondelete=CASCADE) — added.
 """
-from chem_vault.domain.shared.cascade import (
-    CascadeAction as A,
-    CascadeRule,
-    register_rules,
-)
+from chem_vault.domain.shared.cascade.actions import CascadeAction as A
+from chem_vault.infrastructure.cascade.rules import CascadeRule
+from chem_vault.infrastructure.cascade.registry import register_rules
 
 
 register_rules(

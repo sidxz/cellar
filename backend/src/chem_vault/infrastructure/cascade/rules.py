@@ -1,15 +1,16 @@
-"""CascadeRule — a single inbound-FK edge in the cascade graph."""
+"""CascadeRule — a single inbound-FK edge in the cascade graph.
+
+This is a persistence/infrastructure concept: it maps SQL table names,
+FK column names, and parent table names. Lives in infrastructure so that
+renaming a DB table only affects this file, not the domain layer.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 
+from chem_vault.domain.shared.cascade.actions import CascadeAction  # re-export for convenience
 
-class CascadeAction(StrEnum):
-    CASCADE = "cascade"
-    SET_NULL = "set_null"
-    BLOCK = "block"
-    WARN = "warn"
+__all__ = ["CascadeRule", "CascadeAction"]
 
 
 @dataclass(frozen=True)

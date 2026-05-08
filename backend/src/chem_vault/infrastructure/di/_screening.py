@@ -197,7 +197,7 @@ from chem_vault.application.admin.admin_delete_registry import register_admin_de
 
 def register_screening(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
-    import chem_vault.domain.screening_assay.cascade  # noqa: F401
+    import chem_vault.infrastructure.cascade.rules_screening_assay  # noqa: F401
 
     # --- Protocol use cases ---
     def _protocol_cmd(uc_cls: type):

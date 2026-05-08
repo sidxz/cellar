@@ -38,8 +38,7 @@ import chem_vault.infrastructure.persistence.sqlalchemy.research_organization.mo
 import chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
 
 from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
-from chem_vault.domain.shared.cascade import all_rules
-from chem_vault.domain.shared.cascade.registry import _clear_for_test as _clear_cascade_registry
+from chem_vault.infrastructure.cascade.registry import all_rules, _clear_for_test as _clear_cascade_registry
 
 # ---------------------------------------------------------------------------
 # Cascade module names.  Imported and unloaded within the test so that:
@@ -48,11 +47,11 @@ from chem_vault.domain.shared.cascade.registry import _clear_for_test as _clear_
 #       subsequent tests that rely on a fresh first-import still get one.
 # ---------------------------------------------------------------------------
 _CASCADE_MODULES = [
-    "chem_vault.domain.audit_compliance.cascade",
-    "chem_vault.domain.chemical_registration.cascade",
-    "chem_vault.domain.inventory.cascade",
-    "chem_vault.domain.research_organization.cascade",
-    "chem_vault.domain.screening_assay.cascade",
+    "chem_vault.infrastructure.cascade.rules_audit_compliance",
+    "chem_vault.infrastructure.cascade.rules_chemical_registration",
+    "chem_vault.infrastructure.cascade.rules_inventory",
+    "chem_vault.infrastructure.cascade.rules_research_organization",
+    "chem_vault.infrastructure.cascade.rules_screening_assay",
 ]
 
 

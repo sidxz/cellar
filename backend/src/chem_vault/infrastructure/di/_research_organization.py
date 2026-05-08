@@ -81,7 +81,7 @@ from chem_vault.application.admin.admin_delete_registry import register_admin_de
 
 def register_research_organization(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
-    import chem_vault.domain.research_organization.cascade  # noqa: F401
+    import chem_vault.infrastructure.cascade.rules_research_organization  # noqa: F401
 
     # --- Projects ---
     def _project_cmd(uc_cls: type):

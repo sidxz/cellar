@@ -6,9 +6,9 @@ parents are deleted via Tier-2 admin force-cascade.
 Rules are derived from the actual ForeignKey declarations in
 infrastructure/persistence/sqlalchemy/screening_assay/models.py.
 """
-from chem_vault.domain.shared.cascade import (
-    CascadeAction as A, CascadeRule, register_rules,
-)
+from chem_vault.domain.shared.cascade.actions import CascadeAction as A
+from chem_vault.infrastructure.cascade.rules import CascadeRule
+from chem_vault.infrastructure.cascade.registry import register_rules
 
 
 register_rules(

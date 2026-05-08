@@ -15,11 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chem_vault.domain.audit_compliance.enums import AuditAction
 from chem_vault.domain.audit_compliance.models import AuditEntry
-from chem_vault.domain.shared.cascade import (
-    CascadeAction,
-    CascadeNode,
-    get_rules_for_parent,
-)
+from chem_vault.domain.shared.cascade.actions import CascadeAction
+from chem_vault.domain.shared.cascade.nodes import CascadeNode
+from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
 from chem_vault.infrastructure.cascade.label_fields import label_for_table
 from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
 

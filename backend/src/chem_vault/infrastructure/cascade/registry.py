@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Iterable
 
-from chem_vault.domain.shared.cascade.rules import CascadeRule
+from chem_vault.infrastructure.cascade.rules import CascadeRule
 
 
 _BY_PARENT: dict[str, list[CascadeRule]] = defaultdict(list)

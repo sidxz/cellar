@@ -18,11 +18,11 @@ import sys
 import pytest
 
 _CASCADE_MODULES = [
-    "chem_vault.domain.screening_assay.cascade",
-    "chem_vault.domain.research_organization.cascade",
-    "chem_vault.domain.audit_compliance.cascade",
-    "chem_vault.domain.chemical_registration.cascade",
-    "chem_vault.domain.inventory.cascade",
+    "chem_vault.infrastructure.cascade.rules_screening_assay",
+    "chem_vault.infrastructure.cascade.rules_research_organization",
+    "chem_vault.infrastructure.cascade.rules_audit_compliance",
+    "chem_vault.infrastructure.cascade.rules_chemical_registration",
+    "chem_vault.infrastructure.cascade.rules_inventory",
 ]
 
 # SQLAlchemy model modules that must be in Base.metadata for the runner to work.
@@ -47,7 +47,7 @@ def _ensure_cascade_registry_populated() -> None:
     # We detect this by checking whether the registry is empty after a dummy import;
     # the simplest approach is to evict and re-import unconditionally — the register
     # calls are idempotent (they check for duplicates).
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
     if not get_rules_for_parent("protocols"):
         # Registry was cleared — force re-import of all cascade modules.
         for mod_name in _CASCADE_MODULES:

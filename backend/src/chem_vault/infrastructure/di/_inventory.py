@@ -125,7 +125,7 @@ from chem_vault.application.admin.admin_delete_registry import register_admin_de
 
 def register_inventory(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
-    import chem_vault.domain.inventory.cascade  # noqa: F401
+    import chem_vault.infrastructure.cascade.rules_inventory  # noqa: F401
 
     # --- Batches ---
     def _batch_cmd(c: Container):

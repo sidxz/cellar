@@ -24,11 +24,9 @@ Schema notes / deviations from plan:
   to molecules (nullable, no ondelete); SET_NULL on those references.
 - bulk_registration_items.molecule_id: plain UUID, no FK constraint; rule removed.
 """
-from chem_vault.domain.shared.cascade import (
-    CascadeAction as A,
-    CascadeRule,
-    register_rules,
-)
+from chem_vault.domain.shared.cascade.actions import CascadeAction as A
+from chem_vault.infrastructure.cascade.rules import CascadeRule
+from chem_vault.infrastructure.cascade.registry import register_rules
 
 
 register_rules(

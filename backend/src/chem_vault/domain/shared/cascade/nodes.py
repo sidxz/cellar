@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from chem_vault.domain.shared.cascade.rules import CascadeAction
+from chem_vault.domain.shared.cascade.actions import CascadeAction
 
 
 @dataclass

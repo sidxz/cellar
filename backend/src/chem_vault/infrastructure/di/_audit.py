@@ -15,7 +15,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository imp
 
 def register_audit(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
-    import chem_vault.domain.audit_compliance.cascade  # noqa: F401
+    import chem_vault.infrastructure.cascade.rules_audit_compliance  # noqa: F401
 
     container.define(
         SQLAlchemyAuditRepository,

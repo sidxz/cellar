@@ -17,7 +17,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 # Force cascade rules and models into process-global registry for API tests.
-import chem_vault.domain.screening_assay.cascade  # noqa: F401
+import chem_vault.infrastructure.cascade.rules_screening_assay  # noqa: F401
 import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 
 
