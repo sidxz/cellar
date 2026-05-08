@@ -39,10 +39,7 @@ MODE_DEFAULTS: dict[SearchMode, ModeConfig] = {
         metric=Tanimoto(),
         threshold=0.7,
         label="Similar",
-        description=(
-            "Tanimoto similarity over Morgan/ECFP4 fingerprints. "
-            "Default for analog discovery and SAR retrieval."
-        ),
+        description="Tanimoto similarity over Morgan/ECFP4 fingerprints.",
     ),
     SearchMode.SCAFFOLD_HOP: ModeConfig(
         algorithm="fcfp",
@@ -60,9 +57,8 @@ MODE_DEFAULTS: dict[SearchMode, ModeConfig] = {
         threshold=0.7,
         label="Contains my fragment",
         description=(
-            "Asymmetric Tversky similarity (α=1, β=0). Ranks targets "
-            "by the fraction of query features they contain — useful for "
-            "fragment-to-lead expansion."
+            "Asymmetric Tversky similarity (α=1, β=0). "
+            "Ranks targets by the fraction of query features they contain."
         ),
     ),
 }

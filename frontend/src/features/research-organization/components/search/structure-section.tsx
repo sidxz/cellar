@@ -34,8 +34,7 @@ const FALLBACK_MODES: {
   {
     name: "similar",
     label: "Similar",
-    description:
-      "Tanimoto similarity over Morgan/ECFP4 fingerprints. Default for analog discovery and SAR retrieval.",
+    description: "Tanimoto similarity over Morgan/ECFP4 fingerprints.",
     default_threshold: 0.7,
   },
   {
@@ -49,7 +48,7 @@ const FALLBACK_MODES: {
     name: "fragment_in_target",
     label: "Contains my fragment",
     description:
-      "Asymmetric Tversky similarity (α=1, β=0). Ranks targets by the fraction of query features they contain — useful for fragment-to-lead expansion.",
+      "Asymmetric Tversky similarity (α=1, β=0). Ranks targets by the fraction of query features they contain.",
     default_threshold: 0.7,
   },
 ];
