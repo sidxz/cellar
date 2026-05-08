@@ -13,9 +13,15 @@ import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.sql import ColumnElement
 
+from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
+from chem_vault.domain.sar_analysis.similarity_metric import Tanimoto, Tversky
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+
+# Module-level singleton; tests can monkey-patch _default_registry if needed.
+_default_registry = FingerprintRegistry.default()
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
 )
@@ -167,24 +173,112 @@ def _property_clause(criterion: dict[str, Any]) -> ColumnElement:
 
 
 def _structure_clause(criterion: dict[str, Any]) -> ColumnElement:
-    search_type = criterion["search_type"]
+    # Accept new "kind" discriminator or legacy "search_type" alias.
+    kind = criterion.get("kind") or criterion.get("search_type")
 
-    if search_type == "substructure":
-        smarts = criterion["smarts"]
-        return text("mol_from_smiles(smiles) @> mol_from_smarts(:smarts)").bindparams(
-            sa.bindparam("smarts", value=smarts, type_=sa.String)
-        )
-    elif search_type == "similarity":
-        smiles = criterion["smiles"]
-        return text("morgan_bfp % morganbv_fp(mol_from_smiles(:sim_q))").bindparams(
-            sa.bindparam("sim_q", value=smiles, type_=sa.String)
-        )
-    elif search_type == "exact":
+    if kind == "exact":
         inchi_key = criterion["inchi_key"]
         return MoleculeModel.inchi_key == inchi_key
+
+    if kind == "substructure":
+        return _substructure_clause(criterion)
+
+    if kind == "similarity":
+        return _similarity_clause(criterion)
+
+    msg = f"Unknown structure kind: {kind!r}"
+    raise ValueError(msg)
+
+
+def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
+    query_text = criterion.get("smiles_or_smarts") or criterion.get("smarts")
+    if not query_text:
+        raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
+    generalized = bool(criterion.get("generalized", False))
+
+    if generalized:
+        sql = (
+            "mol_from_smiles(smiles) @>> "
+            "mol_to_xqmol(mol_adjust_query_properties(mol_from_smarts(:q)))"
+        )
     else:
-        msg = f"Unknown structure search_type: {search_type}"
-        raise ValueError(msg)
+        sql = (
+            "mol_from_smiles(smiles) @> "
+            "mol_adjust_query_properties(mol_from_smarts(:q))"
+        )
+    return text(sql).bindparams(sa.bindparam("q", value=query_text, type_=sa.String))
+
+
+def _parse_metric(payload: dict[str, Any]) -> object:
+    kind = payload.get("kind", "tanimoto")
+    if kind == "tanimoto":
+        return Tanimoto()
+    if kind == "tversky":
+        return Tversky(alpha=float(payload["alpha"]), beta=float(payload["beta"]))
+    raise ValueError(f"Unknown metric kind: {kind!r}")
+
+
+def _resolve_algorithm_and_metric(
+    criterion: dict[str, Any],
+) -> tuple[str, object, float]:
+    """Resolve (algorithm_name, metric_obj, threshold) from a similarity criterion.
+
+    Priority: explicit algorithm/metric/threshold override mode defaults.
+    Mode shortcut resolves defaults; explicit fields always win.
+    Legacy path (neither mode nor algorithm) falls back to morgan+tanimoto.
+    """
+    algorithm: str | None = criterion.get("algorithm")
+    metric_payload: dict | None = criterion.get("metric")
+    threshold: float | None = criterion.get("threshold")
+
+    mode_value = criterion.get("mode")
+    if mode_value is not None:
+        mode = SearchMode(mode_value)
+        defaults = MODE_DEFAULTS[mode]
+        algorithm = algorithm or defaults.algorithm
+        threshold = threshold if threshold is not None else defaults.threshold
+        if metric_payload is None:
+            metric = defaults.metric
+        else:
+            metric = _parse_metric(metric_payload)
+    elif algorithm is not None:
+        # Explicit algorithm — metric and threshold are required.
+        if metric_payload is None:
+            raise ValueError("similarity without mode requires explicit metric")
+        if threshold is None:
+            raise ValueError("similarity without mode requires explicit threshold")
+        metric = _parse_metric(metric_payload)
+    else:
+        # Legacy fallback: no mode, no algorithm — use morgan/tanimoto defaults.
+        algorithm = "morgan"
+        metric = Tanimoto()
+        threshold = threshold if threshold is not None else 0.7
+
+    if not (0.0 <= float(threshold) <= 1.0):
+        raise ValueError(f"threshold must be in [0,1], got {threshold}")
+
+    return algorithm, metric, float(threshold)
+
+
+def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
+    smiles = criterion["smiles"]
+    algorithm_name, metric, threshold = _resolve_algorithm_and_metric(criterion)
+    algo = _default_registry.get(algorithm_name)
+    column = algo.column_name
+    fn = algo.cartridge_query_fn
+    radius_arg = ", 2" if fn == "featmorganbv_fp" else ""
+
+    if isinstance(metric, Tanimoto):
+        sql = f"{column} % {fn}(mol_from_smiles(:sim_q){radius_arg})"
+    elif isinstance(metric, Tversky):
+        sql = (
+            f"tversky_sml({column}, {fn}(mol_from_smiles(:sim_q){radius_arg}), "
+            f"{metric.alpha}, {metric.beta}) >= {threshold}"
+        )
+    else:
+        raise ValueError(f"Unknown metric: {metric!r}")
+
+    return text(sql).bindparams(sa.bindparam("sim_q", value=smiles, type_=sa.String))
 
 
 def _activity_clause(

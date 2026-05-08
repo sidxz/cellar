@@ -429,3 +429,172 @@ class TestComposeCriteria:
                 ],
                 "logic": "and",
             })
+
+
+# ── New discriminated-union structure tests ────────────────────────────────
+
+
+class TestStructureClauseNewShape:
+    """Tests for the new kind-discriminated structure criterion shape."""
+
+    def test_similarity_morgan_tanimoto_compiles(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "similarity",
+                    "smiles": "CCO",
+                    "algorithm": "morgan",
+                    "metric": {"kind": "tanimoto"},
+                    "threshold": 0.7,
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "morgan_bfp" in sql
+        assert "morganbv_fp" in sql
+        assert "mol_from_smiles" in sql
+
+    def test_similarity_fcfp_tanimoto_compiles(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "similarity",
+                    "smiles": "CCO",
+                    "algorithm": "fcfp",
+                    "metric": {"kind": "tanimoto"},
+                    "threshold": 0.55,
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "fcfp_bfp" in sql
+        assert "featmorganbv_fp" in sql
+
+    def test_similarity_tversky_uses_function_form(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "similarity",
+                    "smiles": "c1ccccc1",
+                    "algorithm": "morgan",
+                    "metric": {"kind": "tversky", "alpha": 1.0, "beta": 0.0},
+                    "threshold": 0.7,
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "tversky_sml" in sql
+        assert "1.0" in sql and "0.0" in sql
+
+    def test_similarity_with_mode_resolves_defaults(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "similarity",
+                    "smiles": "CCO",
+                    "mode": "scaffold_hop",
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # scaffold_hop -> fcfp + tanimoto
+        assert "fcfp_bfp" in sql
+        assert "featmorganbv_fp" in sql
+
+    def test_similarity_with_fragment_in_target_mode_uses_tversky(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "similarity",
+                    "smiles": "CCO",
+                    "mode": "fragment_in_target",
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "tversky_sml" in sql
+
+    def test_substructure_passes_through_mol_adjust_query_properties(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "substructure",
+                    "smiles_or_smarts": "c1ccccc1",
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "mol_adjust_query_properties" in sql
+
+    def test_substructure_generalized_uses_xqmol_and_double_arrow(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "substructure",
+                    "smiles_or_smarts": "OC1=CC=CC=N1",
+                    "generalized": True,
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "@>>" in sql
+        assert "mol_to_xqmol" in sql
+
+    def test_unknown_kind_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown structure"):
+            _compose({
+                "criteria": [
+                    {"type": "structure", "kind": "fancy"}
+                ],
+                "logic": "and",
+            })
+
+    def test_exact_match_inchi_key_unchanged(self) -> None:
+        """The exact path didn't change — assert backwards compat with InChIKey."""
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "structure",
+                    "kind": "exact",
+                    "inchi_key": "ABCDEFGHIJKLMN-OPQRSTUVWX-Y",
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "ABCDEFGHIJKLMN-OPQRSTUVWX-Y" in sql
+
+    def test_legacy_search_type_substructure_still_works(self) -> None:
+        """Legacy search_type alias must continue to route correctly."""
+        clause = _compose({
+            "criteria": [
+                {"type": "structure", "search_type": "substructure", "smarts": "c1ccccc1"}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "mol_adjust_query_properties" in sql
+
+    def test_legacy_search_type_exact_still_works(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "structure", "search_type": "exact", "inchi_key": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "BSYNRYMUTXBXSQ-UHFFFAOYSA-N" in sql
