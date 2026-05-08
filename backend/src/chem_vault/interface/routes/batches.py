@@ -16,6 +16,7 @@ from chem_vault.application.inventory.get_batch import (
     ListBatchesByMoleculeQuery,
 )
 from chem_vault.application.inventory.update_batch import UpdateBatch, UpdateBatchCommand
+from chem_vault.domain.inventory.batch import Batch
 from chem_vault.interface.dependencies import (
     AuthDep,
     CreateBatchDep,
@@ -51,7 +52,7 @@ class BatchResponse(BaseModel):
     appearance: str | None = None
 
     @classmethod
-    def from_domain(cls, b) -> BatchResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, b: Batch) -> BatchResponse:
         return cls(
             id=b.id,
             workspace_id=b.workspace_id,

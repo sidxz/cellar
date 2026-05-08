@@ -18,20 +18,20 @@ from chem_vault.infrastructure.storage.fsspec_client import FsspecStorageClient
 
 
 def register_attachment(container: Container) -> None:
-    def _attach_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _attach_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyAttachmentRepository(uow), c[FsspecStorageClient], c[EventDispatcher])
         return _f
 
-    def _attach_query_with_storage(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _attach_query_with_storage(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyAttachmentRepository(uow), c[FsspecStorageClient])
         return _f
 
-    def _attach_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _attach_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyAttachmentRepository(uow))
         return _f

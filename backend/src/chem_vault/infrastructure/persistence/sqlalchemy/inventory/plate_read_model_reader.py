@@ -5,16 +5,21 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from chem_vault.application.inventory.plate_read_model import MoleculePlateEntry
 
 
 class SQLAlchemyPlateReadModelService:
-    """Infrastructure-layer read model for cross-aggregate plate queries."""
+    """Infrastructure-layer read model for cross-aggregate plate queries.
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    Takes a ``async_sessionmaker`` and opens a fresh session per call so
+    the service is safe to register as a singleton without leaking a
+    long-lived connection.
+    """
+
+    def __init__(self, session_factory: async_sessionmaker) -> None:
+        self._session_factory = session_factory
 
     async def find_plates_for_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
@@ -41,9 +46,11 @@ class SQLAlchemyPlateReadModelService:
             ORDER BY rp.barcode, well_entry.key
         """)
 
-        result = await self._session.execute(
-            sql, {"workspace_id": workspace_id, "molecule_id": molecule_id}
-        )
+        async with self._session_factory() as session:
+            result = await session.execute(
+                sql, {"workspace_id": workspace_id, "molecule_id": molecule_id}
+            )
+            rows = result.fetchall()
         return [
             MoleculePlateEntry(
                 plate_id=row.plate_id,
@@ -56,5 +63,5 @@ class SQLAlchemyPlateReadModelService:
                 status=row.status,
                 storage_location_name=row.storage_location_name,
             )
-            for row in result.fetchall()
+            for row in rows
         ]

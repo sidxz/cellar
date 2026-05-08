@@ -134,26 +134,26 @@ from chem_vault.infrastructure.storage.fsspec_client import FsspecStorageClient
 
 def register_chemical_registration(container: Container) -> None:
     # --- Molecule use cases ---
-    def _mol_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _mol_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
             return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[StructureProcessorProtocol], validator)
         return _f
 
-    def _mol_cmd_no_proc(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _mol_cmd_no_proc(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher])
         return _f
 
-    def _mol_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _mol_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyMoleculeRepository(uow))
         return _f
 
-    def _register_molecule(c):  # type: ignore[no-untyped-def]
+    def _register_molecule(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         mol_repo = SQLAlchemyMoleculeRepository(uow)
         validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
@@ -188,7 +188,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(RegisterMolecule, _register_molecule)
 
-    def _update_molecule(c):  # type: ignore[no-untyped-def]
+    def _update_molecule(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
         return UpdateMolecule(uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], validator)
@@ -201,7 +201,7 @@ def register_chemical_registration(container: Container) -> None:
     container.define(RemoveIdentifier, _mol_cmd_no_proc(RemoveIdentifier))
     container.define(ListIdentifiers, _mol_query(ListIdentifiers))
 
-    def _search_molecules(c):  # type: ignore[no-untyped-def]
+    def _search_molecules(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SearchMolecules(
             uow,
@@ -217,14 +217,14 @@ def register_chemical_registration(container: Container) -> None:
     container.define(MoleculeReader, lambda c: c[SQLAlchemyMoleculeReader])
     container.define(SearchMolecules, _search_molecules)
 
-    def _export_sdf(c):  # type: ignore[no-untyped-def]
+    def _export_sdf(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ExportMoleculesSDF(uow, SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
 
     container.define(ExportMoleculesSDF, _export_sdf)
 
     # --- Molecule Relationships ---
-    def _rel_cmd(c):  # type: ignore[no-untyped-def]
+    def _rel_cmd(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateRelationship(
             uow=uow,
@@ -233,7 +233,7 @@ def register_chemical_registration(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
-    def _rel_query(c):  # type: ignore[no-untyped-def]
+    def _rel_query(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListRelationships(
             uow=uow,
@@ -241,7 +241,7 @@ def register_chemical_registration(container: Container) -> None:
             relationship_repo=SQLAlchemyMoleculeRelationshipRepository(uow),
         )
 
-    def _rel_delete(c):  # type: ignore[no-untyped-def]
+    def _rel_delete(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteRelationship(
             uow=uow,
@@ -256,7 +256,7 @@ def register_chemical_registration(container: Container) -> None:
     # --- Merge & Disclosure ---
     # MergeSideEffectRegistry is a singleton whose attachment side-effect needs
     # the shared FsspecStorageClient — resolved from the container at build time.
-    def _build_merge_registry(c):  # type: ignore[no-untyped-def]
+    def _build_merge_registry(c: Container):
         return MergeSideEffectRegistry([
             SampleRequestMergeSideEffect(),
             BatchMergeSideEffect(),
@@ -273,7 +273,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(MergeSideEffectRegistry, Singleton(_build_merge_registry))
 
-    def _merge_service(c):  # type: ignore[no-untyped-def]
+    def _merge_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MergeService(
             uow=uow,
@@ -285,7 +285,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(MergeService, _merge_service)
 
-    def _disclosure_service(c):  # type: ignore[no-untyped-def]
+    def _disclosure_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         mol_repo = SQLAlchemyMoleculeRepository(uow)
         # MergeService must share the same UoW as DisclosureService because
@@ -308,7 +308,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(DisclosureService, _disclosure_service)
 
-    def _get_disclosure(c):  # type: ignore[no-untyped-def]
+    def _get_disclosure(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetDisclosure(
             uow=uow,
@@ -317,7 +317,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(GetDisclosure, _get_disclosure)
 
-    def _list_disclosures(c):  # type: ignore[no-untyped-def]
+    def _list_disclosures(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListDisclosures(
             uow=uow,
@@ -327,7 +327,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(ListDisclosures, _list_disclosures)
 
-    def _list_disclosures_by_workspace(c):  # type: ignore[no-untyped-def]
+    def _list_disclosures_by_workspace(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListDisclosuresByWorkspace(
             uow=uow,
@@ -336,7 +336,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(ListDisclosuresByWorkspace, _list_disclosures_by_workspace)
 
-    def _resolve_conflict(c):  # type: ignore[no-untyped-def]
+    def _resolve_conflict(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         mol_repo = SQLAlchemyMoleculeRepository(uow)
         merge_svc = MergeService(
@@ -357,7 +357,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(ResolveDisclosureConflict, _resolve_conflict)
 
-    def _merge_history(c):  # type: ignore[no-untyped-def]
+    def _merge_history(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetMergeHistory(
             uow=uow,
@@ -367,7 +367,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(GetMergeHistory, _merge_history)
 
-    def _confirm_disclosure(c):  # type: ignore[no-untyped-def]
+    def _confirm_disclosure(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         mol_repo = SQLAlchemyMoleculeRepository(uow)
         merge_svc = MergeService(
@@ -386,7 +386,7 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(ConfirmDisclosure, _confirm_disclosure)
 
-    def _reject_disclosure(c):  # type: ignore[no-untyped-def]
+    def _reject_disclosure(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RejectDisclosure(
             uow=uow,
@@ -406,7 +406,7 @@ def register_chemical_registration(container: Container) -> None:
     )
 
     # --- Bulk Registration ---
-    def _bulk_registration_service(c):  # type: ignore[no-untyped-def]
+    def _bulk_registration_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return BulkRegistrationService(
             uow=uow,
@@ -431,7 +431,7 @@ def register_chemical_registration(container: Container) -> None:
         lambda c: PreviewBulkRegistrationFile(parser=c[BulkFileParserProtocol]),
     )
 
-    def _list_bulk_reg_items(c):  # type: ignore[no-untyped-def]
+    def _list_bulk_reg_items(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListBulkRegistrationItems(
             uow=uow,
@@ -442,19 +442,19 @@ def register_chemical_registration(container: Container) -> None:
     container.define(ListBulkRegistrationItems, _list_bulk_reg_items)
 
     # --- Synthesis Routes ---
-    def _synth_route_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _synth_route_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySynthesisRouteRepository(uow), c[EventDispatcher])
         return _f
 
-    def _synth_route_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _synth_route_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySynthesisRouteRepository(uow))
         return _f
 
-    def _create_synth_route(c):  # type: ignore[no-untyped-def]
+    def _create_synth_route(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateSynthesisRoute(
             uow, SQLAlchemySynthesisRouteRepository(uow),

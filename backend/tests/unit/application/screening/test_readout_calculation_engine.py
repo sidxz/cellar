@@ -158,6 +158,7 @@ class TestComputedReadoutsPersisted:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         # -- Act --
@@ -228,6 +229,7 @@ class TestCommitsWhenOpeningOwnUoW:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)
@@ -278,6 +280,7 @@ class TestNoCalculatedReadoutsIsNoop:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         # -- Act --
@@ -339,6 +342,7 @@ class TestIdempotentDeletesPreviousComputed:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         # -- Act --
@@ -371,6 +375,7 @@ class TestRunNotFound:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(uuid.uuid4(), workspace_id=WS)
@@ -408,6 +413,7 @@ class TestProtocolNotFound:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)
@@ -447,6 +453,7 @@ class TestEmptyRawDataReturnsSuccess:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)
@@ -504,6 +511,7 @@ class TestCrossProtocolFormulasSkipped:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)
@@ -570,6 +578,7 @@ class TestChainedCalculatedReadouts:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)
@@ -641,6 +650,7 @@ class TestCircularDependencyDetected:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)
@@ -728,6 +738,7 @@ class TestMultiFormulaNormalization:
             readout_data_repo=readout_data_repo,
             run_repo=run_repo,
             protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
         )
 
         result = await engine.compute_for_run(run.id, workspace_id=WS)

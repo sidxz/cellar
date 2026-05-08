@@ -316,7 +316,6 @@ async def lock_run(
             workspace_id=auth.workspace_id,
             run_id=run_id,
             reason=body.reason,
-            locked_by=auth.user_id,
         ),
         auth=auth,
     )
@@ -335,7 +334,6 @@ async def unlock_run(
             workspace_id=auth.workspace_id,
             run_id=run_id,
             reason=body.reason,
-            unlocked_by=auth.user_id,
         ),
         auth=auth,
     )

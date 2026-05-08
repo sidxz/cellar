@@ -17,6 +17,7 @@ import re
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -24,6 +25,7 @@ from chem_vault.application.screening.fit_dose_response import (
     FitDoseResponseCurves,
     FitOverrides,
 )
+from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.enums import (
     ReadoutAggregation,
@@ -80,6 +82,7 @@ class ReadoutCalculationEngine:
         readout_data_repo: ReadoutDataRepository,
         run_repo: RunRepository,
         protocol_repo: ProtocolRepository,
+        dispatcher: EventDispatcherProtocol,
         fit_dose_response: FitDoseResponseCurves | None = None,
         plate_quality: PlateQualityCalculator | None = None,
     ) -> None:
@@ -90,6 +93,7 @@ class ReadoutCalculationEngine:
         self._readout_data_repo = readout_data_repo
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
+        self._dispatcher = dispatcher
         self._fit_dose_response = fit_dose_response
         self._plate_quality = plate_quality
 
@@ -108,10 +112,11 @@ class ReadoutCalculationEngine:
             Failure(DomainError) — if run/protocol not found or a computation fails.
         """
         if self._uow.is_active:
-            # Caller owns the transaction; they will commit.
+            # Caller owns the transaction; they will commit and dispatch.
             return await self._execute(
                 run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
             )
+        events: list = []
         async with self._uow:
             result = await self._execute(
                 run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
@@ -120,8 +125,10 @@ class ReadoutCalculationEngine:
             # commit. Without this commit they were silently rolled back on
             # context exit.
             if isinstance(result, Success):
-                await self._uow.commit()
-            return result
+                events = await self._uow.commit()
+        if events:
+            await self._dispatcher.dispatch_all(events)
+        return result
 
     async def _execute(
         self,
@@ -157,13 +164,21 @@ class ReadoutCalculationEngine:
 
         computed: list[ReadoutData] = []
 
-        # Build lookup maps
+        # Build lookup maps once — the inner loops below are O(W*R*D) without
+        # them on a 384-well, multi-readout run.
         rd_by_id: dict[uuid.UUID, ReadoutDefinition] = {
             rd.id: rd for rd in protocol.readout_definitions
         }
         rd_by_name: dict[str, ReadoutDefinition] = {
             rd.name: rd for rd in protocol.readout_definitions
         }
+        wells_by_id: dict[uuid.UUID, Any] = {w.id: w for w in run.wells}
+        # (well_id, readout_definition_id) -> raw readout, used by the
+        # normalization path to map a normalized value back to its source.
+        raw_by_well_def: dict[tuple[uuid.UUID, uuid.UUID], ReadoutData] = {}
+        for r in raw_data:
+            if r.well_id is not None and r.readout_definition_id is not None:
+                raw_by_well_def[(r.well_id, r.readout_definition_id)] = r
 
         # ------------------------------------------------------------------
         # 4. Normalize per-plate
@@ -181,10 +196,7 @@ class ReadoutCalculationEngine:
                     continue
                 if readout.well_id is None or readout.value is None:
                     continue
-                # Find which plate this well belongs to
-                well = next(
-                    (w for w in run.wells if w.id == readout.well_id), None
-                )
+                well = wells_by_id.get(readout.well_id)
                 if well is None:
                     continue
                 plate_id = well.plate_id
@@ -205,16 +217,7 @@ class ReadoutCalculationEngine:
 
                 for formula, norm_values in per_formula.items():
                     for nv in norm_values:
-                        # Find the original readout to get molecule_id and batch_id
-                        original = next(
-                            (
-                                r
-                                for r in raw_data
-                                if r.well_id == nv.well_id
-                                and r.readout_definition_id == rd.id
-                            ),
-                            None,
-                        )
+                        original = raw_by_well_def.get((nv.well_id, rd.id))
                         if original is None:
                             continue
 
@@ -236,18 +239,24 @@ class ReadoutCalculationEngine:
         # 4.5. Z-prime QC from controls
         # ------------------------------------------------------------------
         if self._plate_quality is not None and run.plates:
+            # Map well_id to its first non-null raw readout once, instead of
+            # rescanning raw_data per well per plate.
+            first_value_by_well: dict[uuid.UUID, ReadoutData] = {}
+            for r in raw_data:
+                if r.well_id is None or r.value is None:
+                    continue
+                if r.well_id not in first_value_by_well:
+                    first_value_by_well[r.well_id] = r
+            wells_by_plate: dict[uuid.UUID, list] = defaultdict(list)
+            for w in run.wells:
+                wells_by_plate[w.plate_id].append(w)
+
             z_prime_results = {}
             for plate in run.plates:
                 pos_vals = []
                 neg_vals = []
-                for w in run.wells:
-                    if w.plate_id != plate.id:
-                        continue
-                    # Find the first raw readout value for this well
-                    well_readout = next(
-                        (r for r in raw_data if r.well_id == w.id and r.value is not None),
-                        None,
-                    )
+                for w in wells_by_plate.get(plate.id, []):
+                    well_readout = first_value_by_well.get(w.id)
                     if well_readout is None:
                         continue
                     if w.well_type == WellType.POSITIVE_CONTROL:
@@ -324,6 +333,13 @@ class ReadoutCalculationEngine:
             except ValidationError as e:
                 return Failure(e)
 
+            # One pass to find a representative readout per molecule, used
+            # below for batch_id attribution.
+            representative_by_mol: dict[uuid.UUID, ReadoutData] = {}
+            for r in raw_data:
+                if r.molecule_id is not None and r.molecule_id not in representative_by_mol:
+                    representative_by_mol[r.molecule_id] = r
+
             for rd in sorted_defs:
                 for mol_id, bindings in aggregated_values.items():
                     try:
@@ -334,10 +350,7 @@ class ReadoutCalculationEngine:
                     except DomainError as exc:
                         return Failure(exc)
 
-                    # Find a representative raw readout to get batch_id
-                    representative = next(
-                        (r for r in raw_data if r.molecule_id == mol_id), None
-                    )
+                    representative = representative_by_mol.get(mol_id)
                     batch_id = representative.batch_id if representative else None
 
                     rd_entity = ReadoutData(
@@ -388,9 +401,7 @@ class ReadoutCalculationEngine:
     ) -> list[ReadoutDefinition]:
         """Sort calculated readout definitions so dependencies evaluate first.
 
-        A calculated readout can reference another calculated readout's name
-        in its formula. This method detects circular dependencies via an
-        ``in_stack`` set and raises ``ValidationError`` if found.
+        Raises ``ValidationError`` on circular dependency.
         """
         calc_names = {rd.name for rd in calculated_defs}
         calc_by_name = {rd.name: rd for rd in calculated_defs}
@@ -399,44 +410,31 @@ class ReadoutCalculationEngine:
         in_stack: set[str] = set()
         order: list[ReadoutDefinition] = []
 
-        nonlocal_error: list[ValidationError] = []
-
         def visit(name: str) -> None:
-            if nonlocal_error:
-                return
             if name in visited:
                 return
             if name in in_stack:
-                nonlocal_error.append(
-                    ValidationError(
-                        f"Circular dependency detected in calculated readout '{name}'"
-                    )
+                raise ValidationError(
+                    f"Circular dependency detected in calculated readout '{name}'"
                 )
-                return
 
             in_stack.add(name)
+            try:
+                rd = calc_by_name[name]
+                formula = rd.calculation_formula or ""
 
-            rd = calc_by_name[name]
-            formula = rd.calculation_formula or ""
+                for dep_name in calc_names:
+                    if dep_name == name:
+                        continue
+                    if re.search(rf"\b{re.escape(dep_name)}\b", formula):
+                        visit(dep_name)
+            finally:
+                in_stack.discard(name)
 
-            # Check if any other calculated readout's name appears in this formula
-            for dep_name in calc_names:
-                if dep_name == name:
-                    continue
-                # Use word-boundary matching to avoid partial matches
-                if re.search(rf"\b{re.escape(dep_name)}\b", formula):
-                    visit(dep_name)
-
-            in_stack.discard(name)
             visited.add(name)
             order.append(rd)
 
         for rd in calculated_defs:
-            if nonlocal_error:
-                break
             visit(rd.name)
-
-        if nonlocal_error:
-            raise nonlocal_error[0]
 
         return order

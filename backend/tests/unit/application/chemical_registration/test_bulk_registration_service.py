@@ -497,11 +497,15 @@ class TestBulkRegistrationBatchCreation:
         assert batch_cmd.salt_entry_id == salt_entry.id
         assert batch_cmd.salt_stoichiometry == 1
 
-    async def test_batch_creation_failure_still_succeeds_registration(
+    async def test_batch_creation_failure_reports_per_row_error(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
-        """If batch creation fails, the molecule registration still reports success
-        but with no batch_id."""
+        """Batch creation failure is surfaced on the row result.
+
+        The molecule is registered (the bulk-reg aggregate counts it), but
+        the per-row result flips ``success=False`` with ``batch_error``
+        populated so operators can see what went wrong.
+        """
         uow = _make_uow()
         service = _make_service(uow)
 
@@ -537,8 +541,10 @@ class TestBulkRegistrationBatchCreation:
         outcome = result.unwrap()
         assert outcome.bulk_registration.registered_count == 1
         item_result = outcome.item_results[0]
-        assert item_result.success is True
+        assert item_result.success is False
         assert item_result.molecule_id == mock_mol.id
         assert item_result.batch_id is None
         assert item_result.batch_number is None
         assert item_result.salt_matched is False
+        assert item_result.batch_error is not None
+        assert "Batch creation failed" in item_result.batch_error

@@ -92,14 +92,14 @@ from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def register_workspace_config(container: Container) -> None:
     # --- Organizations ---
-    def _org_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _org_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyOrganizationRepository(uow), c[EventDispatcher])
         return _f
 
-    def _org_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _org_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyOrganizationRepository(uow))
         return _f
@@ -110,14 +110,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(ListOrganizations, _org_query(ListOrganizations))
 
     # --- Workspace Settings ---
-    def _settings_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _settings_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyWorkspaceSettingsRepository(uow), c[EventDispatcher])
         return _f
 
-    def _settings_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _settings_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyWorkspaceSettingsRepository(uow))
         return _f
@@ -126,14 +126,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateWorkspaceSettings, _settings_cmd(UpdateWorkspaceSettings))
 
     # --- Controlled Vocabularies ---
-    def _vocab_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _vocab_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyControlledVocabularyRepository(uow), c[EventDispatcher])
         return _f
 
-    def _vocab_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _vocab_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyControlledVocabularyRepository(uow))
         return _f
@@ -142,7 +142,7 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))
 
-    def _delete_vocabulary(c):  # type: ignore[no-untyped-def]
+    def _delete_vocabulary(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteVocabulary(
             uow,
@@ -157,19 +157,19 @@ def register_workspace_config(container: Container) -> None:
     # NOTE: CustomFieldValidator is NOT registered as a singleton. It must share
     # the caller's UoW, so it is constructed inline in use-case factories in
     # chemical_registration and inventory files.
-    def _cfd_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _cfd_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow=uow, repo=SQLAlchemyCustomFieldDefinitionRepository(uow), dispatcher=c[EventDispatcher])
         return _f
 
-    def _cfd_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _cfd_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow=uow, repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
         return _f
 
-    def _delete_custom_field(c):  # type: ignore[no-untyped-def]
+    def _delete_custom_field(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteCustomField(uow=uow, repo=SQLAlchemyCustomFieldDefinitionRepository(uow), dispatcher=c[EventDispatcher])
 
@@ -179,19 +179,19 @@ def register_workspace_config(container: Container) -> None:
     container.define(DeleteCustomField, _delete_custom_field)
 
     # --- Salt Catalog ---
-    def _salt_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _salt_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySaltEntryRepository(uow), c[EventDispatcher])
         return _f
 
-    def _salt_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _salt_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySaltEntryRepository(uow))
         return _f
 
-    def _delete_salt_entry(c):  # type: ignore[no-untyped-def]
+    def _delete_salt_entry(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteSaltEntry(uow, SQLAlchemySaltEntryRepository(uow), c[EventDispatcher])
 
@@ -201,19 +201,19 @@ def register_workspace_config(container: Container) -> None:
     container.define(DeleteSaltEntry, _delete_salt_entry)
 
     # --- Registration Forms ---
-    def _regform_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _regform_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRegistrationFormRepository(uow), c[EventDispatcher])
         return _f
 
-    def _regform_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _regform_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRegistrationFormRepository(uow))
         return _f
 
-    def _delete_registration_form(c):  # type: ignore[no-untyped-def]
+    def _delete_registration_form(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteRegistrationForm(uow, SQLAlchemyRegistrationFormRepository(uow), c[EventDispatcher])
 
@@ -224,14 +224,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(DeleteRegistrationForm, _delete_registration_form)
 
     # --- External API Keys ---
-    def _apikey_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _apikey_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyExternalApiKeyRepository(uow), c[EventDispatcher], c[SecretProvider])
         return _f
 
-    def _apikey_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _apikey_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyExternalApiKeyRepository(uow))
         return _f
@@ -243,14 +243,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(GetExternalApiKeySecret, lambda c: GetExternalApiKeySecret(c[SecretProvider]))
 
     # --- Data Sources ---
-    def _ds_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _ds_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyDataSourceRepository(uow), c[EventDispatcher])
         return _f
 
-    def _ds_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _ds_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyDataSourceRepository(uow))
         return _f
@@ -261,7 +261,7 @@ def register_workspace_config(container: Container) -> None:
     container.define(ListDataSources, _ds_query(ListDataSources))
     container.define(GetDataSource, _ds_query(GetDataSource))
 
-    def _get_ds_for_import(c):  # type: ignore[no-untyped-def]
+    def _get_ds_for_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetDataSourceForImport(
             uow,
@@ -273,14 +273,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(GetDataSourceForImport, _get_ds_for_import)
 
     # --- Ontology Slot Definitions ---
-    def _slot_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _slot_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyOntologySlotDefinitionRepository(uow), c[EventDispatcher])
         return _f
 
-    def _slot_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _slot_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyOntologySlotDefinitionRepository(uow))
         return _f
@@ -291,14 +291,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(ListOntologySlots, _slot_query(ListOntologySlots))
 
     # --- Protocol Forms ---
-    def _pf_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _pf_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyProtocolFormRepository(uow), c[EventDispatcher])
         return _f
 
-    def _pf_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _pf_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyProtocolFormRepository(uow))
         return _f

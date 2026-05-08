@@ -80,19 +80,19 @@ from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def register_research_organization(container: Container) -> None:
     # --- Projects ---
-    def _project_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _project_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyProjectRepository(uow), c[EventDispatcher])
         return _f
 
-    def _project_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _project_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyProjectRepository(uow))
         return _f
 
-    def _create_project(c):  # type: ignore[no-untyped-def]
+    def _create_project(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateProject(
             uow,
@@ -108,8 +108,8 @@ def register_research_organization(container: Container) -> None:
     container.define(ListProjects, _project_query(ListProjects))
 
     # --- Project members ---
-    def _member_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _member_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(
                 uow,
@@ -119,8 +119,8 @@ def register_research_organization(container: Container) -> None:
             )
         return _f
 
-    def _member_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _member_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(
                 uow,
@@ -135,8 +135,8 @@ def register_research_organization(container: Container) -> None:
     container.define(ListProjectMembers, _member_query(ListProjectMembers))
 
     # --- Molecule-project association ---
-    def _mol_project_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _mol_project_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(
                 uow,
@@ -150,26 +150,26 @@ def register_research_organization(container: Container) -> None:
     container.define(AddMoleculeToProject, _mol_project_cmd(AddMoleculeToProject))
     container.define(RemoveMoleculeFromProject, _mol_project_cmd(RemoveMoleculeFromProject))
 
-    def _list_mol_projects(c):  # type: ignore[no-untyped-def]
+    def _list_mol_projects(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListMoleculeProjects(uow, SQLAlchemyMoleculeRepository(uow))
 
     container.define(ListMoleculeProjects, _list_mol_projects)
 
     # --- Collections ---
-    def _collection_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _collection_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher])
         return _f
 
-    def _collection_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _collection_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyCollectionRepository(uow))
         return _f
 
-    def _delete_collection(c):  # type: ignore[no-untyped-def]
+    def _delete_collection(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher])
 
@@ -182,14 +182,14 @@ def register_research_organization(container: Container) -> None:
     container.define(ListCollectionMolecules, _collection_query(ListCollectionMolecules))
     container.define(ListCollectionsForMolecule, _collection_query(ListCollectionsForMolecule))
 
-    def _add_molecules(c):  # type: ignore[no-untyped-def]
+    def _add_molecules(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         resolver = MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
         return AddMoleculesToCollection(
             uow, SQLAlchemyCollectionRepository(uow), resolver, c[EventDispatcher],
         )
 
-    def _remove_molecules(c):  # type: ignore[no-untyped-def]
+    def _remove_molecules(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RemoveMoleculesFromCollection(
             uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher],
@@ -199,19 +199,19 @@ def register_research_organization(container: Container) -> None:
     container.define(RemoveMoleculesFromCollection, _remove_molecules)
 
     # --- Saved Searches ---
-    def _ss_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _ss_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySavedSearchRepository(uow), c[EventDispatcher])
         return _f
 
-    def _ss_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _ss_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySavedSearchRepository(uow))
         return _f
 
-    def _delete_saved_search(c):  # type: ignore[no-untyped-def]
+    def _delete_saved_search(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteSavedSearch(uow, SQLAlchemySavedSearchRepository(uow), c[EventDispatcher])
 
@@ -222,7 +222,7 @@ def register_research_organization(container: Container) -> None:
     container.define(ListSavedSearches, _ss_query(ListSavedSearches))
 
     # --- Execute Search ---
-    def _execute_search(c):  # type: ignore[no-untyped-def]
+    def _execute_search(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ExecuteSearch(
             uow,

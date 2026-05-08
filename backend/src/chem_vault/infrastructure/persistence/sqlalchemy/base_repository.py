@@ -58,12 +58,27 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
         self._uow.track(domain_entity)
         return domain_entity
 
-    async def find_by_id(self, id: uuid.UUID) -> T | None:
-        """Load an aggregate by primary key, or return ``None``."""
+    async def _find_by_id_unscoped(self, id: uuid.UUID) -> T | None:
+        """Load an aggregate by primary key with NO workspace check.
+
+        Reserved for aggregates whose primary key IS the workspace_id (e.g.
+        ``WorkspaceSettings``). Every other repository must use
+        ``find_by_id_in_workspace`` to prevent cross-tenant reads.
+        """
         model = await self._session.get(self.model_class, id)
         if model is None:
             return None
         return self._to_domain_tracked(model)
+
+    async def find_by_id(self, id: uuid.UUID) -> T | None:
+        """DEPRECATED — kept for legacy callers and Protocol compliance.
+
+        New code MUST use ``find_by_id_in_workspace``. This method does not
+        check workspace ownership and is a cross-tenant footgun. The only
+        legitimate caller is ``WorkspaceSettingsRepository.find_by_workspace_id``,
+        which delegates to ``_find_by_id_unscoped`` directly.
+        """
+        return await self._find_by_id_unscoped(id)
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -113,12 +128,20 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
             loaded_version: int = aggregate.version
             self._update_model(existing, aggregate)
 
+            where_clauses = [
+                self.model_class.id == aggregate.id,  # type: ignore[attr-defined]
+                self.model_class.version == loaded_version,  # type: ignore[attr-defined]
+            ]
+            if hasattr(aggregate, "workspace_id") and hasattr(
+                self.model_class, "workspace_id"
+            ):
+                where_clauses.append(
+                    self.model_class.workspace_id == aggregate.workspace_id  # type: ignore[attr-defined]
+                )
+
             stmt = (
                 update(self.model_class)
-                .where(
-                    self.model_class.id == aggregate.id,  # type: ignore[attr-defined]
-                    self.model_class.version == loaded_version,  # type: ignore[attr-defined]
-                )
+                .where(*where_clauses)
                 .values(version=loaded_version + 1)
                 .execution_options(synchronize_session=False)
             )

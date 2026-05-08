@@ -17,6 +17,7 @@ from chem_vault.application.inventory.import_plate_data import (
     ImportFileCache,
     ImportPlateDataService,
 )
+from chem_vault.infrastructure.cache.in_memory_file_cache import InMemoryImportFileCache
 from chem_vault.application.inventory.import_templates import (
     CreateImportTemplate,
     DeleteImportTemplate,
@@ -123,18 +124,18 @@ from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def register_inventory(container: Container) -> None:
     # --- Batches ---
-    def _batch_cmd(c):  # type: ignore[no-untyped-def]
+    def _batch_cmd(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
         return CreateBatch(uow, SQLAlchemyBatchRepository(uow), SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], validator)
 
-    def _batch_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _batch_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyBatchRepository(uow))
         return _f
 
-    def _update_batch(c):  # type: ignore[no-untyped-def]
+    def _update_batch(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
         return UpdateBatch(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher], validator)
@@ -146,7 +147,7 @@ def register_inventory(container: Container) -> None:
     container.define(ListBatchesGlobal, _batch_query(ListBatchesGlobal))
 
     # --- Samples ---
-    def _sample_create(c):  # type: ignore[no-untyped-def]
+    def _sample_create(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateSample(
             uow,
@@ -156,14 +157,14 @@ def register_inventory(container: Container) -> None:
             c[EventDispatcher],
         )
 
-    def _sample_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _sample_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySampleRepository(uow), c[EventDispatcher])
         return _f
 
-    def _sample_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _sample_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySampleRepository(uow))
         return _f
@@ -174,7 +175,7 @@ def register_inventory(container: Container) -> None:
     container.define(ListSamplesGlobal, _sample_query(ListSamplesGlobal))
     container.define(AliquotSample, _sample_cmd(AliquotSample))
 
-    def _move_sample(c):  # type: ignore[no-untyped-def]
+    def _move_sample(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MoveSample(
             uow,
@@ -189,21 +190,21 @@ def register_inventory(container: Container) -> None:
     container.define(DisposeSample, _sample_cmd(DisposeSample))
 
     # --- Storage Locations ---
-    def _storage_cmd(c):  # type: ignore[no-untyped-def]
+    def _storage_cmd(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateStorageLocation(uow, SQLAlchemyStorageLocationRepository(uow), c[EventDispatcher])
 
-    def _storage_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _storage_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyStorageLocationRepository(uow))
         return _f
 
-    def _storage_update(c):  # type: ignore[no-untyped-def]
+    def _storage_update(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return UpdateStorageLocation(uow, SQLAlchemyStorageLocationRepository(uow), c[EventDispatcher])
 
-    def _storage_delete(c):  # type: ignore[no-untyped-def]
+    def _storage_delete(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteStorageLocation(
             uow, SQLAlchemyStorageLocationRepository(uow), SQLAlchemySampleRepository(uow), c[EventDispatcher]
@@ -227,19 +228,19 @@ def register_inventory(container: Container) -> None:
     )
 
     # --- Sample Requests ---
-    def _sample_request_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _sample_request_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySampleRequestRepository(uow), c[EventDispatcher])
         return _f
 
-    def _sample_request_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _sample_request_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySampleRequestRepository(uow))
         return _f
 
-    def _create_sample_request(c):  # type: ignore[no-untyped-def]
+    def _create_sample_request(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateSampleRequest(
             uow, SQLAlchemySampleRequestRepository(uow), c[EventDispatcher],
@@ -247,7 +248,7 @@ def register_inventory(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
-    def _fulfill_sample_request(c):  # type: ignore[no-untyped-def]
+    def _fulfill_sample_request(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return FulfillSampleRequest(
             uow, SQLAlchemySampleRequestRepository(uow), c[EventDispatcher],
@@ -265,19 +266,19 @@ def register_inventory(container: Container) -> None:
     container.define(UpdateSampleRequest, _sample_request_cmd(UpdateSampleRequest))
 
     # --- Shipments ---
-    def _shipment_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _shipment_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyShipmentRepository(uow), c[EventDispatcher])
         return _f
 
-    def _shipment_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _shipment_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyShipmentRepository(uow))
         return _f
 
-    def _create_shipment(c):  # type: ignore[no-untyped-def]
+    def _create_shipment(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateShipment(
             uow, SQLAlchemyShipmentRepository(uow), c[EventDispatcher],
@@ -292,7 +293,7 @@ def register_inventory(container: Container) -> None:
     container.define(DeliverShipment, _shipment_cmd(DeliverShipment))
     container.define(ReturnShipment, _shipment_cmd(ReturnShipment))
 
-    def _add_shipment_item(c):  # type: ignore[no-untyped-def]
+    def _add_shipment_item(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return AddShipmentItem(
             uow, SQLAlchemyShipmentRepository(uow), c[EventDispatcher],
@@ -303,7 +304,7 @@ def register_inventory(container: Container) -> None:
     container.define(UpdateShipment, _shipment_cmd(UpdateShipment))
     container.define(DeleteShipment, _shipment_cmd(DeleteShipment))
 
-    def _preview_import(c):  # type: ignore[no-untyped-def]
+    def _preview_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return PreviewShipmentImport(
             uow,
@@ -315,14 +316,14 @@ def register_inventory(container: Container) -> None:
     container.define(PreviewShipmentImport, _preview_import)
 
     # --- Synthesis Requests ---
-    def _synth_req_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _synth_req_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySynthesisRequestRepository(uow), c[EventDispatcher])
         return _f
 
-    def _synth_req_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _synth_req_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemySynthesisRequestRepository(uow))
         return _f
@@ -336,7 +337,7 @@ def register_inventory(container: Container) -> None:
     container.define(FlagInfeasible, _synth_req_cmd(FlagInfeasible))
     container.define(CompleteSynthesis, _synth_req_cmd(CompleteSynthesis))
 
-    def _fulfill_synth_req(c):  # type: ignore[no-untyped-def]
+    def _fulfill_synth_req(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return FulfillSynthesisRequest(
             uow, SQLAlchemySynthesisRequestRepository(uow), c[EventDispatcher],
@@ -352,14 +353,14 @@ def register_inventory(container: Container) -> None:
     container.define(DeleteSynthesisRequest, _synth_req_cmd(DeleteSynthesisRequest))
 
     # --- Import Templates ---
-    def _import_tmpl_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _import_tmpl_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyImportTemplateRepository(uow), c[EventDispatcher])
         return _f
 
-    def _import_tmpl_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _import_tmpl_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyImportTemplateRepository(uow))
         return _f
@@ -369,9 +370,11 @@ def register_inventory(container: Container) -> None:
     container.define(DeleteImportTemplate, _import_tmpl_cmd(DeleteImportTemplate))
 
     # --- Import Plate Data Service ---
-    container.define(ImportFileCache, Singleton(ImportFileCache))
+    # Bind the application Protocol to the in-memory implementation. Swap
+    # to a Valkey-backed cache without changing application callers.
+    container.define(ImportFileCache, Singleton(InMemoryImportFileCache))
 
-    def _import_plate_data_service(c):  # type: ignore[no-untyped-def]
+    def _import_plate_data_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportPlateDataService(
             uow=uow,

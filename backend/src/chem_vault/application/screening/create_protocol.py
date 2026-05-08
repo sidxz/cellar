@@ -27,10 +27,12 @@ from chem_vault.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
     ReadoutDefinition,
+    RESERVED_READOUT_NAMES,
+    is_reserved_readout_name,
 )
 from chem_vault.domain.screening_assay.repository import ProtocolRepository
 from chem_vault.domain.shared.enums import ConcentrationUnit
-from chem_vault.domain.shared.errors import AuthorizationError, DomainError
+from chem_vault.domain.shared.errors import AuthorizationError, DomainError, ValidationError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,6 +66,19 @@ class CreateProtocol:
         require_editor(auth)
         if auth is None:
             return Failure(AuthorizationError("Authentication required"))
+
+        # Reserved-name guard runs at the use-case boundary (the entity
+        # constructor stays permissive so legacy DB rows hydrate cleanly).
+        for rd in input.readout_definitions:
+            rd_name = rd.get("name", "")
+            if is_reserved_readout_name(rd_name):
+                return Failure(
+                    ValidationError(
+                        f"ReadoutDefinition name '{rd_name}' collides with a "
+                        f"reserved well-metadata name. Reserved: "
+                        f"{sorted(RESERVED_READOUT_NAMES)}."
+                    )
+                )
 
         # Use a temporary protocol_id for building owned entities;
         # Protocol.__init__ will rebind them to the actual aggregate ID.

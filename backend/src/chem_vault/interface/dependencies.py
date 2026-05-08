@@ -251,7 +251,11 @@ from chem_vault.application.screening.manage_ontology_annotations import (
 from chem_vault.application.screening.search_ontology import SearchOntology
 from chem_vault.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
 from chem_vault.application.shared.unit_of_work import UnitOfWork
+from chem_vault.application.inventory.salt_matcher import SaltMatcher
 from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
+    SQLAlchemySaltEntryRepository,
+)
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.sentinel.auth import get_sentinel
 
@@ -273,6 +277,20 @@ def get_session_factory(
 ) -> async_sessionmaker:
     """Async session factory."""
     return container[async_sessionmaker]
+
+
+def get_salt_matcher_uow(
+    container: Annotated[Container, Depends(get_container)],
+) -> tuple[SaltMatcher, AsyncUnitOfWork]:
+    """Per-request ``SaltMatcher`` paired with its own ``AsyncUnitOfWork``.
+
+    Returned as a tuple because the caller manages the UoW lifecycle —
+    e.g. ``async with uow: ... await matcher.match_by_smiles(...)``. We
+    can't bind the UoW into ``SaltMatcher`` at DI time and return just
+    the matcher because the UoW must be entered/exited per call.
+    """
+    uow = AsyncUnitOfWork(container[async_sessionmaker])
+    return SaltMatcher(SQLAlchemySaltEntryRepository(uow)), uow
 
 
 def get_event_dispatcher(
@@ -335,6 +353,9 @@ async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
 AuthDep = Annotated[Any, Depends(get_auth)]
 UoWDep = Annotated[AsyncUnitOfWork, Depends(get_uow)]
 SessionFactoryDep = Annotated[async_sessionmaker, Depends(get_session_factory)]
+SaltMatcherUoWDep = Annotated[
+    tuple[SaltMatcher, AsyncUnitOfWork], Depends(get_salt_matcher_uow)
+]
 EventDispatcherDep = Annotated[EventDispatcher, Depends(get_event_dispatcher)]
 AuditServiceDep = Annotated[AuditRecordingService, Depends(get_audit_service)]
 GetPreferencesDep = Annotated[GetPreferences, Depends(get_preferences_query)]

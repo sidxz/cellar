@@ -54,11 +54,8 @@ class DeleteRun:
         input: DeleteRunCommand,
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
-        try:
-            require_editor(auth)
-            require_same_workspace(auth, input.workspace_id)
-        except DomainError as exc:
-            return Failure(exc)
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             run = await self._run_repo.find_by_id_in_workspace(

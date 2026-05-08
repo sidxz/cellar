@@ -271,9 +271,33 @@ class SQLAlchemyReadoutDataRepository:
             self._update_model(existing, entity)
 
     async def save_bulk(self, entities: list[ReadoutData]) -> None:
-        """Bulk upsert readout data points (safe for retry)."""
+        """Bulk insert readout data points.
+
+        Optimised for the compute pipeline: collects all entities into a
+        single ``add_all`` call and performs one flush at the end. Falls
+        back to per-entity ``save`` for any entity whose row already exists
+        (so retry semantics survive when callers don't pre-clean).
+        """
+        if not entities:
+            return
+
+        existing_ids = set()
+        ids = [e.id for e in entities]
+        if ids:
+            stmt = select(ReadoutDataModel.id).where(ReadoutDataModel.id.in_(ids))
+            result = await self._uow.session.execute(stmt)
+            existing_ids = {row[0] for row in result.all()}
+
+        to_insert: list[ReadoutDataModel] = []
         for entity in entities:
-            await self.save(entity)
+            if entity.id in existing_ids:
+                await self.save(entity)
+            else:
+                to_insert.append(self._to_model(entity))
+
+        if to_insert:
+            self._uow.session.add_all(to_insert)
+            await self._uow.session.flush()
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(ReadoutDataModel).where(

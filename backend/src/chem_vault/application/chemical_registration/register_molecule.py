@@ -248,6 +248,23 @@ class RegisterMolecule:
         if inchi_key is None:
             return Failure(ValidationError("Structure processor returned no InChI key"))
 
+        # Custom-field validation runs before opening the UoW since it has
+        # its own session lifecycle and shouldn't share our transaction.
+        if self._custom_field_validator and input.custom_fields:
+            validation = await self._custom_field_validator.validate(
+                input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
+            )
+            if not is_successful(validation):
+                return Failure(validation.failure())
+
+        # Single UoW: read + branch + write happen in one transaction so
+        # concurrent registrations of the same InChIKey can't both succeed
+        # (the second one will hit a unique-constraint violation on commit
+        # rather than silently double-registering).
+        delegate_to_disclosure: Molecule | None = None
+        outcome: RegistrationOutcome | None = None
+        events: list = []
+
         async with self._uow:
             # 2. Check InChIKey against existing active molecules
             existing_by_inchi = await self._repo.find_by_inchi_key(
@@ -264,7 +281,6 @@ class RegisterMolecule:
                     )
 
             # 4. Batch-check all identifiers (name + external_ids) for conflicts.
-            #    Allow the matched molecule's IDs so they don't trigger a conflict.
             allowed_id = (
                 existing_by_inchi.id
                 if existing_by_inchi
@@ -276,10 +292,55 @@ class RegisterMolecule:
             if isinstance(conflict_check, Failure):
                 return Failure(conflict_check.failure())
 
-        # 5. Disclosure path — delegate to DisclosureService if undisclosed match found.
-        #    The DisclosureService manages its own UoW (separate transaction), so we
-        #    return without committing our own UoW (nothing was written to it).
-        if undisclosed_match is not None and self._disclosure_service is not None:
+            # 5. Branch on the outcome of the reads above.
+            if undisclosed_match is not None and self._disclosure_service is not None:
+                # Defer to disclosure_service — it manages its own UoW so we
+                # exit ours first, no writes pending.
+                delegate_to_disclosure = undisclosed_match
+            elif existing_by_inchi is not None:
+                # 6a. Duplicate InChIKey — add identifiers to existing molecule
+                self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
+                await self._repo.save(existing_by_inchi)
+                await self._record_disclosure_provenance(
+                    input, existing_by_inchi.id, processed.structure.smiles, inchi_key,
+                    is_new=False, resolved_to_molecule_id=existing_by_inchi.id,
+                )
+                events = await self._uow.commit()
+                outcome = RegistrationOutcome(
+                    molecule=existing_by_inchi, is_new=False,
+                    action=RegistrationAction.DEDUPLICATED,
+                    qc_warnings=qc_warnings,
+                    detected_salt=processed.detected_salt,
+                )
+            else:
+                # 6b. New molecule — same transaction as the conflict check, so
+                # the unique InChIKey + identifier constraints are enforced
+                # against the same snapshot we read above.
+                reg_number = await self._repo.next_registration_number(input.workspace_id)
+                mol = Molecule.register_disclosed(
+                    workspace_id=input.workspace_id,
+                    registration_number=reg_number,
+                    name=input.name,
+                    molecule_type=MoleculeType(input.molecule_type),
+                    structure=processed.structure,
+                    descriptors=processed.descriptors,
+                    originating_org_id=input.originating_org_id,
+                    custom_fields=input.custom_fields,
+                )
+                self._add_name_and_ids(mol, input, source="name")
+                await self._repo.save(mol)
+                await self._record_disclosure_provenance(
+                    input, mol.id, processed.structure.smiles, inchi_key, is_new=True,
+                )
+                events = await self._uow.commit()
+                outcome = RegistrationOutcome(
+                    molecule=mol, is_new=True,
+                    action=RegistrationAction.REGISTERED,
+                    qc_warnings=qc_warnings,
+                    detected_salt=processed.detected_salt,
+                )
+
+        if delegate_to_disclosure is not None and self._disclosure_service is not None:
             from chem_vault.application.chemical_registration.disclosure_service import (
                 SubmitDisclosureCommand,
             )
@@ -287,7 +348,7 @@ class RegisterMolecule:
             disclosure_result = await self._disclosure_service(
                 SubmitDisclosureCommand(
                     workspace_id=input.workspace_id,
-                    molecule_id=undisclosed_match.id,
+                    molecule_id=delegate_to_disclosure.id,
                     disclosed_smiles=input.smiles,  # type: ignore[arg-type]
                     requested_by=input.registered_by,
                     disclosing_org_id=input.originating_org_id,
@@ -309,7 +370,7 @@ class RegisterMolecule:
 
             return Success(
                 RegistrationOutcome(
-                    molecule=undisclosed_match,
+                    molecule=delegate_to_disclosure,
                     is_new=False,
                     action=action,
                     qc_warnings=qc_warnings,
@@ -320,62 +381,9 @@ class RegisterMolecule:
                 )
             )
 
-        # 6a. Duplicate InChIKey — add identifiers to existing molecule (disclosed match)
-        if existing_by_inchi is not None:
-            async with self._uow:
-                self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
-                await self._repo.save(existing_by_inchi)
-                await self._record_disclosure_provenance(
-                    input, existing_by_inchi.id, processed.structure.smiles, inchi_key,
-                    is_new=False, resolved_to_molecule_id=existing_by_inchi.id,
-                )
-                events = await self._uow.commit()
-
-            await self._dispatcher.dispatch_all(events)
-            return Success(
-                RegistrationOutcome(
-                    molecule=existing_by_inchi, is_new=False,
-                    action=RegistrationAction.DEDUPLICATED,
-                    qc_warnings=qc_warnings,
-                    detected_salt=processed.detected_salt,
-                )
-            )
-
-        # 6b. New molecule
-        if self._custom_field_validator and input.custom_fields:
-            validation = await self._custom_field_validator.validate(
-                input.custom_fields, FieldTarget.MOLECULE, input.workspace_id
-            )
-            if not is_successful(validation):
-                return Failure(validation.failure())
-
-        async with self._uow:
-            reg_number = await self._repo.next_registration_number(input.workspace_id)
-            mol = Molecule.register_disclosed(
-                workspace_id=input.workspace_id,
-                registration_number=reg_number,
-                name=input.name,
-                molecule_type=MoleculeType(input.molecule_type),
-                structure=processed.structure,
-                descriptors=processed.descriptors,
-                originating_org_id=input.originating_org_id,
-                custom_fields=input.custom_fields,
-            )
-            self._add_name_and_ids(mol, input, source="name")
-
-            await self._repo.save(mol)
-            await self._record_disclosure_provenance(
-                input, mol.id, processed.structure.smiles, inchi_key, is_new=True,
-            )
-            events = await self._uow.commit()
-
         await self._dispatcher.dispatch_all(events)
-        return Success(
-            RegistrationOutcome(molecule=mol, is_new=True,
-                                action=RegistrationAction.REGISTERED,
-                                qc_warnings=qc_warnings,
-                                detected_salt=processed.detected_salt)
-        )
+        assert outcome is not None  # one of the branches above sets it
+        return Success(outcome)
 
     async def _register_undisclosed(
         self, input: RegisterMoleculeCommand

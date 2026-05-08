@@ -78,11 +78,8 @@ class CreateRunImportTemplate:
         input: CreateRunImportTemplateCommand,
         auth: AuthContext | None = None,
     ) -> Result[RunImportTemplate, DomainError]:
-        try:
-            require_editor(auth)
-            require_same_workspace(auth, input.workspace_id)
-        except DomainError as exc:
-            return Failure(exc)
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             template = RunImportTemplate.create(
@@ -115,11 +112,8 @@ class UpdateRunImportTemplate:
         input: UpdateRunImportTemplateCommand,
         auth: AuthContext | None = None,
     ) -> Result[RunImportTemplate, DomainError]:
-        try:
-            require_editor(auth)
-            require_same_workspace(auth, input.workspace_id)
-        except DomainError as exc:
-            return Failure(exc)
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             template = await self._repo.find_by_id_in_workspace(

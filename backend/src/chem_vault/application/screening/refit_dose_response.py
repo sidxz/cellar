@@ -14,6 +14,7 @@ from chem_vault.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     CurveFittingService,
 )
+from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
 from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
 from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from chem_vault.domain.screening_assay.enums import CurveType, HillSlopeConstraint, ReadoutDataType
@@ -55,11 +56,13 @@ class RefitDoseResponseCurve:
         curve_repo: DoseResponseCurveRepository,
         protocol_repo: ProtocolRepository,
         curve_fitter: CurveFittingService,
+        guard: DataLockGuard,
     ) -> None:
         self._uow = uow
         self._curve_repo = curve_repo
         self._protocol_repo = protocol_repo
         self._curve_fitter = curve_fitter
+        self._guard = guard
 
     async def __call__(
         self, input: RefitDoseResponseCurveCommand, auth: AuthContext | None = None
@@ -72,6 +75,11 @@ class RefitDoseResponseCurve:
             )
             if curve is None:
                 return Failure(NotFoundError("DoseResponseCurve", str(input.curve_id)))
+
+            try:
+                await self._guard.guard_write(input.workspace_id, curve.run_id)
+            except DomainError as exc:
+                return Failure(exc)
 
             # Reconstruct all points from raw_data + excluded_points. Sort
             # ASCENDING by concentration so user-supplied
@@ -98,19 +106,21 @@ class RefitDoseResponseCurve:
 
             fitted = fit_result.unwrap()
 
-            curve.fitted_value = fitted.fitted_value
-            curve.hill_slope = fitted.hill_slope
-            curve.top = fitted.top
-            curve.bottom = fitted.bottom
-            curve.r_squared = fitted.r_squared
-            curve.confidence_interval_low = fitted.confidence_interval_low
-            curve.confidence_interval_high = fitted.confidence_interval_high
-            curve.num_points = fitted.num_points
-            curve.curve_class = fitted.curve_class
-            curve.raw_data = fitted.raw_data
-            curve.excluded_points = fitted.excluded_points
-            curve.fit_quality_warnings = list(fitted.fit_quality_warnings)
-            curve.intercept_values = list(fitted.intercept_values)
+            curve.update_fit(
+                fitted_value=fitted.fitted_value,
+                hill_slope=fitted.hill_slope,
+                top=fitted.top,
+                bottom=fitted.bottom,
+                r_squared=fitted.r_squared,
+                confidence_interval_low=fitted.confidence_interval_low,
+                confidence_interval_high=fitted.confidence_interval_high,
+                num_points=fitted.num_points,
+                curve_class=fitted.curve_class,
+                raw_data=fitted.raw_data,
+                excluded_points=fitted.excluded_points,
+                fit_quality_warnings=fitted.fit_quality_warnings,
+                intercept_values=fitted.intercept_values,
+            )
 
             await self._curve_repo.save(curve)
             await self._uow.commit()

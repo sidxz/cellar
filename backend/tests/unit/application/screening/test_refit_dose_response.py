@@ -149,11 +149,14 @@ async def test_excluded_index_maps_to_ascending_dose_order():
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=_make_protocol())
     fitter = _RecordingFitter()
 
+    guard = AsyncMock()
+    guard.guard_write = AsyncMock()
     use_case = RefitDoseResponseCurve(
         uow=_FakeUow(),
         curve_repo=curve_repo,
         protocol_repo=protocol_repo,
         curve_fitter=fitter,
+        guard=guard,
     )
 
     cmd = RefitDoseResponseCurveCommand(

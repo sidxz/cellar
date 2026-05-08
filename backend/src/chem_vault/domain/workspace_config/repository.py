@@ -45,7 +45,9 @@ class WorkspaceSettingsRepository(Protocol):
     Uses workspace_id as the identity key (id == workspace_id).
     """
 
-    async def find_by_id(self, id: uuid.UUID) -> WorkspaceSettings | None: ...
+    async def find_by_workspace_id(
+        self, workspace_id: uuid.UUID
+    ) -> WorkspaceSettings | None: ...
 
     async def save(self, aggregate: WorkspaceSettings) -> None: ...
 

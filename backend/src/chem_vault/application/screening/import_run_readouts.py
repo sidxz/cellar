@@ -104,10 +104,7 @@ class ImportRunReadouts:
         input: ImportRunReadoutsCommand,
         auth: AuthContext | None = None,
     ) -> Result[ImportRunReadoutsResult, DomainError]:
-        try:
-            require_editor(auth)
-        except DomainError as exc:
-            return Failure(exc)
+        require_editor(auth)
 
         async with self._uow:
             return await self._execute(input)

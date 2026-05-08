@@ -196,14 +196,14 @@ from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def register_screening(container: Container) -> None:
     # --- Protocol use cases ---
-    def _protocol_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _protocol_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
         return _f
 
-    def _protocol_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _protocol_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyProtocolRepository(uow))
         return _f
@@ -232,14 +232,14 @@ def register_screening(container: Container) -> None:
     container.define(TabularParser, lambda c: c[TabularFileParser])
     container.define(ParsePlateMapFile, lambda c: ParsePlateMapFile(c[TabularParser]))
 
-    def _add_readout_def(c):  # type: ignore[no-untyped-def]
+    def _add_readout_def(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return AddReadoutDefinition(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], c[FormulaEvaluator])
 
     container.define(AddReadoutDefinition, _add_readout_def)
     container.define(RemoveReadoutDefinition, _protocol_cmd(RemoveReadoutDefinition))
 
-    def _update_readout_def(c):  # type: ignore[no-untyped-def]
+    def _update_readout_def(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return UpdateReadoutDefinition(
             uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], c[FormulaEvaluator]
@@ -251,7 +251,7 @@ def register_screening(container: Container) -> None:
     container.define(RemoveConditionDefinition, _protocol_cmd(RemoveConditionDefinition))
     container.define(UpdateConditionDefinition, _protocol_cmd(UpdateConditionDefinition))
 
-    def _set_control_layout(c):  # type: ignore[no-untyped-def]
+    def _set_control_layout(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SetControlLayout(
             uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher],
@@ -262,14 +262,14 @@ def register_screening(container: Container) -> None:
     container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
 
     # --- Targets ---
-    def _target_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _target_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyTargetRepository(uow), c[EventDispatcher])
         return _f
 
-    def _target_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _target_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyTargetRepository(uow))
         return _f
@@ -281,8 +281,8 @@ def register_screening(container: Container) -> None:
     container.define(ListTargets, _target_query(ListTargets))
 
     # --- Compound Flags ---
-    def _compound_flag_uc(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _compound_flag_uc(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyCompoundFlagRepository(uow))
         return _f
@@ -292,19 +292,19 @@ def register_screening(container: Container) -> None:
     container.define(DeleteCompoundFlag, _compound_flag_uc(DeleteCompoundFlag))
 
     # --- Runs ---
-    def _run_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _run_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRunRepository(uow), c[EventDispatcher])
         return _f
 
-    def _run_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _run_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRunRepository(uow))
         return _f
 
-    def _create_run(c):  # type: ignore[no-untyped-def]
+    def _create_run(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CreateRun(
             uow,
@@ -316,7 +316,7 @@ def register_screening(container: Container) -> None:
 
     container.define(CreateRun, _create_run)
 
-    def _delete_run(c):  # type: ignore[no-untyped-def]
+    def _delete_run(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteRun(
             uow=uow,
@@ -328,7 +328,7 @@ def register_screening(container: Container) -> None:
 
     container.define(DeleteRun, _delete_run)
 
-    def _reset_run_data(c):  # type: ignore[no-untyped-def]
+    def _reset_run_data(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ResetRunData(
             uow=uow,
@@ -350,7 +350,7 @@ def register_screening(container: Container) -> None:
     container.define(LockRun, _run_cmd(LockRun))
     container.define(UnlockRun, _run_cmd(UnlockRun))
 
-    def _list_runs_with_counts(c):  # type: ignore[no-untyped-def]
+    def _list_runs_with_counts(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListRunsWithCounts(
             uow=uow,
@@ -361,19 +361,19 @@ def register_screening(container: Container) -> None:
     container.define(ListRunsWithCounts, _list_runs_with_counts)
 
     # --- Readout Data ---
-    def _readout_create(c):  # type: ignore[no-untyped-def]
+    def _readout_create(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
         return CreateReadoutData(uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher], run_repo=run_repo)
 
-    def _readout_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _readout_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyReadoutDataRepository(uow))
         return _f
 
-    def _readout_bulk_create(c):  # type: ignore[no-untyped-def]
+    def _readout_bulk_create(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
@@ -397,7 +397,7 @@ def register_screening(container: Container) -> None:
         lambda c: SQLAlchemyReadoutDataEnrichedReader(c[async_sessionmaker]),
     )
 
-    def _readout_enriched(c):  # type: ignore[no-untyped-def]
+    def _readout_enriched(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListReadoutDataEnriched(
             uow, SQLAlchemyReadoutDataRepository(uow), c[ReadoutDataEnrichedReader]
@@ -406,14 +406,14 @@ def register_screening(container: Container) -> None:
     container.define(ListReadoutDataEnriched, _readout_enriched)
 
     # --- Dose Response ---
-    def _dose_response_create(c):  # type: ignore[no-untyped-def]
+    def _dose_response_create(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
         return CreateDoseResponseCurve(uow, SQLAlchemyDoseResponseCurveRepository(uow), guard, c[EventDispatcher], run_repo=run_repo)
 
-    def _dose_response_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _dose_response_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyDoseResponseCurveRepository(uow))
         return _f
@@ -426,7 +426,7 @@ def register_screening(container: Container) -> None:
         lambda c: SQLAlchemyDoseResponseEnrichedReader(c[async_sessionmaker]),
     )
 
-    def _dose_response_enriched(c):  # type: ignore[no-untyped-def]
+    def _dose_response_enriched(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListDoseResponseEnriched(
             uow,
@@ -438,7 +438,7 @@ def register_screening(container: Container) -> None:
 
     container.define(ListDoseResponseEnriched, _dose_response_enriched)
 
-    def _fit_dose_response_curves(c):  # type: ignore[no-untyped-def]
+    def _fit_dose_response_curves(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return FitDoseResponseCurves(
             uow=uow,
@@ -448,18 +448,20 @@ def register_screening(container: Container) -> None:
 
     container.define(FitDoseResponseCurves, _fit_dose_response_curves)
 
-    def _refit_dose_response_curve(c):  # type: ignore[no-untyped-def]
+    def _refit_dose_response_curve(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        run_repo = SQLAlchemyRunRepository(uow)
         return RefitDoseResponseCurve(
             uow=uow,
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             curve_fitter=c[CurveFittingService],
+            guard=DataLockGuard(run_repo),
         )
 
     container.define(RefitDoseResponseCurve, _refit_dose_response_curve)
 
-    def _classify_dose_response_curve(c):  # type: ignore[no-untyped-def]
+    def _classify_dose_response_curve(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ClassifyDoseResponseCurve(
             uow=uow,
@@ -474,20 +476,20 @@ def register_screening(container: Container) -> None:
         lambda c: SQLAlchemyPlateMapReader(c[async_sessionmaker]),
     )
 
-    def _get_plate_map(c):  # type: ignore[no-untyped-def]
+    def _get_plate_map(c: Container):
         return GetPlateMap(reader=c[PlateMapReader])
 
     container.define(GetPlateMap, _get_plate_map)
 
     # --- Plate Templates ---
-    def _pt_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _pt_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyPlateTemplateRepository(uow), c[EventDispatcher])
         return _f
 
-    def _pt_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _pt_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyPlateTemplateRepository(uow))
         return _f
@@ -499,7 +501,7 @@ def register_screening(container: Container) -> None:
     container.define(ListPlateTemplates, _pt_query(ListPlateTemplates))
 
     # --- Readout Calculation Engine + Plate Setup ---
-    def _readout_calc_engine(c):  # type: ignore[no-untyped-def]
+    def _readout_calc_engine(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ReadoutCalculationEngine(
             uow=uow,
@@ -509,13 +511,14 @@ def register_screening(container: Container) -> None:
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
+            dispatcher=c[EventDispatcher],
             fit_dose_response=c[FitDoseResponseCurves],
             plate_quality=c[PlateQualityCalculator],
         )
 
     container.define(ReadoutCalculationEngine, _readout_calc_engine)
 
-    def _set_up_run_plate(c):  # type: ignore[no-untyped-def]
+    def _set_up_run_plate(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         resolver = MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol])
         return SetUpRunPlate(
@@ -529,7 +532,7 @@ def register_screening(container: Container) -> None:
 
     container.define(SetUpRunPlate, _set_up_run_plate)
 
-    def _import_run_readouts(c):  # type: ignore[no-untyped-def]
+    def _import_run_readouts(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportRunReadouts(
             uow=uow,
@@ -545,7 +548,7 @@ def register_screening(container: Container) -> None:
     # --- Run-file import (long format) ---
     container[InMemoryPreviewStore] = Singleton(lambda: InMemoryPreviewStore())
 
-    def _preview_run_file(c):  # type: ignore[no-untyped-def]
+    def _preview_run_file(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return PreviewRunFile(
             uow=uow,
@@ -561,7 +564,7 @@ def register_screening(container: Container) -> None:
 
     container.define(PreviewRunFile, _preview_run_file)
 
-    def _import_run_file(c):  # type: ignore[no-untyped-def]
+    def _import_run_file(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportRunFile(
             uow=uow,
@@ -580,13 +583,13 @@ def register_screening(container: Container) -> None:
     container.define(ImportRunFile, _import_run_file)
 
     # --- Run import templates (CRUD) ---
-    def _run_import_template_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _run_import_template_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRunImportTemplateRepository(uow), c[EventDispatcher])
         return _f
 
-    def _list_run_import_templates(c):  # type: ignore[no-untyped-def]
+    def _list_run_import_templates(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListRunImportTemplates(uow, SQLAlchemyRunImportTemplateRepository(uow))
 
@@ -595,7 +598,7 @@ def register_screening(container: Container) -> None:
     container.define(DeleteRunImportTemplate, _run_import_template_cmd(DeleteRunImportTemplate))
     container.define(ListRunImportTemplates, _list_run_import_templates)
 
-    def _cross_protocol_resolver(c):  # type: ignore[no-untyped-def]
+    def _cross_protocol_resolver(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CrossProtocolResolver(
             uow=uow,
@@ -605,7 +608,7 @@ def register_screening(container: Container) -> None:
 
     container.define(CrossProtocolResolver, _cross_protocol_resolver)
 
-    def _condition_grouping_service(c):  # type: ignore[no-untyped-def]
+    def _condition_grouping_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ConditionGroupingService(
             uow=uow,
@@ -616,19 +619,19 @@ def register_screening(container: Container) -> None:
     container.define(ConditionGroupingService, _condition_grouping_service)
 
     # --- Registered Plates ---
-    def _reg_plate_cmd(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _reg_plate_cmd(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher])
         return _f
 
-    def _reg_plate_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _reg_plate_query(uc_cls: type):
+        def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
             return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow))
         return _f
 
-    def _map_wells(c):  # type: ignore[no-untyped-def]
+    def _map_wells(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MapWells(
             uow,
@@ -646,7 +649,7 @@ def register_screening(container: Container) -> None:
     container.define(ListPlates, _reg_plate_query(ListPlates))
     container.define(ListChildren, _reg_plate_query(ListChildren))
 
-    def _delete_reg_plate(c):  # type: ignore[no-untyped-def]
+    def _delete_reg_plate(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeletePlate(uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher])
 
@@ -655,7 +658,7 @@ def register_screening(container: Container) -> None:
     # --- Plate Read Model ---
     container.define(
         PlateReadModelService,
-        lambda c: SQLAlchemyPlateReadModelService(c[async_sessionmaker]()),
+        lambda c: SQLAlchemyPlateReadModelService(c[async_sessionmaker]),
     )
 
     # --- Screening Read Models ---
@@ -672,7 +675,7 @@ def register_screening(container: Container) -> None:
         CompoundCurvesReader,
         lambda c: SQLAlchemyCompoundCurvesReader(c[async_sessionmaker]),
     )
-    def _get_compound_curves(c):  # type: ignore[no-untyped-def]
+    def _get_compound_curves(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetCompoundCurves(
             reader=c[CompoundCurvesReader],
@@ -692,7 +695,7 @@ def register_screening(container: Container) -> None:
     )
 
     # --- Molecule Activity Service ---
-    def _molecule_activity_service(c):  # type: ignore[no-untyped-def]
+    def _molecule_activity_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MoleculeActivityService(
             uow=uow,
@@ -703,7 +706,7 @@ def register_screening(container: Container) -> None:
 
     container.define(MoleculeActivityService, _molecule_activity_service)
 
-    def _get_molecule_activity_detail(c):  # type: ignore[no-untyped-def]
+    def _get_molecule_activity_detail(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetMoleculeActivityDetail(
             uow=uow,
@@ -717,11 +720,11 @@ def register_screening(container: Container) -> None:
     container.define(BioPortalClient, lambda c: BioPortalClient(c[SecretProvider]))
     container.define(SearchOntology, lambda c: SearchOntology(c[BioPortalClient]))
 
-    def _set_ontology_annotation(c):  # type: ignore[no-untyped-def]
+    def _set_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SetOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
 
-    def _remove_ontology_annotation(c):  # type: ignore[no-untyped-def]
+    def _remove_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RemoveOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
 

@@ -28,7 +28,7 @@ class GetWorkspaceSettings:
         self, input: GetWorkspaceSettingsQuery
     ) -> Result[WorkspaceSettings, DomainError]:
         async with self._uow:
-            settings = await self._repo.find_by_id(input.workspace_id)
+            settings = await self._repo.find_by_workspace_id(input.workspace_id)
             if settings is None:
                 # Return in-memory defaults — no hidden write.
                 # Settings are persisted on first explicit PATCH.

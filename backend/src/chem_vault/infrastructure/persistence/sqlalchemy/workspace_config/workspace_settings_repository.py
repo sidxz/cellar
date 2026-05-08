@@ -22,10 +22,18 @@ class SQLAlchemyWorkspaceSettingsRepository(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> WorkspaceSettings | None:
         """WorkspaceSettings uses id == workspace_id (singleton per workspace)."""
-        model = await self._session.get(WorkspaceSettingsModel, workspace_id)
-        if model is None:
-            return None
-        return self._to_domain_tracked(model)
+        return await self.find_by_workspace_id(workspace_id)
+
+    async def find_by_workspace_id(
+        self, workspace_id: uuid.UUID
+    ) -> WorkspaceSettings | None:
+        """Load the singleton settings row for a workspace.
+
+        WorkspaceSettings has ``id == workspace_id`` by design — there is at
+        most one row per workspace. This is the only repository that may load
+        without a separate workspace filter.
+        """
+        return await self._find_by_id_unscoped(workspace_id)
 
     def _to_domain(self, model: WorkspaceSettingsModel) -> WorkspaceSettings:
         return WorkspaceSettings(

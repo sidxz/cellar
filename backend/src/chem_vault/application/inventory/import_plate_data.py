@@ -7,7 +7,7 @@ import io
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from returns.result import Failure, Result, Success
 
@@ -38,54 +38,34 @@ class ImportPreview:
     suggested_template_name: str | None = None
 
 
-class ImportFileCache:
-    """In-process cache for uploaded import files between preview/validate/execute.
+@runtime_checkable
+class ImportFileCache(Protocol):
+    """Application-layer port for caching uploaded import files between
+    preview / validate / execute steps.
 
-    Registered as a DI singleton so it survives across requests within the same
-    worker process. A future migration can swap this for a Valkey-backed
-    implementation without changing callers.
-
-    Entries expire after ``ttl_seconds`` (default 30 minutes) to prevent memory
-    leaks from abandoned imports.
+    The default in-memory implementation lives in
+    ``infrastructure/cache/in_memory_file_cache.py`` and is bound via DI.
+    Application code depends on this Protocol so the storage backend
+    (in-memory, Valkey, etc.) is an infrastructure concern.
     """
 
-    def __init__(self, ttl_seconds: int = 1800) -> None:
-        import time
-        self._time = time
-        self._ttl = ttl_seconds
-        # Key is workspace-scoped: "{workspace_id}:{file_id}"
-        self._store: dict[str, tuple[float, list[str], list[list[str]]]] = {}
+    def put(
+        self,
+        workspace_id: uuid.UUID,
+        file_id: str,
+        headers: list[str],
+        data_rows: list[list[str]],
+    ) -> None: ...
 
-    @staticmethod
-    def _key(workspace_id: uuid.UUID, file_id: str) -> str:
-        return f"{workspace_id}:{file_id}"
+    def get(
+        self, workspace_id: uuid.UUID, file_id: str
+    ) -> tuple[list[str], list[list[str]]] | None: ...
 
-    def _evict_expired(self) -> None:
-        now = self._time.monotonic()
-        expired = [k for k, (ts, _, _) in self._store.items() if now - ts > self._ttl]
-        for k in expired:
-            del self._store[k]
+    def pop(
+        self, workspace_id: uuid.UUID, file_id: str
+    ) -> tuple[list[str], list[list[str]]] | None: ...
 
-    def put(self, workspace_id: uuid.UUID, file_id: str, headers: list[str], data_rows: list[list[str]]) -> None:
-        self._evict_expired()
-        self._store[self._key(workspace_id, file_id)] = (self._time.monotonic(), headers, data_rows)
-
-    def get(self, workspace_id: uuid.UUID, file_id: str) -> tuple[list[str], list[list[str]]] | None:
-        self._evict_expired()
-        entry = self._store.get(self._key(workspace_id, file_id))
-        if entry is None:
-            return None
-        return (entry[1], entry[2])
-
-    def pop(self, workspace_id: uuid.UUID, file_id: str) -> tuple[list[str], list[list[str]]] | None:
-        entry = self._store.pop(self._key(workspace_id, file_id), None)
-        if entry is None:
-            return None
-        return (entry[1], entry[2])
-
-    def contains(self, workspace_id: uuid.UUID, file_id: str) -> bool:
-        self._evict_expired()
-        return self._key(workspace_id, file_id) in self._store
+    def contains(self, workspace_id: uuid.UUID, file_id: str) -> bool: ...
 
 
 def preview_import_file(
@@ -433,8 +413,6 @@ class ImportPlateDataService:
                     errors.append(f"Row {row_num}: {exc}")
                     skipped += 1
 
-        self._cache.pop(workspace_id, file_id)
-
         # Phase 2: Create ReadoutData if protocol + readout columns present
         readout_count = 0
         if (
@@ -452,6 +430,11 @@ class ImportPlateDataService:
                 auth=auth,
                 errors=errors,
             )
+
+        # Pop the cached file only after the full import (including readout
+        # creation) completes — that way a failure in Phase 2 leaves the
+        # cached file intact so the client can retry without re-uploading.
+        self._cache.pop(workspace_id, file_id)
 
         return Success(ImportExecutionResult(
             imported_count=imported,

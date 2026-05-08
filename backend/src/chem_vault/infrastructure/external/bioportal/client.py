@@ -25,11 +25,16 @@ class BioPortalClient:
     def __init__(self, secret_provider: SecretProvider) -> None:
         self._secret_provider = secret_provider
 
-    async def _get_api_key(self, workspace_id: uuid.UUID) -> str | None:
-        """Try workspace-scoped secret first, then env fallback."""
-        key = await self._secret_provider.get_secret(f"{workspace_id}:bioportal")
-        if key:
-            return key
+    async def _resolve_api_key(self, workspace_id: uuid.UUID | None) -> str | None:
+        """Workspace secret > env var > None.
+
+        Single resolution path so every method picks up the same fallback
+        chain without duplicating the logic.
+        """
+        if workspace_id is not None:
+            key = await self._secret_provider.get_secret(f"{workspace_id}:bioportal")
+            if key:
+                return key
         return os.environ.get("BIOPORTAL_API_KEY")
 
     async def search(
@@ -42,11 +47,7 @@ class BioPortalClient:
         workspace_id: uuid.UUID | None = None,
     ) -> list[OntologyTerm]:
         """Search BioPortal and map results to OntologyTerm VOs."""
-        api_key = None
-        if workspace_id is not None:
-            api_key = await self._get_api_key(workspace_id)
-        if not api_key:
-            api_key = os.environ.get("BIOPORTAL_API_KEY")
+        api_key = await self._resolve_api_key(workspace_id)
         if not api_key:
             return []
 
@@ -111,11 +112,7 @@ class BioPortalClient:
         workspace_id: uuid.UUID | None = None,
     ) -> list[OntologyTerm]:
         """List all descendants of a concept in an ontology."""
-        api_key = None
-        if workspace_id is not None:
-            api_key = await self._get_api_key(workspace_id)
-        if not api_key:
-            api_key = os.environ.get("BIOPORTAL_API_KEY")
+        api_key = await self._resolve_api_key(workspace_id)
         if not api_key:
             return []
 

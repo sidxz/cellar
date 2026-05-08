@@ -132,6 +132,34 @@ class BulkCreateReadoutData:
             f"Item {idx}: either batch_id or batch_number is required"
         ))
 
+    async def _ensure_run_protocol_loaded(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        idx: int,
+        run_protocol_cache: dict[uuid.UUID, dict[str, Any]],
+    ) -> Result[dict[str, Any], DomainError]:
+        """Cache (and return) the readout definitions for a run's protocol."""
+        if run_id in run_protocol_cache:
+            return Success(run_protocol_cache[run_id])
+        if self._run_repo is None or self._protocol_repo is None:
+            return Failure(ValidationError(
+                f"Item {idx}: run/protocol resolver not available"
+            ))
+        run = await self._run_repo.find_by_id_in_workspace(workspace_id, run_id)
+        if run is None:
+            return Failure(ValidationError(f"Item {idx}: run '{run_id}' not found"))
+        protocol = await self._protocol_repo.find_by_id_in_workspace(
+            workspace_id, run.protocol_id
+        )
+        if protocol is None:
+            return Failure(ValidationError(
+                f"Item {idx}: protocol for run '{run_id}' not found"
+            ))
+        cache_entry = {"definitions": protocol.readout_definitions}
+        run_protocol_cache[run_id] = cache_entry
+        return Success(cache_entry)
+
     async def _resolve_readout_definition_id(
         self,
         workspace_id: uuid.UUID,
@@ -139,39 +167,35 @@ class BulkCreateReadoutData:
         idx: int,
         run_protocol_cache: dict[uuid.UUID, dict[str, Any]],
     ) -> Result[uuid.UUID, DomainError]:
-        """Resolve readout_definition_id, looking up by name from the run's protocol if needed."""
+        """Resolve readout_definition_id and verify it belongs to the run's protocol."""
+        cache_result = await self._ensure_run_protocol_loaded(
+            workspace_id, item.run_id, idx, run_protocol_cache
+        )
+        if isinstance(cache_result, Failure):
+            # If the resolver isn't wired AND the caller supplied a UUID, fall
+            # through to trust the caller (legacy callers without protocol_repo).
+            if item.readout_definition_id is not None and self._protocol_repo is None:
+                return Success(item.readout_definition_id)
+            return cache_result
+        definitions = cache_result.unwrap()["definitions"]
+        defs_by_id = {rd.id: rd for rd in definitions}
+        defs_by_name = {rd.name: rd for rd in definitions}
+
         if item.readout_definition_id is not None:
+            if item.readout_definition_id not in defs_by_id:
+                return Failure(ValidationError(
+                    f"Item {idx}: readout_definition_id '{item.readout_definition_id}' "
+                    f"does not belong to the run's protocol"
+                ))
             return Success(item.readout_definition_id)
         if item.readout_definition_name is not None:
-            if self._run_repo is None or self._protocol_repo is None:
+            rd = defs_by_name.get(item.readout_definition_name)
+            if rd is None:
                 return Failure(ValidationError(
-                    f"Item {idx}: readout_definition_name provided but "
-                    f"run/protocol resolver not available"
+                    f"Item {idx}: readout definition '{item.readout_definition_name}' "
+                    f"not found in protocol"
                 ))
-            # Cache protocol readout definitions per run to avoid repeated lookups
-            if item.run_id not in run_protocol_cache:
-                run = await self._run_repo.find_by_id_in_workspace(workspace_id, item.run_id)
-                if run is None:
-                    return Failure(ValidationError(
-                        f"Item {idx}: run '{item.run_id}' not found"
-                    ))
-                protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, run.protocol_id)
-                if protocol is None:
-                    return Failure(ValidationError(
-                        f"Item {idx}: protocol for run '{item.run_id}' not found"
-                    ))
-                run_protocol_cache[item.run_id] = {
-                    "definitions": protocol.readout_definitions,
-                }
-
-            definitions = run_protocol_cache[item.run_id]["definitions"]
-            for rd in definitions:
-                if rd.name == item.readout_definition_name:
-                    return Success(rd.id)
-            return Failure(ValidationError(
-                f"Item {idx}: readout definition '{item.readout_definition_name}' "
-                f"not found in protocol"
-            ))
+            return Success(rd.id)
         return Failure(ValidationError(
             f"Item {idx}: either readout_definition_id or readout_definition_name is required"
         ))

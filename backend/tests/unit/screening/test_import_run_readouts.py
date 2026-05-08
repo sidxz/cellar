@@ -361,8 +361,14 @@ class TestImportRunReadouts:
         assert abs_id in rd_ids
 
     @pytest.mark.asyncio
-    async def test_viewer_role_returns_authorization_failure(self):
-        """Users with viewer role (below editor) cannot import readout data."""
+    async def test_viewer_role_raises_authorization_error(self):
+        """Users with viewer role (below editor) cannot import readout data.
+
+        ``require_editor`` raises ``AuthorizationError`` directly; the
+        FastAPI error handler converts that to a 403. Use cases must NOT
+        swallow the error into a ``Failure`` (that hides bugs in the guard
+        chain — see ``docs/backend-code-guidelines.md`` §3).
+        """
         ws_id = uuid.uuid4()
         auth = FakeAuth(workspace_id=ws_id, workspace_role="viewer")
 
@@ -382,8 +388,6 @@ class TestImportRunReadouts:
             readout_definition_id=rd_id,
         )
 
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
         from chem_vault.domain.shared.errors import AuthorizationError
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)

@@ -54,7 +54,7 @@ def register_cdd_import(container: Container) -> None:
     container.define(CddVaultClient, Singleton(lambda c: CddVaultClient(c[httpx.AsyncClient])))
 
     # --- CDD Protocol Import ---
-    def _make_get_data_source(c):  # type: ignore[no-untyped-def]
+    def _make_get_data_source(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetDataSourceForImport(
             uow=uow,
@@ -63,15 +63,15 @@ def register_cdd_import(container: Container) -> None:
             secret_provider=c[SecretProvider],
         )
 
-    def _cdd_query(uc_cls):  # type: ignore[no-untyped-def]
-        def _f(c):  # type: ignore[no-untyped-def]
+    def _cdd_query(uc_cls: type):
+        def _f(c: Container):
             return uc_cls(
                 gateway=c[CddVaultClient],
                 get_data_source=_make_get_data_source(c),
             )
         return _f
 
-    def _cdd_import_cmd(c):  # type: ignore[no-untyped-def]
+    def _cdd_import_cmd(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportCddProtocol(
             gateway=c[CddVaultClient],
@@ -86,7 +86,7 @@ def register_cdd_import(container: Container) -> None:
     container.define(ImportCddProtocol, _cdd_import_cmd)
 
     # --- CDD Molecule Import ---
-    def _start_cdd_mol_import(c):  # type: ignore[no-untyped-def]
+    def _start_cdd_mol_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         get_ds = GetDataSourceForImport(
             uow=uow,
@@ -96,14 +96,14 @@ def register_cdd_import(container: Container) -> None:
         )
         return StartCddMoleculeImport(get_data_source=get_ds)
 
-    def _list_cdd_mol_imports(c):  # type: ignore[no-untyped-def]
+    def _list_cdd_mol_imports(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListCddMoleculeImports(
             uow=uow,
             repo=SQLAlchemyCddMoleculeImportRepository(uow),
         )
 
-    def _force_fail_cdd_mol_import(c):  # type: ignore[no-untyped-def]
+    def _force_fail_cdd_mol_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ForceFailCddMoleculeImport(
             uow=uow,
@@ -115,14 +115,14 @@ def register_cdd_import(container: Container) -> None:
     container.define(ListCddMoleculeImports, _list_cdd_mol_imports)
     container.define(ForceFailCddMoleculeImport, _force_fail_cdd_mol_import)
 
-    def _get_cdd_mol_import_status_from_db(c):  # type: ignore[no-untyped-def]
+    def _get_cdd_mol_import_status_from_db(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetCddMoleculeImportStatusFromDb(
             uow=uow,
             repo=SQLAlchemyCddMoleculeImportRepository(uow),
         )
 
-    def _sync_failed_cdd_mol_import(c):  # type: ignore[no-untyped-def]
+    def _sync_failed_cdd_mol_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SyncFailedCddMoleculeImport(
             uow=uow,
@@ -133,7 +133,7 @@ def register_cdd_import(container: Container) -> None:
     container.define(SyncFailedCddMoleculeImport, _sync_failed_cdd_mol_import)
 
     # --- CDD Plate Import ---
-    def _start_cdd_plate_import(c):  # type: ignore[no-untyped-def]
+    def _start_cdd_plate_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         get_ds = GetDataSourceForImport(
             uow=uow,
@@ -143,14 +143,14 @@ def register_cdd_import(container: Container) -> None:
         )
         return StartCddPlateImport(get_data_source=get_ds)
 
-    def _list_cdd_plate_imports(c):  # type: ignore[no-untyped-def]
+    def _list_cdd_plate_imports(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListCddPlateImports(
             uow=uow,
             repo=SQLAlchemyCddPlateImportRepository(uow),
         )
 
-    def _force_fail_cdd_plate_import(c):  # type: ignore[no-untyped-def]
+    def _force_fail_cdd_plate_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ForceFailCddPlateImport(
             uow=uow,
@@ -162,14 +162,14 @@ def register_cdd_import(container: Container) -> None:
     container.define(ListCddPlateImports, _list_cdd_plate_imports)
     container.define(ForceFailCddPlateImport, _force_fail_cdd_plate_import)
 
-    def _get_cdd_plate_import_status_from_db(c):  # type: ignore[no-untyped-def]
+    def _get_cdd_plate_import_status_from_db(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetCddPlateImportStatusFromDb(
             uow=uow,
             repo=SQLAlchemyCddPlateImportRepository(uow),
         )
 
-    def _sync_failed_cdd_plate_import(c):  # type: ignore[no-untyped-def]
+    def _sync_failed_cdd_plate_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SyncFailedCddPlateImport(
             uow=uow,

@@ -185,6 +185,10 @@ class ResolveDisclosureConflict:
             canonical_smiles = dr.canonical_smiles or dr.disclosed_smiles
             inchi_key = dr.inchi_key
 
+        # Single transaction: save DR (for FK), run merge, transition DR.
+        # If anything fails, the whole thing rolls back — no half-applied state
+        # where the molecule is tombstoned but the DR is still in CONFLICT.
+        merge_failure: DomainError | None = None
         async with self._uow:
             target = await self._molecule_repo.find_by_inchi_key(
                 input.workspace_id, inchi_key
@@ -196,55 +200,37 @@ class ResolveDisclosureConflict:
                     )
                 )
 
-            # Save DR before merge for FK integrity (merge_events.disclosure_request_id).
-            # No state transition on DR yet — real transitions happen after the merge.
+            # Save DR first so merge_events.disclosure_request_id FK is satisfiable.
             await self._disclosure_repo.save(dr)
-            await self._uow.commit()
 
-        # Delegate merge to MergeService (opens its own UoW)
-        merge_result = await self._merge_service(
-            MergeCommand(
-                workspace_id=input.workspace_id,
-                source_molecule_id=dr.molecule_id,
-                target_molecule_id=target.id,
-                reason=MergeReason.DISCLOSURE_RESOLVED,
-                merged_by=input.resolved_by,
-                disclosure_request_id=dr.id,
-                notes=input.reason,
-            ),
-            auth=auth,
-        )
-
-        # Update DR based on merge outcome.
-        # NOTE: Intentional UoW re-entry — AsyncUnitOfWork.__aenter__ creates a
-        # fresh session + tracked-aggregates list on each entry, so opening a new
-        # ``async with self._uow`` block after the previous one exited is safe.
-        # The MergeService has already committed its own UoW above, so there is
-        # no nesting; the two transactions are sequential.
-        async with self._uow:
-            loaded_dr = await self._disclosure_repo.find_by_id_in_workspace(input.workspace_id, dr.id)
-            if loaded_dr is None:
-                return Failure(
-                    NotFoundError("DisclosureRequest", str(dr.id))
+            merge_result = await self._merge_service.merge_in_transaction(
+                MergeCommand(
+                    workspace_id=input.workspace_id,
+                    source_molecule_id=dr.molecule_id,
+                    target_molecule_id=target.id,
+                    reason=MergeReason.DISCLOSURE_RESOLVED,
+                    merged_by=input.resolved_by,
+                    disclosure_request_id=dr.id,
+                    notes=input.reason,
                 )
+            )
 
             if isinstance(merge_result, Success):
-                loaded_dr.resolve_as_merged(
+                dr.resolve_as_merged(
                     canonical_smiles=canonical_smiles,
                     inchi_key=inchi_key,
                     resolved_to_molecule_id=target.id,
                 )
             else:
-                loaded_dr.reject(
-                    reason=f"Merge failed: {merge_result.failure().message}"
-                )
+                merge_failure = merge_result.failure()
+                dr.reject(reason=f"Merge failed: {merge_failure.message}")
 
-            await self._disclosure_repo.save(loaded_dr)
+            await self._disclosure_repo.save(dr)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
 
-        if isinstance(merge_result, Failure):
-            return Failure(merge_result.failure())
+        if merge_failure is not None:
+            return Failure(merge_failure)
 
-        return Success(loaded_dr)
+        return Success(dr)

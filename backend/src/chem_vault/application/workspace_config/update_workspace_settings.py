@@ -47,7 +47,7 @@ class UpdateWorkspaceSettings:
         require_admin(auth)
 
         async with self._uow:
-            settings = await self._repo.find_by_id(input.workspace_id)
+            settings = await self._repo.find_by_workspace_id(input.workspace_id)
             if settings is None:
                 settings = WorkspaceSettings.create_default(workspace_id=input.workspace_id)
 

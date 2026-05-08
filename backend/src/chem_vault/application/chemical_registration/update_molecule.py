@@ -67,8 +67,17 @@ class UpdateMolecule:
                     mol.update_tags(added=input.add_tags, removed=input.remove_tags)
 
                 if input.lifecycle_stage is not None:
+                    try:
+                        stage = LifecycleStage(input.lifecycle_stage)
+                    except ValueError:
+                        return Failure(
+                            ValidationError(
+                                f"Invalid lifecycle_stage '{input.lifecycle_stage}'. "
+                                f"Allowed: {[s.value for s in LifecycleStage]}"
+                            )
+                        )
                     mol.advance_lifecycle(
-                        LifecycleStage(input.lifecycle_stage),
+                        stage,
                         changed_by=input.changed_by,
                         reason=input.lifecycle_reason,
                     )

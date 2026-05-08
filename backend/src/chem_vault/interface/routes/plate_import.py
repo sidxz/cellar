@@ -176,9 +176,17 @@ async def preview_import(
         if isinstance(templates_result, Success):
             templates: list[ImportTemplate] = templates_result.unwrap()
             suggested_id, suggested_name = auto_match_template(preview.headers, templates)
-    except Exception:
-        # Auto-matching is best-effort; never fail the preview because of it
-        pass
+    except Exception as exc:  # noqa: BLE001 — best-effort suggestion path
+        # Auto-matching is purely a UX hint; we log and continue rather than
+        # silently swallowing so a misconfigured DI / DB issue is visible
+        # in operator logs without breaking the preview response.
+        import structlog
+
+        structlog.get_logger(__name__).warning(
+            "plate_import.auto_match_failed",
+            error=str(exc),
+            workspace_id=str(auth.workspace_id),
+        )
 
     return ImportPreviewResponse(
         file_id=preview.file_id,

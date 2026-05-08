@@ -25,7 +25,7 @@ from chem_vault.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
 )
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
-from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
+from chem_vault.application.inventory.salt_matcher import compute_formula_weight
 from chem_vault.interface.routes.batches import BatchResponse
 from chem_vault.application.chemical_registration.search_molecules import SearchMoleculesQuery
 from chem_vault.application.chemical_registration.update_molecule import UpdateMoleculeCommand
@@ -47,6 +47,7 @@ from chem_vault.interface.dependencies import (
     MoleculeActivityServiceDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
+    SaltMatcherUoWDep,
     SearchMoleculesDep,
     UpdateMoleculeDep,
     get_container,
@@ -329,27 +330,13 @@ def _get_create_batch(c: Annotated[Container, Depends(get_container)]) -> Create
     return c[CreateBatch]
 
 
-def _get_salt_matcher_uow(
-    c: Annotated[Container, Depends(get_container)],
-) -> tuple[SaltMatcher, Any]:
-    """Return (SaltMatcher, uow) — caller must use ``async with uow:``."""
-    from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-    from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
-        SQLAlchemySaltEntryRepository,
-    )
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
-    uow = AsyncUnitOfWork(c[async_sessionmaker])
-    return SaltMatcher(SQLAlchemySaltEntryRepository(uow)), uow
-
-
 @router.post("", response_model=RegistrationResponse, status_code=201)
 async def register_molecule(
     body: RegisterMoleculeBody,
     auth: AuthDep,
     use_case: RegisterMoleculeDep,
     create_batch_uc: Annotated[CreateBatch, Depends(_get_create_batch)],
-    salt_matcher_uow: Annotated[tuple[SaltMatcher, Any], Depends(_get_salt_matcher_uow)],
+    salt_matcher_uow: SaltMatcherUoWDep,
 ) -> RegistrationResponse:
     command = RegisterMoleculeCommand(
         workspace_id=auth.workspace_id,

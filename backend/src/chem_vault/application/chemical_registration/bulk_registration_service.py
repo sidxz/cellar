@@ -83,6 +83,7 @@ class BulkRegistrationItemResult:
     batch_number: str | None = None
     salt_matched: bool = False
     error: str | None = None
+    batch_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,7 @@ class BulkRegistrationService:
             workspace_id=input.workspace_id,
             originating_org_id=input.originating_org_id,
             submitted_by=input.submitted_by,
+            auth=auth,
         )
 
         # 3. Complete
@@ -181,6 +183,7 @@ class BulkRegistrationService:
         workspace_id: uuid.UUID,
         originating_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
+        auth: AuthContext | None,
     ) -> list[BulkRegistrationItemResult]:
         results: list[BulkRegistrationItemResult] = []
         register_uc = RegisterMolecule(
@@ -231,7 +234,7 @@ class BulkRegistrationService:
                 promote_name_as_identifier=has_explicit_name,
             )
 
-            result = await register_uc(cmd)
+            result = await register_uc(cmd, auth=auth)
 
             if isinstance(result, Failure):
                 err = result.failure()
@@ -258,11 +261,12 @@ class BulkRegistrationService:
                 )
 
                 # Create a batch for the registered molecule
-                batch_id, batch_number, salt_matched = await self._create_batch_for_item(
+                batch_id, batch_number, salt_matched, batch_err = await self._create_batch_for_item(
                     item=item,
                     reg_outcome=outcome,
                     workspace_id=workspace_id,
                     submitted_by=submitted_by,
+                    auth=auth,
                 )
 
                 pending.append(
@@ -282,12 +286,13 @@ class BulkRegistrationService:
                 results.append(
                     BulkRegistrationItemResult(
                         row_index=item.row_index,
-                        success=True,
+                        success=batch_err is None,
                         is_new=outcome.is_new,
                         molecule_id=outcome.molecule.id,
                         batch_id=batch_id,
                         batch_number=batch_number,
                         salt_matched=salt_matched,
+                        batch_error=batch_err,
                     )
                 )
 
@@ -305,7 +310,8 @@ class BulkRegistrationService:
         reg_outcome: RegistrationOutcome,
         workspace_id: uuid.UUID,
         submitted_by: uuid.UUID,
-    ) -> tuple[uuid.UUID | None, str | None, bool]:
+        auth: AuthContext | None,
+    ) -> tuple[uuid.UUID | None, str | None, bool, str | None]:
         """Resolve salt and create a batch for a successfully registered molecule.
 
         Salt resolution priority:
@@ -313,7 +319,9 @@ class BulkRegistrationService:
         2. Auto-detected salt from structure processing -> match_by_smiles
         3. No salt
 
-        Returns (batch_id, batch_number, salt_matched).
+        Returns ``(batch_id, batch_number, salt_matched, batch_error)``.
+        ``batch_error`` is ``None`` on success, otherwise a human-readable
+        message describing why the batch creation failed.
         """
         molecule = reg_outcome.molecule
         detected_salt = reg_outcome.detected_salt
@@ -384,16 +392,17 @@ class BulkRegistrationService:
             appearance=item.appearance,
         )
 
-        batch_result = await create_batch(batch_cmd)
+        batch_result = await create_batch(batch_cmd, auth=auth)
 
         if isinstance(batch_result, Failure):
+            err = batch_result.failure()
             logger.warning(
                 "Batch creation failed for molecule %s row %d: %s",
                 molecule.id,
                 item.row_index,
-                batch_result.failure(),
+                err,
             )
-            return None, None, False
+            return None, None, False, str(err)
 
         batch = batch_result.unwrap()
-        return batch.id, batch.batch_number.value, salt_matched
+        return batch.id, batch.batch_number.value, salt_matched, None
