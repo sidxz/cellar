@@ -101,12 +101,18 @@ export function FormulaInput({
   }, [showPopover]);
 
   /** Replace the token under the cursor with `text` and move cursor
-   *  past the inserted text. */
+   *  past the inserted text. In bracket mode, also consume an
+   *  immediately-following `]` so the user isn't left with a dangling
+   *  `]]` after their pre-typed closing bracket. */
   const commit = useCallback(
     (suggestion: FormulaSuggestion) => {
       const inserted = suggestion.value;
       const before = value.slice(0, token.start);
-      const after = value.slice(cursorPos);
+      let afterStart = cursorPos;
+      if (token.kind === "bracket" && value[afterStart] === "]") {
+        afterStart += 1;
+      }
+      const after = value.slice(afterStart);
       const next = before + inserted + after;
       onChange(next);
 
@@ -122,7 +128,7 @@ export function FormulaInput({
         setCursorPos(newPos);
       });
     },
-    [value, cursorPos, token.start, onChange],
+    [value, cursorPos, token.start, token.kind, onChange],
   );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
