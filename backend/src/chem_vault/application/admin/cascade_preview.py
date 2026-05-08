@@ -46,6 +46,8 @@ class CascadePreview:
         async with self._uow:
             runner = CascadeRunner(self._uow.session)  # type: ignore[attr-defined]
             node = await runner.preview(
-                parent_table=entry.table, parent_id=input.entity_id,
+                parent_table=entry.table,
+                parent_id=input.entity_id,
+                workspace_id=input.workspace_id,
             )
             return Success(node)

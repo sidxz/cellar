@@ -140,7 +140,9 @@ async def test_preview_protocol_with_one_run_one_plate(
     await _insert_plate(db_session, plate_id, run_id, barcode="B1")
 
     runner = CascadeRunner(db_session)
-    tree = await runner.preview(parent_table="protocols", parent_id=protocol_id)
+    tree = await runner.preview(
+        parent_table="protocols", parent_id=protocol_id, workspace_id=WORKSPACE_ID
+    )
 
     # Root node
     assert tree.entity_type == "protocol"

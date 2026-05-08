@@ -101,6 +101,7 @@ class AdminHardDelete:
                 self._uow.session,  # type: ignore[attr-defined]
                 parent_table=entry.table,
                 parent_id=input.entity_id,
+                workspace_id=input.workspace_id,
             )
             if blockers:
                 return Failure(BlockedByDependenciesError(blockers=tuple(blockers)))

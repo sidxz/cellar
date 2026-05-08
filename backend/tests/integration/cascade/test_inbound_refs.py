@@ -103,6 +103,7 @@ async def test_protocol_with_no_runs_has_no_blockers(db_session: AsyncSession) -
         db_session,
         parent_table="protocols",
         parent_id=protocol_id,
+        workspace_id=WORKSPACE_ID,
     )
 
     assert refs == []
@@ -125,6 +126,7 @@ async def test_protocol_with_runs_returns_run_blocker(db_session: AsyncSession) 
         db_session,
         parent_table="protocols",
         parent_id=protocol_id,
+        workspace_id=WORKSPACE_ID,
     )
 
     run_ref = next((r for r in refs if r.table == "runs"), None)
@@ -152,6 +154,7 @@ async def test_truncated_when_more_than_sample_limit(db_session: AsyncSession) -
         db_session,
         parent_table="protocols",
         parent_id=protocol_id,
+        workspace_id=WORKSPACE_ID,
         sample_limit=5,
     )
 

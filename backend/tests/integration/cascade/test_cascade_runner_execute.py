@@ -186,7 +186,9 @@ async def test_execute_deletes_protocol_and_descendants(
     await db_session.flush()
 
     runner = CascadeRunner(db_session)
-    entries = await runner.execute(parent_table="protocols", parent_id=protocol_id)
+    entries = await runner.execute(
+        parent_table="protocols", parent_id=protocol_id, workspace_id=WORKSPACE_ID
+    )
     await db_session.flush()
 
     # All rows gone
@@ -231,7 +233,9 @@ async def test_execute_sets_null_on_saved_searches(
     await db_session.flush()
 
     runner = CascadeRunner(db_session)
-    entries = await runner.execute(parent_table="projects", parent_id=project_id)
+    entries = await runner.execute(
+        parent_table="projects", parent_id=project_id, workspace_id=WORKSPACE_ID
+    )
     await db_session.flush()
 
     # Project is gone

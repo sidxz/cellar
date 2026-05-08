@@ -34,6 +34,7 @@ async def find_inbound_references(
     *,
     parent_table: str,
     parent_id: uuid.UUID,
+    workspace_id: uuid.UUID,
     sample_limit: int = 5,
 ) -> list[InboundReference]:
     """Return all rows referencing (parent_table, parent_id) via FK.
@@ -41,6 +42,10 @@ async def find_inbound_references(
     Walks ``Base.metadata`` at call-time — no registry, no per-entity
     boilerplate required.  Only tables that have at least one matching
     row are included in the result.
+
+    ``workspace_id`` is ANDed into every query on child tables that carry
+    a ``workspace_id`` column, so that an admin in workspace A cannot see
+    references that originate in workspace B.
     """
     references: list[InboundReference] = []
 
@@ -48,11 +53,13 @@ async def find_inbound_references(
         if table.name == parent_table:
             continue
         for fk in _foreign_keys_pointing_to(table, parent_table):
-            count = await _count_rows(session, table, fk.parent.name, parent_id)
+            count = await _count_rows(
+                session, table, fk.parent.name, parent_id, workspace_id
+            )
             if count == 0:
                 continue
             samples = await _fetch_samples(
-                session, table, fk.parent.name, parent_id, sample_limit
+                session, table, fk.parent.name, parent_id, workspace_id, sample_limit
             )
             entity_type, _label_col = label_for_table(table.name)
             references.append(
@@ -89,12 +96,15 @@ async def _count_rows(
     table: Table,
     fk_column: str,
     parent_id: uuid.UUID,
+    workspace_id: uuid.UUID,
 ) -> int:
     stmt = (
         select(func.count())
         .select_from(table)
         .where(table.c[fk_column] == parent_id)
     )
+    if "workspace_id" in table.c:
+        stmt = stmt.where(table.c["workspace_id"] == workspace_id)
     result = await session.execute(stmt)
     return int(result.scalar_one())
 
@@ -104,6 +114,7 @@ async def _fetch_samples(
     table: Table,
     fk_column: str,
     parent_id: uuid.UUID,
+    workspace_id: uuid.UUID,
     limit: int,
 ) -> list[dict]:
     """Fetch up to ``limit`` rows and render label using TABLE_LABELS.
@@ -127,6 +138,8 @@ async def _fetch_samples(
         .where(table.c[fk_column] == parent_id)
         .limit(limit)
     )
+    if "workspace_id" in table.c:
+        stmt = stmt.where(table.c["workspace_id"] == workspace_id)
     result = await session.execute(stmt)
     rows = result.all()
 

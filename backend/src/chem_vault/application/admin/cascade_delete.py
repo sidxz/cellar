@@ -54,6 +54,7 @@ class CascadeDelete:
         async with self._uow:
             actual_label = await _fetch_label(
                 self._uow.session, entry.table, input.entity_id,  # type: ignore[attr-defined]
+                workspace_id=input.workspace_id,
             )
             if actual_label is None:
                 return Failure(NotFoundError(input.entity_type, str(input.entity_id)))
@@ -65,7 +66,9 @@ class CascadeDelete:
             runner = CascadeRunner(self._uow.session)  # type: ignore[attr-defined]
             try:
                 entries = await runner.execute(
-                    parent_table=entry.table, parent_id=input.entity_id,
+                    parent_table=entry.table,
+                    parent_id=input.entity_id,
+                    workspace_id=input.workspace_id,
                 )
             except CascadeExecutionError as e:
                 return Failure(ValidationError(str(e)))
@@ -84,13 +87,16 @@ class CascadeDelete:
         return Success(None)
 
 
-async def _fetch_label(session, table_name: str, id_: uuid.UUID):
+async def _fetch_label(
+    session, table_name: str, id_: uuid.UUID, *, workspace_id: uuid.UUID
+):
     from sqlalchemy import select
     from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
     _et, label_col = label_for_table(table_name)
     if not label_col:
         return None
     t = Base.metadata.tables[table_name]
-    return (await session.execute(
-        select(t.c[label_col]).where(t.c.id == id_)
-    )).scalar_one_or_none()
+    stmt = select(t.c[label_col]).where(t.c.id == id_)
+    if "workspace_id" in t.c:
+        stmt = stmt.where(t.c["workspace_id"] == workspace_id)
+    return (await session.execute(stmt)).scalar_one_or_none()

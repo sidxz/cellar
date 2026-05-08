@@ -108,7 +108,6 @@ class TestAdminHardDelete:
 # workspace setup; direct inserts match the cascade integration test pattern).
 # ---------------------------------------------------------------------------
 
-_WORKSPACE_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000014")
 _USER_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000014")
 
 
@@ -120,8 +119,12 @@ async def _get_session(api_app: FastAPI) -> AsyncSession:
 
 
 async def _raw_insert_protocol(
-    api_app: FastAPI, protocol_id: uuid.UUID, name: str
+    api_app: FastAPI,
+    protocol_id: uuid.UUID,
+    name: str,
+    workspace_id: uuid.UUID,
 ) -> None:
+    """Insert a protocol in the given workspace (must match the admin auth workspace)."""
     async with await _get_session(api_app) as session:
         await session.execute(
             sa.text(
@@ -130,7 +133,7 @@ async def _raw_insert_protocol(
                 "VALUES (:id, :ws, 'T14 Org', 'internal', true, 1) "
                 "ON CONFLICT DO NOTHING"
             ),
-            {"id": _USER_ID, "ws": _WORKSPACE_ID},
+            {"id": _USER_ID, "ws": workspace_id},
         )
         await session.execute(
             sa.text(
@@ -143,7 +146,7 @@ async def _raw_insert_protocol(
             ),
             {
                 "id": protocol_id,
-                "ws": _WORKSPACE_ID,
+                "ws": workspace_id,
                 "name": name,
                 "user": _USER_ID,
             },
@@ -158,12 +161,12 @@ async def _raw_insert_protocol(
 
 class TestCascadeTier2:
     async def test_cascade_preview_protocol(
-        self, client: AsyncClient, api_app: FastAPI
+        self, client: AsyncClient, api_app: FastAPI, workspace_id: uuid.UUID
     ) -> None:
         """Admin previews cascade tree for a protocol — returns 200 with CascadeNode JSON."""
         protocol_id = uuid.uuid4()
         proto_name = f"T14-Preview-{protocol_id.hex[:6]}"
-        await _raw_insert_protocol(api_app, protocol_id, proto_name)
+        await _raw_insert_protocol(api_app, protocol_id, proto_name, workspace_id)
 
         resp = await client.post(
             f"/api/v1/admin/protocol/{protocol_id}/cascade-preview"
@@ -175,12 +178,12 @@ class TestCascadeTier2:
         assert "children" in body
 
     async def test_cascade_delete_requires_typed_name(
-        self, client: AsyncClient, api_app: FastAPI
+        self, client: AsyncClient, api_app: FastAPI, workspace_id: uuid.UUID
     ) -> None:
         """Cascade delete with wrong typed_name → 422."""
         protocol_id = uuid.uuid4()
         proto_name = f"T14-WrongName-{protocol_id.hex[:6]}"
-        await _raw_insert_protocol(api_app, protocol_id, proto_name)
+        await _raw_insert_protocol(api_app, protocol_id, proto_name, workspace_id)
 
         resp = await client.request(
             "DELETE",
@@ -190,12 +193,12 @@ class TestCascadeTier2:
         assert resp.status_code == 422, resp.text
 
     async def test_cascade_delete_succeeds(
-        self, client: AsyncClient, api_app: FastAPI
+        self, client: AsyncClient, api_app: FastAPI, workspace_id: uuid.UUID
     ) -> None:
         """Cascade delete with correct typed_name + reason → 204."""
         protocol_id = uuid.uuid4()
         proto_name = f"T14-Delete-{protocol_id.hex[:6]}"
-        await _raw_insert_protocol(api_app, protocol_id, proto_name)
+        await _raw_insert_protocol(api_app, protocol_id, proto_name, workspace_id)
 
         resp = await client.request(
             "DELETE",
