@@ -260,12 +260,7 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
             onChange={(e) => handleGeneralizedToggle(e.target.checked)}
             className="accent-primary"
           />
-          <span>
-            Allow tautomer / link-node matches
-            <span className="ml-2 text-xs text-muted-foreground">
-              (uses <code>@&gt;&gt;</code> with <code>mol_to_xqmol</code>)
-            </span>
-          </span>
+          <span>Match across tautomers and structural variants</span>
         </label>
       )}
 
