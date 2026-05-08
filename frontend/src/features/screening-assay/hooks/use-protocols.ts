@@ -128,7 +128,8 @@ export function useAddReadoutDefinition(protocolId: string) {
       is_calculated?: boolean;
       calculation_formula?: string | null;
       display_order?: number;
-      pick_list_values?: string[] | null;
+      description?: string | null;
+      pick_list_values?: Array<{ label: string; color?: string | null } | string> | null;
       dose_response_config?: Record<string, unknown> | null;
     }) =>
       customInstance<Protocol>({
@@ -150,6 +151,7 @@ export function useUpdateReadoutDefinition(protocolId: string) {
       definitionId: string;
       data: {
         name?: string;
+        description?: string | null;
         data_type?: string;
         unit?: string | null;
         aggregation?: string;
@@ -159,7 +161,7 @@ export function useUpdateReadoutDefinition(protocolId: string) {
         is_calculated?: boolean;
         calculation_formula?: string | null;
         display_order?: number;
-        pick_list_values?: string[] | null;
+        pick_list_values?: Array<{ label: string; color?: string | null } | string> | null;
         dose_response_config?: Record<string, unknown> | null;
       };
     }) =>

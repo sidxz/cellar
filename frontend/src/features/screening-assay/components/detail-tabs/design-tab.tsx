@@ -27,6 +27,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -62,10 +63,13 @@ import {
 } from "@/shared/components/ontology-search-input";
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import { ConditionGroupTable } from "../condition-group-table";
+import { PickListEditor } from "../pick-list-editor";
 import { PlateMapView } from "../plate-map-view";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
 import { NormalizationCheckboxGroup } from "../readout-normalization-checkboxes";
+import { resolvePickListColor } from "../../lib/pick-list-colors";
 import { showInfo } from "@/shared/lib/toast";
+import { cn } from "@/shared/lib/utils";
 import {
   CURVE_TYPE_LABELS,
   HILL_SLOPE_CONSTRAINT_LABELS,
@@ -78,6 +82,7 @@ import {
   type CurveType,
   type HillSlopeConstraint,
   type NormalizationScope,
+  type PickListValue,
   type PlateFormat,
   type PosControlSignal,
   type Protocol,
@@ -165,10 +170,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
   // --- Readout form fields ---
   const [rdName, setRdName] = useState("");
+  const [rdDescription, setRdDescription] = useState("");
   const [rdDataType, setRdDataType] = useState("numeric");
   const [rdUnit, setRdUnit] = useState("");
   const [rdAggregation, setRdAggregation] = useState("none");
   const [rdNormalizations, setRdNormalizations] = useState<ReadoutNormalization[]>([]);
+  const [rdPickListValues, setRdPickListValues] = useState<PickListValue[]>([]);
   // Dose-response config sub-fields (only used when rdDataType === "dose_response").
   // X-axis sentinel: when drXReadout === WELL_CONC_X, the curve fits against the
   // well's own concentration (the default and most common case). Mapped to
@@ -283,10 +290,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     const rd = protocol.readout_definitions.find((r) => r.id === rdId);
     if (!rd) return;
     setRdName(rd.name);
+    setRdDescription(rd.description ?? "");
     setRdDataType(rd.data_type);
     setRdUnit(rd.unit ?? "");
     setRdAggregation(rd.aggregation);
     setRdNormalizations(rd.normalizations ?? []);
+    setRdPickListValues(rd.pick_list_values ?? []);
     if (rd.dose_response_config) {
       const cfg = rd.dose_response_config;
       setDrCurveType(cfg.curve_type);
@@ -379,10 +388,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const closeEditReadout = () => {
     setEditingReadoutId(null);
     setRdName("");
+    setRdDescription("");
     setRdDataType("numeric");
     setRdUnit("");
     setRdAggregation("none");
     setRdNormalizations([]);
+    setRdPickListValues([]);
     resetDoseResponseFields();
   };
 
@@ -1271,15 +1282,22 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       {rd.pick_list_values &&
                         rd.pick_list_values.length > 0 && (
                           <div className="mt-0.5 flex flex-wrap gap-1">
-                            {rd.pick_list_values.map((v) => (
-                              <Badge
-                                key={v}
-                                variant="outline"
-                                className="text-[10px]"
-                              >
-                                {v}
-                              </Badge>
-                            ))}
+                            {rd.pick_list_values.map((v) => {
+                              const c = resolvePickListColor(v.label, v.color);
+                              return (
+                                <Badge
+                                  key={v.label}
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px]",
+                                    c.bg,
+                                    c.text,
+                                  )}
+                                >
+                                  {v.label}
+                                </Badge>
+                              );
+                            })}
                           </div>
                         )}
                     </TableCell>
@@ -1727,6 +1745,20 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               )}
             </div>
             <div className="space-y-1">
+              <Label>
+                Description{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Textarea
+                value={rdDescription}
+                onChange={(e) => setRdDescription(e.target.value)}
+                placeholder="What this readout captures, e.g. 'Compound activity vs DMSO baseline, normalized per plate.'"
+                rows={2}
+              />
+            </div>
+            <div className="space-y-1">
               <Label>Data Type</Label>
               <Select value={rdDataType} onValueChange={setRdDataType}>
                 <SelectTrigger>
@@ -1778,6 +1810,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 onChange={setRdNormalizations}
               />
             </div>
+            {rdDataType === "pick_list" && (
+              <div className="space-y-1">
+                <Label>Allowed Values</Label>
+                <PickListEditor
+                  value={rdPickListValues}
+                  onChange={setRdPickListValues}
+                />
+              </div>
+            )}
             {renderDoseResponseFields(null)}
           </div>
           <DialogFooter>
@@ -1793,25 +1834,38 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 isReservedReadoutName(rdName) ||
                 addReadoutDef.isPending ||
                 (rdDataType === "dose_response" && !drYReadout) ||
+                (rdDataType === "pick_list" &&
+                  rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
                 drFormInvalid
               }
               onClick={() => {
+                const cleanedPickList = rdPickListValues
+                  .filter((v) => v.label.trim())
+                  .map((v) => ({
+                    label: v.label.trim(),
+                    color: v.color || null,
+                  }));
                 addReadoutDef.mutate(
                   {
                     name: rdName.trim(),
+                    description: rdDescription.trim() || null,
                     data_type: rdDataType,
                     unit: rdUnit.trim() || undefined,
                     aggregation: rdAggregation,
                     normalizations: rdNormalizations,
+                    pick_list_values:
+                      rdDataType === "pick_list" ? cleanedPickList : undefined,
                     dose_response_config: buildDoseResponseConfig(),
                   },
                   {
                     onSuccess: () => {
                       setRdName("");
+                      setRdDescription("");
                       setRdDataType("numeric");
                       setRdUnit("");
                       setRdAggregation("none");
                       setRdNormalizations([]);
+                      setRdPickListValues([]);
                       resetDoseResponseFields();
                       setAddReadoutOpen(false);
                     },
@@ -1855,6 +1909,20 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   and cannot be used as a readout.
                 </p>
               )}
+            </div>
+            <div className="space-y-1">
+              <Label>
+                Description{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Textarea
+                value={rdDescription}
+                onChange={(e) => setRdDescription(e.target.value)}
+                placeholder="What this readout captures."
+                rows={2}
+              />
             </div>
             <div className="space-y-1">
               <Label>Data Type</Label>
@@ -1913,6 +1981,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 disabled={!isDraft}
               />
             </div>
+            {rdDataType === "pick_list" && (
+              <div className="space-y-1">
+                <Label>Allowed Values</Label>
+                <PickListEditor
+                  value={rdPickListValues}
+                  onChange={setRdPickListValues}
+                  disabled={!isDraft}
+                />
+              </div>
+            )}
             {/* Dose-response fields are structural (curve type, axes,
                 intercepts, ranges) — disabled on non-DRAFT. The fields
                 inside renderDoseResponseFields don't currently take a
@@ -1936,19 +2014,30 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 isReservedReadoutName(rdName) ||
                 updateReadoutDef.isPending ||
                 (rdDataType === "dose_response" && !drYReadout) ||
+                (rdDataType === "pick_list" &&
+                  rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
                 drFormInvalid
               }
               onClick={() => {
                 if (!editingReadoutId) return;
+                const cleanedPickList = rdPickListValues
+                  .filter((v) => v.label.trim())
+                  .map((v) => ({
+                    label: v.label.trim(),
+                    color: v.color || null,
+                  }));
                 updateReadoutDef.mutate(
                   {
                     definitionId: editingReadoutId,
                     data: {
                       name: rdName.trim(),
+                      description: rdDescription.trim() || null,
                       data_type: rdDataType,
                       unit: rdUnit.trim() || null,
                       aggregation: rdAggregation,
                       normalizations: rdNormalizations,
+                      pick_list_values:
+                        rdDataType === "pick_list" ? cleanedPickList : null,
                       dose_response_config: buildDoseResponseConfig(),
                     },
                   },

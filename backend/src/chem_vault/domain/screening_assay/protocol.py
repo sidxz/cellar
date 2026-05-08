@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
@@ -82,6 +84,79 @@ _is_reserved_readout_name = is_reserved_readout_name
 
 
 # ---------------------------------------------------------------------------
+# Pick-list value VO — readout-only (not used for ConditionDefinition)
+# ---------------------------------------------------------------------------
+
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+@dataclass(frozen=True)
+class PickListValue:
+    """A single allowed value for a pick-list-typed readout.
+
+    `color` is optional — when None, the FE derives a stable color from
+    the label hash. When set, must be a 7-char lowercase hex (#rrggbb)
+    so the palette stays normalized end-to-end. The FE picks from a
+    fixed palette; arbitrary hexes from the API are still validated to
+    the format but otherwise accepted.
+    """
+
+    label: str
+    color: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.label or not self.label.strip():
+            raise ValidationError("PickListValue label must not be empty")
+        if self.color is not None:
+            if not _HEX_COLOR_RE.match(self.color):
+                raise ValidationError(
+                    f"PickListValue color must be 7-char hex (#rrggbb), "
+                    f"got {self.color!r}"
+                )
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {"label": self.label, "color": self.color}
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object] | str) -> PickListValue:
+        """Tolerant deserializer: accepts the rich {label, color} shape OR
+        a bare string (legacy: list[str] rows pre-dating this VO)."""
+        if isinstance(raw, str):
+            return cls(label=raw)
+        if isinstance(raw, dict):
+            label = raw.get("label")
+            color = raw.get("color")
+            if not isinstance(label, str):
+                raise ValidationError(
+                    f"PickListValue dict missing 'label' string: {raw!r}"
+                )
+            return cls(
+                label=label,
+                color=color if isinstance(color, str) else None,
+            )
+        raise ValidationError(
+            f"PickListValue must be str or dict, got {type(raw).__name__}"
+        )
+
+
+def _normalize_pick_list_values(
+    raw: list[PickListValue | str | dict[str, object]] | None,
+) -> list[PickListValue] | None:
+    """Lift mixed inputs (legacy strings, dicts from JSON, already-VO) to
+    a homogeneous list[PickListValue]. None passes through unchanged so
+    the entity can keep "no pick list" semantics for non-pick-list types."""
+    if raw is None:
+        return None
+    out: list[PickListValue] = []
+    for item in raw:
+        if isinstance(item, PickListValue):
+            out.append(item)
+        else:
+            out.append(PickListValue.from_dict(item))  # type: ignore[arg-type]
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Owned entities
 # ---------------------------------------------------------------------------
 
@@ -102,6 +177,7 @@ class ReadoutDefinition(Entity):
         id: uuid.UUID | None = None,
         protocol_id: uuid.UUID,
         name: str,
+        description: str | None = None,
         data_type: ReadoutDataType,
         unit: str | None = None,
         aggregation: ReadoutAggregation = ReadoutAggregation.NONE,
@@ -110,7 +186,7 @@ class ReadoutDefinition(Entity):
         is_calculated: bool = False,
         calculation_formula: str | None = None,
         display_order: int = 0,
-        pick_list_values: list[str] | None = None,
+        pick_list_values: list[PickListValue | str | dict[str, object]] | None = None,
         dose_response_config: DoseResponseConfig | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -154,6 +230,11 @@ class ReadoutDefinition(Entity):
 
         self.protocol_id = protocol_id
         self.name = name.strip()
+        # Optional documentation — surfaced in the readout-data table
+        # header tooltip, the import wizard, and the viewer dialog. Pure
+        # cosmetic: editable on unlocked ACTIVE since no run-data
+        # interpretation depends on it.
+        self.description = description.strip() if description else None
         self.data_type = data_type
         self.unit = unit
         self.aggregation = aggregation
@@ -162,7 +243,12 @@ class ReadoutDefinition(Entity):
         self.is_calculated = is_calculated
         self.calculation_formula = calculation_formula
         self.display_order = display_order
-        self.pick_list_values = pick_list_values
+        # Normalize whatever shape came in (list[str] from legacy, list[dict]
+        # from JSONB hydration, list[PickListValue] from fresh construction)
+        # to a homogeneous list[PickListValue].
+        self.pick_list_values: list[PickListValue] | None = (
+            _normalize_pick_list_values(pick_list_values)
+        )
         self.dose_response_config = dose_response_config
 
 
@@ -655,6 +741,7 @@ class Protocol(AggregateRoot):
         definition_id: uuid.UUID,
         *,
         name: str | None = None,
+        description: str | None | _UnsetT = _UNSET,
         data_type: ReadoutDataType | None = None,
         unit: str | None | _UnsetT = _UNSET,
         aggregation: ReadoutAggregation | None = None,
@@ -663,7 +750,9 @@ class Protocol(AggregateRoot):
         is_calculated: bool | None = None,
         calculation_formula: str | None | _UnsetT = _UNSET,
         display_order: int | None = None,
-        pick_list_values: list[str] | None | _UnsetT = _UNSET,
+        pick_list_values: (
+            list[PickListValue | str | dict[str, object]] | None | _UnsetT
+        ) = _UNSET,
         dose_response_config: DoseResponseConfig | None | _UnsetT = _UNSET,
     ) -> None:
         """Update fields on an existing readout definition.
@@ -722,6 +811,9 @@ class Protocol(AggregateRoot):
             id=existing.id,
             protocol_id=existing.protocol_id,
             name=new_name,
+            description=(
+                existing.description if description is _UNSET else description  # type: ignore[arg-type]
+            ),
             data_type=data_type if data_type is not None else existing.data_type,
             unit=existing.unit if unit is _UNSET else unit,  # type: ignore[arg-type]
             aggregation=aggregation if aggregation is not None else existing.aggregation,

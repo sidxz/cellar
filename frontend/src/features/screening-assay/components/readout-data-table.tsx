@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { Badge } from "@/shared/components/ui/badge";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
 import { cn } from "@/shared/lib/utils";
@@ -9,6 +10,7 @@ import { groupBy } from "@/shared/lib/group-by";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
+import { resolvePickListColor } from "../lib/pick-list-colors";
 import {
   READOUT_NORMALIZATION_LABELS,
   type DoseResponseCurve,
@@ -265,6 +267,7 @@ export function ReadoutDataTable({
         cols.push({
           headerName: drHeader,
           headerTooltip:
+            rd.description ||
             "Dose-response fit value — same for every well of a compound",
           colId: rd.id,
           width: 130,
@@ -299,12 +302,14 @@ export function ReadoutDataTable({
       // which case there is no raw layer; only the formula output).
       if (!rd.is_calculated) {
         const rawHeader = rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
+        const isPickList = rd.data_type === "pick_list";
         cols.push({
           headerName: rawHeader,
+          headerTooltip: rd.description ?? undefined,
           colId: `${rd.id}::raw`,
           width: 130,
-          cellClass: "text-right tabular-nums",
-          headerClass: "ag-right-aligned-header",
+          cellClass: isPickList ? undefined : "text-right tabular-nums",
+          headerClass: isPickList ? undefined : "ag-right-aligned-header",
           valueGetter: (p) => {
             const row = p.data?.values.get(valueKey(rd.id, false));
             if (!row) return null;
@@ -314,6 +319,25 @@ export function ReadoutDataTable({
             const row = params.data?.values.get(valueKey(rd.id, false));
             if (!row)
               return <span className="text-muted-foreground">{"\u2014"}</span>;
+            // Pick-list cells render as a colored Badge using the
+            // declared color (or hash-derived fallback when null).
+            if (isPickList && row.value_text) {
+              const declared = rd.pick_list_values?.find(
+                (v) => v.label === row.value_text,
+              );
+              const color = resolvePickListColor(
+                row.value_text,
+                declared?.color,
+              );
+              return (
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", color.bg, color.text)}
+                >
+                  {row.value_text}
+                </Badge>
+              );
+            }
             return (
               <span
                 className={cn(

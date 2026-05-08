@@ -42,6 +42,7 @@ class CddProtocolSummaryResponse(BaseModel):
 
 class MappedReadoutResponse(BaseModel):
     name: str
+    description: str | None = None
     data_type: str
     unit: str | None = None
     aggregation: str
@@ -59,6 +60,7 @@ class MappedReadoutResponse(BaseModel):
     def from_dto(cls, r: MappedReadout) -> MappedReadoutResponse:
         return cls(
             name=r.name,
+            description=r.description,
             data_type=r.data_type.value,
             unit=r.unit,
             aggregation=r.aggregation.value,

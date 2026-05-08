@@ -49,10 +49,12 @@ import {
   READOUT_DATA_TYPE_LABELS,
   type CreateReadoutDefinitionInput,
   type DoseUnit,
+  type PickListValue,
   type ProtocolType,
   type ReadoutNormalization,
 } from "../types";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
+import { PickListEditor } from "./pick-list-editor";
 
 // Sentinel for the X-axis dropdown that means "use the well's concentration"
 // (mapped to x_readout_name=null in the payload).
@@ -89,7 +91,7 @@ interface ReadoutDefState {
   is_calculated: boolean;
   calculation_formula: string;
   display_order: number;
-  pick_list_values: string;
+  pick_list_values: PickListValue[];
   // Dose-response config fields (flat for form state)
   dr_curve_type: string;
   dr_x_readout: string;
@@ -115,7 +117,7 @@ function emptyReadoutDef(order: number): ReadoutDefState {
     is_calculated: false,
     calculation_formula: "",
     display_order: order,
-    pick_list_values: "",
+    pick_list_values: [],
     dr_curve_type: "ic50",
     dr_x_readout: WELL_CONC_X,
     dr_y_readout: "",
@@ -275,8 +277,13 @@ export function CreateProtocolDialog({
             : null,
           display_order: rd.display_order,
         };
-        if (rd.data_type === "pick_list" && rd.pick_list_values.trim()) {
-          base.pick_list_values = rd.pick_list_values.split(",").map((v) => v.trim()).filter(Boolean);
+        if (rd.data_type === "pick_list") {
+          const cleaned = rd.pick_list_values
+            .filter((v) => v.label.trim())
+            .map((v) => ({ label: v.label.trim(), color: v.color || null }));
+          if (cleaned.length > 0) {
+            base.pick_list_values = cleaned;
+          }
         }
         if (rd.data_type === "dose_response" && rd.dr_y_readout) {
           base.dose_response_config = {
@@ -665,11 +672,10 @@ export function CreateProtocolDialog({
                       {rd.data_type === "pick_list" && (
                         <div className="grid gap-1">
                           <Label className="text-xs">Pick List Values</Label>
-                          <Input
-                            placeholder="Comma-separated values, e.g., Active, Inactive, Inconclusive"
+                          <PickListEditor
                             value={rd.pick_list_values}
-                            onChange={(e) =>
-                              updateReadout(index, "pick_list_values", e.target.value)
+                            onChange={(next) =>
+                              updateReadout(index, "pick_list_values", next)
                             }
                           />
                         </div>

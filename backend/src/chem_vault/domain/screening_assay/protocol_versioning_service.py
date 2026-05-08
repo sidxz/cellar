@@ -51,6 +51,7 @@ class ProtocolVersioningService:
             ReadoutDefinition(
                 protocol_id=new_protocol_id,
                 name=rd.name,
+                description=rd.description,
                 data_type=rd.data_type,
                 unit=rd.unit,
                 aggregation=rd.aggregation,

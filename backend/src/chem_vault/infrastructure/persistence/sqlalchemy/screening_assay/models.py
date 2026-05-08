@@ -176,6 +176,7 @@ class ReadoutDefinitionModel(Base, EntityModelMixin):
         Uuid, ForeignKey("protocols.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
     data_type: Mapped[str] = mapped_column(String(20), nullable=False)
     unit: Mapped[str | None] = mapped_column(String(50))
     aggregation: Mapped[str] = mapped_column(

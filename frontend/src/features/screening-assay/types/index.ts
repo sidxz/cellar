@@ -256,6 +256,10 @@ export interface DoseResponseConfig {
 export interface ReadoutDefinition {
   id: string;
   name: string;
+  /** Optional documentation surfaced in the readout-data table header
+   *  tooltip, the import wizard column hint, and the viewer dialog.
+   *  Pure cosmetic — editable on unlocked ACTIVE. */
+  description: string | null;
   data_type: ReadoutDataType;
   unit: string | null;
   aggregation: ReadoutAggregation;
@@ -265,8 +269,19 @@ export interface ReadoutDefinition {
   is_calculated: boolean;
   calculation_formula: string | null;
   display_order: number;
-  pick_list_values: string[] | null;
+  /** Pick-list values for PICK_LIST data_type. Each item is
+   *  `{label, color?}` where color is a 7-char hex (#rrggbb) or null
+   *  for "auto" (FE derives a stable color from the label hash). The
+   *  shape diverges from ConditionDefinition (which stays string[]) —
+   *  colors are only meaningful for measurement classifications, not
+   *  condition variables. */
+  pick_list_values: PickListValue[] | null;
   dose_response_config: DoseResponseConfig | null;
+}
+
+export interface PickListValue {
+  label: string;
+  color?: string | null;
 }
 
 export interface ConditionDefinition {
@@ -479,10 +494,14 @@ export interface CreateReadoutDefinitionInput {
   normalizations?: ReadoutNormalization[];
   /** Legacy single-value field. Lifted server-side when normalizations is omitted. */
   normalization?: ReadoutNormalization;
+  description?: string | null;
   is_calculated?: boolean;
   calculation_formula?: string | null;
   display_order?: number;
-  pick_list_values?: string[] | null;
+  /** Pick-list values: each item is `{label, color?}` or a bare string
+   *  (legacy). The backend's _normalize_pick_list_values lifts strings
+   *  to dicts. Color is optional — null means "auto" (hash-derived). */
+  pick_list_values?: Array<PickListValue | string> | null;
   dose_response_config?: DoseResponseConfig | null;
 }
 

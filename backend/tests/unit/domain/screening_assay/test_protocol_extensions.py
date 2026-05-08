@@ -53,13 +53,47 @@ def _make_protocol(workspace_id=None, user_id=None, **kwargs):
 
 class TestReadoutDefinitionPickList:
     def test_pick_list_with_values(self):
+        # Constructor accepts legacy list[str] shape; lifts to PickListValue
+        # objects (color = None when not specified).
+        from chem_vault.domain.screening_assay.protocol import PickListValue
+
         rd = ReadoutDefinition(
             protocol_id=_PLACEHOLDER_ID,
             name="Result",
             data_type=ReadoutDataType.PICK_LIST,
             pick_list_values=["Active", "Inactive"],
         )
-        assert rd.pick_list_values == ["Active", "Inactive"]
+        assert rd.pick_list_values == [
+            PickListValue(label="Active"),
+            PickListValue(label="Inactive"),
+        ]
+
+    def test_pick_list_with_color(self):
+        from chem_vault.domain.screening_assay.protocol import PickListValue
+
+        rd = ReadoutDefinition(
+            protocol_id=_PLACEHOLDER_ID,
+            name="Hit Class",
+            data_type=ReadoutDataType.PICK_LIST,
+            pick_list_values=[
+                PickListValue(label="Active", color="#22c55e"),
+                {"label": "Inactive", "color": "#ef4444"},
+                "Partial",  # no color — auto-derive on FE
+            ],
+        )
+        assert rd.pick_list_values is not None
+        assert rd.pick_list_values[0] == PickListValue(label="Active", color="#22c55e")
+        assert rd.pick_list_values[1] == PickListValue(label="Inactive", color="#ef4444")
+        assert rd.pick_list_values[2] == PickListValue(label="Partial", color=None)
+
+    def test_pick_list_invalid_color_raises(self):
+        from chem_vault.domain.screening_assay.protocol import PickListValue
+        from chem_vault.domain.shared.errors import ValidationError as VE
+
+        with pytest.raises(VE, match="7-char hex"):
+            PickListValue(label="X", color="green")
+        with pytest.raises(VE, match="7-char hex"):
+            PickListValue(label="X", color="#abc")
 
     def test_pick_list_without_values_raises(self):
         with pytest.raises(ValidationError, match="pick_list_values"):
@@ -323,6 +357,8 @@ class TestProtocolVersioningNewFields:
             ProtocolVersioningService,
         )
 
+        from chem_vault.domain.screening_assay.protocol import PickListValue
+
         protocol = _make_protocol(
             readout_definitions=[
                 ReadoutDefinition(
@@ -336,7 +372,10 @@ class TestProtocolVersioningNewFields:
         protocol.publish()
         svc = ProtocolVersioningService()
         new_protocol = svc.create_new_version(protocol)
-        assert new_protocol.readout_definitions[0].pick_list_values == ["Active", "Inactive"]
+        assert new_protocol.readout_definitions[0].pick_list_values == [
+            PickListValue(label="Active"),
+            PickListValue(label="Inactive"),
+        ]
         # Verify it's a copy, not shared reference
         assert new_protocol.readout_definitions[0].pick_list_values is not protocol.readout_definitions[0].pick_list_values
 

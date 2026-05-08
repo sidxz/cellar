@@ -97,6 +97,7 @@ class CreateProtocol:
                 ReadoutDefinition(
                     protocol_id=tmp_protocol_id,
                     name=rd["name"],
+                    description=rd.get("description"),
                     data_type=ReadoutDataType(rd["data_type"]),
                     unit=rd.get("unit"),
                     aggregation=ReadoutAggregation(rd["aggregation"]) if rd.get("aggregation") else ReadoutAggregation.NONE,

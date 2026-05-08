@@ -219,6 +219,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 id=rd.id,
                 protocol_id=rd.protocol_id,
                 name=rd.name,
+                description=rd.description,
                 data_type=ReadoutDataType(rd.data_type),
                 unit=rd.unit,
                 aggregation=ReadoutAggregation(rd.aggregation),
@@ -415,6 +416,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             id=rd.id,
             protocol_id=rd.protocol_id,
             name=rd.name,
+            description=rd.description,
             data_type=rd.data_type.value,
             unit=rd.unit,
             aggregation=rd.aggregation.value,
@@ -423,7 +425,11 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             is_calculated=rd.is_calculated,
             calculation_formula=rd.calculation_formula,
             display_order=rd.display_order,
-            pick_list_values=rd.pick_list_values,
+            pick_list_values=(
+                [v.to_dict() for v in rd.pick_list_values]
+                if rd.pick_list_values
+                else None
+            ),
             dose_response_config=dose_response_dict,
         )
 

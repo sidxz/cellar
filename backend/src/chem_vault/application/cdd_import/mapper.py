@@ -93,6 +93,7 @@ class MappingWarning:
 @dataclass(frozen=True)
 class MappedReadout:
     name: str
+    description: str | None
     data_type: ReadoutDataType
     unit: str | None
     aggregation: ReadoutAggregation
@@ -278,6 +279,7 @@ def _build_dose_response_readouts(
         dr_readouts.append(
             MappedReadout(
                 name=dr_name,
+                description=intercept_rd.get("description"),
                 data_type=ReadoutDataType.DOSE_RESPONSE,
                 unit=dr_unit,
                 aggregation=ReadoutAggregation.NONE,
@@ -425,6 +427,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
         readouts.append(
             MappedReadout(
                 name=rd_name,
+                description=rd.get("description"),
                 data_type=mapped_type,
                 unit=rd.get("unit_label") or rd.get("unit"),
                 aggregation=ReadoutAggregation.NONE,

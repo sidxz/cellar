@@ -117,6 +117,7 @@ router = APIRouter(prefix="/api/v1")
 class ReadoutDefinitionResponse(BaseModel):
     id: uuid.UUID
     name: str
+    description: str | None = None
     data_type: str
     unit: str | None = None
     aggregation: str
@@ -126,7 +127,12 @@ class ReadoutDefinitionResponse(BaseModel):
     is_calculated: bool
     calculation_formula: str | None = None
     display_order: int
-    pick_list_values: list[str] | None = None
+    # Pick-list values for PICK_LIST data_type. Each is `{label, color}`
+    # where color is a 7-char hex (#rrggbb) or null for "auto". The shape
+    # diverges from ConditionDefinition (which stays list[str]) — colors
+    # are only meaningful for measurement classifications, not condition
+    # variables.
+    pick_list_values: list[dict] | None = None
     dose_response_config: dict | None = None
 
 
@@ -203,6 +209,7 @@ class ProtocolResponse(BaseModel):
                 ReadoutDefinitionResponse(
                     id=rd.id,
                     name=rd.name,
+                    description=rd.description,
                     data_type=rd.data_type.value,
                     unit=rd.unit,
                     aggregation=rd.aggregation.value,
@@ -211,7 +218,11 @@ class ProtocolResponse(BaseModel):
                     is_calculated=rd.is_calculated,
                     calculation_formula=rd.calculation_formula,
                     display_order=rd.display_order,
-                    pick_list_values=rd.pick_list_values,
+                    pick_list_values=(
+                        [v.to_dict() for v in rd.pick_list_values]
+                        if rd.pick_list_values
+                        else None
+                    ),
                     dose_response_config=(
                         serialize_dose_response_config(rd.dose_response_config)
                         if rd.dose_response_config is not None
@@ -320,6 +331,7 @@ class RetireRequest(BaseModel):
 
 class AddReadoutDefinitionRequest(BaseModel):
     name: str
+    description: str | None = None
     data_type: str
     unit: str | None = None
     aggregation: str = "none"
@@ -329,7 +341,10 @@ class AddReadoutDefinitionRequest(BaseModel):
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
-    pick_list_values: list[str] | None = None
+    # Pick-list values: each item is either a `{label, color?}` dict
+    # (preferred) or a bare string (legacy). The use case lifts strings
+    # to `{label}` automatically.
+    pick_list_values: list[dict | str] | None = None
     dose_response_config: dict | None = None
 
 
@@ -337,6 +352,7 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     """Partial-update payload. Only fields present in the JSON are applied."""
 
     name: str | None = None
+    description: str | None = None
     data_type: str | None = None
     unit: str | None = None
     aggregation: str | None = None
@@ -346,7 +362,7 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     is_calculated: bool | None = None
     calculation_formula: str | None = None
     display_order: int | None = None
-    pick_list_values: list[str] | None = None
+    pick_list_values: list[dict | str] | None = None
     dose_response_config: dict | None = None
 
 
@@ -588,6 +604,7 @@ async def add_readout_definition(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
         name=body.name,
+        description=body.description,
         data_type=body.data_type,
         unit=body.unit,
         aggregation=body.aggregation,
@@ -631,7 +648,7 @@ async def update_readout_definition(
         if key in sent:
             cmd_kwargs[key] = getattr(body, key)
     for key in (
-        "unit", "precision", "calculation_formula",
+        "unit", "precision", "calculation_formula", "description",
         "normalizations", "pick_list_values", "dose_response_config",
     ):
         if key in sent:

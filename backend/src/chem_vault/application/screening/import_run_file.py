@@ -591,6 +591,14 @@ class ImportRunFile:
             cmd.workspace_id, run.id
         )
         rd_name_by_id = {rd.id: rd.name for rd in protocol.readout_definitions}
+        # Build allowed-label sets for each PICK_LIST readout def. The scan
+        # uses these to flag rows whose value isn't in the set. None for
+        # non-pick-list defs — they aren't constrained.
+        pick_list_allowed: dict[uuid.UUID, set[str]] = {}
+        for rd in protocol.readout_definitions:
+            if rd.data_type == ReadoutDataType.PICK_LIST and rd.pick_list_values:
+                pick_list_allowed[rd.id] = {v.label for v in rd.pick_list_values}
+
         plan = _scan_conflicts(
             normalized,
             run,
@@ -598,7 +606,24 @@ class ImportRunFile:
             templates_by_format,
             batch_lookup=batch_lookup,
             rd_name_by_id=rd_name_by_id,
+            pick_list_allowed=pick_list_allowed,
         )
+
+        # 7b. Pick-list violations are hard errors — refuse to commit a
+        # half-broken import. The wizard's preview pass would have caught
+        # this with a real mapping, but we re-validate here for safety.
+        if plan.pick_list_violations:
+            return Failure(
+                ValidationError(
+                    "Pick-list constraint violations:\n  - "
+                    + "\n  - ".join(plan.pick_list_violations[:10])
+                    + (
+                        f"\n  ... and {len(plan.pick_list_violations) - 10} more"
+                        if len(plan.pick_list_violations) > 10
+                        else ""
+                    )
+                )
+            )
 
         # 8. Apply plan: create new plates, attach new wells, write new
         # readouts. Existing entities are reused as-is.
@@ -731,6 +756,7 @@ class _ImportPlan:
     new_readouts: list[_ReadoutWrite] = field(default_factory=list)
     well_conflicts: list[WellConflict] = field(default_factory=list)
     readout_conflicts: list[ReadoutConflict] = field(default_factory=list)
+    pick_list_violations: list[str] = field(default_factory=list)
     unmatched_batches: set[str] = field(default_factory=set)
     controls_from_template: int = 0
     controls_unclassified: int = 0
@@ -747,6 +773,7 @@ def _scan_conflicts(
     *,
     batch_lookup: dict[str, tuple[uuid.UUID, uuid.UUID]] | None = None,
     rd_name_by_id: dict[uuid.UUID, str] | None = None,
+    pick_list_allowed: dict[uuid.UUID, set[str]] | None = None,
 ) -> _ImportPlan:
     """Scan a normalized file against existing run state.
 
@@ -754,10 +781,16 @@ def _scan_conflicts(
     for resolving batches before calling this when actually writing
     (the preview-time scan can pass an empty/None batch_lookup; sample
     rows with unresolved refs are skipped either way).
+
+    `pick_list_allowed` carries each PICK_LIST readout-def's allowed label
+    set. Values not in the set are recorded as plan.pick_list_violations
+    so the preview can surface a hard error and the import can refuse the
+    write.
     """
     plan = _ImportPlan()
     batch_lookup = batch_lookup or {}
     rd_name_by_id = rd_name_by_id or {}
+    pick_list_allowed = pick_list_allowed or {}
 
     # Index existing run state.
     plates_by_name: dict[str, Plate] = {}
@@ -890,6 +923,21 @@ def _scan_conflicts(
                 continue
 
             if isinstance(value, str):
+                # Pick-list constraint: if this readout def has an allowed
+                # set, the value must be in it. Mismatch is a hard error
+                # (typo'd hit class is worse than a missing batch ref;
+                # there's no later opportunity to clean it up). Recorded
+                # against the plan so the preview surfaces it and the
+                # import refuses to commit.
+                allowed = pick_list_allowed.get(rd_id)
+                if allowed is not None and value not in allowed:
+                    plan.pick_list_violations.append(
+                        f"{row.plate_name} {_well_key(row.well)} "
+                        f"'{rd_name_by_id.get(rd_id, '')}': "
+                        f"value {value!r} not in allowed values "
+                        f"{sorted(allowed)}"
+                    )
+                    continue
                 plan.new_readouts.append(
                     _ReadoutWrite(
                         well_id=target_well.id,

@@ -7,9 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { cn } from "@/shared/lib/utils";
+import { resolvePickListColor } from "../lib/pick-list-colors";
 import {
   CURVE_TYPE_LABELS,
   HILL_SLOPE_CONSTRAINT_LABELS,
@@ -77,6 +80,14 @@ export function ReadoutDefinitionViewerDialog({
                 }
               />
             </div>
+            {readoutDef.description && (
+              <div className="mt-3 grid gap-1">
+                <Label className="text-xs">Description</Label>
+                <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm whitespace-pre-wrap">
+                  {readoutDef.description}
+                </p>
+              </div>
+            )}
             <div className="mt-3 grid gap-1">
               <Label className="text-xs">Normalization</Label>
               <div className="rounded-md border bg-background p-2">
@@ -97,11 +108,22 @@ export function ReadoutDefinitionViewerDialog({
             )}
             {readoutDef.pick_list_values &&
               readoutDef.pick_list_values.length > 0 && (
-                <div className="mt-3">
-                  <Field
-                    label="Pick List Values"
-                    value={readoutDef.pick_list_values.join(", ")}
-                  />
+                <div className="mt-3 grid gap-1">
+                  <Label className="text-xs">Pick List Values</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {readoutDef.pick_list_values.map((v) => {
+                      const c = resolvePickListColor(v.label, v.color);
+                      return (
+                        <Badge
+                          key={v.label}
+                          variant="outline"
+                          className={cn("text-xs", c.bg, c.text)}
+                        >
+                          {v.label}
+                        </Badge>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
           </Section>

@@ -35,6 +35,7 @@ class AddReadoutDefinitionCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     name: str
+    description: str | None = None
     data_type: str
     unit: str | None = None
     aggregation: str = "none"
@@ -44,7 +45,9 @@ class AddReadoutDefinitionCommand(Command):
     is_calculated: bool = False
     calculation_formula: str | None = None
     display_order: int = 0
-    pick_list_values: list[str] | None = None
+    # Each item is `{label, color?}` dict or a bare string (legacy);
+    # the entity's _normalize_pick_list_values lifts strings to dicts.
+    pick_list_values: list[dict | str] | None = None
     dose_response_config: dict | None = None
 
 
@@ -65,6 +68,7 @@ class UpdateReadoutDefinitionCommand(Command):
     protocol_id: uuid.UUID
     definition_id: uuid.UUID
     name: str | None = None
+    description: str | None | object = _UNSET
     data_type: str | None = None
     unit: str | None | object = _UNSET
     aggregation: str | None = None
@@ -75,7 +79,7 @@ class UpdateReadoutDefinitionCommand(Command):
     is_calculated: bool | None = None
     calculation_formula: str | None | object = _UNSET
     display_order: int | None = None
-    pick_list_values: list[str] | None | object = _UNSET
+    pick_list_values: list[dict | str] | None | object = _UNSET
     dose_response_config: dict | None | object = _UNSET
 
 
@@ -132,6 +136,7 @@ class AddReadoutDefinition:
             definition = ReadoutDefinition(
                 protocol_id=protocol.id,
                 name=input.name,
+                description=input.description,
                 data_type=ReadoutDataType(input.data_type),
                 unit=input.unit,
                 aggregation=ReadoutAggregation(input.aggregation),
@@ -211,6 +216,8 @@ class UpdateReadoutDefinition:
             kwargs: dict = {}
             if input.name is not None:
                 kwargs["name"] = input.name
+            if input.description is not _UNSET:
+                kwargs["description"] = input.description
             if input.data_type is not None:
                 kwargs["data_type"] = ReadoutDataType(input.data_type)
             if input.unit is not _UNSET:

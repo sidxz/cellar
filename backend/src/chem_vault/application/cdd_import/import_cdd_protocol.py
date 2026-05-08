@@ -88,6 +88,7 @@ class ImportCddProtocol:
                 ReadoutDefinition(
                     protocol_id=tmp_id,
                     name=r.name,
+                    description=r.description,
                     data_type=r.data_type,
                     unit=r.unit,
                     aggregation=r.aggregation,
