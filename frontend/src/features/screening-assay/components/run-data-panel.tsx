@@ -22,7 +22,6 @@ import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { type Run, type PlateFormat } from "../types";
 import { AddDoseResponseDialog } from "./add-dose-response-dialog";
-import { AddReadoutDataDialog } from "./add-readout-data-dialog";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { PlateHeatmap } from "./plate-heatmap";
@@ -195,7 +194,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const { data: curves } = useDoseResponseByRun(run.id);
   const { data: plateMap } = usePlateMap(run.id);
 
-  const [addReadoutOpen, setAddReadoutOpen] = useState(false);
   const [addDoseResponseOpen, setAddDoseResponseOpen] = useState(false);
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [plateSetupOpen, setPlateSetupOpen] = useState(false);
@@ -241,18 +239,10 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
         {/* Readout Data */}
         <TabsContent value="readout">
-          <div className="mt-4">
-            <div className="mb-4 flex gap-2">
+          <div className="mt-3 space-y-3">
+            <div className="flex justify-end">
               <Button
                 size="sm"
-                onClick={() => setAddReadoutOpen(true)}
-                disabled={run.is_locked}
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add Data
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
                 onClick={() => setRunImportWizardOpen(true)}
                 disabled={run.is_locked}
               >
@@ -265,12 +255,11 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
         {/* Plate Map */}
         <TabsContent value="plate-map">
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-3">
             {hasPlateMap && (
-              <div className="flex gap-2">
+              <div className="flex justify-end">
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={() => setRunImportWizardOpen(true)}
                   disabled={run.is_locked}
                 >
@@ -290,7 +279,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                   </TabsList>
                   {plates.map((p) => (
                     <TabsContent key={p.plate_id} value={p.plate_id}>
-                      <div className="mt-4">
+                      <div className="mt-3">
                         <PlateMapViewer plate={p} doseUnit={doseUnit} />
                       </div>
                     </TabsContent>
@@ -300,7 +289,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                 <PlateMapViewer plate={plates[0]} doseUnit={doseUnit} />
               )
             ) : run.plate_format ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <PlateHeatmap format={run.plate_format as PlateFormat} />
                 {!run.is_locked && (
                   <div className="flex justify-center gap-2">
@@ -321,7 +310,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-4 py-12">
+              <div className="flex flex-col items-center gap-3 py-8">
                 <p className="text-sm text-muted-foreground">
                   No plate map has been configured for this run.
                 </p>
@@ -354,8 +343,8 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
         {/* Dose-Response */}
         <TabsContent value="dose-response">
-          <div className="mt-4">
-            <div className="mb-4">
+          <div className="mt-3 space-y-3">
+            <div className="flex justify-end">
               <Button
                 size="sm"
                 onClick={() => setAddDoseResponseOpen(true)}
@@ -374,8 +363,8 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
         {/* QC Metrics */}
         <TabsContent value="qc">
-          <div className="mt-4">
-            <div className="mb-4">
+          <div className="mt-3 space-y-3">
+            <div className="flex justify-end">
               <Button
                 size="sm"
                 onClick={() => setEditQcOpen(true)}
@@ -389,7 +378,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         </TabsContent>
         {/* Files */}
         <TabsContent value="files">
-          <div className="mt-4 space-y-6">
+          <div className="mt-3 space-y-4">
             <FileUploadZone entityType="run" entityId={run.id} />
             <AttachmentList entityType="run" entityId={run.id} />
           </div>
@@ -397,12 +386,6 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
       </Tabs>
 
       {/* Dialogs */}
-      <AddReadoutDataDialog
-        runId={run.id}
-        protocolId={run.protocol_id}
-        open={addReadoutOpen}
-        onOpenChange={setAddReadoutOpen}
-      />
       <AddDoseResponseDialog
         runId={run.id}
         protocolId={run.protocol_id}
