@@ -135,6 +135,9 @@ from chem_vault.application.admin.admin_delete_registry import register_admin_de
 
 
 def register_chemical_registration(container: Container) -> None:
+    # Force cascade rules to register at DI bootstrap.
+    import chem_vault.domain.chemical_registration.cascade  # noqa: F401
+
     # --- Molecule use cases ---
     def _mol_cmd(uc_cls: type):
         def _f(c: Container):
