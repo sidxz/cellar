@@ -108,30 +108,32 @@ class AdminHardDelete:
 
             snapshot = _to_snapshot_dict(obj)
             await repo.delete(input.workspace_id, input.entity_id)
-            await self._uow.commit()
 
-        # Audit *after* commit — admin delete records actual outcome, not intent.
-        assert auth is not None  # require_admin already enforced
-        now = datetime.now(UTC)
-        await self._audit.record(
-            workspace_id=input.workspace_id,
-            operation_type=OperationType.ADMIN_HARD_DELETE,
-            entity_type=input.entity_type,
-            entity_id=input.entity_id,
-            user_id=auth.user_id,
-            reason=input.reason,
-            entries=[
-                AuditEntry(
-                    entity_type=input.entity_type,
-                    entity_id=input.entity_id,
-                    field_name="*",
-                    action=AuditAction.DELETE,
-                    old_value=json.dumps(snapshot, default=str, sort_keys=True),
-                    new_value=None,
-                    timestamp=now,
-                )
-            ],
-        )
+            # Audit inside the active transaction so that audit failure rolls
+            # back the delete — atomicity required for 21 CFR Part 11.
+            assert auth is not None  # require_admin already enforced
+            now = datetime.now(UTC)
+            await self._audit.record(
+                workspace_id=input.workspace_id,
+                operation_type=OperationType.ADMIN_HARD_DELETE,
+                entity_type=input.entity_type,
+                entity_id=input.entity_id,
+                user_id=auth.user_id,
+                reason=input.reason,
+                entries=[
+                    AuditEntry(
+                        entity_type=input.entity_type,
+                        entity_id=input.entity_id,
+                        field_name="*",
+                        action=AuditAction.DELETE,
+                        old_value=json.dumps(snapshot, default=str, sort_keys=True),
+                        new_value=None,
+                        timestamp=now,
+                    )
+                ],
+                session=self._uow.session,  # type: ignore[attr-defined]
+            )
+            await self._uow.commit()
 
         return Success(None)
 

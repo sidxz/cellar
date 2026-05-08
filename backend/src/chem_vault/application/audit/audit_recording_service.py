@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from chem_vault.domain.audit_compliance.enums import (
     ActorType,
@@ -19,6 +20,13 @@ from chem_vault.domain.audit_compliance.enums import (
 from chem_vault.domain.audit_compliance.models import AuditEntry, AuditOperation
 from chem_vault.domain.audit_compliance.repository import AuditRepository
 from chem_vault.domain.shared.events import DomainEvent
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
+        SQLAlchemyAuditRepository,
+    )
 
 
 class AuditRecordingService:
@@ -41,8 +49,23 @@ class AuditRecordingService:
         correlation_id: uuid.UUID | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        session: Any | None = None,
     ) -> AuditOperation:
-        """Create and persist an audit operation with entries."""
+        """Create and persist an audit operation with entries.
+
+        Parameters
+        ----------
+        session:
+            When provided (must be an ``AsyncSession``), the audit write is
+            added to *that* session without issuing a separate commit.  The
+            caller (unit-of-work) owns the transaction; if it rolls back the
+            audit write rolls back too.  This is the safe path for mutations
+            that must be audited atomically (e.g. admin hard-delete).
+
+            When ``None`` (default), a fresh session is opened and committed
+            immediately — the original behaviour used by event handlers and
+            other call sites.
+        """
         now = datetime.now(UTC)
         operation = AuditOperation(
             id=uuid.uuid4(),
@@ -64,7 +87,21 @@ class AuditRecordingService:
         for entry in entries:
             operation.add_entry(entry)
 
-        await self._repository.save(operation)
+        if session is not None:
+            # Participate in the caller's transaction — no self-commit.
+            # Requires the underlying repository to support session injection.
+            repo = self._repository
+            if hasattr(repo, "save_with_session"):
+                await repo.save_with_session(operation, session)  # type: ignore[union-attr]
+            else:
+                # Fallback: repository doesn't support session injection.
+                # This should not happen in production; raise to surface the gap.
+                raise RuntimeError(
+                    f"AuditRepository {type(repo).__name__!r} does not support "
+                    "session-scoped saves. Implement save_with_session()."
+                )
+        else:
+            await self._repository.save(operation)
         return operation
 
     async def handle_event(self, event: DomainEvent) -> None:

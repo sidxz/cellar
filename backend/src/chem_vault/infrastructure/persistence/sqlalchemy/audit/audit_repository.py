@@ -40,6 +40,19 @@ class SQLAlchemyAuditRepository:
             session.add(model)
             await session.commit()
 
+    async def save_with_session(
+        self, operation: AuditOperation, session: AsyncSession
+    ) -> None:
+        """Persist an audit operation into the *provided* session.
+
+        The caller owns the transaction — no commit is issued here.  Use this
+        when you want the audit write to participate in the same transaction as
+        the business operation (e.g. admin hard-delete), so that a failure in
+        either rolls back both.
+        """
+        model = self._to_operation_model(operation)
+        session.add(model)
+
     async def find_by_id(self, id: uuid.UUID) -> AuditOperation | None:
         """Retrieve an audit operation by ID (with entries + signature eager-loaded)."""
         stmt = (

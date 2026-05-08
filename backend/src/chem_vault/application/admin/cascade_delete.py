@@ -72,18 +72,22 @@ class CascadeDelete:
                 )
             except CascadeExecutionError as e:
                 return Failure(ValidationError(str(e)))
+
+            # Audit inside the active transaction so that audit failure rolls
+            # back the entire cascade — atomicity required for 21 CFR Part 11.
+            assert auth is not None
+            await self._audit.record(
+                workspace_id=input.workspace_id,
+                operation_type=OperationType.ADMIN_HARD_DELETE,
+                entity_type=input.entity_type,
+                entity_id=input.entity_id,
+                user_id=auth.user_id,
+                reason=input.reason,
+                entries=entries,
+                session=self._uow.session,  # type: ignore[attr-defined]
+            )
             await self._uow.commit()
 
-        assert auth is not None
-        await self._audit.record(
-            workspace_id=input.workspace_id,
-            operation_type=OperationType.ADMIN_HARD_DELETE,
-            entity_type=input.entity_type,
-            entity_id=input.entity_id,
-            user_id=auth.user_id,
-            reason=input.reason,
-            entries=entries,
-        )
         return Success(None)
 
 
