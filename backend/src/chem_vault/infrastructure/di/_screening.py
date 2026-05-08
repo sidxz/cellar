@@ -192,6 +192,8 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.target_rep
     SQLAlchemyTargetRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from chem_vault.application.admin._adapter import RepoAdapter
+from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 
 
 def register_screening(container: Container) -> None:
@@ -730,3 +732,44 @@ def register_screening(container: Container) -> None:
 
     container.define(SetOntologyAnnotation, _set_ontology_annotation)
     container.define(RemoveOntologyAnnotation, _remove_ontology_annotation)
+
+    # --- Admin Hard-Delete Registry (Tier 1) ---
+    def _resolve_protocol(c, uow):
+        return RepoAdapter(SQLAlchemyProtocolRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="protocol",
+        table="protocols",
+        label_field="name",
+        repo_resolver=_resolve_protocol,
+    )
+
+    def _resolve_run(c, uow):
+        return RepoAdapter(SQLAlchemyRunRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="run",
+        table="runs",
+        label_field="notes",
+        repo_resolver=_resolve_run,
+    )
+
+    def _resolve_plate_template(c, uow):
+        return RepoAdapter(SQLAlchemyPlateTemplateRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="plate_template",
+        table="plate_templates",
+        label_field="name",
+        repo_resolver=_resolve_plate_template,
+    )
+
+    def _resolve_run_import_template(c, uow):
+        return RepoAdapter(SQLAlchemyRunImportTemplateRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="run_import_template",
+        table="run_import_templates",
+        label_field="name",
+        repo_resolver=_resolve_run_import_template,
+    )

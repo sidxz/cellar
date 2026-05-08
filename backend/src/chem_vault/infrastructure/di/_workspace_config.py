@@ -88,6 +88,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from chem_vault.application.admin._adapter import RepoAdapter
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
 
@@ -331,4 +332,74 @@ def register_workspace_config(container: Container) -> None:
         table="controlled_vocabularies",
         label_field="name",
         repo_resolver=_resolve_vocab,
+    )
+
+    def _resolve_registration_form(c, uow):
+        return RepoAdapter(SQLAlchemyRegistrationFormRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="registration_form",
+        table="registration_forms",
+        label_field="name",
+        repo_resolver=_resolve_registration_form,
+    )
+
+    def _resolve_protocol_form(c, uow):
+        return RepoAdapter(SQLAlchemyProtocolFormRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="protocol_form",
+        table="protocol_forms",
+        label_field="name",
+        repo_resolver=_resolve_protocol_form,
+    )
+
+    def _resolve_salt_entry(c, uow):
+        return RepoAdapter(SQLAlchemySaltEntryRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="salt_entry",
+        table="salt_catalog",
+        label_field="code",
+        repo_resolver=_resolve_salt_entry,
+    )
+
+    def _resolve_ontology_slot(c, uow):
+        return RepoAdapter(SQLAlchemyOntologySlotDefinitionRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="ontology_slot",
+        table="ontology_slot_definitions",
+        label_field="name",
+        repo_resolver=_resolve_ontology_slot,
+    )
+
+    def _resolve_custom_field(c, uow):
+        return RepoAdapter(SQLAlchemyCustomFieldDefinitionRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="custom_field",
+        table="custom_field_definitions",
+        label_field="label",
+        repo_resolver=_resolve_custom_field,
+    )
+
+    def _resolve_data_source(c, uow):
+        return RepoAdapter(SQLAlchemyDataSourceRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="data_source",
+        table="data_sources",
+        label_field="name",
+        repo_resolver=_resolve_data_source,
+    )
+
+    def _resolve_api_key(c, uow):
+        return RepoAdapter(SQLAlchemyExternalApiKeyRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="api_key",
+        table="external_api_keys",
+        label_field="label",
+        repo_resolver=_resolve_api_key,
     )

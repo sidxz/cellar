@@ -130,6 +130,8 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entr
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.storage.fsspec_client import FsspecStorageClient
+from chem_vault.application.admin._adapter import RepoAdapter
+from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 
 
 def register_chemical_registration(container: Container) -> None:
@@ -472,3 +474,69 @@ def register_chemical_registration(container: Container) -> None:
     container.define(UpdateSynthesisRoute, _synth_route_cmd(UpdateSynthesisRoute))
     container.define(DeleteSynthesisRoute, _synth_route_cmd(DeleteSynthesisRoute))
     container.define(RemoveReactionStep, _synth_route_cmd(RemoveReactionStep))
+
+    # --- Admin Hard-Delete Registry (Tier 1) ---
+    def _resolve_compound_flag(c, uow):
+        from sqlalchemy import select
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model import (
+            CompoundFlagModel,
+        )
+        from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
+            SQLAlchemyCompoundFlagRepository,
+        )
+
+        repo = SQLAlchemyCompoundFlagRepository(uow)
+
+        class _CompoundFlagAdapter:
+            async def find_by_id(self, workspace_id, id):
+                stmt = select(CompoundFlagModel).where(
+                    CompoundFlagModel.id == id,
+                    CompoundFlagModel.workspace_id == workspace_id,
+                )
+                result = await uow.session.execute(stmt)
+                model = result.scalar_one_or_none()
+                if model is None:
+                    return None
+                return repo._to_domain(model)
+
+            async def delete(self, workspace_id, id):
+                await repo.delete(workspace_id, id)
+
+        return _CompoundFlagAdapter()
+
+    register_admin_delete(
+        entity_type="compound_flag",
+        table="compound_flags",
+        label_field=None,
+        repo_resolver=_resolve_compound_flag,
+    )
+
+    def _resolve_molecule_relationship(c, uow):
+        return RepoAdapter(SQLAlchemyMoleculeRelationshipRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="molecule_relationship",
+        table="molecule_relationships",
+        label_field=None,
+        repo_resolver=_resolve_molecule_relationship,
+    )
+
+    def _resolve_synthesis_route(c, uow):
+        return RepoAdapter(SQLAlchemySynthesisRouteRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="synthesis_route",
+        table="synthesis_routes",
+        label_field="name",
+        repo_resolver=_resolve_synthesis_route,
+    )
+
+    def _resolve_molecule(c, uow):
+        return RepoAdapter(SQLAlchemyMoleculeRepository(uow), find="find_by_id_in_workspace")
+
+    register_admin_delete(
+        entity_type="molecule",
+        table="molecules",
+        label_field="registration_number",
+        repo_resolver=_resolve_molecule,
+    )
