@@ -451,10 +451,14 @@ class TestStructureClauseNewShape:
             ],
             "logic": "and",
         })
-        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # Compile without literal_binds — the LargeBinary bindparam cannot be
+        # rendered as a SQL literal; we only care about the SQL template shape.
+        sql = str(clause.compile())
         assert "morgan_bfp" in sql
-        assert "morganbv_fp" in sql
-        assert "mol_from_smiles" in sql
+        # Morgan path must use bfp_from_binary_text (Python-computed bytes),
+        # NOT morganbv_fp(mol_from_smiles(...)) which produces an incompatible format.
+        assert "bfp_from_binary_text" in sql
+        assert "morganbv_fp" not in sql
 
     def test_similarity_fcfp_tanimoto_compiles(self) -> None:
         clause = _compose({
@@ -488,9 +492,14 @@ class TestStructureClauseNewShape:
             ],
             "logic": "and",
         })
-        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # Compile without literal_binds — the LargeBinary bindparam cannot be
+        # rendered as a SQL literal; we only care about the SQL template shape.
+        sql = str(clause.compile())
         assert "tversky_sml" in sql
         assert "1.0" in sql and "0.0" in sql
+        # Morgan Tversky must also use bfp_from_binary_text, not the cartridge fn.
+        assert "bfp_from_binary_text" in sql
+        assert "morganbv_fp" not in sql
 
     def test_similarity_with_mode_resolves_defaults(self) -> None:
         clause = _compose({
@@ -521,8 +530,11 @@ class TestStructureClauseNewShape:
             ],
             "logic": "and",
         })
-        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # fragment_in_target -> morgan + tversky. Compile without literal_binds
+        # because the Morgan path uses a LargeBinary bindparam.
+        sql = str(clause.compile())
         assert "tversky_sml" in sql
+        assert "bfp_from_binary_text" in sql
 
     def test_substructure_passes_through_mol_adjust_query_properties(self) -> None:
         clause = _compose({

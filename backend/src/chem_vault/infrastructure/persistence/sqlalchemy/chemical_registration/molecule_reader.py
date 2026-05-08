@@ -27,6 +27,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mole
     model_to_molecule,
 )
 from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+    _compute_query_bytes,
+)
 
 
 _SORT_FIELDS: dict[str, Any] = {
@@ -95,39 +98,82 @@ class SQLAlchemyMoleculeReader:
         fn = algo.cartridge_query_fn
         radius_arg = ", 2" if fn == "featmorganbv_fp" else ""
 
+        # For Morgan, pre-compute the query fingerprint in Python so the bytes
+        # are in the same format as the stored morgan_bfp column (written by the
+        # Python-side stereo-aware generator, not the cartridge). FCFP is
+        # unaffected — both write (DB trigger) and read use the same cartridge fn.
+        q_bytes = _compute_query_bytes(algorithm_name, smiles)
+
         async with self._session_factory() as session:
-            if isinstance(effective_metric, Tanimoto):
-                await session.execute(
-                    text(f"SET rdkit.tanimoto_threshold = {effective_threshold}")
-                )
-                score_sql = (
-                    f"tanimoto_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}))"
-                    " AS similarity"
-                )
-                where_sql = f"{column} % {fn}(mol_from_smiles(:q){radius_arg})"
-            elif isinstance(effective_metric, Tversky):
-                score_sql = (
-                    f"tversky_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}), "
-                    f"{effective_metric.alpha}, {effective_metric.beta}) AS similarity"
-                )
-                where_sql = (
-                    f"tversky_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}), "
-                    f"{effective_metric.alpha}, {effective_metric.beta})"
-                    f" >= {effective_threshold}"
+            if q_bytes is not None:
+                # Morgan path: use bfp_from_binary_text with Python bytes.
+                if isinstance(effective_metric, Tanimoto):
+                    await session.execute(
+                        text(f"SET rdkit.tanimoto_threshold = {effective_threshold}")
+                    )
+                    score_sql = (
+                        f"tanimoto_sml({column}, bfp_from_binary_text(:q_bytes))"
+                        " AS similarity"
+                    )
+                    where_sql = f"{column} % bfp_from_binary_text(:q_bytes)"
+                elif isinstance(effective_metric, Tversky):
+                    score_sql = (
+                        f"tversky_sml({column}, bfp_from_binary_text(:q_bytes), "
+                        f"{effective_metric.alpha}, {effective_metric.beta}) AS similarity"
+                    )
+                    where_sql = (
+                        f"tversky_sml({column}, bfp_from_binary_text(:q_bytes), "
+                        f"{effective_metric.alpha}, {effective_metric.beta})"
+                        f" >= {effective_threshold}"
+                    )
+                else:
+                    raise ValueError(f"Unknown metric: {effective_metric!r}")
+
+                stmt = (
+                    select(MoleculeModel, text(score_sql))
+                    .where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.merged_into_id.is_(None),
+                        text(where_sql),
+                    )
+                    .params(q_bytes=q_bytes)
+                    .order_by(text("similarity DESC"))
                 )
             else:
-                raise ValueError(f"Unknown metric: {effective_metric!r}")
+                # FCFP path: cartridge function is format-compatible on both ends.
+                if isinstance(effective_metric, Tanimoto):
+                    await session.execute(
+                        text(f"SET rdkit.tanimoto_threshold = {effective_threshold}")
+                    )
+                    score_sql = (
+                        f"tanimoto_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}))"
+                        " AS similarity"
+                    )
+                    where_sql = f"{column} % {fn}(mol_from_smiles(:q){radius_arg})"
+                elif isinstance(effective_metric, Tversky):
+                    score_sql = (
+                        f"tversky_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}), "
+                        f"{effective_metric.alpha}, {effective_metric.beta}) AS similarity"
+                    )
+                    where_sql = (
+                        f"tversky_sml({column}, {fn}(mol_from_smiles(:q){radius_arg}), "
+                        f"{effective_metric.alpha}, {effective_metric.beta})"
+                        f" >= {effective_threshold}"
+                    )
+                else:
+                    raise ValueError(f"Unknown metric: {effective_metric!r}")
 
-            stmt = (
-                select(MoleculeModel, text(score_sql))
-                .where(
-                    MoleculeModel.workspace_id == workspace_id,
-                    MoleculeModel.merged_into_id.is_(None),
-                    text(where_sql),
+                stmt = (
+                    select(MoleculeModel, text(score_sql))
+                    .where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.merged_into_id.is_(None),
+                        text(where_sql),
+                    )
+                    .params(q=smiles)
+                    .order_by(text("similarity DESC"))
                 )
-                .params(q=smiles)
-                .order_by(text("similarity DESC"))
-            )
+
             if cursor_id is not None:
                 stmt = stmt.where(MoleculeModel.id > cursor_id)
             if limit is not None:

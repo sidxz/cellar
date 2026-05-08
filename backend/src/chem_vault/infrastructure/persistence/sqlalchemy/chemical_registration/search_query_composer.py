@@ -19,6 +19,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mode
     MoleculeModel,
 )
 from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 # Module-level singleton; tests can monkey-patch _default_registry if needed.
 _default_registry = FingerprintRegistry.default()
@@ -260,6 +261,26 @@ def _resolve_algorithm_and_metric(
     return algorithm, metric, float(threshold)
 
 
+def _compute_query_bytes(algorithm_name: str, smiles: str) -> bytes | None:
+    """Compute Python-side fingerprint bytes for ``algorithm_name`` from ``smiles``.
+
+    Returns bytes for ``"morgan"`` (the only algorithm whose stored column was
+    written by Python, not the cartridge, so both sides must use the same format).
+    Returns ``None`` for ``"fcfp"`` — the cartridge trigger uses
+    ``featmorganbv_fp`` on both write and read sides, so bytes are compatible.
+
+    Raises ``ValueError`` if ``smiles`` cannot be parsed.
+    """
+    if algorithm_name != "morgan":
+        return None
+    from rdkit.Chem import MolFromSmiles  # local import to keep module fast to import
+
+    mol = MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Cannot parse SMILES for similarity query: {smiles!r}")
+    return MorganAlgorithm().compute_bytes(mol)
+
+
 def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
     smiles = criterion["smiles"]
     algorithm_name, metric, threshold = _resolve_algorithm_and_metric(criterion)
@@ -268,17 +289,37 @@ def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
     fn = algo.cartridge_query_fn
     radius_arg = ", 2" if fn == "featmorganbv_fp" else ""
 
-    if isinstance(metric, Tanimoto):
-        sql = f"{column} % {fn}(mol_from_smiles(:sim_q){radius_arg})"
-    elif isinstance(metric, Tversky):
-        sql = (
-            f"tversky_sml({column}, {fn}(mol_from_smiles(:sim_q){radius_arg}), "
-            f"{metric.alpha}, {metric.beta}) >= {threshold}"
+    q_bytes = _compute_query_bytes(algorithm_name, smiles)
+
+    if q_bytes is not None:
+        # Morgan: Python-computed bytes must be passed via bfp_from_binary_text
+        # so the query vector is in the same format as the stored morgan_bfp column.
+        if isinstance(metric, Tanimoto):
+            sql = f"{column} % bfp_from_binary_text(:sim_q_bytes)"
+        elif isinstance(metric, Tversky):
+            sql = (
+                f"tversky_sml({column}, bfp_from_binary_text(:sim_q_bytes), "
+                f"{metric.alpha}, {metric.beta}) >= {threshold}"
+            )
+        else:
+            raise ValueError(f"Unknown metric: {metric!r}")
+        return text(sql).bindparams(
+            sa.bindparam("sim_q_bytes", value=q_bytes, type_=sa.LargeBinary)
         )
     else:
-        raise ValueError(f"Unknown metric: {metric!r}")
-
-    return text(sql).bindparams(sa.bindparam("sim_q", value=smiles, type_=sa.String))
+        # FCFP: cartridge function is consistent on both sides.
+        if isinstance(metric, Tanimoto):
+            sql = f"{column} % {fn}(mol_from_smiles(:sim_q){radius_arg})"
+        elif isinstance(metric, Tversky):
+            sql = (
+                f"tversky_sml({column}, {fn}(mol_from_smiles(:sim_q){radius_arg}), "
+                f"{metric.alpha}, {metric.beta}) >= {threshold}"
+            )
+        else:
+            raise ValueError(f"Unknown metric: {metric!r}")
+        return text(sql).bindparams(
+            sa.bindparam("sim_q", value=smiles, type_=sa.String)
+        )
 
 
 def _activity_clause(

@@ -5,10 +5,15 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from rdkit import Chem
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+
 from .conftest import _make_molecule_model
+
+_morgan = MorganAlgorithm()
 
 
 class TestStereoRegression:
@@ -83,7 +88,9 @@ class TestStereoRegression:
 
         Uses raw SQL against db_session to avoid cross-session visibility issues
         (SQLAlchemyMoleculeReader opens its own session which won't see unflushed
-        rows). The query mirrors the reader's Tanimoto logic exactly.
+        rows). The query uses bfp_from_binary_text(:q_bytes) with Python-computed
+        bytes — exactly mirroring the production reader after the bfp_from_binary_text
+        fix. morganbv_fp(mol_from_smiles) is achiral and must NOT be used here.
         """
         r = _make_molecule_model(
             workspace_id, org_id, smiles="C[C@H](O)c1ccccc1", name="R"
@@ -94,24 +101,20 @@ class TestStereoRegression:
         db_session.add_all([r, s])
         await db_session.flush()
 
-        # Mirror the reader's Tanimoto similarity query:
-        #   tanimoto_sml(morgan_bfp, morganbv_fp(mol_from_smiles(:q))) AS similarity
-        # Note: morganbv_fp is the achiral cartridge function; we must compute the
-        # query fp from our Python-computed bytes too. We use bfp_from_binary_text
-        # on the already-stored fp_morgan of the R molecule as the query vector, so
-        # the query is stereo-aware.
+        # Compute query bytes in Python for R — same path as the production reader.
+        r_mol = Chem.MolFromSmiles("C[C@H](O)c1ccccc1")
+        q_bytes = _morgan.compute_bytes(r_mol)
+
         result = await db_session.execute(
             text(
                 "SELECT id, name, "
-                "  tanimoto_sml(morgan_bfp, "
-                "    bfp_from_binary_text((SELECT fp_morgan FROM molecules WHERE id = :query_id))) "
-                "  AS similarity "
+                "  tanimoto_sml(morgan_bfp, bfp_from_binary_text(:q_bytes)) AS similarity "
                 "FROM molecules "
                 "WHERE workspace_id = :ws "
                 "  AND merged_into_id IS NULL "
                 "  AND id = ANY(:ids)"
             ),
-            {"query_id": r.id, "ws": workspace_id, "ids": [r.id, s.id]},
+            {"q_bytes": q_bytes, "ws": workspace_id, "ids": [r.id, s.id]},
         )
         rows = {row.name: float(row.similarity) for row in result.all()}
         assert "R" in rows and "S" in rows, f"Expected both enantiomers in results, got: {rows}"

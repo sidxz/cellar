@@ -4,8 +4,9 @@ Architecture note: ``morgan_bfp`` is populated from Python-computed stereo-aware
 Morgan bytes via ``bfp_from_binary_text(fp_morgan)``.  This format is NOT
 cross-comparable with ``morganbv_fp(mol_from_smiles(...))``, which is the
 achiral cartridge function.  The correct way to build a query vector for
-``morgan_bfp`` columns is ``bfp_from_binary_text((SELECT fp_morgan …))`` —
-the same pattern used by the stereo-regression tests.
+``morgan_bfp`` columns is ``bfp_from_binary_text(:q_bytes)`` where ``q_bytes``
+are computed by ``MorganAlgorithm.compute_bytes`` — the same path used by the
+production reader after the bfp_from_binary_text fix.
 
 ``fcfp_bfp`` is populated by a DB trigger using ``featmorganbv_fp(smiles, 2)``,
 so querying via ``featmorganbv_fp(mol_from_smiles(:q), 2)`` IS cross-compatible.
@@ -16,10 +17,15 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from rdkit import Chem
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+
 from .conftest import _make_molecule_model
+
+_morgan = MorganAlgorithm()
 
 
 @pytest.fixture
@@ -46,8 +52,9 @@ async def small_corpus(
 class TestSimilarMode:
     """SearchMode.SIMILAR — morgan_bfp + tanimoto.
 
-    Query vector is built from the stored Python-computed fp_morgan bytes via
-    ``bfp_from_binary_text``, which is the only format compatible with the
+    Query vector is computed in Python via ``MorganAlgorithm.compute_bytes`` and
+    passed to the cartridge via ``bfp_from_binary_text(:q_bytes)``.  This mirrors
+    the production reader exactly and is the only format compatible with the
     ``morgan_bfp`` column (see module docstring).
     """
 
@@ -58,17 +65,18 @@ class TestSimilarMode:
         db_session: AsyncSession,
         workspace_id: uuid.UUID,
     ) -> None:
-        ethanol_id = small_corpus["ethanol"]
+        # Compute query bytes in Python — same path as the production reader.
+        ethanol_mol = Chem.MolFromSmiles("CCO")
+        q_bytes = _morgan.compute_bytes(ethanol_mol)
+
         result = await db_session.execute(
             text(
                 "SELECT id, name, "
-                "tanimoto_sml(morgan_bfp, "
-                "  bfp_from_binary_text((SELECT fp_morgan FROM molecules WHERE id = :qid))) "
-                "AS score "
+                "tanimoto_sml(morgan_bfp, bfp_from_binary_text(:q_bytes)) AS score "
                 "FROM molecules WHERE workspace_id = :ws "
                 "ORDER BY score DESC NULLS LAST"
             ),
-            {"qid": ethanol_id, "ws": workspace_id},
+            {"q_bytes": q_bytes, "ws": workspace_id},
         )
         rows = result.all()
         scores = {row.name: float(row.score) for row in rows}
@@ -123,8 +131,8 @@ class TestFragmentInTargetMode:
     features present in target.  Here A = target ``morgan_bfp``, B = query fp.
     With α=1 and query==stored fp this reduces to |fp| / |fp| = 1.0.
 
-    Query vector uses ``bfp_from_binary_text`` to stay in the same format as
-    ``morgan_bfp``.
+    Query vector is computed in Python via ``MorganAlgorithm.compute_bytes`` and
+    passed as ``bfp_from_binary_text(:q_bytes)`` — same pattern as the reader.
     """
 
     @pytest.mark.asyncio
@@ -134,17 +142,18 @@ class TestFragmentInTargetMode:
         db_session: AsyncSession,
         workspace_id: uuid.UUID,
     ) -> None:
-        ethanol_id = small_corpus["ethanol"]
+        # Compute query bytes in Python — same path as the production reader.
+        ethanol_mol = Chem.MolFromSmiles("CCO")
+        q_bytes = _morgan.compute_bytes(ethanol_mol)
+
         result = await db_session.execute(
             text(
                 "SELECT id, name, "
-                "tversky_sml(morgan_bfp, "
-                "  bfp_from_binary_text((SELECT fp_morgan FROM molecules WHERE id = :qid)), "
-                "  1.0, 0.0) AS score "
+                "tversky_sml(morgan_bfp, bfp_from_binary_text(:q_bytes), 1.0, 0.0) AS score "
                 "FROM molecules WHERE workspace_id = :ws "
                 "ORDER BY score DESC NULLS LAST"
             ),
-            {"qid": ethanol_id, "ws": workspace_id},
+            {"q_bytes": q_bytes, "ws": workspace_id},
         )
         rows = result.all()
         scores = {row.name: float(row.score) for row in rows}
