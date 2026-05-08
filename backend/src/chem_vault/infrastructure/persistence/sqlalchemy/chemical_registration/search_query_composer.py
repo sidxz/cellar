@@ -199,12 +199,12 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
     if generalized:
         sql = (
             "mol_from_smiles(smiles) @>> "
-            "mol_to_xqmol(mol_adjust_query_properties(mol_from_smarts(:q)))"
+            "mol_to_xqmol(mol_from_smiles(:q))"
         )
     else:
         sql = (
             "mol_from_smiles(smiles) @> "
-            "mol_adjust_query_properties(mol_from_smarts(:q))"
+            "mol_adjust_query_properties(qmol_from_smarts(:q))"
         )
     return text(sql).bindparams(sa.bindparam("q", value=query_text, type_=sa.String))
 
