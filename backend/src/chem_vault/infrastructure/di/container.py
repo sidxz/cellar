@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from lagom import Container
 
+from chem_vault.infrastructure.di._admin import register_admin
 from chem_vault.infrastructure.di._attachment import register_attachment
 from chem_vault.infrastructure.di._audit import register_audit
 from chem_vault.infrastructure.di._cdd_import import register_cdd_import
@@ -32,6 +33,7 @@ def create_container(db_settings: DatabaseSettings | None = None) -> Container:
     container = Container()
 
     register_core(container, db_settings)
+    register_admin(container)
     register_audit(container)
     register_user(container)
     register_workspace_config(container)
