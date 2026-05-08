@@ -124,6 +124,19 @@ function isFiniteRange(minS: string, maxS: string): boolean {
 // (mapped to x_readout_name=null in the payload).
 const WELL_CONC_X = "__well_concentration__";
 
+// Readout data types surfaced in the Add/Edit dialog dropdown. The BE
+// enum still carries File / Date / Batch Link for legacy hydration, but
+// they don't fit chem-vault's model (see audit notes): File is per-run
+// attachment territory, Date is run.run_date, Batch Link duplicates
+// well.batch_id. We trim them from the FE so chemists can't pick types
+// the system has no real workflow for.
+const VISIBLE_READOUT_DATA_TYPES: readonly string[] = [
+  "numeric",
+  "text",
+  "pick_list",
+  "dose_response",
+] as const;
+
 // ---------------------------------------------------------------------------
 // DesignTab
 // ---------------------------------------------------------------------------
@@ -1765,52 +1778,19 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(READOUT_DATA_TYPE_LABELS).map(
-                    ([val, label]) => (
-                      <SelectItem key={val} value={val}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
+                  {VISIBLE_READOUT_DATA_TYPES.map((val) => (
+                    <SelectItem key={val} value={val}>
+                      {READOUT_DATA_TYPE_LABELS[val as ReadoutDataType] ?? val}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label>Unit</Label>
-              <Input
-                value={rdUnit}
-                onChange={(e) => setRdUnit(e.target.value)}
-                placeholder="e.g. nM, %, \u00B5M"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Aggregation</Label>
-              <Select
-                value={rdAggregation}
-                onValueChange={setRdAggregation}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                    ([val, label]) => (
-                      <SelectItem key={val} value={val}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Normalization</Label>
-              <NormalizationCheckboxGroup
-                value={rdNormalizations}
-                onChange={setRdNormalizations}
-              />
-            </div>
-            {rdDataType === "pick_list" && (
+            {/* Pick-list specific: Allowed Values directly after Data
+                Type. Numeric measurement attributes (Unit, Aggregation,
+                Normalization) are hidden \u2014 pick lists are categorical
+                and these fields don't apply. */}
+            {rdDataType === "pick_list" ? (
               <div className="space-y-1">
                 <Label>Allowed Values</Label>
                 <PickListEditor
@@ -1818,6 +1798,44 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   onChange={setRdPickListValues}
                 />
               </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <Label>Unit</Label>
+                  <Input
+                    value={rdUnit}
+                    onChange={(e) => setRdUnit(e.target.value)}
+                    placeholder="e.g. nM, %, \u00B5M"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Aggregation</Label>
+                  <Select
+                    value={rdAggregation}
+                    onValueChange={setRdAggregation}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(READOUT_AGGREGATION_LABELS).map(
+                        ([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Normalization</Label>
+                  <NormalizationCheckboxGroup
+                    value={rdNormalizations}
+                    onChange={setRdNormalizations}
+                  />
+                </div>
+              </>
             )}
             {renderDoseResponseFields(null)}
           </div>
@@ -1935,53 +1953,19 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(READOUT_DATA_TYPE_LABELS).map(
-                    ([val, label]) => (
-                      <SelectItem key={val} value={val}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
+                  {VISIBLE_READOUT_DATA_TYPES.map((val) => (
+                    <SelectItem key={val} value={val}>
+                      {READOUT_DATA_TYPE_LABELS[val as ReadoutDataType] ?? val}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label>Unit</Label>
-              <Input
-                value={rdUnit}
-                onChange={(e) => setRdUnit(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Aggregation</Label>
-              <Select
-                value={rdAggregation}
-                onValueChange={setRdAggregation}
-                disabled={!isDraft}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                    ([val, label]) => (
-                      <SelectItem key={val} value={val}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Normalization</Label>
-              <NormalizationCheckboxGroup
-                value={rdNormalizations}
-                onChange={setRdNormalizations}
-                disabled={!isDraft}
-              />
-            </div>
-            {rdDataType === "pick_list" && (
+            {/* Pick-list specific: Allowed Values directly after Data
+                Type. Numeric measurement attributes (Unit, Aggregation,
+                Normalization) are hidden — pick lists are categorical
+                and these fields don't apply. */}
+            {rdDataType === "pick_list" ? (
               <div className="space-y-1">
                 <Label>Allowed Values</Label>
                 <PickListEditor
@@ -1990,6 +1974,45 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   disabled={!isDraft}
                 />
               </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <Label>Unit</Label>
+                  <Input
+                    value={rdUnit}
+                    onChange={(e) => setRdUnit(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Aggregation</Label>
+                  <Select
+                    value={rdAggregation}
+                    onValueChange={setRdAggregation}
+                    disabled={!isDraft}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(READOUT_AGGREGATION_LABELS).map(
+                        ([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Normalization</Label>
+                  <NormalizationCheckboxGroup
+                    value={rdNormalizations}
+                    onChange={setRdNormalizations}
+                    disabled={!isDraft}
+                  />
+                </div>
+              </>
             )}
             {/* Dose-response fields are structural (curve type, axes,
                 intercepts, ranges) — disabled on non-DRAFT. The fields

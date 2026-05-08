@@ -60,6 +60,17 @@ import { PickListEditor } from "./pick-list-editor";
 // (mapped to x_readout_name=null in the payload).
 const WELL_CONC_X = "__well_concentration__";
 
+// FE-visible subset of the readout data-type enum. File / Date / Batch
+// Link are dropped from the picker — they're either run-level metadata
+// chem-vault already models elsewhere (run.run_date, well.batch_id) or
+// per-run attachments. The BE enum keeps them for legacy hydration.
+const VISIBLE_READOUT_DATA_TYPES: readonly string[] = [
+  "numeric",
+  "text",
+  "pick_list",
+  "dose_response",
+] as const;
+
 // Reserved readout-definition names that collide with built-in well metadata.
 // Kept in sync with backend domain.screening_assay.protocol._RESERVED_READOUT_NAMES.
 const RESERVED_READOUT_NAMES: ReadonlySet<string> = new Set([
@@ -580,61 +591,84 @@ export function CreateProtocolDialog({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {Object.entries(READOUT_DATA_TYPE_LABELS).map(
-                                ([value, label]) => (
-                                  <SelectItem key={value} value={value}>
-                                    {label}
-                                  </SelectItem>
-                                )
-                              )}
+                              {VISIBLE_READOUT_DATA_TYPES.map((value) => (
+                                <SelectItem key={value} value={value}>
+                                  {
+                                    READOUT_DATA_TYPE_LABELS[
+                                      value as keyof typeof READOUT_DATA_TYPE_LABELS
+                                    ]
+                                  }
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      {/* Pick List Values — directly after Data Type when
+                          type=pick_list. Categorical readout, so the
+                          numeric Unit/Aggregation/Normalization grid
+                          below is hidden. */}
+                      {rd.data_type === "pick_list" && (
                         <div className="grid gap-1">
-                          <Label className="text-xs">Unit</Label>
-                          <Input
-                            placeholder="e.g., nM"
-                            value={rd.unit}
-                            onChange={(e) =>
-                              updateReadout(index, "unit", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="grid gap-1">
-                          <Label className="text-xs">Aggregation</Label>
-                          <Select
-                            value={rd.aggregation}
-                            onValueChange={(v) =>
-                              updateReadout(index, "aggregation", v)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                                ([value, label]) => (
-                                  <SelectItem key={value} value={value}>
-                                    {label}
-                                  </SelectItem>
-                                )
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid gap-1">
-                          <Label className="text-xs">Normalization</Label>
-                          <NormalizationCheckboxGroup
-                            value={rd.normalizations}
+                          <Label className="text-xs">Allowed Values</Label>
+                          <PickListEditor
+                            value={rd.pick_list_values}
                             onChange={(next) =>
-                              updateReadout(index, "normalizations", next)
+                              updateReadout(index, "pick_list_values", next)
                             }
                           />
                         </div>
-                      </div>
+                      )}
+
+                      {/* Numeric measurement attributes — hidden for
+                          pick_list (categorical readouts have no unit /
+                          aggregation / normalization). */}
+                      {rd.data_type !== "pick_list" && (
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="grid gap-1">
+                            <Label className="text-xs">Unit</Label>
+                            <Input
+                              placeholder="e.g., nM"
+                              value={rd.unit}
+                              onChange={(e) =>
+                                updateReadout(index, "unit", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="grid gap-1">
+                            <Label className="text-xs">Aggregation</Label>
+                            <Select
+                              value={rd.aggregation}
+                              onValueChange={(v) =>
+                                updateReadout(index, "aggregation", v)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(READOUT_AGGREGATION_LABELS).map(
+                                  ([value, label]) => (
+                                    <SelectItem key={value} value={value}>
+                                      {label}
+                                    </SelectItem>
+                                  )
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-1">
+                            <Label className="text-xs">Normalization</Label>
+                            <NormalizationCheckboxGroup
+                              value={rd.normalizations}
+                              onChange={(next) =>
+                                updateReadout(index, "normalizations", next)
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       {/* Calculated readout toggle */}
                       <div className="flex items-center gap-3">
@@ -665,19 +699,6 @@ export function CreateProtocolDialog({
                           <p className="text-[11px] text-muted-foreground">
                             Use readout names as variables. Cross-protocol: @ProtocolName.ReadoutName
                           </p>
-                        </div>
-                      )}
-
-                      {/* Pick List Values */}
-                      {rd.data_type === "pick_list" && (
-                        <div className="grid gap-1">
-                          <Label className="text-xs">Pick List Values</Label>
-                          <PickListEditor
-                            value={rd.pick_list_values}
-                            onChange={(next) =>
-                              updateReadout(index, "pick_list_values", next)
-                            }
-                          />
                         </div>
                       )}
 

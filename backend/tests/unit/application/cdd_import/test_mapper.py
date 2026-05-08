@@ -85,22 +85,38 @@ class TestMapCddProtocol:
         assert result.readouts[0].data_type == ReadoutDataType.DOSE_RESPONSE
         assert result.readouts[0].dose_response_config is not None
 
-    def test_batch_link_readout(self):
-        # "Batch" alone is reserved well-metadata and would be skipped by the
-        # mapper. Use a name that's unambiguously a measurement/reference.
+    def test_batch_link_dropped_with_warning(self):
+        # CDD "Batch Link" doesn't fit chem-vault's model — well.batch_id
+        # is canonical. Mapper drops it + emits an informative warning.
         proto = _protocol_json(readouts=[_readout("Reference Batch", "Batch Link")])
         result = map_cdd_protocol(proto)
-        assert result.readouts[0].data_type == ReadoutDataType.BATCH_LINK
+        assert result.readouts == []
+        assert any(
+            w.field_name == "Reference Batch" and "Batch Link" in w.source_type
+            for w in result.warnings
+        )
 
-    def test_file_readout(self):
+    def test_file_dropped_with_warning(self):
+        # File readouts not yet supported (Phase 3). Drop with a clear
+        # message rather than importing a placeholder column nothing
+        # populates.
         proto = _protocol_json(readouts=[_readout("Attachment", "File")])
         result = map_cdd_protocol(proto)
-        assert result.readouts[0].data_type == ReadoutDataType.FILE
+        assert result.readouts == []
+        assert any(
+            w.field_name == "Attachment" and "File" in w.source_type
+            for w in result.warnings
+        )
 
-    def test_date_readout(self):
+    def test_date_dropped_with_warning(self):
+        # Date duplicates run.run_date in chem-vault's model. Drop.
         proto = _protocol_json(readouts=[_readout("Exp Date", "Date")])
         result = map_cdd_protocol(proto)
-        assert result.readouts[0].data_type == ReadoutDataType.DATE
+        assert result.readouts == []
+        assert any(
+            w.field_name == "Exp Date" and "Date" in w.source_type
+            for w in result.warnings
+        )
 
     def test_unknown_type_skipped_with_warning(self):
         proto = _protocol_json(

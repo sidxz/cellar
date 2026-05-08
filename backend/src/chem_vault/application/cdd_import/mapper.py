@@ -132,9 +132,31 @@ _READOUT_TYPE_MAP: dict[str, ReadoutDataType] = {
     "Text": ReadoutDataType.TEXT,
     "Pick List": ReadoutDataType.PICK_LIST,
     "Plot": ReadoutDataType.DOSE_RESPONSE,
-    "Batch Link": ReadoutDataType.BATCH_LINK,
-    "File": ReadoutDataType.FILE,
-    "Date": ReadoutDataType.DATE,
+}
+
+# CDD-only readout types that don't fit chem-vault's model — surfaced as
+# warnings + dropped on import. Rationale per the design audit:
+#   - "File": chem-vault models attachments at the run / molecule level,
+#     not per-readout-cell. Per-data-point file attachment is a Phase-3
+#     feature requiring a real lifecycle (upload, ZIP-bulk match, etc.).
+#   - "Date": run.run_date is the canonical "when measured." Per-readout
+#     dates are time-course territory, which needs a richer model than
+#     a single column.
+#   - "Batch Link": well.batch_id is canonical. A Batch Link readout
+#     would duplicate it.
+_DROPPED_READOUT_TYPES: dict[str, str] = {
+    "File": (
+        "'File' readout type isn't supported in chem-vault — files attach "
+        "to the run, not to individual data points. Skipped."
+    ),
+    "Date": (
+        "'Date' readout type isn't supported — chem-vault uses "
+        "run.run_date for measurement timing. Skipped."
+    ),
+    "Batch Link": (
+        "'Batch Link' readout type isn't supported — chem-vault stores "
+        "the batch reference on the well (well.batch_id). Skipped."
+    ),
 }
 
 _CONDITION_TYPE_MAP: dict[str, ConditionDataType] = {
@@ -376,6 +398,19 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
 
         # Regular readout — map the data_type
         src_type = rd.get("data_type") or rd.get("type") or ""
+
+        # CDD types we explicitly don't support — drop with a clear
+        # explanation so the chemist sees what was filtered.
+        if src_type in _DROPPED_READOUT_TYPES:
+            warnings.append(
+                MappingWarning(
+                    field_name=rd_name,
+                    source_type=src_type,
+                    reason=_DROPPED_READOUT_TYPES[src_type],
+                )
+            )
+            continue
+
         mapped_type = _READOUT_TYPE_MAP.get(src_type)
         if mapped_type is None:
             warnings.append(
