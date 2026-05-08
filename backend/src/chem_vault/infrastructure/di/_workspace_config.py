@@ -88,6 +88,8 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from chem_vault.application.admin.admin_delete_registry import register_admin_delete
+from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
 
 
 def register_workspace_config(container: Container) -> None:
@@ -307,3 +309,26 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateProtocolForm, _pf_cmd(UpdateProtocolForm))
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
+
+    # --- Admin Hard-Delete Registry (Tier 1) ---
+    class _VocabularyAdapter:
+        """Adapts ControlledVocabularyRepository to the admin-delete protocol."""
+        def __init__(self, repo):
+            self._r = repo
+
+        async def find_by_id(self, workspace_id, id):
+            return await self._r.find_by_id_in_workspace(workspace_id, id)
+
+        async def delete(self, workspace_id, id):
+            await self._r.delete(workspace_id, id)
+
+    def _resolve_vocab(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return _VocabularyAdapter(SQLAlchemyControlledVocabularyRepository(uow))
+
+    register_admin_delete(
+        entity_type="vocabulary",
+        table="controlled_vocabularies",
+        label_field="name",
+        repo_resolver=_resolve_vocab,
+    )

@@ -5,18 +5,7 @@ from chem_vault.application.admin.admin_delete_registry import (
     all_entity_types,
     get_entry,
     register_admin_delete,
-    _REGISTRY,
 )
-
-
-@pytest.fixture(autouse=True)
-def _clear_registry():
-    """Clear and restore registry state around each test."""
-    snapshot = dict(_REGISTRY)
-    _REGISTRY.clear()
-    yield
-    _REGISTRY.clear()
-    _REGISTRY.update(snapshot)
 
 
 def _dummy_resolver():
