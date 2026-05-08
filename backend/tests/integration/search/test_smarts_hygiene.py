@@ -1,8 +1,10 @@
-"""mol_adjust_query_properties must normalize aromaticity perception.
+"""qmol_from_smarts handles aromaticity perception across SMARTS dialects.
 
-Uses qmol_from_smarts (the cartridge function) + mol_adjust_query_properties
-to verify that three semantically-equivalent SMARTS representations of benzene
-all match after normalization.
+Originally this test wrapped the SMARTS in mol_adjust_query_properties per the
+literature recommendation, but with this cartridge build that wrap silently
+strips legitimate aromatic matches (e.g. benzene SMARTS hits 2/719 instead of
+535/719 on a real corpus). qmol_from_smarts already produces the right query
+mol for the @> operator path.
 """
 
 from __future__ import annotations
@@ -32,8 +34,7 @@ async def test_three_benzene_smarts_all_match(
     workspace_id: uuid.UUID,
     org_id: uuid.UUID,
 ) -> None:
-    """All three SMARTS forms of benzene must match the registered benzene
-    after mol_adjust_query_properties normalization via qmol_from_smarts."""
+    """All three SMARTS forms of benzene must match the registered benzene."""
     benzene = _make_molecule_model(
         workspace_id, org_id, smiles="c1ccccc1", name="benzene",
     )
@@ -43,8 +44,7 @@ async def test_three_benzene_smarts_all_match(
     result = await db_session.execute(
         text(
             "SELECT id FROM molecules WHERE workspace_id = :ws "
-            "AND mol_from_smiles(smiles) @> "
-            "mol_adjust_query_properties(qmol_from_smarts(:q))"
+            "AND mol_from_smiles(smiles) @> qmol_from_smarts(:q)"
         ),
         {"ws": workspace_id, "q": query_text},
     )

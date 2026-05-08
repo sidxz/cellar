@@ -203,10 +203,12 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
             "mol_to_xqmol(mol_from_smiles(:q))"
         )
     else:
-        sql = (
-            "mol_from_smiles(smiles) @> "
-            "mol_adjust_query_properties(qmol_from_smarts(:q))"
-        )
+        # Note: mol_adjust_query_properties was originally wrapped here per the
+        # literature recommendation, but with this cartridge build it strips
+        # legitimate aromatic matches (e.g. benzene SMARTS hits 2/719 instead
+        # of 535/719). qmol_from_smarts already handles aromaticity perception
+        # correctly for the @> operator path.
+        sql = "mol_from_smiles(smiles) @> qmol_from_smarts(:q)"
     return text(sql).bindparams(sa.bindparam("q", value=query_text, type_=sa.String))
 
 

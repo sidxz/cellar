@@ -536,7 +536,15 @@ class TestStructureClauseNewShape:
         assert "tversky_sml" in sql
         assert "bfp_from_binary_text" in sql
 
-    def test_substructure_passes_through_mol_adjust_query_properties(self) -> None:
+    def test_substructure_uses_qmol_from_smarts(self) -> None:
+        """Substructure SMARTS goes through qmol_from_smarts directly.
+
+        Note: mol_adjust_query_properties was originally wrapped here per the
+        literature recommendation, but with this cartridge build it stripped
+        legitimate aromatic matches (benzene SMARTS hit 2/719 instead of 535/719
+        on a real corpus). The cartridge's qmol_from_smarts already handles
+        aromaticity perception correctly for the @> operator path.
+        """
         clause = _compose({
             "criteria": [
                 {
@@ -548,7 +556,8 @@ class TestStructureClauseNewShape:
             "logic": "and",
         })
         sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
-        assert "mol_adjust_query_properties" in sql
+        assert "qmol_from_smarts" in sql
+        assert "mol_adjust_query_properties" not in sql
 
     def test_substructure_generalized_uses_xqmol_and_double_arrow(self) -> None:
         clause = _compose({
@@ -599,7 +608,7 @@ class TestStructureClauseNewShape:
             "logic": "and",
         })
         sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
-        assert "mol_adjust_query_properties" in sql
+        assert "qmol_from_smarts" in sql
 
     def test_legacy_search_type_exact_still_works(self) -> None:
         clause = _compose({

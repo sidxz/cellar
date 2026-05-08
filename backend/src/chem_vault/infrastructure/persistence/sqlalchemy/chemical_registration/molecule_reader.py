@@ -65,7 +65,7 @@ class SQLAlchemyMoleculeReader:
                     MoleculeModel.workspace_id == workspace_id,
                     MoleculeModel.merged_into_id.is_(None),
                     MoleculeModel.smiles.is_not(None),
-                    text("mol_from_smiles(smiles) @> mol_adjust_query_properties(qmol_from_smarts(:smarts))"),
+                    text("mol_from_smiles(smiles) @> qmol_from_smarts(:smarts)"),
                 )
                 .params(smarts=smarts)
             )
