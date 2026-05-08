@@ -7,6 +7,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.admin.admin_delete_registry import get_entry
 from chem_vault.application.admin.cascade_service import CascadeService
+from chem_vault.application.admin.tier2_entities import TIER2_ENTITY_TYPES
 from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -14,9 +15,6 @@ from chem_vault.domain.shared.cascade import CascadeNode
 from chem_vault.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError,
 )
-
-# Tier-2 is gated to these entity types only.
-TIER2_ENTITY_TYPES = frozenset({"protocol", "run", "molecule"})
 
 
 @dataclass(frozen=True, kw_only=True)

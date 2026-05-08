@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import uuid
 
+import structlog
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from returns.result import Failure, Success
+
+log = structlog.get_logger(__name__)
 
 from chem_vault.application.admin.admin_hard_delete import (
     AdminHardDeleteCommand,
@@ -104,7 +107,8 @@ async def admin_hard_delete(
         raise HTTPException(status_code=404, detail=str(err))
     if isinstance(err, ValidationError):
         raise HTTPException(status_code=422, detail=str(err))
-    raise HTTPException(status_code=500, detail=str(err))
+    log.error("admin_delete.unexpected_error", entity_type=entity_type, entity_id=str(entity_id), error=str(err))
+    raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +168,8 @@ async def cascade_preview(
         raise HTTPException(status_code=403, detail=str(err))
     if isinstance(err, NotFoundError):
         raise HTTPException(status_code=404, detail=str(err))
-    raise HTTPException(status_code=500, detail=str(err))
+    log.error("admin_delete.cascade_preview_unexpected_error", entity_type=entity_type, entity_id=str(entity_id), error=str(err))
+    raise HTTPException(status_code=500, detail="Internal server error")
 
 
 class CascadeDeleteBody(BaseModel):
@@ -202,4 +207,5 @@ async def cascade_delete(
         raise HTTPException(status_code=404, detail=str(err))
     if isinstance(err, ValidationError):
         raise HTTPException(status_code=422, detail=str(err))
-    raise HTTPException(status_code=500, detail=str(err))
+    log.error("admin_delete.cascade_delete_unexpected_error", entity_type=entity_type, entity_id=str(entity_id), error=str(err))
+    raise HTTPException(status_code=500, detail="Internal server error")

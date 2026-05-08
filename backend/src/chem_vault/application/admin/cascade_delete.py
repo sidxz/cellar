@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.admin.admin_delete_registry import get_entry
-from chem_vault.application.admin.cascade_preview import TIER2_ENTITY_TYPES
 from chem_vault.application.admin.cascade_service import CascadeService
+from chem_vault.application.admin.tier2_entities import TIER2_ENTITY_TYPES
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
