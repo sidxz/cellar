@@ -132,6 +132,13 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const status = protocol.status as ProtocolStatus;
   const isDraft = status === "draft";
   const isRetired = status === "retired";
+  const isLocked = protocol.is_locked;
+  // Additive ops (add readout/condition, add NEW control layout, edit
+  // cosmetic fields) — DRAFT or unlocked ACTIVE.
+  const canAddMetadata = !isLocked && !isRetired;
+  // Destructive / structural ops (remove, rename, replace existing
+  // layout, ontology edits) — strict DRAFT only. Lock blocks DRAFT too.
+  const canStructurallyEdit = isDraft && !isLocked;
 
   // --- Mutations ---
   const updateProtocol = useUpdateProtocol(protocolId);
@@ -1146,7 +1153,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     )}
                   </Label>
 
-                  {isDraft ? (
+                  {canStructurallyEdit ? (
                     <OntologySearchInput
                       ontologySources={slot.ontology_sources}
                       rootConceptId={slot.root_concept_id}
@@ -1202,7 +1209,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               Measured values captured for each compound in a run.
             </CardDescription>
           </div>
-          {isDraft && (
+          {canAddMetadata && (
             <Button
               size="sm"
               variant="outline"
@@ -1321,30 +1328,34 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {isDraft && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEditReadout(rd.id)}
-                              title="Edit"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              disabled={
-                                protocol.readout_definitions.length <= 1
-                              }
-                              onClick={() => removeReadoutDef.mutate(rd.id)}
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
+                        {canAddMetadata && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEditReadout(rd.id)}
+                            title={
+                              isDraft
+                                ? "Edit"
+                                : "Edit (cosmetic fields only — rename / structural changes require a new version)"
+                            }
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canStructurallyEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            disabled={
+                              protocol.readout_definitions.length <= 1
+                            }
+                            onClick={() => removeReadoutDef.mutate(rd.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         )}
                       </div>
                     </TableCell>
@@ -1365,7 +1376,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               Experimental conditions that vary between runs.
             </CardDescription>
           </div>
-          {isDraft && (
+          {canAddMetadata && (
             <Button
               size="sm"
               variant="outline"
@@ -1388,7 +1399,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <TableHead>Name</TableHead>
                   <TableHead>Data Type</TableHead>
                   <TableHead>Unit</TableHead>
-                  {isDraft && <TableHead className="w-10" />}
+                  {canStructurallyEdit && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1399,7 +1410,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       {cd.data_type}
                     </TableCell>
                     <TableCell>{cd.unit ?? "\u2014"}</TableCell>
-                    {isDraft && (
+                    {canStructurallyEdit && (
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button
@@ -1473,7 +1484,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                             {tmpl?.name ?? templateId}
                           </span>
                         </span>
-                        {isDraft && (
+                        {canStructurallyEdit && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1506,8 +1517,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </p>
           )}
 
-          {/* Add form (draft only) */}
-          {isDraft && (
+          {/* Add form — additive, allowed on unlocked ACTIVE for new
+              formats. Replacing an existing format's layout still
+              requires DRAFT (would change Z′ interpretation of prior
+              runs); we filter the format dropdown to those not yet
+              configured so users can't accidentally try. */}
+          {canAddMetadata && (
             <>
               {plateTemplates && plateTemplates.length === 0 ? (
                 <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
@@ -1523,12 +1538,36 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     </Button>
                   </div>
                 </div>
-              ) : (
+              ) : (() => {
+                const configuredFormats = Object.keys(
+                  protocol.control_layouts ?? {},
+                );
+                // On non-DRAFT, filter to formats not already configured —
+                // the BE rejects replacing on ACTIVE. On DRAFT, any
+                // format is fair game (replace included).
+                const availableFormats = isDraft
+                  ? Object.keys(PLATE_FORMAT_LABELS)
+                  : Object.keys(PLATE_FORMAT_LABELS).filter(
+                      (f) => !configuredFormats.includes(f),
+                    );
+                if (availableFormats.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      All plate formats already have a layout configured.
+                      To replace an existing layout, create a new version.
+                    </p>
+                  );
+                }
+                return (
                 <div className="flex items-end gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">Format</Label>
                     <Select
-                      value={clFormat}
+                      value={
+                        availableFormats.includes(clFormat)
+                          ? clFormat
+                          : availableFormats[0]
+                      }
                       onValueChange={(v) => {
                         setClFormat(v);
                         setClTemplateId("");
@@ -1538,13 +1577,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(PLATE_FORMAT_LABELS).map(
-                          ([val, label]) => (
-                            <SelectItem key={val} value={val}>
-                              {label}
-                            </SelectItem>
-                          ),
-                        )}
+                        {availableFormats.map((val) => (
+                          <SelectItem key={val} value={val}>
+                            {
+                              PLATE_FORMAT_LABELS[
+                                val as keyof typeof PLATE_FORMAT_LABELS
+                              ]
+                            }
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1588,7 +1629,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     Set Layout
                   </Button>
                 </div>
-              )}
+                );
+              })()}
             </>
           )}
         </CardContent>
@@ -1794,8 +1836,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           <DialogHeader>
             <DialogTitle>Edit Readout Definition</DialogTitle>
             <DialogDescription>
-              Update fields on this readout. Only available while the protocol
-              is in draft.
+              {isDraft
+                ? "Update fields on this readout."
+                : "Cosmetic fields (unit) can be edited on a published protocol. Renaming, data-type changes, and other structural edits require a new version — they would invalidate prior runs."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1804,6 +1847,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               <Input
                 value={rdName}
                 onChange={(e) => setRdName(e.target.value)}
+                disabled={!isDraft}
               />
               {isReservedReadoutName(rdName) && (
                 <p className="text-xs text-destructive">
@@ -1814,7 +1858,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Data Type</Label>
-              <Select value={rdDataType} onValueChange={setRdDataType}>
+              <Select
+                value={rdDataType}
+                onValueChange={setRdDataType}
+                disabled={!isDraft}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1838,7 +1886,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Aggregation</Label>
-              <Select value={rdAggregation} onValueChange={setRdAggregation}>
+              <Select
+                value={rdAggregation}
+                onValueChange={setRdAggregation}
+                disabled={!isDraft}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1858,9 +1910,21 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               <NormalizationCheckboxGroup
                 value={rdNormalizations}
                 onChange={setRdNormalizations}
+                disabled={!isDraft}
               />
             </div>
-            {renderDoseResponseFields(editingReadoutId)}
+            {/* Dose-response fields are structural (curve type, axes,
+                intercepts, ranges) — disabled on non-DRAFT. The fields
+                inside renderDoseResponseFields don't currently take a
+                disabled prop, so we wrap in a disabled-pointer-events
+                shim instead. Cleaner long-term: thread `disabled`. */}
+            {!isDraft ? (
+              <div className="pointer-events-none opacity-60">
+                {renderDoseResponseFields(editingReadoutId)}
+              </div>
+            ) : (
+              renderDoseResponseFields(editingReadoutId)
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeEditReadout}>
