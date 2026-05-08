@@ -27,6 +27,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Select,
@@ -184,6 +185,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // --- Readout form fields ---
   const [rdName, setRdName] = useState("");
   const [rdDescription, setRdDescription] = useState("");
+  const [rdIsCalculated, setRdIsCalculated] = useState(false);
+  const [rdCalculationFormula, setRdCalculationFormula] = useState("");
   const [rdDataType, setRdDataType] = useState("numeric");
   const [rdUnit, setRdUnit] = useState("");
   const [rdAggregation, setRdAggregation] = useState("none");
@@ -309,6 +312,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdAggregation(rd.aggregation);
     setRdNormalizations(rd.normalizations ?? []);
     setRdPickListValues(rd.pick_list_values ?? []);
+    setRdIsCalculated(rd.is_calculated);
+    setRdCalculationFormula(rd.calculation_formula ?? "");
     if (rd.dose_response_config) {
       const cfg = rd.dose_response_config;
       setDrCurveType(cfg.curve_type);
@@ -407,6 +412,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setRdAggregation("none");
     setRdNormalizations([]);
     setRdPickListValues([]);
+    setRdIsCalculated(false);
+    setRdCalculationFormula("");
     resetDoseResponseFields();
   };
 
@@ -1292,6 +1299,18 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                           vs {rd.dose_response_config.y_readout_name})
                         </span>
                       )}
+                      {rd.is_calculated && rd.calculation_formula && (
+                        <span
+                          className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground italic"
+                          title={`Computed from formula: ${rd.calculation_formula}`}
+                        >
+                          ƒ <code className="font-mono not-italic">
+                            {rd.calculation_formula.length > 40
+                              ? rd.calculation_formula.slice(0, 40) + "…"
+                              : rd.calculation_formula}
+                          </code>
+                        </span>
+                      )}
                       {rd.pick_list_values &&
                         rd.pick_list_values.length > 0 && (
                           <div className="mt-0.5 flex flex-wrap gap-1">
@@ -1808,33 +1827,73 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     placeholder="e.g. nM, %, \u00B5M"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>Aggregation</Label>
-                  <Select
-                    value={rdAggregation}
-                    onValueChange={setRdAggregation}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                        ([val, label]) => (
-                          <SelectItem key={val} value={val}>
-                            {label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Normalization</Label>
-                  <NormalizationCheckboxGroup
-                    value={rdNormalizations}
-                    onChange={setRdNormalizations}
-                  />
-                </div>
+                {/* Calculated toggle \u2014 only meaningful for numeric (the
+                    formula evaluator returns a float). When on, hide
+                    Aggregation + Normalization: the calc engine ignores
+                    both for is_calculated readouts (see
+                    readout_calculation_engine.py:172, 282). */}
+                {rdDataType === "numeric" && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <Switch
+                      checked={rdIsCalculated}
+                      onCheckedChange={(v) => setRdIsCalculated(v === true)}
+                    />
+                    <Label className="text-sm font-normal">
+                      Calculated{" "}
+                      <span className="text-muted-foreground">
+                        \u2014 value derived from a formula over other readouts
+                      </span>
+                    </Label>
+                  </div>
+                )}
+                {rdIsCalculated && rdDataType === "numeric" && (
+                  <div className="space-y-1">
+                    <Label>Formula</Label>
+                    <Input
+                      className="font-mono text-sm"
+                      placeholder="e.g. 100 * (1 - Raw / Control)"
+                      value={rdCalculationFormula}
+                      onChange={(e) => setRdCalculationFormula(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Use other readout names as variables. Cross-protocol:
+                      <code className="ml-1">@ProtocolName.ReadoutName</code>.
+                      Math:{" "}
+                      <code>log, log10, sqrt, abs, pow, min, max, exp, pi, e</code>.
+                    </p>
+                  </div>
+                )}
+                {!rdIsCalculated && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Aggregation</Label>
+                      <Select
+                        value={rdAggregation}
+                        onValueChange={setRdAggregation}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(READOUT_AGGREGATION_LABELS).map(
+                            ([val, label]) => (
+                              <SelectItem key={val} value={val}>
+                                {label}
+                              </SelectItem>
+                            ),
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Normalization</Label>
+                      <NormalizationCheckboxGroup
+                        value={rdNormalizations}
+                        onChange={setRdNormalizations}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
             {renderDoseResponseFields(null)}
@@ -1854,6 +1913,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 (rdDataType === "dose_response" && !drYReadout) ||
                 (rdDataType === "pick_list" &&
                   rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
+                (rdDataType === "numeric" &&
+                  rdIsCalculated &&
+                  !rdCalculationFormula.trim()) ||
                 drFormInvalid
               }
               onClick={() => {
@@ -1863,14 +1925,22 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     label: v.label.trim(),
                     color: v.color || null,
                   }));
+                const isCalc = rdDataType === "numeric" && rdIsCalculated;
                 addReadoutDef.mutate(
                   {
                     name: rdName.trim(),
                     description: rdDescription.trim() || null,
                     data_type: rdDataType,
                     unit: rdUnit.trim() || undefined,
-                    aggregation: rdAggregation,
-                    normalizations: rdNormalizations,
+                    // Calculated readouts: send empty aggregation +
+                    // normalizations so the BE doesn't store stale values
+                    // alongside the formula (calc engine ignores them).
+                    aggregation: isCalc ? "none" : rdAggregation,
+                    normalizations: isCalc ? [] : rdNormalizations,
+                    is_calculated: isCalc,
+                    calculation_formula: isCalc
+                      ? rdCalculationFormula.trim() || null
+                      : null,
                     pick_list_values:
                       rdDataType === "pick_list" ? cleanedPickList : undefined,
                     dose_response_config: buildDoseResponseConfig(),
@@ -1884,6 +1954,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       setRdAggregation("none");
                       setRdNormalizations([]);
                       setRdPickListValues([]);
+                      setRdIsCalculated(false);
+                      setRdCalculationFormula("");
                       resetDoseResponseFields();
                       setAddReadoutOpen(false);
                     },
@@ -1983,35 +2055,75 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     onChange={(e) => setRdUnit(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>Aggregation</Label>
-                  <Select
-                    value={rdAggregation}
-                    onValueChange={setRdAggregation}
-                    disabled={!isDraft}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                        ([val, label]) => (
-                          <SelectItem key={val} value={val}>
-                            {label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Normalization</Label>
-                  <NormalizationCheckboxGroup
-                    value={rdNormalizations}
-                    onChange={setRdNormalizations}
-                    disabled={!isDraft}
-                  />
-                </div>
+                {/* Calculated toggle — structural (changing the formula
+                    on ACTIVE would silently shift computed values across
+                    every prior run). Disabled on non-DRAFT. */}
+                {rdDataType === "numeric" && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <Switch
+                      checked={rdIsCalculated}
+                      onCheckedChange={(v) => setRdIsCalculated(v === true)}
+                      disabled={!isDraft}
+                    />
+                    <Label className="text-sm font-normal">
+                      Calculated{" "}
+                      <span className="text-muted-foreground">
+                        — value derived from a formula over other readouts
+                      </span>
+                    </Label>
+                  </div>
+                )}
+                {rdIsCalculated && rdDataType === "numeric" && (
+                  <div className="space-y-1">
+                    <Label>Formula</Label>
+                    <Input
+                      className="font-mono text-sm"
+                      placeholder="e.g. 100 * (1 - Raw / Control)"
+                      value={rdCalculationFormula}
+                      onChange={(e) => setRdCalculationFormula(e.target.value)}
+                      disabled={!isDraft}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Use other readout names as variables. Cross-protocol:
+                      <code className="ml-1">@ProtocolName.ReadoutName</code>.
+                      Math:{" "}
+                      <code>log, log10, sqrt, abs, pow, min, max, exp, pi, e</code>.
+                    </p>
+                  </div>
+                )}
+                {!rdIsCalculated && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Aggregation</Label>
+                      <Select
+                        value={rdAggregation}
+                        onValueChange={setRdAggregation}
+                        disabled={!isDraft}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(READOUT_AGGREGATION_LABELS).map(
+                            ([val, label]) => (
+                              <SelectItem key={val} value={val}>
+                                {label}
+                              </SelectItem>
+                            ),
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Normalization</Label>
+                      <NormalizationCheckboxGroup
+                        value={rdNormalizations}
+                        onChange={setRdNormalizations}
+                        disabled={!isDraft}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
             {/* Dose-response fields are structural (curve type, axes,
@@ -2039,6 +2151,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 (rdDataType === "dose_response" && !drYReadout) ||
                 (rdDataType === "pick_list" &&
                   rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
+                (rdDataType === "numeric" &&
+                  rdIsCalculated &&
+                  !rdCalculationFormula.trim()) ||
                 drFormInvalid
               }
               onClick={() => {
@@ -2049,6 +2164,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                     label: v.label.trim(),
                     color: v.color || null,
                   }));
+                const isCalc = rdDataType === "numeric" && rdIsCalculated;
                 updateReadoutDef.mutate(
                   {
                     definitionId: editingReadoutId,
@@ -2057,8 +2173,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       description: rdDescription.trim() || null,
                       data_type: rdDataType,
                       unit: rdUnit.trim() || null,
-                      aggregation: rdAggregation,
-                      normalizations: rdNormalizations,
+                      aggregation: isCalc ? "none" : rdAggregation,
+                      normalizations: isCalc ? [] : rdNormalizations,
+                      is_calculated: isCalc,
+                      calculation_formula: isCalc
+                        ? rdCalculationFormula.trim() || null
+                        : null,
                       pick_list_values:
                         rdDataType === "pick_list" ? cleanedPickList : null,
                       dose_response_config: buildDoseResponseConfig(),
