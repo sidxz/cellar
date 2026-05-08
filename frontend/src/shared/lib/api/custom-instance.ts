@@ -22,14 +22,25 @@ export const customInstance = async <T>({
   params,
   data,
   headers,
+  signal,
 }: {
   url: string;
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  params?: Record<string, string>;
+  // biome-ignore lint/suspicious/noExplicitAny: orval generates params with mixed primitive types
+  params?: Record<string, any>;
   data?: unknown;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }): Promise<T> => {
-  const searchParams = new URLSearchParams(params);
+  // Filter out null/undefined, stringify remaining values for URLSearchParams
+  const filteredParams = params
+    ? Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v != null)
+          .map(([k, v]) => [k, String(v)])
+      )
+    : undefined;
+  const searchParams = new URLSearchParams(filteredParams);
   const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
   const client = typeof window !== "undefined" ? getSentinelClient() : null;
@@ -46,6 +57,7 @@ export const customInstance = async <T>({
   const response = await fetch(`${_baseUrl}${url}${queryString}`, {
     method,
     headers: fetchHeaders,
+    signal,
     ...(data
       ? { body: isFormData ? (data as FormData) : JSON.stringify(data) }
       : {}),
