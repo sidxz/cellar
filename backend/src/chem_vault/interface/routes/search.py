@@ -86,12 +86,15 @@ class _SimilarityMatch(BaseModel):
     def _check(self) -> "_SimilarityMatch":
         if Chem.MolFromSmiles(self.smiles) is None:
             raise ValueError("smiles failed RDKit parse")
-        if (self.mode is None
-                and (self.algorithm is None or self.metric is None
-                     or self.threshold is None)):
+        # Power-user override: if `algorithm` is set without `mode`,
+        # `metric` and `threshold` must also be set explicitly.
+        if (self.mode is None and self.algorithm is not None
+                and (self.metric is None or self.threshold is None)):
             raise ValueError(
-                "either mode is required, or algorithm + metric + threshold must all be set"
+                "explicit algorithm requires metric + threshold (or use mode)"
             )
+        # Legacy shape (just smiles + optional threshold) is accepted; the
+        # composer falls back to morgan + tanimoto + supplied/default threshold.
         if self.algorithm is not None and self.algorithm not in _registry.names():
             raise ValueError(
                 f"unknown algorithm: {self.algorithm!r}; valid: {sorted(_registry.names())}"

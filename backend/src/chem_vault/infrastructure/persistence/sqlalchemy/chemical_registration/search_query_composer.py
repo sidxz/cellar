@@ -197,13 +197,13 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
         raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
     generalized = bool(criterion.get("generalized", False))
 
-    # asyncpg binds sa.String as VARCHAR, but qmol_from_smarts and
-    # mol_from_smiles expect cstring. Untyped binding (no `type_=sa.String`)
-    # lets Postgres infer/cast freely.
+    # Cartridge functions qmol_from_smarts/mol_from_smiles take cstring, but
+    # SQLAlchemy bindparams infer Python str -> VARCHAR. Explicit SQL CAST
+    # to cstring is the only path that works under all driver scenarios.
     if generalized:
         sql = (
             "mol_from_smiles(smiles) @>> "
-            "mol_to_xqmol(mol_from_smiles(:q))"
+            "mol_to_xqmol(mol_from_smiles(CAST(:q AS cstring)))"
         )
     else:
         # Note: mol_adjust_query_properties was originally wrapped here per the
@@ -211,7 +211,7 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
         # legitimate aromatic matches (e.g. benzene SMARTS hits 2/719 instead
         # of 535/719). qmol_from_smarts already handles aromaticity perception
         # correctly for the @> operator path.
-        sql = "mol_from_smiles(smiles) @> qmol_from_smarts(:q)"
+        sql = "mol_from_smiles(smiles) @> qmol_from_smarts(CAST(:q AS cstring))"
     return text(sql).bindparams(q=query_text)
 
 
@@ -312,13 +312,18 @@ def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
             sa.bindparam("sim_q_bytes", value=q_bytes, type_=sa.LargeBinary)
         )
     else:
-        # FCFP: cartridge function is consistent on both sides.
-        # Untyped binding so asyncpg sends as text; Postgres casts to cstring.
+        # FCFP: cartridge function is consistent on both sides. mol_from_smiles
+        # takes cstring; CAST(:sim_q AS cstring) handles the type coercion that
+        # would otherwise fail under SQLAlchemy's String->VARCHAR inference.
         if isinstance(metric, Tanimoto):
-            sql = f"{column} % {fn}(mol_from_smiles(:sim_q){radius_arg})"
+            sql = (
+                f"{column} % {fn}(mol_from_smiles(CAST(:sim_q AS cstring))"
+                f"{radius_arg})"
+            )
         elif isinstance(metric, Tversky):
             sql = (
-                f"tversky_sml({column}, {fn}(mol_from_smiles(:sim_q){radius_arg}), "
+                f"tversky_sml({column}, "
+                f"{fn}(mol_from_smiles(CAST(:sim_q AS cstring)){radius_arg}), "
                 f"{metric.alpha}, {metric.beta}) >= {threshold}"
             )
         else:
