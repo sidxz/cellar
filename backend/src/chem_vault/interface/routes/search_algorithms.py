@@ -13,8 +13,14 @@ router = APIRouter(prefix="/api/v1/search", tags=["search"])
 _registry = FingerprintRegistry.default()
 
 _ALGORITHM_DESCRIPTIONS = {
-    "morgan": "Circular topological FP (ECFP4-equivalent), stereo-aware",
-    "fcfp": "Pharmacophore-flavored circular FP",
+    "morgan": (
+        "Morgan circular fingerprint (ECFP4-equivalent), 2048-bit, stereo-aware. "
+        "Industry standard for analog and SAR retrieval."
+    ),
+    "fcfp": (
+        "Feature-class circular fingerprint (FCFP4-equivalent), 2048-bit. "
+        "Pharmacophore-aware variant suited to scaffold hopping."
+    ),
 }
 
 

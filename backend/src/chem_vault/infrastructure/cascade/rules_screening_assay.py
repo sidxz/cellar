@@ -156,4 +156,34 @@ register_rules(
         label_field="notes",
         display_label="Runs (template link cleared)",
     ),
+
+    # -------------------------------------------------------------------------
+    # Self-referential lineage links (SET NULL)
+    # -------------------------------------------------------------------------
+    # Versioned successors point back at their predecessor via parent_*_id.
+    # When the predecessor is admin-deleted, the successor must survive — it
+    # owns its own runs/data and is not a child in the ownership sense.
+    # SET NULL clears the lineage link so the FK no longer blocks deletion.
+    # The null_ops phase runs before deletes, so this also handles the case
+    # where a whole versioning chain is collected for deletion at once.
+
+    # ProtocolModel.parent_protocol_id → protocols (no ondelete clause)
+    CascadeRule(
+        child_table="protocols",
+        fk_column="parent_protocol_id",
+        parent_table="protocols",
+        action=A.SET_NULL,
+        label_field="name",
+        display_label="Successor protocols (lineage link cleared)",
+    ),
+
+    # RunModel.parent_run_id → runs (no ondelete clause)
+    CascadeRule(
+        child_table="runs",
+        fk_column="parent_run_id",
+        parent_table="runs",
+        action=A.SET_NULL,
+        label_field="notes",
+        display_label="Successor runs (lineage link cleared)",
+    ),
 )

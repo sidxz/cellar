@@ -212,7 +212,9 @@ class CascadeRunner:
                 update(sa_table).where(sa_table.c.id.in_(ids)).values(**{fk_col: None})
             )
 
-        # Delete in reverse topological order: collected list has deepest last.
+        # delete_ops is built shallow-first (each layer appended before its
+        # descendants are recursed into), so reversed iteration deletes the
+        # deepest rows first and works back up to the root's direct children.
         for table_name, ids in reversed(delete_ops):
             sa_table = Base.metadata.tables[table_name]
             await self._session.execute(
@@ -315,7 +317,10 @@ class CascadeRunner:
             if rule.action == CascadeAction.SET_NULL:
                 null_ops.append((rule.child_table, rule.fk_column, child_ids))
                 continue
-            # CASCADE — recurse if rule says so, otherwise just snapshot+delete
+            # CASCADE — record this layer BEFORE descending into grandchildren so
+            # that deeper layers land later in delete_ops; reversed iteration in
+            # execute() then deletes the deepest rows first, satisfying FK order.
+            delete_ops.append((rule.child_table, child_ids))
             if rule.recurse_into_entity:
                 await self._collect(
                     rule.child_table, child_ids, workspace_id,
@@ -342,4 +347,3 @@ class CascadeRunner:
                             timestamp=now2,
                         )
                     )
-            delete_ops.append((rule.child_table, child_ids))

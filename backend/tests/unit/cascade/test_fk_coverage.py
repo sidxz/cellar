@@ -127,13 +127,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("protocols", "target_id", "targets"),
 
     # -------------------------------------------------------------------------
-    # Protocols → protocols: self-referential for versioned protocol lineage
-    # -------------------------------------------------------------------------
-    # protocols.parent_protocol_id links a versioned protocol to its predecessor.
-    # Protocol versioning is managed via the protocol lifecycle, not admin delete.
-    ("protocols", "parent_protocol_id", "protocols"),
-
-    # -------------------------------------------------------------------------
     # custom_field_definitions → controlled_vocabularies: SET NULL on delete
     # -------------------------------------------------------------------------
     # custom_field_definitions.vocabulary_id is nullable; if the vocabulary is
@@ -239,6 +232,23 @@ def _collect_tier2_rule_keys() -> set[tuple[str, str, str]]:
     }
 
 
+# DB-level ondelete clauses that resolve the FK at delete time.
+# RESTRICT and NO ACTION still raise FK violations, so they don't count.
+_DB_ONDELETE_HANDLERS = {"CASCADE", "SET NULL", "SET DEFAULT"}
+
+
+def _has_db_ondelete_handling(child_table: str, fk_col: str) -> bool:
+    """True if the FK column has a DB ondelete clause that resolves the FK
+    automatically when the parent row is deleted.
+    """
+    table = Base.metadata.tables[child_table]
+    col = table.c[fk_col]
+    for fk in col.foreign_keys:
+        if fk.ondelete and fk.ondelete.upper() in _DB_ONDELETE_HANDLERS:
+            return True
+    return False
+
+
 # Tier-1 admin-deletable parent tables — RESTRICT will surface their inbound FKs.
 TIER1_PARENT_TABLES = {
     "controlled_vocabularies", "registration_forms", "protocol_forms",
@@ -277,8 +287,32 @@ def test_every_fk_is_categorized():
         sys.modules.pop(mod_name, None)
 
     uncovered: list[tuple[str, str, str]] = []
+    unsafe_self_refs: list[tuple[str, str, str]] = []
     for fk in all_fks:
         child_table, fk_col, parent_table = fk
+
+        # Self-refs in Tier-1 tables are a structural blind spot for the
+        # generic "Tier-1 RESTRICT will handle it" shortcut:
+        #   1. The Tier-1 RESTRICT walk in inbound_refs.find_inbound_references
+        #      explicitly skips the parent table itself, so a self-ref is
+        #      never surfaced as a blocker at the entry point.
+        #   2. Inside a Tier-2 cascade, multiple rows of the same Tier-1 table
+        #      can be deleted in one shot (e.g. a versioning chain), or a
+        #      successor row can point at the row being deleted — both raise
+        #      a FK violation at DELETE time.
+        # Either case requires explicit handling: a Tier-2 cascade rule
+        # (typically SET_NULL for lineage links) or a DB-level ondelete
+        # clause that resolves the FK automatically. IGNORED_FKS does NOT
+        # bypass this — silent ignore is exactly the bug pattern that sent
+        # protocol cascade-deletes into ForeignKeyViolationError.
+        if child_table == parent_table and parent_table in TIER1_PARENT_TABLES:
+            if fk in tier2_keys:
+                continue
+            if _has_db_ondelete_handling(child_table, fk_col):
+                continue
+            unsafe_self_refs.append(fk)
+            continue
+
         if fk in IGNORED_FKS:
             continue
         if parent_table in TIER1_PARENT_TABLES:
@@ -286,6 +320,18 @@ def test_every_fk_is_categorized():
         if fk in tier2_keys:
             continue  # Tier-2 rule covers it
         uncovered.append(fk)
+
+    assert not unsafe_self_refs, (
+        "Self-referential FKs in Tier-1 tables MUST have explicit delete-time "
+        "handling.\n"
+        "Tier-1 RESTRICT walking explicitly skips the parent table (so it never "
+        "surfaces self-refs as blockers), and Tier-2 cascade can delete multiple "
+        "rows of the same table together — both paths hit the FK at DELETE time. "
+        "Add a Tier-2 cascade rule (SET_NULL is typical for lineage links) or a "
+        "DB-level ondelete clause (CASCADE / SET NULL / SET DEFAULT). "
+        "IGNORED_FKS does NOT bypass this check.\n\n"
+        + "\n".join(f"  {ct}.{c} -> {pt}" for ct, c, pt in unsafe_self_refs)
+    )
 
     assert not uncovered, (
         "FKs not covered by Tier-1 RESTRICT or Tier-2 cascade rules:\n"

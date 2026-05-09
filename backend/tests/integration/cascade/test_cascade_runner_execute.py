@@ -218,6 +218,175 @@ async def test_execute_deletes_protocol_and_descendants(
         assert entry.new_value is None
 
 
+async def _insert_readout_definition(
+    session: AsyncSession,
+    rd_id: uuid.UUID,
+    protocol_id: uuid.UUID,
+    *,
+    name: str = "Signal",
+) -> None:
+    await session.execute(
+        sa.text(
+            "INSERT INTO readout_definitions "
+            "(id, protocol_id, name, data_type, aggregation, display_order) "
+            "VALUES (:id, :proto, :name, 'numeric', 'none', 0)"
+        ),
+        {"id": rd_id, "proto": protocol_id, "name": name},
+    )
+
+
+async def _insert_readout_data(
+    session: AsyncSession,
+    rdata_id: uuid.UUID,
+    run_id: uuid.UUID,
+    readout_definition_id: uuid.UUID,
+    *,
+    value_numeric: float = 1.0,
+) -> None:
+    await session.execute(
+        sa.text(
+            "INSERT INTO readout_data "
+            "(id, workspace_id, run_id, readout_definition_id, value_numeric) "
+            "VALUES (:id, :ws, :run_id, :rd_id, :v)"
+        ),
+        {
+            "id": rdata_id,
+            "ws": WORKSPACE_ID,
+            "run_id": run_id,
+            "rd_id": readout_definition_id,
+            "v": value_numeric,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_deletes_protocol_with_readout_data(
+    db_session: AsyncSession,
+) -> None:
+    """Regression: protocol cascade must delete readout_data BEFORE runs.
+
+    readout_data.run_id is FK with no ondelete, so the cascade runner must
+    order DELETEs so that grandchildren go before their parents. Earlier
+    versions inverted this and hit ForeignKeyViolationError when deleting a
+    protocol whose runs had any readout_data rows.
+    """
+    org_id = uuid.uuid4()
+    protocol_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    rd_id = uuid.uuid4()
+    rdata_id = uuid.uuid4()
+
+    await _insert_org(db_session, org_id)
+    await _insert_protocol(db_session, protocol_id, name="ReadoutProtocol")
+    await _insert_readout_definition(db_session, rd_id, protocol_id)
+    await _insert_run(db_session, run_id, protocol_id, notes="ReadoutRun")
+    await _insert_readout_data(db_session, rdata_id, run_id, rd_id, value_numeric=42.0)
+    await db_session.flush()
+
+    runner = CascadeRunner(db_session)
+    await runner.execute(
+        parent_table="protocols", parent_id=protocol_id, workspace_id=WORKSPACE_ID
+    )
+    await db_session.flush()
+
+    for table_name, row_id in (
+        ("protocols", protocol_id),
+        ("runs", run_id),
+        ("readout_definitions", rd_id),
+        ("readout_data", rdata_id),
+    ):
+        t = Base.metadata.tables[table_name]
+        count = (
+            await db_session.execute(
+                sa.select(sa.func.count()).select_from(t).where(t.c.id == row_id)
+            )
+        ).scalar_one()
+        assert count == 0, f"{table_name} row {row_id} should have been deleted"
+
+
+async def _insert_protocol_with_parent(
+    session: AsyncSession,
+    protocol_id: uuid.UUID,
+    parent_protocol_id: uuid.UUID,
+    *,
+    name: str = "Successor",
+) -> None:
+    await session.execute(
+        sa.text(
+            "INSERT INTO protocols "
+            "(id, workspace_id, name, protocol_type, status, "
+            "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
+            "created_by, parent_protocol_id) "
+            "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+            "false, 'uM', 'high', 1, 2, :user, :parent)"
+        ),
+        {
+            "id": protocol_id,
+            "ws": WORKSPACE_ID,
+            "name": name,
+            "user": USER_ID,
+            "parent": parent_protocol_id,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_clears_successor_protocol_lineage(
+    db_session: AsyncSession,
+) -> None:
+    """Regression: cascade-deleting a protocol must NULL parent_protocol_id on
+    successor protocols, not block on the self-referential FK.
+
+    Production hit ForeignKeyViolationError on protocols_parent_protocol_id_fkey
+    because no Tier-2 rule existed for the self-ref. Successors are independent
+    aggregates — they should survive with their lineage link cleared.
+    """
+    org_id = uuid.uuid4()
+    parent_protocol_id = uuid.uuid4()
+    successor_protocol_id = uuid.uuid4()
+
+    await _insert_org(db_session, org_id)
+    await _insert_protocol(db_session, parent_protocol_id, name="ParentProtocol")
+    await _insert_protocol_with_parent(
+        db_session,
+        successor_protocol_id,
+        parent_protocol_id,
+        name="SuccessorProtocol",
+    )
+    await db_session.flush()
+
+    runner = CascadeRunner(db_session)
+    await runner.execute(
+        parent_table="protocols",
+        parent_id=parent_protocol_id,
+        workspace_id=WORKSPACE_ID,
+    )
+    await db_session.flush()
+
+    protocols_t = Base.metadata.tables["protocols"]
+
+    parent_count = (
+        await db_session.execute(
+            sa.select(sa.func.count())
+            .select_from(protocols_t)
+            .where(protocols_t.c.id == parent_protocol_id)
+        )
+    ).scalar_one()
+    assert parent_count == 0, "parent protocol should have been deleted"
+
+    successor_parent_id = (
+        await db_session.execute(
+            sa.select(protocols_t.c.parent_protocol_id).where(
+                protocols_t.c.id == successor_protocol_id
+            )
+        )
+    ).scalar_one()
+    assert successor_parent_id is None, (
+        f"successor protocol should survive with parent_protocol_id NULLed, "
+        f"got {successor_parent_id!r}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_execute_sets_null_on_saved_searches(
     db_session: AsyncSession,
