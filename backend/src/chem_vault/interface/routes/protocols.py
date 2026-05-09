@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Response
@@ -23,6 +23,9 @@ from chem_vault.application.screening.lock_protocol import (
 from chem_vault.application.screening.create_target import CreateTarget, CreateTargetCommand
 from chem_vault.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
 from chem_vault.application.screening.get_protocol import GetProtocol, GetProtocolQuery, ListProtocols, ListProtocolsQuery
+from chem_vault.application.screening.list_protocol_summaries import (
+    ListProtocolSummariesQuery,
+)
 from chem_vault.application.screening.get_target import GetTarget, GetTargetQuery, ListTargets, ListTargetsQuery
 from chem_vault.application.screening.manage_protocol import (
     AddProtocolToProject,
@@ -88,6 +91,7 @@ from chem_vault.interface.dependencies import (
     GetTargetDep,
     ListProtocolsByProjectDep,
     ListProtocolsDep,
+    ListProtocolSummariesDep,
     ListTargetsDep,
     LockProtocolDep,
     PublishProtocolDep,
@@ -415,6 +419,51 @@ async def create_protocol(
     )
     result = await uc(cmd, auth=auth)
     return ProtocolResponse.from_domain(result_to_response(result))
+
+
+class ProtocolSummaryResponse(BaseModel):
+    """Lightweight row for the protocol picker — name + status + run stats."""
+
+    id: uuid.UUID
+    name: str
+    status: str
+    protocol_type: str
+    description: str | None = None
+    target_id: uuid.UUID | None = None
+    target_name: str | None = None
+    run_count: int = 0
+    last_run_date: date | None = None
+
+
+@router.get(
+    "/protocols/summary",
+    response_model=list[ProtocolSummaryResponse],
+    tags=["protocols"],
+)
+async def list_protocol_summaries(
+    auth: AuthDep,
+    uc: ListProtocolSummariesDep,
+) -> list[ProtocolSummaryResponse]:
+    """List protocols enriched with run_count + last_run_date for the picker."""
+    result = await uc(
+        ListProtocolSummariesQuery(workspace_id=auth.workspace_id),
+        auth=auth,
+    )
+    summaries = result_to_response(result)
+    return [
+        ProtocolSummaryResponse(
+            id=s.id,
+            name=s.name,
+            status=s.status,
+            protocol_type=s.protocol_type,
+            description=s.description,
+            target_id=s.target_id,
+            target_name=s.target_name,
+            run_count=s.run_count,
+            last_run_date=s.last_run_date,
+        )
+        for s in summaries
+    ]
 
 
 @router.get("/protocols", response_model=list[ProtocolResponse], tags=["protocols"])

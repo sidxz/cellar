@@ -216,6 +216,9 @@ class MoleculeActivityService:
                             curve_class=curve.curve_class.value if curve.curve_class else None,
                             confidence_interval_low=curve.confidence_interval_low,
                             confidence_interval_high=curve.confidence_interval_high,
+                            fit_quality_warnings=list(curve.fit_quality_warnings)
+                            if curve.fit_quality_warnings
+                            else None,
                         ),
                     )
 

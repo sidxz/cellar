@@ -46,6 +46,7 @@ from chem_vault.application.screening.get_dose_response import ListDoseResponseB
 from chem_vault.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from chem_vault.application.screening.get_plate_map import GetPlateMap
 from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
+from chem_vault.application.screening.list_protocol_summaries import ListProtocolSummaries
 from chem_vault.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from chem_vault.application.screening.get_protocol_stats import GetProtocolStats
 from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
@@ -223,6 +224,17 @@ def register_screening(container: Container) -> None:
     container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
     container.define(ListProtocolsByProject, _protocol_query(ListProtocolsByProject))
+
+    def _list_protocol_summaries(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListProtocolSummaries(
+            uow=uow,
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            target_repo=SQLAlchemyTargetRepository(uow),
+            run_repo=SQLAlchemyRunRepository(uow),
+        )
+
+    container.define(ListProtocolSummaries, _list_protocol_summaries)
     container.define(AddProtocolToProject, _protocol_cmd(AddProtocolToProject))
     container.define(RemoveProtocolFromProject, _protocol_cmd(RemoveProtocolFromProject))
 

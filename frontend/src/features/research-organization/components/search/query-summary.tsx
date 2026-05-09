@@ -60,7 +60,15 @@ function criterionText(c: SearchCriterion): string {
     }
     case "activity": {
       const ac = c as ActivityCriterion;
-      return `${prefix}Protocol activity ${PROP_OP_LABELS[ac.operator]} ${ac.value}`;
+      const where = Array.isArray(ac.where) && ac.where.length > 0 ? ac.where : null;
+      if (where) {
+        const n = where.length;
+        return `${prefix}Protocol activity (${n} filter${n === 1 ? "" : "s"})`;
+      }
+      if (ac.operator !== undefined && ac.value !== undefined) {
+        return `${prefix}Protocol activity ${PROP_OP_LABELS[ac.operator]} ${ac.value}`;
+      }
+      return `${prefix}Tested in protocol`;
     }
     case "collection": {
       return `${prefix}In collection`;

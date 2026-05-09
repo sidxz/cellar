@@ -213,13 +213,42 @@ export interface StructureCriterion {
   generalized?: boolean;
 }
 
+/** Per-protocol run scoping for ActivityCriterion. */
+export type RunScope =
+  | { mode: "any" }
+  | { mode: "latest" }
+  | { mode: "all" }
+  | { mode: "specific"; run_id: string }
+  | { mode: "date_range"; date_from?: string; date_to?: string }
+  | { mode: "past_n_days"; days: number };
+
+export type RunScopeMode = RunScope["mode"];
+
+/** A single where-condition on an activity criterion. Multiple conditions
+ *  on the same criterion are ANDed together. */
+export interface ActivityWhereCondition {
+  curve_type?: string;
+  readout_definition_id?: string;
+  /** Includes "between" — chemists routinely bracket potency. */
+  operator: PropertyOperator;
+  value?: number;
+  min?: number;
+  max?: number;
+}
+
 export interface ActivityCriterion {
   type: "activity";
   protocol_id: string;
+  /** Multi-where list — preferred shape. Each row ANDed with the others. */
+  where?: ActivityWhereCondition[];
+  /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
+  run_scope?: RunScope;
+  /** @deprecated legacy single-where fields. Kept for saved-search compat;
+   *  the composer normalizes them to a single-element where list. */
   readout_definition_id?: string;
   curve_type?: string;
-  operator: PropertyOperator;
-  value: number;
+  operator?: PropertyOperator;
+  value?: number;
 }
 
 export interface CollectionCriterion {
@@ -370,6 +399,8 @@ export interface CurveParams {
   curve_class: string | null;
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
+  /** Fit-quality warning codes (e.g. "ec50_at_bound") for compact renderers. */
+  fit_quality_warnings?: string[] | null;
 }
 
 // ─── Molecule Activity Detail (side panel) ──────────────────────────────────

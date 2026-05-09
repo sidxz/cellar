@@ -172,6 +172,7 @@ from chem_vault.application.screening.reset_run_data import ResetRunData
 from chem_vault.application.screening.create_target import CreateTarget
 from chem_vault.application.screening.get_dose_response import ListDoseResponseByRun
 from chem_vault.application.screening.get_protocol import GetProtocol, ListProtocols
+from chem_vault.application.screening.list_protocol_summaries import ListProtocolSummaries
 from chem_vault.application.screening.get_readout_data import ListReadoutDataByRun
 from chem_vault.application.screening.get_run import GetRun, ListRunsByProtocol
 from chem_vault.application.screening.get_target import GetTarget, ListTargets
@@ -507,6 +508,9 @@ PlateReadModelServiceDep = Annotated[PlateReadModelService, Depends(_get_use_cas
 CreateProtocolDep = Annotated[CreateProtocol, Depends(_get_use_case(CreateProtocol))]
 GetProtocolDep = Annotated[GetProtocol, Depends(_get_use_case(GetProtocol))]
 ListProtocolsDep = Annotated[ListProtocols, Depends(_get_use_case(ListProtocols))]
+ListProtocolSummariesDep = Annotated[
+    ListProtocolSummaries, Depends(_get_use_case(ListProtocolSummaries))
+]
 PublishProtocolDep = Annotated[PublishProtocol, Depends(_get_use_case(PublishProtocol))]
 RetireProtocolDep = Annotated[RetireProtocol, Depends(_get_use_case(RetireProtocol))]
 LockProtocolDep = Annotated[LockProtocol, Depends(_get_use_case(LockProtocol))]

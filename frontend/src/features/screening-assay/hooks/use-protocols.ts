@@ -37,6 +37,32 @@ export function useProtocols(projectId?: string) {
   });
 }
 
+/** Lightweight protocol rows for the picker — name + status + run stats.
+ *  Sorted server-side: most-recently-run first; never-run sink to bottom. */
+export interface ProtocolSummary {
+  id: string;
+  name: string;
+  status: string;
+  protocol_type: string;
+  description: string | null;
+  target_id: string | null;
+  target_name: string | null;
+  run_count: number;
+  /** ISO date (YYYY-MM-DD) or null when no runs yet. */
+  last_run_date: string | null;
+}
+
+export function useProtocolSummaries() {
+  return useQuery({
+    queryKey: [...PROTOCOLS_KEY, "summary"],
+    queryFn: () =>
+      customInstance<ProtocolSummary[]>({
+        url: "/api/v1/protocols/summary",
+        method: "GET",
+      }),
+  });
+}
+
 export const useProtocol = protocolHooks.useGet;
 export const useCreateProtocol = protocolHooks.useCreate;
 export const useUpdateProtocol = protocolHooks.useUpdate;

@@ -165,6 +165,292 @@ class TestComposeCriteria:
             explicit_false.compile(compile_kwargs={"literal_binds": True})
         )
 
+    # ── Activity multi-where (where[] list of conditions ANDed) ──────────
+
+    def test_activity_legacy_single_where_still_works(self) -> None:
+        """Inline curve_type+operator+value (legacy shape) is unchanged."""
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0}
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile())
+        assert "fitted_value" in sql
+
+    def test_activity_where_list_two_conditions_anded(self) -> None:
+        """where=[{IC50<1}, {readout>50}] → two subqueries AND'd."""
+        proto = str(uuid.uuid4())
+        readout = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto,
+                 "where": [
+                     {"curve_type": "ic50", "operator": "lt", "value": 1.0},
+                     {"readout_definition_id": readout, "operator": "gte", "value": 50.0},
+                 ]}
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile())
+        # Both data tables referenced
+        assert "fitted_value" in sql
+        assert "value_numeric" in sql
+        # Two subqueries combined under one AND
+        assert sql.lower().count("molecules.id in") == 2
+
+    def test_activity_where_between_operator(self) -> None:
+        """between requires min+max instead of value."""
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto,
+                 "where": [
+                     {"curve_type": "ic50", "operator": "between",
+                      "min": 0.1, "max": 10.0}
+                 ]}
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile())
+        assert "between" in sql.lower()
+
+    def test_activity_where_between_inline_legacy(self) -> None:
+        """between also accepted on the legacy single-where shape."""
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto,
+                 "curve_type": "ic50",
+                 "operator": "between", "min": 0.1, "max": 10.0}
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile())
+        assert "between" in sql.lower()
+
+    def test_activity_where_empty_list_is_presence_only(self) -> None:
+        """where=[] (no conditions) is equivalent to no where at all."""
+        proto = str(uuid.uuid4())
+        without = _compose({
+            "criteria": [{"type": "activity", "protocol_id": proto}],
+            "logic": "and",
+        })
+        with_empty = _compose({
+            "criteria": [{"type": "activity", "protocol_id": proto, "where": []}],
+            "logic": "and",
+        })
+        assert str(without.compile()) == str(with_empty.compile())
+
+    def test_activity_where_run_scope_applied_to_each_condition(self) -> None:
+        """run_scope must be honored on every where-row."""
+        proto = str(uuid.uuid4())
+        readout = str(uuid.uuid4())
+        run = "11111111-2222-3333-4444-555555555555"
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto,
+                 "run_scope": {"mode": "specific", "run_id": run},
+                 "where": [
+                     {"curve_type": "ic50", "operator": "lt", "value": 1.0},
+                     {"readout_definition_id": readout, "operator": "gte", "value": 50.0},
+                 ]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # run_id constraint should appear in BOTH subqueries (curves and readouts)
+        assert sql.lower().count("run_id") >= 2
+
+    def test_activity_where_missing_field_raises(self) -> None:
+        """A where-row needs either curve_type or readout_definition_id."""
+        proto = str(uuid.uuid4())
+        with pytest.raises(ValueError, match="curve_type|readout"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": proto,
+                     "where": [{"operator": "lt", "value": 1.0}]}
+                ],
+                "logic": "and",
+            })
+
+    def test_activity_between_missing_min_max_raises(self) -> None:
+        proto = str(uuid.uuid4())
+        with pytest.raises(ValueError, match="between"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": proto,
+                     "where": [
+                         {"curve_type": "ic50", "operator": "between"}
+                     ]}
+                ],
+                "logic": "and",
+            })
+
+    # ── Activity presence-only (no curve_type / no readout) ──────────────
+
+    def test_activity_presence_only_matches_any_data(self) -> None:
+        """An activity criterion without curve_type or readout_definition_id
+        is a 'tested-in-protocol' presence filter — no value comparison."""
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto}
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile())
+        # Must reference run table to scope by protocol; should not require
+        # value_numeric or fitted_value comparison.
+        assert "run" in sql.lower()
+
+    def test_activity_presence_only_with_run_scope(self) -> None:
+        proto = str(uuid.uuid4())
+        run = "11111111-2222-3333-4444-555555555555"
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto,
+                 "run_scope": {"mode": "specific", "run_id": run}}
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile())
+        assert "run_id" in sql
+
+    # ── Activity run_scope (per-protocol run scoping) ─────────────────────
+
+    def test_activity_run_scope_any_omits_run_filter(self) -> None:
+        """run_scope: any (or absent) leaves the existing un-scoped activity SQL intact."""
+        proto = str(uuid.uuid4())
+        without = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0}
+            ],
+            "logic": "and",
+        })
+        with_any = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0,
+                 "run_scope": {"mode": "any"}}
+            ],
+            "logic": "and",
+        })
+        # Both compile to identical SQL — "any" is the no-op default.
+        assert str(without.compile()) == str(with_any.compile())
+
+    def test_activity_run_scope_specific_filters_by_run_id(self) -> None:
+        proto = str(uuid.uuid4())
+        run = "11111111-2222-3333-4444-555555555555"
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0,
+                 "run_scope": {"mode": "specific", "run_id": run}}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "run_id" in sql
+
+    def test_activity_run_scope_date_range_filters_by_run_date(self) -> None:
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0,
+                 "run_scope": {"mode": "date_range",
+                               "date_from": "2026-01-01",
+                               "date_to": "2026-03-31"}}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "run_date" in sql
+
+    def test_activity_run_scope_past_n_days_filters_recent_runs(self) -> None:
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0,
+                 "run_scope": {"mode": "past_n_days", "days": 30}}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "run_date" in sql
+
+    def test_activity_run_scope_latest_picks_most_recent_run(self) -> None:
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0,
+                 "run_scope": {"mode": "latest"}}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # Latest = scope to a single run id chosen by max(created_at) for the
+        # (workspace, protocol). The compiled SQL should reference both.
+        assert "run_id" in sql
+        assert "created_at" in sql.lower() or "max" in sql.lower()
+
+    def test_activity_run_scope_all_excludes_violating_runs(self) -> None:
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                 "operator": "lt", "value": 1.0,
+                 "run_scope": {"mode": "all"}}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # "all" semantics: molecule has at least one satisfying value AND no
+        # non-satisfying value -> SQL contains a NOT IN guarding against
+        # violations.
+        assert "not in" in sql.lower()
+
+    def test_activity_run_scope_specific_works_for_readout(self) -> None:
+        """run_scope must also apply to raw-readout activity criteria."""
+        proto = str(uuid.uuid4())
+        readout = str(uuid.uuid4())
+        run = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": proto,
+                 "readout_definition_id": readout,
+                 "operator": "gte", "value": 50.0,
+                 "run_scope": {"mode": "specific", "run_id": run}}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "run_id" in sql
+
+    def test_activity_run_scope_unknown_mode_raises(self) -> None:
+        proto = str(uuid.uuid4())
+        with pytest.raises(ValueError, match="run_scope"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                     "operator": "lt", "value": 1.0,
+                     "run_scope": {"mode": "wat"}}
+                ],
+                "logic": "and",
+            })
+
     def test_negate_activity(self) -> None:
         proto = str(uuid.uuid4())
         clause = _compose({

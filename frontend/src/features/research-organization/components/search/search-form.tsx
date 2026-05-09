@@ -128,17 +128,28 @@ function decomposeQuery(query: SearchQuery | undefined) {
  */
 function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] {
   const columns: string[] = [];
+  function add(col: string) {
+    if (!columns.includes(col)) columns.push(col);
+  }
   for (const c of activityCriteria) {
     if (!c.protocol_id) continue;
-    // Always add DR curve column
-    const curveType = c.curve_type ?? "ic50";
-    const drcCol = `drc:${c.protocol_id}:${curveType}`;
-    if (!columns.includes(drcCol)) columns.push(drcCol);
-    // If a readout was selected, add readout column too
-    if (c.readout_definition_id) {
-      const rdCol = `rd:${c.protocol_id}:${c.readout_definition_id}`;
-      if (!columns.includes(rdCol)) columns.push(rdCol);
+    // Collect every (curve_type | readout) referenced by this criterion's
+    // where[] (or the legacy inline single-where shape).
+    const conds = Array.isArray(c.where) && c.where.length > 0
+      ? c.where
+      : [{ curve_type: c.curve_type, readout_definition_id: c.readout_definition_id }];
+    let addedCurve = false;
+    for (const cond of conds) {
+      if (cond.curve_type) {
+        add(`drc:${c.protocol_id}:${cond.curve_type}`);
+        addedCurve = true;
+      }
+      if (cond.readout_definition_id) {
+        add(`rd:${c.protocol_id}:${cond.readout_definition_id}`);
+      }
     }
+    // Fallback: protocol-only / presence filter still gets a default IC50 column.
+    if (!addedCurve) add(`drc:${c.protocol_id}:ic50`);
   }
   return columns;
 }
@@ -190,11 +201,24 @@ export function SearchForm({
     const criteria: SearchCriterion[] = [];
 
     // Activity — respect per-row conjunctions
+    // Prune incomplete where[] rows (field missing, value missing for non-between, etc.)
+    // so the backend never sees a half-filled condition.
+    const cleanedActivity = activityCriteria.map((c) => {
+      if (!Array.isArray(c.where)) return c;
+      const cleaned = c.where.filter((w) => {
+        if (!w.curve_type && !w.readout_definition_id) return false;
+        if (w.operator === "between") {
+          return w.min !== undefined && w.max !== undefined;
+        }
+        return w.value !== undefined && !Number.isNaN(w.value);
+      });
+      return { ...c, where: cleaned };
+    });
     // Filter to valid criteria and their matching conjunctions
-    const validIndices = activityCriteria
+    const validIndices = cleanedActivity
       .map((c, i) => (c.protocol_id ? i : -1))
       .filter((i) => i >= 0);
-    const validActivity = validIndices.map((i) => activityCriteria[i]);
+    const validActivity = validIndices.map((i) => cleanedActivity[i]);
     const validConjs = validIndices.map((i) => protocolConjunctions[i] ?? "or");
 
     if (validActivity.length === 1) {
@@ -306,20 +330,82 @@ export function SearchForm({
 
   const criteriaCount = composeCriteria().length;
 
+  // ⌘/Ctrl+Enter from anywhere inside the form fires Search.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSearch();
+    }
+  }
+
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      {/* Header: projects + actions */}
-      <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex-shrink-0">
-            Projects
-          </span>
-          <ProjectFilter selectedIds={projectIds} onChange={onProjectsChange} />
+    <div
+      className="rounded-lg border border-border bg-card overflow-hidden"
+      onKeyDown={handleKeyDown}
+    >
+      <div className="p-4 pb-2">
+        {/* Header: projects only — Search/Reset moved to sticky bottom bar. */}
+        <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex-shrink-0">
+              Projects
+            </span>
+            <ProjectFilter selectedIds={projectIds} onChange={onProjectsChange} />
+          </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0 ml-4">
-          <Button variant="ghost" size="sm" onClick={handleReset}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
-          </Button>
+
+        {/* Protocols — full width */}
+        <ProtocolSection
+          criteria={activityCriteria}
+          conjunctions={protocolConjunctions}
+          onChange={(criteria, conjs) => {
+            setActivityCriteria(criteria);
+            setProtocolConjunctions(conjs);
+          }}
+        />
+
+        <Separator className="my-3" />
+
+        {/* Structure | Properties — two columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+          <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
+          <PropertySection criteria={propertyCriteria} onChange={setPropertyCriteria} />
+        </div>
+
+        <Separator className="my-3" />
+
+        {/* Collections | Keywords — two columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+          <CollectionSection terms={collectionTerms} onChange={setCollectionTerms} />
+          <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
+        </div>
+
+        {/* More Filters */}
+        <div className="mt-3 pt-3 border-t border-border">
+          <AdvancedFilters state={advanced} onChange={setAdvanced} />
+        </div>
+      </div>
+
+      {/* Sticky bottom action bar — pinned within the search panel so it stays
+          reachable as the form grows. ⌘/Ctrl+Enter also fires Search. */}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-border bg-card/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleReset}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
+        </Button>
+        <div className="flex items-center gap-3">
+          {criteriaCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {criteriaCount} filter{criteriaCount === 1 ? "" : "s"}
+            </span>
+          )}
+          <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground/60 sm:inline">
+            ⌘ ↵
+          </span>
           <Button onClick={handleSearch} disabled={isLoading} className="px-5">
             <Search className="h-4 w-4 mr-2" />
             Search
@@ -330,37 +416,6 @@ export function SearchForm({
             )}
           </Button>
         </div>
-      </div>
-
-      {/* Protocols — full width */}
-      <ProtocolSection
-        criteria={activityCriteria}
-        conjunctions={protocolConjunctions}
-        onChange={(criteria, conjs) => {
-          setActivityCriteria(criteria);
-          setProtocolConjunctions(conjs);
-        }}
-      />
-
-      <Separator className="my-3" />
-
-      {/* Structure | Properties — two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
-        <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
-        <PropertySection criteria={propertyCriteria} onChange={setPropertyCriteria} />
-      </div>
-
-      <Separator className="my-3" />
-
-      {/* Collections | Keywords — two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
-        <CollectionSection terms={collectionTerms} onChange={setCollectionTerms} />
-        <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
-      </div>
-
-      {/* More Filters */}
-      <div className="mt-3 pt-3 border-t border-border">
-        <AdvancedFilters state={advanced} onChange={setAdvanced} />
       </div>
     </div>
   );

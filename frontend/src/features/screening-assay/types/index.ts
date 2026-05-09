@@ -369,6 +369,8 @@ export interface Run {
   workspace_id: string;
   protocol_id: string;
   run_date: string;
+  /** ISO datetime — wall-clock creation time, used for same-day disambiguation. */
+  created_at: string;
   operator: string;
   status: RunStatus;
   is_locked: boolean;
@@ -377,6 +379,8 @@ export interface Run {
   qc_metrics: Record<string, unknown> | null;
   notes: string | null;
   plate_count: number;
+  /** Plate barcodes attached to the run, in plate_number order. */
+  plate_barcodes: string[];
   molecule_count: number;
   performed_at_org_id: string | null;
   parent_run_id: string | null;

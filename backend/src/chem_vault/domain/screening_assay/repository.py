@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Protocol, runtime_checkable
 
 from chem_vault.domain.screening_assay.activity_types import AggregatedReadout
@@ -91,6 +92,9 @@ class RunRepository(Protocol):
     async def find_by_protocol(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[Run]: ...
+    async def aggregate_stats_by_protocol(
+        self, workspace_id: uuid.UUID
+    ) -> dict[uuid.UUID, tuple[int, "date | None"]]: ...
     async def find_children(
         self, workspace_id: uuid.UUID, parent_run_id: uuid.UUID
     ) -> list[Run]: ...

@@ -36,6 +36,9 @@ class CurveParams:
     curve_class: str | None
     confidence_interval_low: float | None
     confidence_interval_high: float | None
+    # Fit-quality warning codes (e.g. "ec50_at_bound") so compact renderers
+    # can flag extrapolated fits without re-querying the curve aggregate.
+    fit_quality_warnings: list[str] | None = None
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -59,6 +59,7 @@ class RunResponse(BaseModel):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     run_date: date
+    created_at: datetime
     operator: uuid.UUID
     status: str
     is_locked: bool
@@ -67,6 +68,7 @@ class RunResponse(BaseModel):
     qc_metrics: dict[str, Any] | None = None
     notes: str | None = None
     plate_count: int
+    plate_barcodes: list[str] = []
     molecule_count: int = 0
     performed_at_org_id: uuid.UUID | None = None
     parent_run_id: uuid.UUID | None = None
@@ -77,11 +79,15 @@ class RunResponse(BaseModel):
 
     @classmethod
     def from_domain(cls, r, *, molecule_count: int = 0) -> RunResponse:  # type: ignore[no-untyped-def]
+        plate_barcodes = [
+            p.barcode.value for p in r.plates if getattr(p, "barcode", None)
+        ]
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
             protocol_id=r.protocol_id,
             run_date=r.run_date,
+            created_at=r.created_at,
             operator=r.operator,
             status=r.status.value,
             is_locked=r.is_locked,
@@ -90,6 +96,7 @@ class RunResponse(BaseModel):
             qc_metrics=r.qc_metrics,
             notes=r.notes,
             plate_count=len(r.plates),
+            plate_barcodes=plate_barcodes,
             molecule_count=molecule_count,
             performed_at_org_id=r.performed_at_org_id,
             parent_run_id=r.parent_run_id,

@@ -27,7 +27,10 @@ import {
   type LifecycleStage,
 } from "@/features/chemical-registration/types";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
-import { generate4PLPoints, DETAIL_4PL } from "../../lib/curve-math";
+import {
+  DETAIL_4PL_OPTIONS,
+  generate4PLFromData,
+} from "@/features/screening-assay/lib/dose-response-display";
 import type { ProtocolCurveGroup, CurveDetail } from "../../types";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
@@ -85,13 +88,15 @@ const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
 
   const hasFit = isFinite(curve.fitted_value) && curve.fitted_value !== 0;
   if (hasFit) {
-    const fitted = generate4PLPoints(
+    const fitted = generate4PLFromData(
+      {
+        top: curve.top,
+        bottom: curve.bottom,
+        fitted_value: curve.fitted_value,
+        hill_slope: curve.hill_slope,
+      },
       rawData,
-      curve.fitted_value,
-      curve.hill_slope,
-      curve.top,
-      curve.bottom,
-      DETAIL_4PL,
+      DETAIL_4PL_OPTIONS,
     );
     if (fitted.x.length > 0) {
       traces.push({

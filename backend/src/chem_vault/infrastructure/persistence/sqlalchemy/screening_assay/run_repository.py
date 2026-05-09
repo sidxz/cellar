@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from chem_vault.domain.screening_assay.enums import (
     PlateFormat,
@@ -45,6 +46,29 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         )
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
+    async def aggregate_stats_by_protocol(
+        self, workspace_id: uuid.UUID
+    ) -> dict[uuid.UUID, tuple[int, date | None]]:
+        """One row per protocol — total run count and most recent run_date.
+
+        Used by the rich protocol picker. Single round-trip to avoid the
+        N+1 explosion of stats endpoints when the picker opens.
+        """
+        stmt = (
+            select(
+                RunModel.protocol_id,
+                func.count(RunModel.id),
+                func.max(RunModel.run_date),
+            )
+            .where(RunModel.workspace_id == workspace_id)
+            .group_by(RunModel.protocol_id)
+        )
+        result = await self._session.execute(stmt)
+        return {
+            row[0]: (int(row[1]), row[2])
+            for row in result.all()
+        }
 
     async def find_children(
         self, workspace_id: uuid.UUID, parent_run_id: uuid.UUID
