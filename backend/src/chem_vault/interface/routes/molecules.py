@@ -47,6 +47,7 @@ from chem_vault.interface.dependencies import (
     DepictMoleculesDep,
     GetMoleculeByIdentifierDep,
     GetMoleculeDep,
+    GetWorkspaceSettingsDep,
     ListCollectionsForMoleculeDep,
     ListIdentifiersDep,
     ListMoleculeProjectsDep,
@@ -260,6 +261,7 @@ class RegistrationResponse(BaseModel):
     is_new: bool
     qc_warnings: list[str]
     batch: BatchResponse | None = None
+    batch_skipped: bool = False
     detected_salt: DetectedSaltResponse | None = None
     action: str = "registered"
     needs_merge_confirmation: bool = False
@@ -311,6 +313,7 @@ class RegisterMoleculeBody(BaseModel):
     custom_fields: dict | None = None
     batch: BatchBody | None = None
     auto_approve: bool = True
+    create_batch_on_duplicate: bool | None = None  # None → use workspace default
 
 
 class UpdateMoleculeBody(BaseModel):
@@ -341,6 +344,7 @@ async def register_molecule(
     use_case: RegisterMoleculeDep,
     create_batch_uc: CreateBatchDep,
     salt_matcher_uow: SaltMatcherUoWDep,
+    settings_uc: GetWorkspaceSettingsDep,
 ) -> RegistrationResponse:
     command = RegisterMoleculeCommand(
         workspace_id=auth.workspace_id,
@@ -358,9 +362,29 @@ async def register_molecule(
     )
     outcome = result_to_response(await use_case(command, auth=auth))
 
+    # Resolve batch-creation policy (workspace default unless caller overrides).
+    from chem_vault.application.inventory.batch_policy import should_create_batch
+    from chem_vault.application.workspace_config.get_workspace_settings import (
+        GetWorkspaceSettingsQuery,
+    )
+
+    settings = result_to_response(
+        await settings_uc(
+            GetWorkspaceSettingsQuery(workspace_id=auth.workspace_id), auth=auth
+        )
+    )
+    workspace_default = settings.create_batch_on_duplicate
+
+    create_batch_now = should_create_batch(
+        is_new_molecule=outcome.is_new,
+        override=body.create_batch_on_duplicate,
+        workspace_default=workspace_default,
+    )
+    batch_skipped = body.batch is not None and not create_batch_now
+
     # Optionally create a batch on the (new or existing) molecule
     batch_response: BatchResponse | None = None
-    if body.batch is not None:
+    if body.batch is not None and create_batch_now:
         b = body.batch
 
         # Auto-fill salt from detected_salt if user didn't pick one
@@ -431,6 +455,7 @@ async def register_molecule(
         is_new=outcome.is_new,
         qc_warnings=outcome.qc_warnings,
         batch=batch_response,
+        batch_skipped=batch_skipped,
         detected_salt=detected_salt_resp,
         action=outcome.action.value,
         needs_merge_confirmation=outcome.needs_merge_confirmation,
