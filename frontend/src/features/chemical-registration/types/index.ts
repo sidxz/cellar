@@ -116,6 +116,7 @@ export interface RegistrationResponse {
   is_new: boolean;
   qc_warnings: string[];
   batch?: { id: string; batch_number: string } | null;
+  batch_skipped: boolean;
   action: string;
   needs_merge_confirmation: boolean;
   matched_molecule_id: string | null;
@@ -131,6 +132,7 @@ export interface RegisterMoleculeInput {
   originating_org_id: string;
   custom_fields?: Record<string, unknown> | null;
   batch?: BatchInput | null;
+  create_batch_on_duplicate?: boolean | null;
   auto_approve?: boolean;
 }
 

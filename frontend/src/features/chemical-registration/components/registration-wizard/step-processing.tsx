@@ -77,12 +77,13 @@ function SingleProcessing() {
           setSingleResult({
             molecule: mol,
             is_new: false,
+            qc_warnings: [],
+            batch_skipped: true,
             action: outcome.needs_confirmation
               ? "merge_candidate"
               : outcome.was_merged
                 ? "deduplicated"
                 : "disclosed",
-            qc_warnings: [],
             needs_merge_confirmation: outcome.needs_confirmation,
             matched_molecule_id: outcome.matched_molecule_id,
             disclosure_id: outcome.disclosure_request.id,
