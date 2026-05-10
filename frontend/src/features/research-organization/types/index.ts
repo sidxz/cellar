@@ -202,6 +202,7 @@ export interface StructureCriterion {
   // Two-way compat: keep search_type for legacy criteria, add `kind`
   search_type: StructureSearchType; // kept for compat — same values as kind
   kind?: StructureSearchType; // mirrors search_type going forward
+  /** @deprecated read-only legacy field; new criteria use smiles_or_smarts. */
   smarts?: string;
   smiles?: string;
   smiles_or_smarts?: string; // new substructure field
@@ -211,6 +212,13 @@ export interface StructureCriterion {
   mode?: SearchMode;
   // New substructure field:
   generalized?: boolean;
+  /** Disambiguates how the BE/cartridge interprets ``smiles_or_smarts``.
+   *  - "smiles" → cartridge's mol_from_smiles (aromaticity perception
+   *    handled cartridge-side; works for plain drawn structures)
+   *  - "smarts" → qmol_from_smarts (preserves atom lists / R-groups /
+   *    "any bond" semantics — used when Ketcher SMILES export fails)
+   *  Omitted ⇒ legacy defensive path (BE aromatizes the SMARTS). */
+  query_kind?: "smiles" | "smarts";
 }
 
 /** Per-protocol run scoping for ActivityCriterion. */
@@ -405,6 +413,22 @@ export interface CurveParams {
 
 // ─── Molecule Activity Detail (side panel) ──────────────────────────────────
 
+/** Mirrors `screening-assay`'s InterceptValue/InterceptSpec wire shape — kept
+ *  inline here to avoid a feature-cross-import for plain DTO fields. */
+export interface CurveInterceptSpec {
+  kind: "ic" | "ec";
+  level: number;
+  basis: "relative_percent" | "absolute";
+  label?: string | null;
+}
+export interface CurveInterceptValue {
+  spec: CurveInterceptSpec;
+  value: number;
+  confidence_interval_low: number | null;
+  confidence_interval_high: number | null;
+  at_bound: boolean;
+}
+
 export interface CurveDetail {
   curve_id: string;
   run_id: string;
@@ -421,6 +445,21 @@ export interface CurveDetail {
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
   raw_data: Array<{ x: number; y: number }>;
+  /** Read-only on the search-detail panel; the run-page's curator UI is
+   *  where points get excluded. Included so the shared chart can show
+   *  excluded points consistently in viewer mode. */
+  excluded_points?: Array<{
+    x?: number;
+    y?: number;
+    concentration?: number;
+    response?: number;
+    reason?: string | null;
+  }> | null;
+  /** Machine-readable fit-quality codes the chemist needs to see during
+   *  triage (e.g. "ec50_at_bound" — the IC50 is unreliable). */
+  fit_quality_warnings?: string[];
+  /** Per-spec intercepts (IC50/IC90/...) derived from the same Hill fit. */
+  intercept_values?: CurveInterceptValue[];
 }
 
 export interface ProtocolCurveGroup {

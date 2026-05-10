@@ -36,6 +36,9 @@ class SearchMoleculesQuery(Query):
     metric: SimilarityMetric | None = None
     cursor_id: uuid.UUID | None = None
     limit: int | None = None
+    # SUBSTRUCTURE only: how the cartridge interprets `query`. None falls
+    # back to the legacy aromatize-helper SMARTS path.
+    query_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -94,7 +97,9 @@ class SearchMolecules:
                 return await self._exact_search(input)
             elif search_type == SearchType.SUBSTRUCTURE:
                 results = await self._reader.search_substructure(
-                    input.workspace_id, input.query.strip()
+                    input.workspace_id,
+                    input.query.strip(),
+                    kind=input.query_kind,
                 )
                 return Success(results)
             else:

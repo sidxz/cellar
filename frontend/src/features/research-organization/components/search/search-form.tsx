@@ -1,34 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Search, RotateCcw } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Separator } from "@/shared/components/ui/separator";
+import { RotateCcw, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import type {
-  SearchQuery,
-  SearchCriterion,
   ActivityCriterion,
   GroupCriterion,
-  TextCriterion,
   PropertyCriterion,
+  SearchCriterion,
+  SearchQuery,
   StructureCriterion,
+  TextCriterion,
 } from "../../types";
-import { ProtocolSection, type ProtocolConjunction } from "./protocol-section";
-import { StructureSection } from "./structure-section";
-import { PropertySection } from "./property-section";
-import {
-  CollectionSection,
-  termsToCollectionCriteria,
-  collectionCriteriaToTerms,
-  type CollectionTermValue,
-} from "./collection-section";
-import { KeywordSection } from "./keyword-section";
 import {
   AdvancedFilters,
-  emptyAdvancedFilters,
   type AdvancedFiltersState,
+  emptyAdvancedFilters,
 } from "./advanced-filters";
+import {
+  CollectionSection,
+  type CollectionTermValue,
+  collectionCriteriaToTerms,
+  termsToCollectionCriteria,
+} from "./collection-section";
+import { KeywordSection } from "./keyword-section";
 import { ProjectFilter } from "./project-filter";
+import { PropertySection } from "./property-section";
+import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
+import { StructureSection } from "./structure-section";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -50,13 +50,28 @@ function decomposeQuery(query: SearchQuery | undefined) {
   let structureCriterion: StructureCriterion | null = null;
   const collectionCriteria: SearchCriterion[] = [];
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
+  // Hoisted out so saved searches that include a project criterion can
+  // re-populate the project chips at the top of the panel.
+  let projectIds: string[] = [];
 
   if (!query) {
-    return { activityCriteria, protocolConjunctions, textCriteria, propertyCriteria, structureCriterion, collectionCriteria, advanced };
+    return {
+      activityCriteria,
+      protocolConjunctions,
+      textCriteria,
+      propertyCriteria,
+      structureCriterion,
+      collectionCriteria,
+      advanced,
+      projectIds,
+    };
   }
 
   for (const c of query.criteria) {
     switch (c.type) {
+      case "project":
+        projectIds = [...c.project_ids];
+        break;
       case "activity":
         // Top-level activity criteria were ANDed
         protocolConjunctions.push(activityCriteria.length === 0 ? "and" : "and");
@@ -68,9 +83,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
         for (const gc of group.criteria) {
           if (gc.type === "activity") {
             // First item in group gets conjunction from context; rest get group logic
-            protocolConjunctions.push(
-              activityCriteria.length === 0 ? group.logic : group.logic,
-            );
+            protocolConjunctions.push(activityCriteria.length === 0 ? group.logic : group.logic);
             activityCriteria.push(gc as ActivityCriterion);
           }
         }
@@ -116,6 +129,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
     structureCriterion,
     collectionCriteria,
     advanced,
+    projectIds,
   };
 }
 
@@ -135,9 +149,10 @@ function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] 
     if (!c.protocol_id) continue;
     // Collect every (curve_type | readout) referenced by this criterion's
     // where[] (or the legacy inline single-where shape).
-    const conds = Array.isArray(c.where) && c.where.length > 0
-      ? c.where
-      : [{ curve_type: c.curve_type, readout_definition_id: c.readout_definition_id }];
+    const conds =
+      Array.isArray(c.where) && c.where.length > 0
+        ? c.where
+        : [{ curve_type: c.curve_type, readout_definition_id: c.readout_definition_id }];
     let addedCurve = false;
     for (const cond of conds) {
       if (cond.curve_type) {
@@ -166,39 +181,64 @@ export function SearchForm({
   // Parse initial query into section states
   const initial = decomposeQuery(initialQuery);
 
-  const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(initial.activityCriteria);
+  const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(
+    initial.activityCriteria,
+  );
   const [protocolConjunctions, setProtocolConjunctions] = useState<ProtocolConjunction[]>(
     initial.protocolConjunctions.length > 0
       ? initial.protocolConjunctions
-      : initial.activityCriteria.map(() => "or" as ProtocolConjunction)
+      : initial.activityCriteria.map(() => "or" as ProtocolConjunction),
   );
-  const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(initial.structureCriterion);
-  const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(initial.propertyCriteria);
+  const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(
+    initial.structureCriterion,
+  );
+  const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(
+    initial.propertyCriteria,
+  );
   const [collectionTerms, setCollectionTerms] = useState<CollectionTermValue[]>(
-    collectionCriteriaToTerms(initial.collectionCriteria)
+    collectionCriteriaToTerms(initial.collectionCriteria),
   );
   const [textCriteria, setTextCriteria] = useState<TextCriterion[]>(initial.textCriteria);
   const [advanced, setAdvanced] = useState<AdvancedFiltersState>(initial.advanced);
 
-  // Re-parse when initialQuery changes externally (e.g., loading a saved search)
+  // Re-parse when initialQuery changes externally (e.g., loading a saved search).
+  // We intentionally don't depend on projectIds / onProjectsChange — re-parse
+  // is driven by saved-search loads only; current values are read inside.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
   useEffect(() => {
     const parsed = decomposeQuery(initialQuery);
     setActivityCriteria(parsed.activityCriteria);
     setProtocolConjunctions(
       parsed.protocolConjunctions.length > 0
         ? parsed.protocolConjunctions
-        : parsed.activityCriteria.map(() => "or" as ProtocolConjunction)
+        : parsed.activityCriteria.map(() => "or" as ProtocolConjunction),
     );
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);
     setCollectionTerms(collectionCriteriaToTerms(parsed.collectionCriteria));
     setTextCriteria(parsed.textCriteria);
     setAdvanced(parsed.advanced);
+    // Round-trip saved searches: a stored project criterion repopulates the
+    // chip(s) at the top of the panel so the chemist sees the same scope they
+    // saved with. Only push when it actually changed to avoid re-fetch loops.
+    if (initialQuery) {
+      const same =
+        parsed.projectIds.length === projectIds.length &&
+        parsed.projectIds.every((id, i) => id === projectIds[i]);
+      if (!same) onProjectsChange(parsed.projectIds);
+    }
   }, [initialQuery]);
 
   // Compose all section states back into a SearchQuery
   const composeCriteria = useCallback((): SearchCriterion[] => {
     const criteria: SearchCriterion[] = [];
+
+    // Project scope — the chip(s) at the top of the panel scope the result
+    // set itself, not just the picker dropdowns. Empty array means
+    // workspace-wide and is omitted entirely from the query.
+    if (projectIds.length > 0) {
+      criteria.push({ type: "project", project_ids: projectIds });
+    }
 
     // Activity — respect per-row conjunctions
     // Prune incomplete where[] rows (field missing, value missing for non-between, etc.)
@@ -260,10 +300,15 @@ export function SearchForm({
 
     // Structure
     if (structureCriterion) {
+      const subValue = structureCriterion.smiles_or_smarts ?? structureCriterion.smarts ?? "";
       const hasValue =
-        (structureCriterion.search_type === "substructure" && structureCriterion.smarts && structureCriterion.smarts.length > 0) ||
-        (structureCriterion.search_type === "similarity" && structureCriterion.smiles && structureCriterion.smiles.length > 0) ||
-        (structureCriterion.search_type === "exact" && structureCriterion.inchi_key && structureCriterion.inchi_key.length > 0);
+        (structureCriterion.search_type === "substructure" && subValue.length > 0) ||
+        (structureCriterion.search_type === "similarity" &&
+          structureCriterion.smiles &&
+          structureCriterion.smiles.length > 0) ||
+        (structureCriterion.search_type === "exact" &&
+          structureCriterion.inchi_key &&
+          structureCriterion.inchi_key.length > 0);
       if (hasValue) criteria.push(structureCriterion);
     }
 
@@ -308,7 +353,16 @@ export function SearchForm({
     }
 
     return criteria;
-  }, [activityCriteria, protocolConjunctions, structureCriterion, propertyCriteria, collectionTerms, textCriteria, advanced]);
+  }, [
+    projectIds,
+    activityCriteria,
+    protocolConjunctions,
+    structureCriterion,
+    propertyCriteria,
+    collectionTerms,
+    textCriteria,
+    advanced,
+  ]);
 
   function handleSearch() {
     const criteria = composeCriteria();
@@ -358,6 +412,7 @@ export function SearchForm({
         <ProtocolSection
           criteria={activityCriteria}
           conjunctions={protocolConjunctions}
+          projectIds={projectIds}
           onChange={(criteria, conjs) => {
             setActivityCriteria(criteria);
             setProtocolConjunctions(conjs);
@@ -376,7 +431,11 @@ export function SearchForm({
 
         {/* Collections | Keywords — two columns */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
-          <CollectionSection terms={collectionTerms} onChange={setCollectionTerms} />
+          <CollectionSection
+            terms={collectionTerms}
+            projectIds={projectIds}
+            onChange={setCollectionTerms}
+          />
           <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
         </div>
 

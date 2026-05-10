@@ -25,7 +25,9 @@ interface CollectionListProps {
 export function CollectionList({ projectId }: CollectionListProps) {
   const router = useRouter();
   const { user } = useAuthz();
-  const { data: collections, isLoading, error } = useCollections(projectId);
+  const { data: collections, isLoading, error } = useCollections(
+    projectId ? [projectId] : undefined,
+  );
   const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [booleanOpsOpen, setBooleanOpsOpen] = useState(false);

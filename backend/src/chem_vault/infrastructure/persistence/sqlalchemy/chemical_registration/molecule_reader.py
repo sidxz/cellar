@@ -30,6 +30,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mole
     model_to_molecule,
 )
 from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from chem_vault.infrastructure.rdkit.query_normalizer import aromatize_substructure_query
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     _compute_query_bytes,
 )
@@ -55,20 +56,51 @@ class SQLAlchemyMoleculeReader:
         self._session_factory = session_factory
 
     async def search_substructure(
-        self, workspace_id: uuid.UUID, smarts: str
+        self,
+        workspace_id: uuid.UUID,
+        query: str,
+        *,
+        kind: str | None = None,
     ) -> list[Molecule]:
-        """Substructure search using RDKit cartridge ``mol @> mol_from_smarts``."""
+        """Substructure search via the RDKit cartridge.
+
+        ``kind`` selects the cartridge function:
+          - ``"smiles"`` → ``mol_from_smiles`` on the query side; cartridge
+            handles aromaticity perception on both sides.
+          - ``"smarts"`` → ``qmol_from_smarts`` with the query passed
+            through literally (chemist may have used "any bond" / atom
+            lists / other SMARTS primitives whose semantics would be lost
+            by an SMILES roundtrip).
+          - ``None`` (legacy) → SMARTS path with defensive aromatization
+            so Ketcher's Kekulé exports still match aromatic storage.
+        """
         async with self._session_factory() as session:
-            stmt = (
-                select(MoleculeModel)
-                .where(
-                    MoleculeModel.workspace_id == workspace_id,
-                    MoleculeModel.merged_into_id.is_(None),
-                    MoleculeModel.smiles.is_not(None),
-                    text("mol_from_smiles(smiles) @> qmol_from_smarts(:smarts)"),
+            if kind == "smiles":
+                stmt = (
+                    select(MoleculeModel)
+                    .where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.merged_into_id.is_(None),
+                        MoleculeModel.smiles.is_not(None),
+                        text("mol_from_smiles(smiles) @> mol_from_smiles(:q)"),
+                    )
+                    .params(q=query)
                 )
-                .params(smarts=smarts)
-            )
+            else:
+                bound_query = (
+                    query if kind == "smarts"
+                    else aromatize_substructure_query(query)
+                )
+                stmt = (
+                    select(MoleculeModel)
+                    .where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.merged_into_id.is_(None),
+                        MoleculeModel.smiles.is_not(None),
+                        text("mol_from_smiles(smiles) @> qmol_from_smarts(:q)"),
+                    )
+                    .params(q=bound_query)
+                )
             result = await session.execute(stmt)
             return [model_to_molecule(m) for m in result.scalars()]
 

@@ -96,7 +96,7 @@ class SQLAlchemyCollectionRepository(
         self,
         workspace_id: uuid.UUID,
         *,
-        project_id: uuid.UUID | None = None,
+        project_ids: list[uuid.UUID] | None = None,
     ) -> list[Collection]:
         # Subquery for molecule counts
         count_sq = (
@@ -113,8 +113,8 @@ class SQLAlchemyCollectionRepository(
             .outerjoin(count_sq, CollectionModel.id == count_sq.c.collection_id)
             .where(CollectionModel.workspace_id == workspace_id)
         )
-        if project_id is not None:
-            stmt = stmt.where(CollectionModel.project_id == project_id)
+        if project_ids:
+            stmt = stmt.where(CollectionModel.project_id.in_(project_ids))
         stmt = stmt.order_by(CollectionModel.name)
 
         result = await self._session.execute(stmt)

@@ -21,7 +21,11 @@ class MoleculeReader(Protocol):
     """Application-layer protocol for molecule search read-model queries."""
 
     async def search_substructure(
-        self, workspace_id: uuid.UUID, smarts: str
+        self,
+        workspace_id: uuid.UUID,
+        query: str,
+        *,
+        kind: str | None = None,
     ) -> list[Molecule]: ...
 
     async def search_similarity(

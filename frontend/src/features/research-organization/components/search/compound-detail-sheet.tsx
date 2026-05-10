@@ -1,37 +1,20 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Plot } from "@/shared/lib/plotly";
-import Link from "next/link";
-import { CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
-import {
-  X,
-  ChevronUp,
-  ChevronDown,
-  ExternalLink,
-} from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetDescription,
-} from "@/shared/components/ui/sheet";
-import { Button } from "@/shared/components/ui/button";
-import { Badge } from "@/shared/components/ui/badge";
-import { ScrollArea } from "@/shared/components/ui/scroll-area";
-import { Skeleton } from "@/shared/components/ui/skeleton";
-import { StructureThumbnail } from "@/shared/components/chemistry";
 import type { Molecule } from "@/features/chemical-registration/types";
-import {
-  LIFECYCLE_LABELS,
-  type LifecycleStage,
-} from "@/features/chemical-registration/types";
+import { LIFECYCLE_LABELS, type LifecycleStage } from "@/features/chemical-registration/types";
+import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
+import type { CurveClass, CurveType, DoseResponseCurve } from "@/features/screening-assay/types";
+import { StructureThumbnail } from "@/shared/components/chemistry";
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/shared/components/ui/sheet";
+import { Skeleton } from "@/shared/components/ui/skeleton";
+import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
-import {
-  DETAIL_4PL_OPTIONS,
-  generate4PLFromData,
-} from "@/features/screening-assay/lib/dose-response-display";
-import type { ProtocolCurveGroup, CurveDetail } from "../../types";
+import type { CurveDetail, ProtocolCurveGroup } from "../../types";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
@@ -49,216 +32,73 @@ interface CompoundDetailSheetProps {
   onClose: () => void;
 }
 
-// ─── CurveChart (single interactive Plotly chart) ─────────────────────────
+// ─── CurveDetail → DoseResponseCurve adapter ──────────────────────────────
+//
+// The search-detail panel and the protocol-runs page now share the same
+// `<DoseResponseChart />` (run-page is the canonical renderer; the search
+// detail simply passes `isInteractive={false}`). This adapter widens the
+// activity-detail wire shape (`CurveDetail`) to the chart's expected
+// `DoseResponseCurve` shape. Workspace-/molecule-id placeholders are fine —
+// the chart uses them only for query-key uniqueness and never reads them.
 
-interface CurveChartProps {
-  curve: CurveDetail;
-}
-
-const CurveChart = memo(function CurveChart({ curve }: CurveChartProps) {
-  const rawData = curve.raw_data ?? [];
-  if (rawData.length === 0) {
-    return (
-      <div className="flex h-[260px] items-center justify-center text-xs text-muted-foreground">
-        No data points available
-      </div>
-    );
-  }
-  const rawX = rawData.map((pt) => pt.x);
-  const rawY = rawData.map((pt) => pt.y);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const traces: any[] = [
-    {
-      x: rawX,
-      y: rawY,
-      mode: "markers",
-      type: "scatter" as const,
-      marker: { color: CHART_COLORS.purple, size: 6 },
-      name: "Data",
-      hovertemplate: "Conc: %{x:.3e}<br>Response: %{y:.1f}<extra></extra>",
-    },
-  ];
-
-  // Fitted sigmoid + IC50 crosshair
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const shapes: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const annotations: any[] = [];
-
-  const hasFit = isFinite(curve.fitted_value) && curve.fitted_value !== 0;
-  if (hasFit) {
-    const fitted = generate4PLFromData(
-      {
-        top: curve.top,
-        bottom: curve.bottom,
-        fitted_value: curve.fitted_value,
-        hill_slope: curve.hill_slope,
-      },
-      rawData,
-      DETAIL_4PL_OPTIONS,
-    );
-    if (fitted.x.length > 0) {
-      traces.push({
-        x: fitted.x,
-        y: fitted.y,
-        mode: "lines",
-        type: "scatter" as const,
-        line: { color: CHART_COLORS.primaryLight, width: 2 },
-        name: "Fit",
-        hoverinfo: "skip" as const,
-      });
-    }
-
-    // IC50 crosshair: dotted lines + orange marker + value label
-    const midY = (curve.top + curve.bottom) / 2;
-    const ec50 = curve.fitted_value;
-    const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
-
-    // Horizontal dotted line at midpoint
-    shapes.push({
-      type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
-      line: { color: CHART_COLORS.neutral, width: 1, dash: "dot" }, opacity: 0.4,
-    });
-    // Vertical dotted line at IC50
-    shapes.push({
-      type: "line", xref: "x", x0: ec50, x1: ec50, yref: "paper", y0: 0, y1: 1,
-      line: { color: CHART_COLORS.neutral, width: 1, dash: "dot" }, opacity: 0.4,
-    });
-    // Orange marker at intersection
-    traces.push({
-      type: "scatter", mode: "markers", x: [ec50], y: [midY],
-      marker: { color: CHART_COLORS.warning, size: 9, line: { color: CHART_COLORS.error, width: 2 }, symbol: "circle" },
-      showlegend: false,
-      hovertemplate: `${curve.curve_type.toUpperCase()} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
-    });
-    // Value annotation
-    annotations.push({
-      x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
-      text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-      showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: CHART_COLORS.error,
-      ax: 0, ay: -30, font: { color: CHART_COLORS.error, size: 11 },
-    });
-  }
-
-  return (
-    <Plot
-      data={traces}
-      layout={{
-        height: 260,
-        margin: { l: 50, r: 16, t: 8, b: 40 },
-        xaxis: {
-          type: "log",
-          title: {
-            text: `Concentration (${curve.fitted_unit})`,
-            font: { size: 10, color: CHART_AXIS.label },
-          },
-          showgrid: true,
-          gridcolor: CHART_AXIS.grid,
-          tickfont: { size: 9, color: CHART_AXIS.tick },
-          zeroline: false,
-        },
-        yaxis: {
-          title: {
-            text: "Response (%)",
-            font: { size: 10, color: CHART_AXIS.label },
-          },
-          showgrid: true,
-          gridcolor: CHART_AXIS.grid,
-          tickfont: { size: 9, color: CHART_AXIS.tick },
-          zeroline: false,
-        },
-        paper_bgcolor: "transparent",
-        plot_bgcolor: "transparent",
-        showlegend: false,
-        shapes,
-        annotations,
-      }}
-      config={{ displayModeBar: false }}
-      useResizeHandler
-      style={{ width: "100%", height: 260 }}
-    />
-  );
-});
-
-// ─── CurveParamGrid ───────────────────────────────────────────────────────
-
-const CURVE_CLASS_COLORS: Record<string, string> = {
-  F: "bg-success/20 text-success border-success/30",
-  P: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  I: "bg-destructive/20 text-destructive border-destructive/30",
-};
-
-function CurveParamGrid({ curve }: { curve: CurveDetail }) {
-  const classColor =
-    curve.curve_class && CURVE_CLASS_COLORS[curve.curve_class]
-      ? CURVE_CLASS_COLORS[curve.curve_class]
-      : undefined;
-
-  return (
-    <div className="grid grid-cols-4 gap-px rounded-md border border-border bg-border">
-      <div className="bg-background px-3 py-2">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Fitted
-        </span>
-        <p className="mt-0.5 font-mono text-xs tabular-nums">
-          {curve.fitted_value.toExponential(2)} {curve.fitted_unit}
-        </p>
-      </div>
-      <div className="bg-background px-3 py-2">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Hill Slope
-        </span>
-        <p className="mt-0.5 font-mono text-xs tabular-nums">
-          {curve.hill_slope.toFixed(2)}
-        </p>
-      </div>
-      <div className="bg-background px-3 py-2">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          R&sup2;
-        </span>
-        <p className="mt-0.5 font-mono text-xs tabular-nums">
-          {curve.r_squared.toFixed(3)}
-        </p>
-      </div>
-      <div className="bg-background px-3 py-2">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Curve Class
-        </span>
-        <p className="mt-0.5">
-          {curve.curve_class ? (
-            <span
-              className={`inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-semibold ${classColor ?? "bg-muted text-muted-foreground border-border"}`}
-            >
-              {curve.curve_class}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">&mdash;</span>
-          )}
-        </p>
-      </div>
-    </div>
-  );
+function adaptCurve(curve: CurveDetail, protocolId: string, molecule: Molecule): DoseResponseCurve {
+  return {
+    id: curve.curve_id,
+    workspace_id: molecule.workspace_id,
+    molecule_id: molecule.id,
+    registration_number: molecule.registration_number ?? null,
+    molecule_name: molecule.name ?? null,
+    // Search-detail molecule shape doesn't carry the synonym list — the
+    // chart's SummaryCard already falls back to registration_number /
+    // molecule_name for the title, which is what chemists scan for.
+    synonyms: [],
+    smiles: molecule.structure?.smiles ?? null,
+    batch_id: curve.batch_id,
+    batch_number: null,
+    protocol_id: protocolId,
+    run_id: curve.run_id,
+    curve_type: curve.curve_type as CurveType,
+    fitted_value: curve.fitted_value,
+    fitted_unit: curve.fitted_unit,
+    hill_slope: curve.hill_slope,
+    top: curve.top,
+    bottom: curve.bottom,
+    r_squared: curve.r_squared,
+    confidence_interval_low: curve.confidence_interval_low,
+    confidence_interval_high: curve.confidence_interval_high,
+    num_points: curve.num_points,
+    curve_class: (curve.curve_class as CurveClass | null) ?? null,
+    raw_data: curve.raw_data ?? null,
+    excluded_points: curve.excluded_points ?? null,
+    fit_quality_warnings: curve.fit_quality_warnings ?? [],
+    intercept_values: curve.intercept_values ?? [],
+  };
 }
 
 // ─── ProtocolCard ─────────────────────────────────────────────────────────
 
 interface ProtocolCardProps {
   group: ProtocolCurveGroup;
+  molecule: Molecule;
   defaultExpanded?: boolean;
 }
 
-function ProtocolCard({ group, defaultExpanded = true }: ProtocolCardProps) {
+function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  // Pick best curve by R-squared
+  // Pick best curve by R-squared — search detail shows the headline value;
+  // the run page is where chemists drill into individual runs / replicates.
   const sortedCurves = useMemo(
     () => [...group.curves].sort((a, b) => b.r_squared - a.r_squared),
     [group.curves],
   );
   const bestCurve = sortedCurves[0];
+  const adaptedCurve = useMemo(
+    () => (bestCurve ? adaptCurve(bestCurve, group.protocol_id, molecule) : null),
+    [bestCurve, group.protocol_id, molecule],
+  );
 
-  if (!bestCurve) return null;
+  if (!bestCurve || !adaptedCurve) return null;
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -279,15 +119,17 @@ function ProtocolCard({ group, defaultExpanded = true }: ProtocolCardProps) {
       </button>
 
       {expanded && (
-        <div className="space-y-3 border-t border-border px-4 py-3">
+        // `min-w-0` is the standard fix for flex children that would
+        // otherwise refuse to shrink below their content width — without it
+        // the side-panel chart pushes past the sheet's right edge.
+        <div className="min-w-0 space-y-3 border-t border-border px-4 py-3">
           {group.curves.length > 1 && (
             <p className="text-xs text-muted-foreground">
               {group.curves.length} runs &mdash; showing best (R&sup2; ={" "}
               {bestCurve.r_squared.toFixed(3)})
             </p>
           )}
-          <CurveChart curve={bestCurve} />
-          <CurveParamGrid curve={bestCurve} />
+          <DoseResponseChart curves={[adaptedCurve]} isInteractive={false} />
         </div>
       )}
     </div>
@@ -327,9 +169,7 @@ export function CompoundDetailSheet({
 }: CompoundDetailSheetProps) {
   const [othersExpanded, setOthersExpanded] = useState(false);
 
-  const { data: activityDetail, isLoading } = useMoleculeActivityDetail(
-    molecule?.id ?? null,
-  );
+  const { data: activityDetail, isLoading } = useMoleculeActivityDetail(molecule?.id ?? null);
 
   // Reset expanded state when molecule changes
   useEffect(() => {
@@ -404,9 +244,7 @@ export function CompoundDetailSheet({
                       {molecule.registration_number}
                     </p>
                     {molecule.name && (
-                      <p className="truncate text-sm text-muted-foreground">
-                        {molecule.name}
-                      </p>
+                      <p className="truncate text-sm text-muted-foreground">{molecule.name}</p>
                     )}
                   </div>
                   <Button
@@ -420,9 +258,7 @@ export function CompoundDetailSheet({
                 </div>
 
                 {molecule.molecular_formula && (
-                  <p className="text-xs text-muted-foreground">
-                    {molecule.molecular_formula}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{molecule.molecular_formula}</p>
                 )}
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -437,16 +273,13 @@ export function CompoundDetailSheet({
                   {descriptors?.logp != null && (
                     <span>
                       LogP{" "}
-                      <span className="font-mono tabular-nums">
-                        {descriptors.logp.toFixed(2)}
-                      </span>
+                      <span className="font-mono tabular-nums">{descriptors.logp.toFixed(2)}</span>
                     </span>
                   )}
                 </div>
 
                 <Badge variant={lifecycleBadgeVariant(molecule.lifecycle_stage)}>
-                  {LIFECYCLE_LABELS[molecule.lifecycle_stage] ??
-                    molecule.lifecycle_stage}
+                  {LIFECYCLE_LABELS[molecule.lifecycle_stage] ?? molecule.lifecycle_stage}
                 </Badge>
               </div>
             </div>
@@ -490,8 +323,14 @@ export function CompoundDetailSheet({
               </div>
             )}
 
-            {/* ── Scrollable content ── */}
-            <ScrollArea className="flex-1">
+            {/* ── Scrollable content ──
+                `min-h-0` is required so `flex-1` actually constrains the
+                ScrollArea's height instead of letting it grow to fit its
+                content. Without it the content (chart + summary card)
+                pushes the footer + ScrollArea bottom below the viewport
+                and no scrollbar ever appears — the chart looks clipped
+                at the screen edge. */}
+            <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-5 px-5 py-4">
                 {/* Loading state */}
                 {isLoading && (
@@ -503,13 +342,11 @@ export function CompoundDetailSheet({
                 )}
 
                 {/* No activity data */}
-                {!isLoading &&
-                  (!activityDetail ||
-                    activityDetail.protocols.length === 0) && (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      No dose-response data available for this compound.
-                    </p>
-                  )}
+                {!isLoading && (!activityDetail || activityDetail.protocols.length === 0) && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    No dose-response data available for this compound.
+                  </p>
+                )}
 
                 {/* Selected protocol curves */}
                 {!isLoading && selected.length > 0 && (
@@ -517,13 +354,15 @@ export function CompoundDetailSheet({
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Selected Protocols
                     </h4>
-                    {selected.map((group) => (
-                      <ProtocolCard
-                        key={group.protocol_id}
-                        group={group}
-                        defaultExpanded
-                      />
-                    ))}
+                    {molecule &&
+                      selected.map((group) => (
+                        <ProtocolCard
+                          key={group.protocol_id}
+                          group={group}
+                          molecule={molecule}
+                          defaultExpanded
+                        />
+                      ))}
                   </div>
                 )}
 
@@ -547,10 +386,12 @@ export function CompoundDetailSheet({
                     </button>
 
                     {othersExpanded &&
+                      molecule &&
                       others.map((group) => (
                         <ProtocolCard
                           key={group.protocol_id}
                           group={group}
+                          molecule={molecule}
                           defaultExpanded={false}
                         />
                       ))}

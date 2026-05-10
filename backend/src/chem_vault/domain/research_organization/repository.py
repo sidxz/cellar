@@ -11,6 +11,7 @@ from chem_vault.domain.research_organization.project_membership import (
     ProjectMember,
     ProjectRole,
 )
+from chem_vault.domain.research_organization.project_scope_stats import ProjectScopeStats
 from chem_vault.domain.research_organization.saved_search import SavedSearch
 
 
@@ -34,6 +35,10 @@ class ProjectRepository(Protocol):
         self, workspace_id: uuid.UUID, name: str
     ) -> Project | None: ...
 
+    async def get_scope_stats(
+        self, workspace_id: uuid.UUID, project_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, ProjectScopeStats]: ...
+
 
 @runtime_checkable
 class CollectionRepository(Protocol):
@@ -56,7 +61,7 @@ class CollectionRepository(Protocol):
         self,
         workspace_id: uuid.UUID,
         *,
-        project_id: uuid.UUID | None = None,
+        project_ids: list[uuid.UUID] | None = None,
     ) -> list[Collection]: ...
 
     async def add_molecules(

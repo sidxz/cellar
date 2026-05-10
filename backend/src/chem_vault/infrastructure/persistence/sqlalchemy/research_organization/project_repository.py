@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from chem_vault.domain.research_organization.project import Project, ProjectStatus
+from chem_vault.domain.research_organization.project_scope_stats import ProjectScopeStats
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (
     ProjectModel,
+    molecule_projects,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    RunModel,
+    protocol_projects,
 )
 
 
@@ -76,3 +82,61 @@ class SQLAlchemyProjectRepository(
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
         return self._to_domain_tracked(model) if model else None
+
+    async def get_scope_stats(
+        self, workspace_id: uuid.UUID, project_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, ProjectScopeStats]:
+        if not project_ids:
+            return {}
+
+        # Restrict to project_ids that actually live in this workspace —
+        # defense-in-depth so a forged ID can't surface a count from
+        # another workspace.
+        scoped_ids_stmt = select(ProjectModel.id).where(
+            ProjectModel.workspace_id == workspace_id,
+            ProjectModel.id.in_(project_ids),
+        )
+        scoped_ids = {row for row in (await self._session.execute(scoped_ids_stmt)).scalars()}
+        if not scoped_ids:
+            return {}
+
+        scoped_ids_list = list(scoped_ids)
+
+        mol_stmt = (
+            select(
+                molecule_projects.c.project_id,
+                func.count(molecule_projects.c.molecule_id),
+            )
+            .where(molecule_projects.c.project_id.in_(scoped_ids_list))
+            .group_by(molecule_projects.c.project_id)
+        )
+        prot_stmt = (
+            select(
+                protocol_projects.c.project_id,
+                func.count(protocol_projects.c.protocol_id),
+            )
+            .where(protocol_projects.c.project_id.in_(scoped_ids_list))
+            .group_by(protocol_projects.c.project_id)
+        )
+        run_stmt = (
+            select(
+                protocol_projects.c.project_id,
+                func.count(RunModel.id),
+            )
+            .join(RunModel, RunModel.protocol_id == protocol_projects.c.protocol_id)
+            .where(protocol_projects.c.project_id.in_(scoped_ids_list))
+            .group_by(protocol_projects.c.project_id)
+        )
+
+        mol_counts = dict((await self._session.execute(mol_stmt)).all())
+        prot_counts = dict((await self._session.execute(prot_stmt)).all())
+        run_counts = dict((await self._session.execute(run_stmt)).all())
+
+        return {
+            pid: ProjectScopeStats(
+                molecule_count=mol_counts.get(pid, 0),
+                protocol_count=prot_counts.get(pid, 0),
+                run_count=run_counts.get(pid, 0),
+            )
+            for pid in scoped_ids
+        }

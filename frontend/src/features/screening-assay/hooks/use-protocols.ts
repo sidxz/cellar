@@ -52,13 +52,28 @@ export interface ProtocolSummary {
   last_run_date: string | null;
 }
 
-export function useProtocolSummaries() {
+/**
+ * Protocol picker rows (name + status + run stats).
+ *
+ * - `projectIds` empty / undefined ⇒ workspace-wide picker (every protocol).
+ * - `projectIds` non-empty ⇒ scoped to the union of protocols linked to those
+ *   projects, so a chemist on "Anti-inflammatory" doesn't have to scroll past
+ *   200 unrelated assays in the dropdown.
+ * - `includeAll = true` overrides scoping (backs the per-picker "Show all
+ *   (across projects)" toggle for cross-program scaffold/selectivity lookups).
+ */
+export function useProtocolSummaries(projectIds?: string[], options?: { includeAll?: boolean }) {
+  const includeAll = options?.includeAll ?? false;
+  const scope = !includeAll && projectIds && projectIds.length > 0 ? [...projectIds].sort() : null;
   return useQuery({
-    queryKey: [...PROTOCOLS_KEY, "summary"],
+    queryKey: scope
+      ? [...PROTOCOLS_KEY, "summary", { projectIds: scope }]
+      : [...PROTOCOLS_KEY, "summary"],
     queryFn: () =>
       customInstance<ProtocolSummary[]>({
         url: "/api/v1/protocols/summary",
         method: "GET",
+        ...(scope ? { params: { project_ids: scope } } : {}),
       }),
   });
 }

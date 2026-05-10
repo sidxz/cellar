@@ -32,15 +32,24 @@ export const customInstance = async <T>({
   headers?: Record<string, string>;
   signal?: AbortSignal;
 }): Promise<T> => {
-  // Filter out null/undefined, stringify remaining values for URLSearchParams
-  const filteredParams = params
-    ? Object.fromEntries(
-        Object.entries(params)
-          .filter(([, v]) => v != null)
-          .map(([k, v]) => [k, String(v)])
-      )
-    : undefined;
-  const searchParams = new URLSearchParams(filteredParams);
+  // Build query string. Arrays are emitted as repeated keys (`k=a&k=b`),
+  // matching FastAPI's `list[T] = Query(...)` expectation. Scalars are
+  // stringified; null/undefined entries (and null/undefined array items)
+  // are skipped.
+  const searchParams = new URLSearchParams();
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v == null) continue;
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (item == null) continue;
+          searchParams.append(k, String(item));
+        }
+      } else {
+        searchParams.append(k, String(v));
+      }
+    }
+  }
   const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
   const client = typeof window !== "undefined" ? getSentinelClient() : null;

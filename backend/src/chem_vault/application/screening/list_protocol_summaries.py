@@ -27,6 +27,9 @@ from chem_vault.domain.shared.errors import DomainError
 @dataclass(frozen=True, kw_only=True)
 class ListProtocolSummariesQuery(Query):
     workspace_id: uuid.UUID
+    # When non-empty, restrict the summaries to protocols that are linked
+    # to ANY of these projects (union scope for the search-panel picker).
+    project_ids: tuple[uuid.UUID, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -66,11 +69,18 @@ class ListProtocolSummaries:
             protocols = await self._protocol_repo.find_by_workspace(input.workspace_id)
             targets = await self._target_repo.find_by_workspace(input.workspace_id)
             stats = await self._run_repo.aggregate_stats_by_protocol(input.workspace_id)
+            scoped_ids: set[uuid.UUID] | None = None
+            if input.project_ids:
+                scoped_ids = await self._protocol_repo.find_protocol_ids_in_projects(
+                    input.workspace_id, list(input.project_ids)
+                )
 
         target_name_by_id: dict[uuid.UUID, str] = {t.id: t.name for t in targets}
 
         summaries: list[ProtocolSummary] = []
         for p in protocols:
+            if scoped_ids is not None and p.id not in scoped_ids:
+                continue
             count, last = stats.get(p.id, (0, None))
             summaries.append(
                 ProtocolSummary(

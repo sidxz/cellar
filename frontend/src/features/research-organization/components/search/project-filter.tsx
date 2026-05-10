@@ -1,8 +1,5 @@
 "use client";
 
-import * as React from "react";
-import { X, Plus } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Command,
@@ -12,7 +9,22 @@ import {
   CommandItem,
   CommandList,
 } from "@/shared/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { Plus, X } from "lucide-react";
+import * as React from "react";
+import { useProjectScopeStats } from "../../hooks/use-project-scope-stats";
 import { useProjects } from "../../hooks/use-projects";
+
+const NUMBER_FORMAT = new Intl.NumberFormat("en-US");
+
+function formatScope(stats: {
+  molecule_count: number;
+  protocol_count: number;
+  run_count: number;
+}): string {
+  const f = NUMBER_FORMAT.format;
+  return `${f(stats.molecule_count)} compounds · ${f(stats.protocol_count)} protocols · ${f(stats.run_count)} runs`;
+}
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -25,6 +37,7 @@ interface ProjectFilterProps {
 
 export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
   const { data: projects } = useProjects();
+  const { data: stats } = useProjectScopeStats(selectedIds);
   const [open, setOpen] = React.useState(false);
 
   const activeProjects = React.useMemo(
@@ -54,22 +67,28 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {/* Selected project chips */}
-      {selectedProjects.map((project) => (
-        <span
-          key={project.id}
-          className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-sm text-primary"
-        >
-          {project.name}
-          <button
-            type="button"
-            aria-label={`Remove ${project.name}`}
-            onClick={() => removeProject(project.id)}
-            className="inline-flex items-center justify-center rounded-full text-primary/70 hover:text-primary/80 focus:outline-none"
+      {selectedProjects.map((project) => {
+        const projectStats = stats?.[project.id];
+        return (
+          <span
+            key={project.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-sm text-primary"
           >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
+            <span>{project.name}</span>
+            {projectStats && (
+              <span className="text-xs text-primary/70">· {formatScope(projectStats)}</span>
+            )}
+            <button
+              type="button"
+              aria-label={`Remove ${project.name}`}
+              onClick={() => removeProject(project.id)}
+              className="inline-flex items-center justify-center rounded-full text-primary/70 hover:text-primary/80 focus:outline-none"
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        );
+      })}
 
       {/* Add button with popover */}
       <Popover open={open} onOpenChange={setOpen}>

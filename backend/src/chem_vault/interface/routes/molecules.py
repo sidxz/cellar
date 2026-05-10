@@ -475,8 +475,15 @@ async def search_molecules(
     query: str,
     threshold: float = 0.7,
     limit: int = 100,
+    query_kind: str | None = None,
 ) -> StructureSearchResponse:
-    """Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES).
+    """Structure search: exact (by SMILES), substructure (by SMILES or SMARTS),
+    or similarity (by SMILES).
+
+    For substructure, ``query_kind`` selects the cartridge interpretation —
+    ``"smiles"`` for plain structures (cartridge handles aromaticity),
+    ``"smarts"`` for queries with atom lists / R-groups / query primitives.
+    Omitted ⇒ legacy SMARTS path (aromatized defensively).
 
     Results are capped at ``limit`` (max 500, default 100).
     """
@@ -486,6 +493,7 @@ async def search_molecules(
         search_type=search_type,
         query=query,
         threshold=threshold,
+        query_kind=query_kind,
     )
     results = result_to_response(await use_case(q))
 

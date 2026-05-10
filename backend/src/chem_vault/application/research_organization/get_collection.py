@@ -38,7 +38,10 @@ class GetCollection:
 @dataclass(frozen=True, kw_only=True)
 class ListCollectionsQuery(Query):
     workspace_id: uuid.UUID
-    project_id: uuid.UUID | None = None
+    # Empty/None means workspace-wide; non-empty restricts to the union of
+    # collections that belong to any of these projects (multi-project scoping
+    # for the search picker).
+    project_ids: tuple[uuid.UUID, ...] | None = None
 
 
 class ListCollections:
@@ -51,6 +54,7 @@ class ListCollections:
     ) -> Result[list[Collection], DomainError]:
         async with self._uow:
             collections = await self._repo.find_by_workspace(
-                input.workspace_id, project_id=input.project_id
+                input.workspace_id,
+                project_ids=list(input.project_ids) if input.project_ids else None,
             )
             return Success(collections)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from chem_vault.application.research_organization.collection_membership import (
@@ -121,10 +121,11 @@ class MembershipResultResponse(BaseModel):
 async def list_collections(
     auth: AuthDep,
     use_case: ListCollectionsDep,
-    project_id: uuid.UUID | None = None,
+    project_ids: list[uuid.UUID] | None = Query(default=None),
 ) -> list[CollectionResponse]:
     query = ListCollectionsQuery(
-        workspace_id=auth.workspace_id, project_id=project_id
+        workspace_id=auth.workspace_id,
+        project_ids=tuple(project_ids) if project_ids else None,
     )
     collections = result_to_response(await use_case(query))
     return [CollectionResponse.from_domain(c) for c in collections]

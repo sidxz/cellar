@@ -184,6 +184,23 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
+    async def find_protocol_ids_in_projects(
+        self, workspace_id: uuid.UUID, project_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        """IDs of protocols linked to any of the given projects (workspace-scoped)."""
+        if not project_ids:
+            return set()
+        stmt = select(protocol_projects.c.protocol_id).where(
+            protocol_projects.c.project_id.in_(project_ids),
+            protocol_projects.c.protocol_id.in_(
+                select(ProtocolModel.id).where(
+                    ProtocolModel.workspace_id == workspace_id
+                )
+            ),
+        )
+        result = await self._session.execute(stmt)
+        return set(result.scalars().all())
+
     async def find_project_ids(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[uuid.UUID]:
         """Return all project IDs linked to a given protocol, scoped to workspace."""
         from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models import (

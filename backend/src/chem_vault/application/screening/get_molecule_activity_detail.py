@@ -43,6 +43,27 @@ class GetMoleculeActivityDetailQuery(Query):
 
 
 @dataclass(frozen=True)
+class InterceptSpecPayload:
+    """Wire form of InterceptSpec for the activity-detail response."""
+
+    kind: str  # "ic" | "ec"
+    level: float
+    basis: str  # "relative_percent" | "absolute"
+    label: str | None
+
+
+@dataclass(frozen=True)
+class InterceptValuePayload:
+    """Wire form of InterceptValue for the activity-detail response."""
+
+    spec: InterceptSpecPayload
+    value: float
+    confidence_interval_low: float | None
+    confidence_interval_high: float | None
+    at_bound: bool
+
+
+@dataclass(frozen=True)
 class CurveDetail:
     curve_id: uuid.UUID
     run_id: uuid.UUID
@@ -59,6 +80,13 @@ class CurveDetail:
     confidence_interval_low: float | None
     confidence_interval_high: float | None
     raw_data: list[dict[str, Any]]
+    # Mirrors the run-page DRC response so the search-detail panel can render
+    # the same chemistry-quality signals (at-bound EC50 warnings, IC90/IC10
+    # intercepts, auto-/manually-excluded replicate points). Without these
+    # the panel was silently hiding fit-quality issues during hit triage.
+    excluded_points: list[dict[str, Any]] | None
+    fit_quality_warnings: list[str]
+    intercept_values: list[InterceptValuePayload]
 
     @classmethod
     def from_domain(
@@ -80,6 +108,23 @@ class CurveDetail:
             confidence_interval_low=curve.confidence_interval_low,
             confidence_interval_high=curve.confidence_interval_high,
             raw_data=_condense_raw_data(curve.raw_data or []),
+            excluded_points=curve.excluded_points,
+            fit_quality_warnings=list(curve.fit_quality_warnings or []),
+            intercept_values=[
+                InterceptValuePayload(
+                    spec=InterceptSpecPayload(
+                        kind=iv.spec.kind.value,
+                        level=iv.spec.level,
+                        basis=iv.spec.basis.value,
+                        label=iv.spec.label,
+                    ),
+                    value=iv.value,
+                    confidence_interval_low=iv.confidence_interval_low,
+                    confidence_interval_high=iv.confidence_interval_high,
+                    at_bound=iv.at_bound,
+                )
+                for iv in (curve.intercept_values or [])
+            ],
         )
 
 

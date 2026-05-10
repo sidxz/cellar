@@ -443,10 +443,18 @@ class ProtocolSummaryResponse(BaseModel):
 async def list_protocol_summaries(
     auth: AuthDep,
     uc: ListProtocolSummariesDep,
+    project_ids: list[uuid.UUID] | None = Query(default=None),
 ) -> list[ProtocolSummaryResponse]:
-    """List protocols enriched with run_count + last_run_date for the picker."""
+    """List protocols enriched with run_count + last_run_date for the picker.
+
+    When ``project_ids`` is provided, the summaries are restricted to protocols
+    linked to any of those projects (union). Empty/omitted ⇒ workspace-wide.
+    """
     result = await uc(
-        ListProtocolSummariesQuery(workspace_id=auth.workspace_id),
+        ListProtocolSummariesQuery(
+            workspace_id=auth.workspace_id,
+            project_ids=tuple(project_ids) if project_ids else None,
+        ),
         auth=auth,
     )
     summaries = result_to_response(result)

@@ -127,6 +127,72 @@ async def test_list_protocol_summaries_merges_run_stats() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_protocol_summaries_scopes_to_projects_union() -> None:
+    """When project_ids is given, only protocols linked to those projects appear.
+
+    Mirrors the search-panel picker behaviour: chemists scoped to "Anti-inflammatory"
+    + "Oncology" should see protocols in either, never the workspace-wide noise.
+    """
+    proto_repo = AsyncMock()
+    proto_repo.find_by_workspace.return_value = [
+        _FakeProtocol(id=P_A, name="In project A"),
+        _FakeProtocol(id=P_B, name="In project B"),
+        _FakeProtocol(id=P_C, name="In neither (excluded)"),
+    ]
+    target_repo = AsyncMock()
+    target_repo.find_by_workspace.return_value = []
+    run_repo = AsyncMock()
+    run_repo.aggregate_stats_by_protocol.return_value = {}
+    proto_repo.find_protocol_ids_in_projects.return_value = {P_A, P_B}
+
+    proj_a = uuid.uuid4()
+    proj_b = uuid.uuid4()
+
+    uc = ListProtocolSummaries(
+        uow=_FakeUoW(),
+        protocol_repo=proto_repo,
+        target_repo=target_repo,
+        run_repo=run_repo,
+    )
+    result = await uc(
+        ListProtocolSummariesQuery(workspace_id=WS, project_ids=(proj_a, proj_b)),
+        auth=FakeAuth(workspace_id=WS),
+    )
+    summaries = result.unwrap()
+    ids = {s.id for s in summaries}
+    assert ids == {P_A, P_B}
+    proto_repo.find_protocol_ids_in_projects.assert_awaited_once_with(
+        WS, [proj_a, proj_b]
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_protocol_summaries_unscoped_skips_project_lookup() -> None:
+    """Workspace-wide list (no project_ids) must NOT touch the project repo."""
+    proto_repo = AsyncMock()
+    proto_repo.find_by_workspace.return_value = [
+        _FakeProtocol(id=P_A, name="anything"),
+    ]
+    target_repo = AsyncMock()
+    target_repo.find_by_workspace.return_value = []
+    run_repo = AsyncMock()
+    run_repo.aggregate_stats_by_protocol.return_value = {}
+
+    uc = ListProtocolSummaries(
+        uow=_FakeUoW(),
+        protocol_repo=proto_repo,
+        target_repo=target_repo,
+        run_repo=run_repo,
+    )
+    result = await uc(
+        ListProtocolSummariesQuery(workspace_id=WS),
+        auth=FakeAuth(workspace_id=WS),
+    )
+    assert {s.id for s in result.unwrap()} == {P_A}
+    proto_repo.find_protocol_ids_in_projects.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_list_protocol_summaries_orders_by_last_run_desc() -> None:
     """Protocols with recent runs come before stale ones; never-run last."""
     proto_repo = AsyncMock()

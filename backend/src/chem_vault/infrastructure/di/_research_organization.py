@@ -30,6 +30,9 @@ from chem_vault.application.research_organization.get_collections_for_molecule i
     ListCollectionsForMolecule,
 )
 from chem_vault.application.research_organization.get_project import GetProject, ListProjects
+from chem_vault.application.research_organization.get_project_scope_stats import (
+    GetProjectScopeStats,
+)
 from chem_vault.application.research_organization.get_saved_search import (
     GetSavedSearch,
     ListSavedSearches,
@@ -110,6 +113,7 @@ def register_research_organization(container: Container) -> None:
     container.define(ArchiveProject, _project_cmd(ArchiveProject))
     container.define(GetProject, _project_query(GetProject))
     container.define(ListProjects, _project_query(ListProjects))
+    container.define(GetProjectScopeStats, _project_query(GetProjectScopeStats))
 
     # --- Project members ---
     def _member_cmd(uc_cls: type):

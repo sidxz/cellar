@@ -3,6 +3,7 @@
 import { StructureEditorDialog, StructureRenderer } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
+import { detectQueryKind } from "@/shared/lib/rdkit/detect-query-kind";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { useSearchAlgorithms } from "../../hooks/use-search-algorithms";
@@ -10,10 +11,14 @@ import type { SearchMode, StructureCriterion, StructureSearchType } from "../../
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
+// Order chosen by chemist-frequency on the discovery search panel:
+// substructure (daily SAR / scaffold filtering) → similarity (lead-hopping,
+// analog finding) → exact (rare lookup; mostly a registration / IP-dedup
+// concern, which has its own dedicated UIs). Tab order follows likelihood.
 const SEARCH_TYPES: { value: StructureSearchType; label: string }[] = [
   { value: "substructure", label: "substructure" },
-  { value: "exact", label: "exact" },
   { value: "similarity", label: "similarity" },
+  { value: "exact", label: "exact" },
 ];
 
 const PLACEHOLDERS: Record<StructureSearchType, string> = {
@@ -58,13 +63,13 @@ function defaultStructureCriterion(): StructureCriterion {
     type: "structure",
     search_type: "substructure",
     kind: "substructure",
-    smarts: "",
-    smiles: undefined,
     smiles_or_smarts: undefined,
+    smiles: undefined,
     threshold: 0.7,
     inchi_key: undefined,
     mode: undefined,
     generalized: false,
+    query_kind: undefined,
   };
 }
 
@@ -78,11 +83,35 @@ function getInputValue(c: StructureCriterion): string {
 
 function setInputValue(c: StructureCriterion, value: string): StructureCriterion {
   if (c.search_type === "substructure") {
-    // Mirror to both fields for safety with downstream consumers.
-    return { ...c, smiles_or_smarts: value, smarts: value };
+    // Auto-detect SMILES vs SMARTS for typed input. Drawing-derived
+    // input arrives via handleEditorApply with an explicit query_kind.
+    return {
+      ...c,
+      smiles_or_smarts: value,
+      query_kind: value ? detectQueryKind(value) : undefined,
+    };
   }
   if (c.search_type === "similarity") return { ...c, smiles: value };
   return { ...c, inchi_key: value };
+}
+
+function setStructureFromEditor(
+  c: StructureCriterion,
+  value: string,
+  format: "smiles" | "smarts",
+): StructureCriterion {
+  if (c.search_type !== "substructure") {
+    // Editor only emits SMILES for similarity/exact today; preserve.
+    return setInputValue(c, value);
+  }
+  return {
+    ...c,
+    smiles_or_smarts: value,
+    query_kind: format,
+    // Generalized matching only makes sense with structural (SMILES)
+    // queries. Auto-clear if Ketcher dropped us into SMARTS mode.
+    generalized: format === "smarts" ? false : c.generalized,
+  };
 }
 
 function getPreviewSmiles(c: StructureCriterion): string | undefined {
@@ -119,8 +148,10 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
   const previewSmiles = getPreviewSmiles(c);
   const inputValue = getInputValue(c);
   const isStructureMode = c.search_type !== "exact";
-  const editorOutputFormat = c.search_type === "substructure" ? "smarts" : "smiles";
+  const editorOutputFormat: "smiles" | "smarts" | "auto" =
+    c.search_type === "substructure" ? "auto" : "smiles";
   const filled = hasValue(c);
+  const isSmartsMode = c.search_type === "substructure" && c.query_kind === "smarts";
 
   function handleTypeChange(type: StructureSearchType) {
     const base: StructureCriterion = {
@@ -144,8 +175,8 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
     onChange(setInputValue(c, value));
   }
 
-  function handleEditorApply(structure: string) {
-    onChange(setInputValue(c, structure));
+  function handleEditorApply(structure: string, format: "smiles" | "smarts") {
+    onChange(setStructureFromEditor(c, structure, format));
   }
 
   function handleThresholdChange(value: string) {
@@ -210,7 +241,10 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
                     step={5}
                     value={Math.round((c.threshold ?? 0.7) * 100)}
                     onChange={(e) => handleThresholdChange(e.target.value)}
-                    className="h-6 w-14 text-sm text-center"
+                    // Right-align + slight right padding so digits clear the
+                    // browser-rendered spinner caret. w-[4.5rem] fits 3-digit
+                    // values (e.g. 100) plus the spinner without clipping.
+                    className="h-6 w-[4.5rem] text-sm text-right pr-1"
                     onClick={(e) => e.stopPropagation()}
                   />
                   <span className="text-muted-foreground">%</span>
@@ -251,12 +285,25 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
         </div>
       )}
 
-      {/* Generalized substructure toggle */}
+      {/* Generalized substructure toggle. Disabled in SMARTS mode —
+          tautomer/variant expansion needs a structural query and the
+          cartridge can't apply it to atom lists / R-groups / "any
+          bond" patterns. */}
       {c.search_type === "substructure" && (
-        <label className="flex cursor-pointer items-center gap-2 text-sm select-none pl-1">
+        <label
+          className={`flex items-center gap-2 text-sm select-none pl-1 ${
+            isSmartsMode ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"
+          }`}
+          title={
+            isSmartsMode
+              ? "Tautomer matching needs a structural query — atom lists, R-groups and special markers don't apply here"
+              : undefined
+          }
+        >
           <input
             type="checkbox"
-            checked={c.generalized ?? false}
+            checked={!isSmartsMode && (c.generalized ?? false)}
+            disabled={isSmartsMode}
             onChange={(e) => handleGeneralizedToggle(e.target.checked)}
             className="accent-primary"
           />
@@ -271,8 +318,11 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
         </div>
       )}
 
-      {/* Input row */}
-      <div className="flex items-center gap-1">
+      {/* Input row — type SMILES/SMARTS, or click "Draw structure" to open Ketcher.
+          The button is labeled (not a bare pencil) so chemists who came from
+          ChemDraw / Ketcher / MarvinSketch see the path immediately without
+          parsing an icon. */}
+      <div className="flex items-center gap-1.5">
         <Input
           className="h-8 flex-1 text-sm font-mono"
           placeholder={PLACEHOLDERS[c.search_type]}
@@ -284,11 +334,12 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 w-7 p-0"
+            className="h-8 px-2.5 gap-1.5 shrink-0"
             onClick={() => setEditorOpen(true)}
-            title="Draw structure"
+            title="Draw structure with Ketcher"
           >
             <Pencil className="h-3.5 w-3.5" />
+            <span>{filled ? "Edit structure" : "Draw structure"}</span>
           </Button>
         )}
       </div>

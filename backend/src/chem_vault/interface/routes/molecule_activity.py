@@ -27,6 +27,21 @@ router = APIRouter(prefix="/api/v1/molecules", tags=["molecule-activity"])
 # ---------------------------------------------------------------------------
 
 
+class InterceptSpecResponse(BaseModel):
+    kind: str  # "ic" | "ec"
+    level: float
+    basis: str  # "relative_percent" | "absolute"
+    label: str | None = None
+
+
+class InterceptValueResponse(BaseModel):
+    spec: InterceptSpecResponse
+    value: float
+    confidence_interval_low: float | None = None
+    confidence_interval_high: float | None = None
+    at_bound: bool = False
+
+
 class CurveDetailResponse(BaseModel):
     curve_id: uuid.UUID
     run_id: uuid.UUID
@@ -43,6 +58,12 @@ class CurveDetailResponse(BaseModel):
     confidence_interval_low: float | None = None
     confidence_interval_high: float | None = None
     raw_data: list[dict[str, Any]] = []
+    # Mirrors the run-page DRC response: surfaces fit-quality warnings and
+    # secondary intercepts (IC90/EC10/etc.) so the search-detail panel renders
+    # the same chemistry-quality signals as the protocol-runs view.
+    excluded_points: list[dict[str, Any]] | None = None
+    fit_quality_warnings: list[str] = []
+    intercept_values: list[InterceptValueResponse] = []
 
 
 class ProtocolCurveGroupResponse(BaseModel):
@@ -84,6 +105,23 @@ class MoleculeActivityDetailResponse(BaseModel):
                             confidence_interval_low=c.confidence_interval_low,
                             confidence_interval_high=c.confidence_interval_high,
                             raw_data=c.raw_data,
+                            excluded_points=c.excluded_points,
+                            fit_quality_warnings=c.fit_quality_warnings,
+                            intercept_values=[
+                                InterceptValueResponse(
+                                    spec=InterceptSpecResponse(
+                                        kind=iv.spec.kind,
+                                        level=iv.spec.level,
+                                        basis=iv.spec.basis,
+                                        label=iv.spec.label,
+                                    ),
+                                    value=iv.value,
+                                    confidence_interval_low=iv.confidence_interval_low,
+                                    confidence_interval_high=iv.confidence_interval_high,
+                                    at_bound=iv.at_bound,
+                                )
+                                for iv in c.intercept_values
+                            ],
                         )
                         for c in g.curves
                     ],

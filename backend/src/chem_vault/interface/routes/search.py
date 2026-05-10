@@ -63,15 +63,34 @@ class _SubstructureMatch(BaseModel):
     smiles_or_smarts: str | None = None
     smarts: str | None = None  # legacy alias accepted
     generalized: bool = False
+    # Disambiguates how the cartridge interprets the value. Optional —
+    # legacy criteria (no query_kind) follow the "either parses" rule and
+    # the composer aromatizes them defensively. New FE always sets it.
+    query_kind: Literal["smiles", "smarts"] | None = None
 
     @model_validator(mode="after")
     def _check(self) -> "_SubstructureMatch":
         text_value = self.smiles_or_smarts or self.smarts
         if not text_value:
             raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
-        if (Chem.MolFromSmiles(text_value) is None
-                and Chem.MolFromSmarts(text_value) is None):
-            raise ValueError("smiles_or_smarts failed RDKit parse")
+        if self.query_kind == "smiles":
+            if Chem.MolFromSmiles(text_value) is None:
+                raise ValueError("query_kind=smiles requires SMILES-parseable input")
+        elif self.query_kind == "smarts":
+            if Chem.MolFromSmarts(text_value) is None:
+                raise ValueError("query_kind=smarts requires SMARTS-parseable input")
+        else:
+            if (Chem.MolFromSmiles(text_value) is None
+                    and Chem.MolFromSmarts(text_value) is None):
+                raise ValueError("smiles_or_smarts failed RDKit parse")
+        if self.generalized and self.query_kind == "smarts":
+            # The cartridge's mol_to_xqmol path requires a real `mol`,
+            # not a `qmol`. Generalized + SMARTS would silently match
+            # nothing useful — surface the conflict instead.
+            raise ValueError(
+                "generalized matching requires a structural query "
+                "(SMILES); query atoms / atom lists aren't supported"
+            )
         return self
 
 

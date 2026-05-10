@@ -157,6 +157,117 @@ class TestSubstructureExecutes:
         )
         assert benzene.id in ids
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "kekule_query",
+        [
+            "C1=CC=CC=C1",  # Kekulé SMILES
+            "[#6]1-[#6]=[#6]-[#6]=[#6]-[#6]=1",  # exact Ketcher SMARTS export
+        ],
+    )
+    async def test_kekule_benzene_matches_aromatic_storage(
+        self,
+        db_session: AsyncSession,
+        workspace_id: uuid.UUID,
+        benzene: MoleculeModel,
+        kekule_query: str,
+    ) -> None:
+        """Regression: a chemist drawing benzene in Ketcher exports Kekulé
+        SMARTS. The cartridge stores molecules with aromaticity perceived,
+        so explicit -/= bonds in the query never match aromatic bonds in
+        storage without query-side aromatization. Without the normalizer,
+        these queries return zero hits — the most common medchem search
+        appears completely broken.
+        """
+        ids = await _execute_clause(
+            db_session,
+            workspace_id,
+            {"criteria": [{
+                "type": "structure",
+                "kind": "substructure",
+                "smiles_or_smarts": kekule_query,
+            }]},
+        )
+        assert benzene.id in ids, (
+            f"Kekulé query {kekule_query!r} failed to match aromatic-stored "
+            f"benzene — query-side aromatization regression"
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "smiles_query",
+        ["c1ccccc1", "C1=CC=CC=C1"],
+    )
+    async def test_smiles_kind_path_matches_benzene(
+        self,
+        db_session: AsyncSession,
+        workspace_id: uuid.UUID,
+        benzene: MoleculeModel,
+        smiles_query: str,
+    ) -> None:
+        """SMILES dispatch: cartridge parses query via mol_from_smiles —
+        aromaticity perception happens cartridge-side on both halves of
+        the @> match. This is the path the new FE uses for plain drawn
+        structures."""
+        ids = await _execute_clause(
+            db_session,
+            workspace_id,
+            {"criteria": [{
+                "type": "structure",
+                "kind": "substructure",
+                "query_kind": "smiles",
+                "smiles_or_smarts": smiles_query,
+            }]},
+        )
+        assert benzene.id in ids
+
+    @pytest.mark.asyncio
+    async def test_smarts_kind_with_atom_list_executes(
+        self,
+        db_session: AsyncSession,
+        workspace_id: uuid.UUID,
+        benzene: MoleculeModel,
+    ) -> None:
+        """SMARTS-only feature (atom list) survives the SMARTS dispatch —
+        chemist's '4-halo-phenyl' style query."""
+        ids = await _execute_clause(
+            db_session,
+            workspace_id,
+            {"criteria": [{
+                "type": "structure",
+                "kind": "substructure",
+                "query_kind": "smarts",
+                "smiles_or_smarts": "[#6]1[#6][#6][#6][#6][#6]1",
+            }]},
+        )
+        # Benzene matches "ring of 6 carbons" (no bond-order constraint).
+        assert benzene.id in ids
+
+    @pytest.mark.asyncio
+    async def test_generalized_smiles_path_matches_benzene(
+        self,
+        db_session: AsyncSession,
+        workspace_id: uuid.UUID,
+        benzene: MoleculeModel,
+    ) -> None:
+        """Generalized + SMILES: tautomer/variant matching path. This
+        capability (the 'Match across tautomers and structural variants'
+        toggle) only works correctly when the query reaches the cartridge
+        as SMILES so mol_to_xqmol can expand it; SMARTS-tagged inputs are
+        rejected at the API edge."""
+        ids = await _execute_clause(
+            db_session,
+            workspace_id,
+            {"criteria": [{
+                "type": "structure",
+                "kind": "substructure",
+                "query_kind": "smiles",
+                "smiles_or_smarts": "c1ccccc1",
+                "generalized": True,
+            }]},
+        )
+        assert benzene.id in ids
+
 
 # ─── Similarity ────────────────────────────────────────────────────────────
 

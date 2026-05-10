@@ -1384,7 +1384,9 @@ export function DoseResponseChart({
     },
     shapes,
     annotations,
-    margin: { t: 20, b: 60, l: 60, r: 20 },
+    // Right margin gives the last X-axis tick label (e.g. "100") room
+    // before the panel edge — narrow side-panel layouts were clipping it.
+    margin: { t: 20, b: 60, l: 60, r: 32 },
     clickmode: editMode ? "event" : undefined,
     dragmode: editMode ? false : "zoom",
   };
@@ -1483,7 +1485,11 @@ export function DoseResponseChart({
         )}
       </div>
 
-      <div ref={plotContainerRef}>
+      {/* `min-w-0` lets the chart shrink inside flex/grid parents (side
+          panels, sheets) instead of forcing horizontal overflow.
+          `overflow-hidden` clips any residual canvas width Plotly's
+          resize-handler hasn't caught up with after a sheet animation. */}
+      <div ref={plotContainerRef} className="min-w-0 overflow-hidden">
         <Plot
           data={traces}
           layout={layout}
@@ -1511,8 +1517,16 @@ export function DoseResponseChart({
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Summary cards — single-curve case spans full width so the card
+          isn't stranded in a 1/3 column with 2/3 of the panel empty
+          (search-detail side panel hits this constantly). Multi-curve case
+          keeps the responsive grid for the run-page comparison view. */}
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-3",
+          curves.length > 1 && "sm:grid-cols-2 lg:grid-cols-3",
+        )}
+      >
         {curves.map((curve) => {
           const totalPoints = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
           const localExcluded = getExcluded(curve.id);

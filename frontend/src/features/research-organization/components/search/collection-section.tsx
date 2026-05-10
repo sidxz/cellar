@@ -1,19 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/shared/components/ui/popover";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -22,7 +9,17 @@ import {
   CommandItem,
   CommandList,
 } from "@/shared/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { useCollections } from "../../hooks/use-collections";
 import type { CollectionCriterion, SearchCriterion } from "../../types";
 
@@ -42,15 +39,26 @@ function defaultCollectionTerm(): CollectionTermValue {
 
 function CollectionTerm({
   term,
+  projectIds,
   onChange,
   onRemove,
 }: {
   term: CollectionTermValue;
+  /** Selected projects in the search panel — scopes the picker list when non-empty. */
+  projectIds: string[];
   onChange: (t: CollectionTermValue) => void;
   onRemove: () => void;
 }) {
-  const { data: collections } = useCollections();
   const [open, setOpen] = useState(false);
+  // "Show all (across projects)" — only meaningful when at least one project
+  // is selected. Defaults OFF so the picker is scoped to the user's program;
+  // chemists doing scaffold-hop or cross-program lookups flip this to peek
+  // at the rest of the org without losing their project filter.
+  const [showAll, setShowAll] = useState(false);
+  const hasProjectScope = projectIds.length > 0;
+  const { data: collections } = useCollections(projectIds, {
+    includeAll: showAll,
+  });
 
   const selected = collections?.find((c) => c.id === term.collection_id);
 
@@ -82,9 +90,7 @@ function CollectionTerm({
               )}
             >
               <span className="truncate">
-                {selected
-                  ? `${selected.name} (${selected.molecule_count})`
-                  : "Select collection…"}
+                {selected ? `${selected.name} (${selected.molecule_count})` : "Select collection…"}
               </span>
               <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
             </button>
@@ -115,6 +121,23 @@ function CollectionTerm({
                     </CommandItem>
                   ))}
                 </CommandGroup>
+
+                {hasProjectScope && (
+                  <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      id={`collection-show-all-${term.collection_id || "new"}`}
+                      checked={showAll}
+                      onCheckedChange={(v) => setShowAll(v === true)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <label
+                      htmlFor={`collection-show-all-${term.collection_id || "new"}`}
+                      className="cursor-pointer select-none"
+                    >
+                      Show all (across projects)
+                    </label>
+                  </div>
+                )}
               </CommandList>
             </Command>
           </PopoverContent>
@@ -137,10 +160,12 @@ function CollectionTerm({
 interface CollectionSectionProps {
   /** Terms with in/not-in semantics */
   terms: CollectionTermValue[];
+  /** Selected projects from the search panel — scopes the picker list when non-empty. */
+  projectIds: string[];
   onChange: (terms: CollectionTermValue[]) => void;
 }
 
-export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
+export function CollectionSection({ terms, projectIds, onChange }: CollectionSectionProps) {
   function addTerm() {
     onChange([...terms, defaultCollectionTerm()]);
   }
@@ -169,9 +194,7 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
       </div>
 
       {terms.length === 0 && (
-        <p className="text-sm italic text-muted-foreground/50">
-          No collection filters.
-        </p>
+        <p className="text-sm italic text-muted-foreground/50">No collection filters.</p>
       )}
 
       <div>
@@ -179,6 +202,7 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
           <CollectionTerm
             key={`collection-${i}`}
             term={t}
+            projectIds={projectIds}
             onChange={(updated) => updateTerm(i, updated)}
             onRemove={() => removeTerm(i)}
           />
@@ -193,11 +217,13 @@ export function CollectionSection({ terms, onChange }: CollectionSectionProps) {
 export function termsToCollectionCriteria(terms: CollectionTermValue[]): SearchCriterion[] {
   return terms
     .filter((t) => t.collection_id)
-    .map((t): SearchCriterion => ({
-      type: "collection" as const,
-      collection_id: t.collection_id,
-      negate: t.negate || undefined,
-    }));
+    .map(
+      (t): SearchCriterion => ({
+        type: "collection" as const,
+        collection_id: t.collection_id,
+        negate: t.negate || undefined,
+      }),
+    );
 }
 
 export function collectionCriteriaToTerms(criteria: SearchCriterion[]): CollectionTermValue[] {

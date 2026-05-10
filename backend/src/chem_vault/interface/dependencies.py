@@ -135,6 +135,9 @@ from chem_vault.application.research_organization.delete_saved_search import Del
 from chem_vault.application.research_organization.get_collection import GetCollection, ListCollections
 from chem_vault.application.research_organization.get_collections_for_molecule import ListCollectionsForMolecule
 from chem_vault.application.research_organization.get_project import GetProject, ListProjects
+from chem_vault.application.research_organization.get_project_scope_stats import (
+    GetProjectScopeStats,
+)
 from chem_vault.application.research_organization.get_saved_search import GetSavedSearch, ListSavedSearches
 from chem_vault.application.research_organization.manage_project_members import (
     AddProjectMember,
@@ -590,6 +593,9 @@ UpdateProjectDep = Annotated[UpdateProject, Depends(_get_use_case(UpdateProject)
 ArchiveProjectDep = Annotated[ArchiveProject, Depends(_get_use_case(ArchiveProject))]
 GetProjectDep = Annotated[GetProject, Depends(_get_use_case(GetProject))]
 ListProjectsDep = Annotated[ListProjects, Depends(_get_use_case(ListProjects))]
+GetProjectScopeStatsDep = Annotated[
+    GetProjectScopeStats, Depends(_get_use_case(GetProjectScopeStats))
+]
 ComposeCollectionsDep = Annotated[ComposeCollections, Depends(_get_use_case(ComposeCollections))]
 CreateCollectionDep = Annotated[CreateCollection, Depends(_get_use_case(CreateCollection))]
 UpdateCollectionDep = Annotated[UpdateCollection, Depends(_get_use_case(UpdateCollection))]

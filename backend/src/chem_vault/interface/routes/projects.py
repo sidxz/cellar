@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from starlette.responses import Response
 
 from chem_vault.application.research_organization.archive_project import ArchiveProjectCommand
 from chem_vault.application.research_organization.create_project import CreateProjectCommand
 from chem_vault.application.research_organization.get_project import GetProjectQuery, ListProjectsQuery
+from chem_vault.application.research_organization.get_project_scope_stats import (
+    GetProjectScopeStatsQuery,
+)
 from chem_vault.application.research_organization.manage_project_members import (
     AddProjectMemberCommand,
     ListProjectMembersQuery,
@@ -31,6 +34,7 @@ from chem_vault.interface.dependencies import (
     AuthDep,
     CreateProjectDep,
     GetProjectDep,
+    GetProjectScopeStatsDep,
     ListProjectMembersDep,
     ListProjectsDep,
     RemoveMoleculeFromProjectDep,
@@ -85,6 +89,36 @@ async def list_projects(
     query = ListProjectsQuery(workspace_id=auth.workspace_id)
     projects = result_to_response(await use_case(query))
     return [ProjectResponse.from_domain(p) for p in projects]
+
+
+class ProjectScopeStatsResponse(BaseModel):
+    molecule_count: int
+    protocol_count: int
+    run_count: int
+
+
+@router.get(
+    "/stats",
+    response_model=dict[uuid.UUID, ProjectScopeStatsResponse],
+)
+async def get_project_scope_stats(
+    auth: AuthDep,
+    use_case: GetProjectScopeStatsDep,
+    project_ids: list[uuid.UUID] = Query(default_factory=list),
+) -> dict[uuid.UUID, ProjectScopeStatsResponse]:
+    query = GetProjectScopeStatsQuery(
+        workspace_id=auth.workspace_id,
+        project_ids=tuple(project_ids),
+    )
+    stats = result_to_response(await use_case(query))
+    return {
+        pid: ProjectScopeStatsResponse(
+            molecule_count=s.molecule_count,
+            protocol_count=s.protocol_count,
+            run_count=s.run_count,
+        )
+        for pid, s in stats.items()
+    }
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)

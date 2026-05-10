@@ -1,13 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import type {
-  Collection,
-  CreateCollectionInput,
-  UpdateCollectionInput,
-} from "../types";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
+import type { Collection, CreateCollectionInput, UpdateCollectionInput } from "../types";
 
 const COLLECTIONS_KEY = ["collections"];
 
@@ -17,17 +13,28 @@ const collectionHooks = createCrudHooks<Collection, CreateCollectionInput, Updat
   queryKey: COLLECTIONS_KEY,
 });
 
-/** Custom list — supports optional projectId filter. */
-export function useCollections(projectId?: string) {
+/**
+ * Workspace collections list.
+ *
+ * - `projectIds` empty / undefined ⇒ workspace-wide list.
+ * - `projectIds` non-empty ⇒ union of collections across those projects
+ *   (defaults the search-panel picker to what's relevant to the user's
+ *   selected programs without hiding cross-project collections behind
+ *   a single click).
+ * - `includeAll = true` overrides project scoping and returns the
+ *   workspace-wide list — backs the per-picker "Show all (across projects)"
+ *   toggle for chemists doing scaffold-hop / cross-program lookups.
+ */
+export function useCollections(projectIds?: string[], options?: { includeAll?: boolean }) {
+  const includeAll = options?.includeAll ?? false;
+  const scope = !includeAll && projectIds && projectIds.length > 0 ? [...projectIds].sort() : null;
   return useQuery({
-    queryKey: projectId
-      ? [...COLLECTIONS_KEY, { projectId }]
-      : COLLECTIONS_KEY,
+    queryKey: scope ? [...COLLECTIONS_KEY, { projectIds: scope }] : COLLECTIONS_KEY,
     queryFn: () =>
       customInstance<Collection[]>({
         url: "/api/v1/collections",
         method: "GET",
-        ...(projectId ? { params: { project_id: projectId } } : {}),
+        ...(scope ? { params: { project_ids: scope } } : {}),
       }),
   });
 }

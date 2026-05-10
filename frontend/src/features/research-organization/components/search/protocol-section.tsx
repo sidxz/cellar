@@ -1,21 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
-import { Input } from "@/shared/components/ui/input";
+import {
+  type ProtocolSummary,
+  useProtocol,
+  useProtocolSummaries,
+} from "@/features/screening-assay/hooks/use-protocols";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/shared/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -25,13 +16,18 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/shared/components/ui/command";
-import { cn } from "@/shared/lib/utils";
+import { Input } from "@/shared/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import {
-  useProtocol,
-  useProtocolSummaries,
-  type ProtocolSummary,
-} from "@/features/screening-assay/hooks/use-protocols";
-import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
+import { cn } from "@/shared/lib/utils";
+import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ActivityCriterion,
   ActivityWhereCondition,
@@ -64,7 +60,7 @@ function protocolStatusColor(status: string): string {
  *  Keeps the picker scannable without taking too much horizontal space. */
 function formatLastRun(iso: string | null): string {
   if (!iso) return "no runs";
-  const d = new Date(iso + "T00:00:00");
+  const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -74,7 +70,11 @@ function formatLastRun(iso: string | null): string {
   if (diffDays < 14) return `${diffDays}d ago`;
   if (diffDays < 60) return `${Math.floor(diffDays / 7)}w ago`;
   // Older — show calendar date.
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: today.getFullYear() === d.getFullYear() ? undefined : "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: today.getFullYear() === d.getFullYear() ? undefined : "numeric",
+  });
 }
 
 /** How many recently-used protocols to pin at the top of the list. */
@@ -82,7 +82,9 @@ const RECENTS_LIMIT = 5;
 const RECENTS_MIN_TOTAL = 8; // only pin a recents group if the list is at least this long
 
 /** Extract available curve types from a protocol's readout definitions. */
-function getProtocolCurveTypes(protocol: import("@/features/screening-assay/types").Protocol | undefined): { value: string; label: string }[] {
+function getProtocolCurveTypes(
+  protocol: import("@/features/screening-assay/types").Protocol | undefined,
+): { value: string; label: string }[] {
   if (!protocol?.readout_definitions) return [];
   const seen = new Set<string>();
   const options: { value: string; label: string }[] = [];
@@ -147,24 +149,14 @@ interface ProtocolRowProps {
 function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
   const isArchived = protocol.status === "retired" || protocol.status === "archived";
   // Build a haystack so Command's filter can hit name + target + status.
-  const value = [
-    protocol.id,
-    protocol.name,
-    protocol.target_name ?? "",
-    protocol.status,
-  ]
+  const value = [protocol.id, protocol.name, protocol.target_name ?? "", protocol.status]
     .join(" ")
     .toLowerCase();
 
   return (
     <CommandItem value={value} onSelect={onPick} className="text-sm py-1.5">
       <div className="flex w-full min-w-0 items-start gap-2">
-        <Check
-          className={cn(
-            "mt-1 h-3 w-3 shrink-0",
-            selected ? "opacity-100" : "opacity-0",
-          )}
-        />
+        <Check className={cn("mt-1 h-3 w-3 shrink-0", selected ? "opacity-100" : "opacity-0")} />
         <span
           className={cn(
             "mt-1.5 h-2 w-2 rounded-full shrink-0",
@@ -175,10 +167,7 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-1.5">
             <span
-              className={cn(
-                "line-clamp-2 text-sm",
-                isArchived && "text-muted-foreground italic",
-              )}
+              className={cn("line-clamp-2 text-sm", isArchived && "text-muted-foreground italic")}
             >
               {protocol.name}
             </span>
@@ -226,12 +215,7 @@ interface WhereListProps {
   onChange: (next: ActivityWhereCondition[]) => void;
 }
 
-function WhereList({
-  where,
-  curveTypeOptions,
-  numericReadouts,
-  onChange,
-}: WhereListProps) {
+function WhereList({ where, curveTypeOptions, numericReadouts, onChange }: WhereListProps) {
   function update(i: number, next: ActivityWhereCondition) {
     onChange(where.map((w, idx) => (idx === i ? next : w)));
   }
@@ -299,7 +283,7 @@ function WhereRow({
 }: WhereRowProps) {
   const fieldValue = cond.readout_definition_id
     ? `readout:${cond.readout_definition_id}`
-    : cond.curve_type ?? "";
+    : (cond.curve_type ?? "");
   const isBetween = cond.operator === "between";
 
   return (
@@ -465,6 +449,19 @@ interface ActivityRowProps {
   conjunction: ProtocolConjunction;
   protocols: ProtocolSummary[];
   isFirst: boolean;
+  /** True when the search panel has at least one project selected — controls
+   *  visibility of the "Show all (across projects)" toggle inside the picker. */
+  hasProjectScope: boolean;
+  showAllProjects: boolean;
+  /**
+   * Pristine = the row was auto-rendered as a placeholder (criteria was empty),
+   * not user-added. We suppress the "Choose a protocol" red border + error
+   * text so the chemist isn't nagged by a row they never asked to fill in.
+   * Once they pick a protocol the row promotes to a real criterion via
+   * `onChange` and pristine no longer applies.
+   */
+  isPristine?: boolean;
+  onShowAllProjectsChange: (next: boolean) => void;
   onConjunctionChange: (conj: ProtocolConjunction) => void;
   onChange: (c: ActivityCriterion) => void;
   onRemove: () => void;
@@ -476,6 +473,10 @@ function ActivityRow({
   conjunction,
   protocols,
   isFirst,
+  hasProjectScope,
+  showAllProjects,
+  isPristine = false,
+  onShowAllProjectsChange,
   onConjunctionChange,
   onChange,
   onRemove,
@@ -489,15 +490,14 @@ function ActivityRow({
       showArchived
         ? protocols
         : protocols.filter((p) => p.status !== "retired" && p.status !== "archived"),
-    [protocols, showArchived]
+    [protocols, showArchived],
   );
 
   // Pin a "Recently used" group at the top once the list is large enough.
   // Server returns rows already sorted by last_run_date desc; use that order.
   const { recents, others, hasRecents } = useMemo(() => {
     const withRuns = visibleProtocols.filter((p) => p.last_run_date !== null);
-    const shouldPin =
-      visibleProtocols.length >= RECENTS_MIN_TOTAL && withRuns.length >= 2;
+    const shouldPin = visibleProtocols.length >= RECENTS_MIN_TOTAL && withRuns.length >= 2;
     if (!shouldPin) {
       return { recents: [] as ProtocolSummary[], others: visibleProtocols, hasRecents: false };
     }
@@ -512,13 +512,17 @@ function ActivityRow({
 
   const selectedProtocol = protocols.find((p) => p.id === criterion.protocol_id);
 
-  const numericReadouts = protocol?.readout_definitions?.filter(
-    (rd) => rd.data_type === "numeric" && !rd.dose_response_config
-  ) ?? [];
+  const numericReadouts =
+    protocol?.readout_definitions?.filter(
+      (rd) => rd.data_type === "numeric" && !rd.dose_response_config,
+    ) ?? [];
 
   const curveTypeOptions = getProtocolCurveTypes(protocol);
   const hasProtocol = Boolean(criterion.protocol_id);
-  const protocolInvalid = !hasProtocol;
+  // Pristine rows don't surface validation — the row is a passive placeholder
+  // (CDD-style "always-visible empty row"). Only flag invalid once the user
+  // has committed (real row from +Add or saved-search load).
+  const protocolInvalid = !hasProtocol && !isPristine;
   // The where-clause is optional: a protocol-only criterion is a valid
   // "any compound screened in this protocol/scope" presence filter.
   const whereList = readWhere(criterion);
@@ -587,10 +591,7 @@ function ActivityRow({
               <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
             </button>
           </PopoverTrigger>
-          <PopoverContent
-            className="p-0 w-[28rem] max-w-[calc(100vw-2rem)]"
-            align="start"
-          >
+          <PopoverContent className="p-0 w-[28rem] max-w-[calc(100vw-2rem)]" align="start">
             <Command
               filter={(value, search) => {
                 // Match by name + target + status; case-insensitive substring.
@@ -600,10 +601,7 @@ function ActivityRow({
                 return haystack.includes(needle) ? 1 : 0;
               }}
             >
-              <CommandInput
-                placeholder="Search protocols, targets…"
-                className="h-8 text-sm"
-              />
+              <CommandInput placeholder="Search protocols, targets…" className="h-8 text-sm" />
               <CommandList className="max-h-96">
                 <CommandEmpty>No protocols found.</CommandEmpty>
 
@@ -650,19 +648,37 @@ function ActivityRow({
                   ))}
                 </CommandGroup>
 
-                <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    id={`protocol-show-archived-${index}`}
-                    checked={showArchived}
-                    onCheckedChange={(v) => setShowArchived(v === true)}
-                    className="h-3.5 w-3.5"
-                  />
-                  <label
-                    htmlFor={`protocol-show-archived-${index}`}
-                    className="cursor-pointer select-none"
-                  >
-                    Show archived / retired
-                  </label>
+                <div className="flex flex-col gap-1.5 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`protocol-show-archived-${index}`}
+                      checked={showArchived}
+                      onCheckedChange={(v) => setShowArchived(v === true)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <label
+                      htmlFor={`protocol-show-archived-${index}`}
+                      className="cursor-pointer select-none"
+                    >
+                      Show archived / retired
+                    </label>
+                  </div>
+                  {hasProjectScope && (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`protocol-show-all-${index}`}
+                        checked={showAllProjects}
+                        onCheckedChange={(v) => onShowAllProjectsChange(v === true)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <label
+                        htmlFor={`protocol-show-all-${index}`}
+                        className="cursor-pointer select-none"
+                      >
+                        Show all (across projects)
+                      </label>
+                    </div>
+                  )}
                 </div>
               </CommandList>
             </Command>
@@ -677,9 +693,7 @@ function ActivityRow({
           <RunScopePicker
             protocolId={criterion.protocol_id}
             value={criterion.run_scope}
-            onChange={(next: RunScope | undefined) =>
-              onChange({ ...criterion, run_scope: next })
-            }
+            onChange={(next: RunScope | undefined) => onChange({ ...criterion, run_scope: next })}
           />
 
           {/* where — optional, multiple. Empty list ⇒ presence filter
@@ -703,11 +717,7 @@ function ActivityRow({
         </div>
       )}
 
-      {protocolInvalid && (
-        <p className="ml-[70px] text-xs text-destructive">
-          Choose a protocol.
-        </p>
-      )}
+      {protocolInvalid && <p className="ml-[70px] text-xs text-destructive">Choose a protocol.</p>}
     </div>
   );
 }
@@ -717,24 +727,59 @@ function ActivityRow({
 export interface ProtocolSectionProps {
   criteria: ActivityCriterion[];
   conjunctions: ProtocolConjunction[];
+  /** Selected projects from the search panel — scopes the picker list when non-empty. */
+  projectIds: string[];
   onChange: (criteria: ActivityCriterion[], conjunctions: ProtocolConjunction[]) => void;
 }
 
-export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSectionProps) {
-  const { data: protocols } = useProtocolSummaries();
+export function ProtocolSection({
+  criteria,
+  conjunctions,
+  projectIds,
+  onChange,
+}: ProtocolSectionProps) {
+  // Section-level "Show all (across projects)" — flipping in one picker
+  // affects all rows so chemists don't toggle it per row when comparing
+  // two protocols. Resets implicitly whenever the selected projects change.
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  // CDD-style pristine row: when criteria is empty we render one passive
+  // placeholder row with the protocol picker ready, so the most common
+  // search shape (`project + protocol + …`) is one click away instead of two.
+  // Dismissing the pristine row hides it for the rest of the session — until
+  // the user adds a real row and removes it again, at which point the
+  // "fresh start" intent re-shows the placeholder.
+  const [pristineDismissed, setPristineDismissed] = useState(false);
+  useEffect(() => {
+    if (criteria.length > 0) setPristineDismissed(false);
+  }, [criteria.length]);
+  const showPristine = criteria.length === 0 && !pristineDismissed;
+  const hasProjectScope = projectIds.length > 0;
+  const { data: protocols } = useProtocolSummaries(projectIds, {
+    includeAll: showAllProjects,
+  });
 
   const addTerm = useCallback(() => {
-    onChange(
-      [...criteria, defaultActivityCriterion()],
-      [...conjunctions, "or"],
-    );
+    onChange([...criteria, defaultActivityCriterion()], [...conjunctions, "or"]);
   }, [criteria, conjunctions, onChange]);
+
+  // Picking a protocol on the pristine placeholder row promotes it to a
+  // real criterion. Until that happens the row contributes nothing to the
+  // composed query (no protocol_id ⇒ filtered out by composeCriteria).
+  const commitPristine = useCallback(
+    (next: ActivityCriterion) => {
+      onChange([next], ["or"]);
+    },
+    [onChange],
+  );
 
   const updateTerm = useCallback(
     (index: number, updated: ActivityCriterion) => {
-      onChange(criteria.map((c, i) => (i === index ? updated : c)), conjunctions);
+      onChange(
+        criteria.map((c, i) => (i === index ? updated : c)),
+        conjunctions,
+      );
     },
-    [criteria, conjunctions, onChange]
+    [criteria, conjunctions, onChange],
   );
 
   const removeTerm = useCallback(
@@ -744,41 +789,75 @@ export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSe
         conjunctions.filter((_, i) => i !== index),
       );
     },
-    [criteria, conjunctions, onChange]
+    [criteria, conjunctions, onChange],
   );
 
   const updateConjunction = useCallback(
     (index: number, conj: ProtocolConjunction) => {
-      onChange(criteria, conjunctions.map((c, i) => (i === index ? conj : c)));
+      onChange(
+        criteria,
+        conjunctions.map((c, i) => (i === index ? conj : c)),
+      );
     },
-    [criteria, conjunctions, onChange]
+    [criteria, conjunctions, onChange],
   );
 
   return (
     <div className="space-y-2">
-      {/* Section header */}
+      {/* Section header — `+ Add` is hidden while the pristine placeholder is
+          showing, so the chemist isn't presented with two ways to create their
+          first row. Once they pick a protocol it reappears for adding more. */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Protocols
         </span>
+        {!showPristine && (
+          <button
+            type="button"
+            onClick={addTerm}
+            className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors"
+          >
+            <Plus className="h-3 w-3" />
+            Add
+          </button>
+        )}
+      </div>
+
+      {/* Empty state — only when the user has explicitly dismissed the
+          pristine placeholder and there are no real rows. */}
+      {criteria.length === 0 && pristineDismissed && (
         <button
           type="button"
           onClick={addTerm}
-          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors"
+          className="text-sm italic text-muted-foreground/60 hover:text-foreground transition-colors py-1"
         >
-          <Plus className="h-3 w-3" />
-          Add
+          + Add a protocol filter
         </button>
-      </div>
-
-      {/* Empty state */}
-      {criteria.length === 0 && (
-        <p className="text-sm italic text-muted-foreground/50 py-1">
-          No protocol filters. Click &ldquo;+ Add a term&rdquo; to filter by assay activity.
-        </p>
       )}
 
-      {/* Criteria rows */}
+      {/* Pristine placeholder row — passive until the user picks a protocol. */}
+      {showPristine && (
+        <div className="space-y-3">
+          <ActivityRow
+            index={0}
+            criterion={defaultActivityCriterion()}
+            conjunction="or"
+            protocols={protocols ?? []}
+            isFirst
+            isPristine
+            hasProjectScope={hasProjectScope}
+            showAllProjects={showAllProjects}
+            onShowAllProjectsChange={setShowAllProjects}
+            onConjunctionChange={() => {
+              /* Conjunction is hidden on the first row; pristine never has siblings */
+            }}
+            onChange={commitPristine}
+            onRemove={() => setPristineDismissed(true)}
+          />
+        </div>
+      )}
+
+      {/* Real criteria rows */}
       <div className="space-y-3">
         {criteria.map((c, i) => (
           <ActivityRow
@@ -788,6 +867,9 @@ export function ProtocolSection({ criteria, conjunctions, onChange }: ProtocolSe
             conjunction={conjunctions[i] ?? "or"}
             protocols={protocols ?? []}
             isFirst={i === 0}
+            hasProjectScope={hasProjectScope}
+            showAllProjects={showAllProjects}
+            onShowAllProjectsChange={setShowAllProjects}
             onConjunctionChange={(conj) => updateConjunction(i, conj)}
             onChange={(updated) => updateTerm(i, updated)}
             onRemove={() => removeTerm(i)}

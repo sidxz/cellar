@@ -20,6 +20,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mode
 )
 from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from chem_vault.infrastructure.rdkit.query_normalizer import aromatize_substructure_query
 
 # Module-level singleton; tests can monkey-patch _default_registry if needed.
 _default_registry = FingerprintRegistry.default()
@@ -196,23 +197,45 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
     if not query_text:
         raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
     generalized = bool(criterion.get("generalized", False))
+    query_kind = criterion.get("query_kind")  # "smiles" | "smarts" | None
 
     # Cartridge functions qmol_from_smarts/mol_from_smiles take cstring, but
     # SQLAlchemy bindparams infer Python str -> VARCHAR. Explicit SQL CAST
     # to cstring is the only path that works under all driver scenarios.
-    if generalized:
-        sql = (
-            "mol_from_smiles(smiles) @>> "
-            "mol_to_xqmol(mol_from_smiles(CAST(:q AS cstring)))"
-        )
-    else:
-        # Note: mol_adjust_query_properties was originally wrapped here per the
-        # literature recommendation, but with this cartridge build it strips
-        # legitimate aromatic matches (e.g. benzene SMARTS hits 2/719 instead
-        # of 535/719). qmol_from_smarts already handles aromaticity perception
-        # correctly for the @> operator path.
+    # The generalized (xqmol) path is structurally a SMILES path — the
+    # cartridge's mol_to_xqmol works on a `mol`, not a `qmol`. Treat
+    # untagged criteria with generalized=True as if they were tagged
+    # SMILES (preserves the pre-query_kind contract for saved searches).
+    effective_kind = query_kind
+    if effective_kind is None and generalized:
+        effective_kind = "smiles"
+
+    if effective_kind == "smiles":
+        # Cartridge's mol_from_smiles handles aromaticity perception on
+        # both sides, no Python-side normalization needed.
+        bound_query = query_text
+        if generalized:
+            sql = (
+                "mol_from_smiles(smiles) @>> "
+                "mol_to_xqmol(mol_from_smiles(CAST(:q AS cstring)))"
+            )
+        else:
+            sql = "mol_from_smiles(smiles) @> mol_from_smiles(CAST(:q AS cstring))"
+    elif effective_kind == "smarts":
+        # Trust the chemist's pattern literally. Atom lists, "any bond"
+        # notation, and other SMARTS primitives would be silently
+        # collapsed by an SMILES roundtrip.
+        bound_query = query_text
         sql = "mol_from_smiles(smiles) @> qmol_from_smarts(CAST(:q AS cstring))"
-    return text(sql).bindparams(q=query_text)
+    else:
+        # Legacy untagged input (saved searches predating query_kind, or
+        # third-party API callers) without generalized. Defensive
+        # aromatization handles the dominant failure mode — Ketcher's
+        # Kekulé SMARTS export [#6]1-[#6]=[#6]-[#6]=[#6]-[#6]=1 returning
+        # zero hits against aromatic-perceived storage.
+        bound_query = aromatize_substructure_query(query_text)
+        sql = "mol_from_smiles(smiles) @> qmol_from_smarts(CAST(:q AS cstring))"
+    return text(sql).bindparams(q=bound_query)
 
 
 def _parse_metric(payload: dict[str, Any]) -> object:

@@ -122,3 +122,84 @@ class TestStructureClauseValidation:
             }]}},
         )
         assert r.status_code == 200, r.text
+
+
+class TestSubstructureQueryKindValidation:
+    """query_kind disambiguates how the cartridge interprets the query string."""
+
+    async def test_query_kind_smiles_accepts_smiles(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/api/v1/search/execute",
+            json={"query": {"criteria": [{
+                "type": "structure", "kind": "substructure",
+                "query_kind": "smiles", "smiles_or_smarts": "c1ccccc1",
+            }]}},
+        )
+        assert r.status_code == 200, r.text
+
+    async def test_query_kind_smiles_rejects_smarts_only(
+        self, client: AsyncClient
+    ) -> None:
+        """Atom-list SMARTS isn't valid SMILES — validator must reject."""
+        r = await client.post(
+            "/api/v1/search/execute",
+            json={"query": {"criteria": [{
+                "type": "structure", "kind": "substructure",
+                "query_kind": "smiles", "smiles_or_smarts": "[N,O]CC",
+            }]}},
+        )
+        assert r.status_code == 422
+
+    async def test_query_kind_smarts_accepts_atom_list(
+        self, client: AsyncClient
+    ) -> None:
+        r = await client.post(
+            "/api/v1/search/execute",
+            json={"query": {"criteria": [{
+                "type": "structure", "kind": "substructure",
+                "query_kind": "smarts", "smiles_or_smarts": "[N,O]CC",
+            }]}},
+        )
+        assert r.status_code == 200, r.text
+
+    async def test_generalized_with_smarts_kind_returns_422(
+        self, client: AsyncClient
+    ) -> None:
+        """Generalized matching needs a real `mol`; SMARTS+generalized is
+        rejected at the API edge so the chemist gets a clear signal."""
+        r = await client.post(
+            "/api/v1/search/execute",
+            json={"query": {"criteria": [{
+                "type": "structure", "kind": "substructure",
+                "query_kind": "smarts", "smiles_or_smarts": "[N,O]CC",
+                "generalized": True,
+            }]}},
+        )
+        assert r.status_code == 422
+
+    async def test_generalized_with_smiles_kind_accepted(
+        self, client: AsyncClient
+    ) -> None:
+        r = await client.post(
+            "/api/v1/search/execute",
+            json={"query": {"criteria": [{
+                "type": "structure", "kind": "substructure",
+                "query_kind": "smiles", "smiles_or_smarts": "c1ccccc1",
+                "generalized": True,
+            }]}},
+        )
+        assert r.status_code == 200, r.text
+
+    async def test_legacy_no_query_kind_still_works(
+        self, client: AsyncClient
+    ) -> None:
+        """Untagged criteria (saved searches predating query_kind) keep
+        validating against the either-parses rule."""
+        r = await client.post(
+            "/api/v1/search/execute",
+            json={"query": {"criteria": [{
+                "type": "structure", "kind": "substructure",
+                "smiles_or_smarts": "[#6]1-[#6]=[#6]-[#6]=[#6]-[#6]=1",
+            }]}},
+        )
+        assert r.status_code == 200, r.text
