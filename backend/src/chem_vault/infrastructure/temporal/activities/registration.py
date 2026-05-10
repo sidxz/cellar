@@ -7,6 +7,7 @@ invocation resolves fresh UoW + repos from the DI container.
 from __future__ import annotations
 
 import uuid
+from typing import Callable
 
 import structlog
 from returns.result import Failure
@@ -25,9 +26,11 @@ from chem_vault.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
     RegistrationOutcome,
 )
+from chem_vault.application.inventory.batch_policy import should_create_batch
 from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from chem_vault.domain.chemical_registration.enums import RegistrationAction
+from chem_vault.domain.workspace_config.repository import WorkspaceSettingsRepository
 from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
     SQLAlchemyDisclosureRequestRepository,
 )
@@ -42,6 +45,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_repository
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
     SQLAlchemySaltEntryRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+    SQLAlchemyWorkspaceSettingsRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.temporal.activities.dtos import (
@@ -63,11 +69,13 @@ class RegistrationActivities:
         dispatcher: EventDispatcher,
         structure_processor: StructureProcessorProtocol,
         side_effect_registry: MergeSideEffectRegistry,
+        settings_repo_factory: Callable[[AsyncUnitOfWork], WorkspaceSettingsRepository] = SQLAlchemyWorkspaceSettingsRepository,
     ) -> None:
         self._session_factory = session_factory
         self._dispatcher = dispatcher
         self._structure_processor = structure_processor
         self._side_effect_registry = side_effect_registry
+        self._settings_repo_factory = settings_repo_factory
 
     @activity.defn
     async def process_chunk(self, input: ChunkInput) -> ChunkOutput:
@@ -113,6 +121,21 @@ class RegistrationActivities:
         ws_id = uuid.UUID(input.workspace_id)
         org_id = uuid.UUID(input.originating_org_id)
         submitted_by = uuid.UUID(input.submitted_by)
+
+        # Read workspace settings once per chunk to determine batch creation policy.
+        ws_uow = AsyncUnitOfWork(session_factory)
+        ws_repo = self._settings_repo_factory(ws_uow)
+        async with ws_uow:
+            ws_settings = await ws_repo.find_by_workspace_id(ws_id)
+        workspace_default = ws_settings.create_batch_on_duplicate if ws_settings else False
+
+        # Collapse chunk-level override: if the caller specified a value on
+        # ChunkInput, use that; otherwise fall back to the workspace setting.
+        effective_policy_default = (
+            input.create_batch_on_duplicate
+            if input.create_batch_on_duplicate is not None
+            else workspace_default
+        )
 
         output = ChunkOutput()
 
@@ -167,18 +190,28 @@ class RegistrationActivities:
 
             # Skip batch for merge candidates and conflicts — those molecules
             # haven't been finalized yet, so creating a batch would be premature.
+            # Also skip batch for duplicate registrations when policy says so.
             batch_id: uuid.UUID | None = None
             batch_number: str | None = None
             salt_matched = False
+            batch_skipped = False
             if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
-                batch_id, batch_number, salt_matched = await _create_batch(
-                    item=item,
-                    reg_outcome=outcome,
-                    workspace_id=ws_id,
-                    submitted_by=submitted_by,
-                    session_factory=session_factory,
-                    dispatcher=dispatcher,
+                create_batch_now = should_create_batch(
+                    is_new_molecule=outcome.is_new,
+                    override=None,  # workflow-level decision already collapsed into effective_policy_default
+                    workspace_default=effective_policy_default,
                 )
+                if create_batch_now:
+                    batch_id, batch_number, salt_matched = await _create_batch(
+                        item=item,
+                        reg_outcome=outcome,
+                        workspace_id=ws_id,
+                        submitted_by=submitted_by,
+                        session_factory=session_factory,
+                        dispatcher=dispatcher,
+                    )
+                else:
+                    batch_skipped = True
 
             output.results.append(
                 ChunkItemResult(
@@ -190,6 +223,7 @@ class RegistrationActivities:
                     batch_id=str(batch_id) if batch_id else None,
                     batch_number=batch_number,
                     salt_matched=salt_matched,
+                    batch_skipped=batch_skipped,
                     needs_merge_confirmation=outcome.needs_merge_confirmation,
                     matched_molecule_id=str(outcome.matched_molecule_id) if outcome.matched_molecule_id else None,
                     disclosure_id=str(outcome.disclosure_id) if outcome.disclosure_id else None,
