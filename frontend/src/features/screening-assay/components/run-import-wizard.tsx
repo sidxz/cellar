@@ -880,7 +880,7 @@ function PreviewStep({
 
       {preview.unmatched_batches.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-amber-300">
+          <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
             <AlertCircle className="h-4 w-4" />
             {preview.unmatched_batches.length} unmatched batch ref(s)
           </div>
@@ -897,7 +897,7 @@ function PreviewStep({
 
       {preview.unmatched_compound_refs.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-amber-300">
+          <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
             <AlertCircle className="h-4 w-4" />
             {preview.unmatched_compound_refs.length} unmatched compound ref(s)
           </div>
@@ -976,7 +976,7 @@ function DisambiguatePanel({
 
   return (
     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-      <div className="mb-2 flex items-center justify-between gap-2 font-medium text-amber-300">
+      <div className="mb-2 flex items-center justify-between gap-2 font-medium text-amber-700 dark:text-amber-300">
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4" />
           Disambiguate compounds ({resolvedCount} / {ambiguous.length} picked)
@@ -1059,7 +1059,7 @@ function ConflictPanel({
   const SAMPLE = 10;
   return (
     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-      <div className="mb-2 flex items-center gap-2 font-medium text-amber-300">
+      <div className="mb-2 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
         <AlertCircle className="h-4 w-4" />
         Will skip: {wells.length} well metadata mismatch
         {wells.length === 1 ? "" : "es"}, {readouts.length} readout cell
@@ -1071,7 +1071,7 @@ function ConflictPanel({
       </p>
       {wells.length > 0 && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-xs font-medium text-amber-200/90">
+          <summary className="cursor-pointer text-xs font-medium text-amber-700 dark:text-amber-200/90">
             Well metadata conflicts ({wells.length})
           </summary>
           <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
@@ -1091,7 +1091,7 @@ function ConflictPanel({
       )}
       {readouts.length > 0 && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-xs font-medium text-amber-200/90">
+          <summary className="cursor-pointer text-xs font-medium text-amber-700 dark:text-amber-200/90">
             Readout cells already populated ({readouts.length})
           </summary>
           <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
@@ -1199,7 +1199,7 @@ function ConfirmStep({
             </p>
           )}
           {result.attachment_warning && (
-            <p className="mt-1 text-xs text-amber-300/90">
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/90">
               File attachment failed: {result.attachment_warning}
             </p>
           )}
@@ -1208,7 +1208,7 @@ function ConfirmStep({
 
       {result.compute_warning && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-amber-300">
+          <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
             <AlertCircle className="h-4 w-4" />
             Post-import calculation failed
           </div>
