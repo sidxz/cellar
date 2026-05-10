@@ -957,11 +957,39 @@ function DisambiguatePanel({
   onPick: (moleculeId: string, batchId: string) => void;
 }) {
   const resolvedCount = ambiguous.filter((a) => picks[a.molecule_id]).length;
+  const allPicked = resolvedCount === ambiguous.length;
+
+  // Convenience: fills unpicked rows with each compound's most-recently
+  // created batch. Existing picks are left alone — chemist's deliberate
+  // choices win over auto-fill. Defensive sort in case the BE ever
+  // returns batch_options in a different order.
+  const handleAutoPickLatest = () => {
+    for (const a of ambiguous) {
+      if (picks[a.molecule_id]) continue;
+      if (a.batch_options.length === 0) continue;
+      const latest = [...a.batch_options].sort((x, y) =>
+        y.created_at.localeCompare(x.created_at),
+      )[0];
+      onPick(a.molecule_id, latest.batch_id);
+    }
+  };
+
   return (
     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-      <div className="mb-2 flex items-center gap-2 font-medium text-amber-300">
-        <AlertCircle className="h-4 w-4" />
-        Disambiguate compounds ({resolvedCount} / {ambiguous.length} picked)
+      <div className="mb-2 flex items-center justify-between gap-2 font-medium text-amber-300">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          Disambiguate compounds ({resolvedCount} / {ambiguous.length} picked)
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAutoPickLatest}
+          disabled={allPicked}
+          title="Picks the most recently created batch for every compound that hasn't been picked yet"
+        >
+          Auto-pick latest
+        </Button>
       </div>
       <p className="text-xs text-muted-foreground">
         These compounds have multiple registered batches. Pick the lot that
