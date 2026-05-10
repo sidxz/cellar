@@ -63,3 +63,23 @@ class TestWorkspaceSettingsUpdate:
         )
         settings.update(audit_retention_days=None)
         assert settings.audit_retention_days is None
+
+
+class TestCreateBatchOnDuplicate:
+    def test_defaults_to_false_when_key_missing(self) -> None:
+        ws = WorkspaceSettings.create_default(workspace_id=uuid.uuid4())
+        assert ws.create_batch_on_duplicate is False
+
+    def test_reads_from_registration_rules(self) -> None:
+        ws = WorkspaceSettings(
+            id=uuid.uuid4(),
+            registration_rules={"create_batch_on_duplicate": True},
+        )
+        assert ws.create_batch_on_duplicate is True
+
+    def test_falsey_when_explicitly_false(self) -> None:
+        ws = WorkspaceSettings(
+            id=uuid.uuid4(),
+            registration_rules={"create_batch_on_duplicate": False, "foo": True},
+        )
+        assert ws.create_batch_on_duplicate is False

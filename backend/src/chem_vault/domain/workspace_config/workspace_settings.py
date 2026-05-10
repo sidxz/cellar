@@ -52,6 +52,15 @@ class WorkspaceSettings(AggregateRoot):
         """Alias — the id IS the workspace_id."""
         return self.id
 
+    @property
+    def create_batch_on_duplicate(self) -> bool:
+        """Whether re-registering an existing compound also creates a new batch.
+
+        Default ``False`` — re-registration merges identifiers but does not
+        create a new batch unless the caller explicitly opts in.
+        """
+        return bool(self.registration_rules.get("create_batch_on_duplicate", False))
+
     @classmethod
     def create_default(cls, *, workspace_id: uuid.UUID) -> WorkspaceSettings:
         """Factory for a new workspace with all default settings."""
