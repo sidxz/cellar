@@ -92,45 +92,6 @@ def _make_settings_repo_factory(*, create_batch_on_duplicate: bool) -> MagicMock
     return factory
 
 
-async def _run_process_chunk(
-    activity_instance: RegistrationActivities,
-    chunk_input: ChunkInput,
-    *,
-    outcome: MagicMock,
-) -> object:
-    """Invoke process_chunk with RegisterMolecule mocked to return the given outcome."""
-    with patch.object(
-        registration_module,
-        "RegisterMolecule",
-        return_value=AsyncMock(return_value=Success(outcome)),
-    ):
-        with patch.object(
-            registration_module,
-            "DisclosureService",
-            return_value=MagicMock(),
-        ):
-            with patch.object(
-                registration_module,
-                "MergeService",
-                return_value=MagicMock(),
-            ):
-                with patch("chem_vault.infrastructure.temporal.activities.registration.AsyncUnitOfWork") as mock_uow_cls:
-                    # Make all UoW instances work as async context managers
-                    mock_uow = AsyncMock()
-                    mock_uow.__aenter__ = AsyncMock(return_value=mock_uow)
-                    mock_uow.__aexit__ = AsyncMock(return_value=False)
-                    mock_uow_cls.return_value = mock_uow
-
-                    # Re-wire the settings repo factory to use our mock directly
-                    # since AsyncUnitOfWork is now mocked
-                    activity_instance._settings_repo_factory = MagicMock(
-                        return_value=_make_ws_repo(
-                            create_batch_on_duplicate=activity_instance._settings_repo_factory._batch_default
-                        )
-                    )
-                    return await activity_instance.process_chunk(chunk_input)
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
