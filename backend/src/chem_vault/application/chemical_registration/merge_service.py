@@ -93,6 +93,7 @@ class MergeService:
         async with self._uow:
             result = await self._execute_merge(input)
             if isinstance(result, Failure):
+                await self._uow.rollback()
                 return result
             events = await self._uow.commit()
 

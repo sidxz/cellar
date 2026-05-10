@@ -8,7 +8,7 @@ from datetime import date
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.screening.protocol_stats_reader import (
     ProtocolStatsReader,
 )
@@ -66,6 +66,7 @@ class GetProtocolStats:
         input: GetProtocolStatsQuery,
         auth: AuthContext | None = None,
     ) -> Result[ProtocolStats, DomainError]:
+        require_workspace_role(auth, "viewer")
         ws = input.workspace_id
         pid = input.protocol_id
 

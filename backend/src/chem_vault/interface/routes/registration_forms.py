@@ -84,7 +84,7 @@ async def list_registration_forms(
         workspace_id=auth.workspace_id,
         applies_to=applies_to,
     )
-    forms = result_to_response(await use_case(query))
+    forms = result_to_response(await use_case(query, auth=auth))
     return [RegistrationFormResponse.from_domain(f) for f in forms]
 
 
@@ -95,7 +95,7 @@ async def get_registration_form(
     use_case: GetRegistrationFormDep,
 ) -> RegistrationFormResponse:
     query = GetRegistrationFormQuery(workspace_id=auth.workspace_id, form_id=form_id)
-    form = result_to_response(await use_case(query))
+    form = result_to_response(await use_case(query, auth=auth))
     return RegistrationFormResponse.from_domain(form)
 
 

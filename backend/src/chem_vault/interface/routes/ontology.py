@@ -131,7 +131,7 @@ async def search_ontology(
         ontology_sources=sources,
         subtree_root_id=subtree_root_id,
     )
-    terms = result_to_response(await use_case(query))
+    terms = result_to_response(await use_case(query, auth=auth))
     return [OntologyTermResponse.from_domain(t) for t in terms]
 
 
@@ -164,7 +164,7 @@ async def list_ontology_slots(
     use_case: ListOntologySlotsDep,
 ) -> list[OntologySlotResponse]:
     query = ListOntologySlotsQuery(workspace_id=auth.workspace_id)
-    slots = result_to_response(await use_case(query))
+    slots = result_to_response(await use_case(query, auth=auth))
     return [OntologySlotResponse.from_domain(s) for s in slots]
 
 

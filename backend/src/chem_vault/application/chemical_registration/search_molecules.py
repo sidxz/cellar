@@ -8,6 +8,7 @@ from enum import StrEnum
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.chemical_registration.molecule_reader import MoleculeReader
 from chem_vault.application.chemical_registration.protocols import ProcessedStructureDTO, StructureProcessorProtocol
 from chem_vault.application.shared.query import Query
@@ -74,8 +75,9 @@ class SearchMolecules:
         self._structure_processor = structure_processor
 
     async def __call__(
-        self, input: SearchMoleculesQuery
+        self, input: SearchMoleculesQuery, auth: AuthContext | None = None
     ) -> Result[SearchResults, DomainError]:
+        require_workspace_role(auth, "viewer")
         try:
             search_type = SearchType(input.search_type)
         except ValueError:

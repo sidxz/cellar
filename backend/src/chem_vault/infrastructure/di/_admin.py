@@ -34,14 +34,16 @@ def _build_admin_repo_map(uow) -> dict:
 
 
 def register_admin(container: Container) -> None:
-    container.define(
-        AdminHardDelete,
-        lambda c: AdminHardDelete(
-            uow=AsyncUnitOfWork(c[async_sessionmaker]),
+    def _admin_hard_delete(c: Container) -> AdminHardDelete:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AdminHardDelete(
+            uow=uow,
             audit=c[AuditRecordingService],
             repos=_build_admin_repo_map,  # factory: (uow) -> repo map
-        ),
-    )
+            cascade_service=UoWBackedCascadeService(uow),
+        )
+
+    container.define(AdminHardDelete, _admin_hard_delete)
 
     def _cascade_preview(c: Container) -> CascadePreview:
         # Use a single UoW instance so the cascade service reads the same session.

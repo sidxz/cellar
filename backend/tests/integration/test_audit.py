@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from chem_vault.domain.audit_compliance.enums import (
     ActorType,
@@ -26,8 +26,12 @@ from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository imp
 
 
 @pytest.fixture
-def audit_repo(db_session: AsyncSession) -> SQLAlchemyAuditRepository:
-    return SQLAlchemyAuditRepository(db_session)
+def audit_repo(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> SQLAlchemyAuditRepository:
+    # The repo manages its own session lifecycle (audit writes commit
+    # independently of business UoWs), so it takes a sessionmaker, not a session.
+    return SQLAlchemyAuditRepository(session_factory)
 
 
 def _make_operation(
@@ -68,7 +72,7 @@ class TestAuditRepositoryIntegration:
         await audit_repo.save(op)
         await db_session.flush()
 
-        loaded = await audit_repo.find_by_id(op.id)
+        loaded = await audit_repo._find_by_id_unscoped(op.id)
         assert loaded is not None
         assert loaded.id == op.id
         assert loaded.operation_type == OperationType.REGISTRATION
@@ -89,7 +93,7 @@ class TestAuditRepositoryIntegration:
         await audit_repo.save(op)
         await db_session.flush()
 
-        loaded = await audit_repo.find_by_id(op.id)
+        loaded = await audit_repo._find_by_id_unscoped(op.id)
         assert loaded is not None
         assert loaded.signature is not None
         assert loaded.signature.auth_method == AuthMethod.MFA
@@ -118,7 +122,7 @@ class TestAuditRepositoryIntegration:
     async def test_find_by_id_not_found(
         self, audit_repo: SQLAlchemyAuditRepository
     ) -> None:
-        result = await audit_repo.find_by_id(uuid.uuid4())
+        result = await audit_repo._find_by_id_unscoped(uuid.uuid4())
         assert result is None
 
     async def test_multiple_entries(
@@ -146,7 +150,7 @@ class TestAuditRepositoryIntegration:
         await audit_repo.save(op)
         await db_session.flush()
 
-        loaded = await audit_repo.find_by_id(op.id)
+        loaded = await audit_repo._find_by_id_unscoped(op.id)
         assert loaded is not None
         assert len(loaded.entries) == 5
 

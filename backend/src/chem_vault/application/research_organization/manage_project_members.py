@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor, require_project_role
+from chem_vault.application.auth import AuthContext, require_editor, require_project_role, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -274,6 +274,7 @@ class ListProjectMembers:
     async def __call__(
         self, input: ListProjectMembersQuery, auth: AuthContext | None = None
     ) -> Result[list[ProjectMember], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             project = await self._project_repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:

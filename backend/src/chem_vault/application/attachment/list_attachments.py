@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.attachment.attachment import Attachment
@@ -31,6 +31,7 @@ class ListAttachments:
     async def __call__(
         self, input: ListAttachmentsQuery, auth: AuthContext | None = None
     ) -> Result[list[Attachment], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             attachments = await self._repo.find_by_entity(
                 input.workspace_id, input.attachable_type, input.attachable_id

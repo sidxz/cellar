@@ -70,7 +70,7 @@ class SQLAlchemyMergeEventRepository:
     # Queries
     # ------------------------------------------------------------------
 
-    async def find_by_id(self, id: uuid.UUID) -> MergeEvent | None:
+    async def _find_by_id_unscoped(self, id: uuid.UUID) -> MergeEvent | None:
         model = await self._session.get(MergeEventModel, id)
         if model is None:
             return None

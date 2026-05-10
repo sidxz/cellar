@@ -11,6 +11,8 @@ DomainError
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class DomainError(Exception):
     """Base domain error. All domain failures derive from this."""
@@ -19,6 +21,14 @@ class DomainError(Exception):
         self.message = message
         self.detail = detail
         super().__init__(message)
+
+    def body_extras(self) -> dict[str, Any]:
+        """Optional override hook for subclasses that need extra JSON fields.
+
+        Returned keys are merged into the HTTP error body. Used by errors that
+        carry structured payloads (e.g. blocker lists for cascade-restrict).
+        """
+        return {}
 
 
 class NotFoundError(DomainError):
@@ -72,3 +82,12 @@ class AuthorizationError(DomainError):
 
 class DataLockedError(DomainError):
     """Raised when attempting to modify a locked entity (e.g., locked Run data)."""
+
+
+class ServiceUnavailableError(DomainError):
+    """Raised when an external service required by the operation is unreachable.
+
+    Maps to HTTP 503. Use sparingly — most failures should be domain-specific
+    errors (NotFound, Conflict, etc.); this is for genuine "the dependency
+    isn't there right now" situations such as a missing workflow engine.
+    """

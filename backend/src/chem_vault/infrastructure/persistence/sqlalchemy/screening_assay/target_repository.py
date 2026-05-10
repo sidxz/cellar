@@ -23,7 +23,7 @@ class SQLAlchemyTargetRepository:
     def __init__(self, uow: AsyncUnitOfWork) -> None:
         self._uow = uow
 
-    async def find_by_id(self, id: uuid.UUID) -> Target | None:
+    async def _find_by_id_unscoped(self, id: uuid.UUID) -> Target | None:
         model = await self._uow.session.get(TargetModel, id)
         return self._to_domain(model) if model else None
 

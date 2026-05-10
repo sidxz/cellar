@@ -42,7 +42,7 @@ class UpdatePreferencesBody(BaseModel):
 @router.get("/preferences", response_model=PreferencesResponse)
 async def get_preferences(auth: AuthDep, use_case: GetPreferencesDep) -> PreferencesResponse:
     query = GetPreferencesQuery(workspace_id=auth.workspace_id, user_id=auth.user_id)
-    prefs = result_to_response(await use_case(query))
+    prefs = result_to_response(await use_case(query, auth=auth))
     return PreferencesResponse.from_domain(prefs)
 
 
@@ -64,7 +64,7 @@ async def update_preferences(
         sidebar_collapsed=body.sidebar_collapsed,
         default_search_columns=dsc,
     )
-    prefs = result_to_response(await use_case(command))
+    prefs = result_to_response(await use_case(command, auth=auth))
     return PreferencesResponse.from_domain(prefs)
 
 

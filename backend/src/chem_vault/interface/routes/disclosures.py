@@ -150,7 +150,7 @@ async def list_disclosures(
     query = ListDisclosuresByWorkspaceQuery(
         workspace_id=auth.workspace_id, status=status
     )
-    disclosures = result_to_response(await use_case(query))
+    disclosures = result_to_response(await use_case(query, auth=auth))
     return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
 
 
@@ -161,7 +161,7 @@ async def get_disclosure(
     use_case: GetDisclosureDep,
 ) -> DisclosureRequestResponse:
     query = GetDisclosureQuery(workspace_id=auth.workspace_id, disclosure_id=disclosure_id)
-    dr = result_to_response(await use_case(query))
+    dr = result_to_response(await use_case(query, auth=auth))
     return DisclosureRequestResponse.from_domain(dr)
 
 
@@ -175,7 +175,7 @@ async def list_disclosures_for_molecule(
     use_case: ListDisclosuresDep,
 ) -> list[DisclosureRequestResponse]:
     query = ListDisclosuresQuery(workspace_id=auth.workspace_id, molecule_id=molecule_id)
-    disclosures = result_to_response(await use_case(query))
+    disclosures = result_to_response(await use_case(query, auth=auth))
     return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
 
 

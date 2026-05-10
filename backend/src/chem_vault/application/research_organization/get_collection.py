@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.research_organization.collection import Collection
@@ -26,8 +27,9 @@ class GetCollection:
         self._repo = repo
 
     async def __call__(
-        self, input: GetCollectionQuery
+        self, input: GetCollectionQuery, auth: AuthContext | None = None
     ) -> Result[Collection, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             collection = await self._repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
             if collection is None:
@@ -50,8 +52,9 @@ class ListCollections:
         self._repo = repo
 
     async def __call__(
-        self, input: ListCollectionsQuery
+        self, input: ListCollectionsQuery, auth: AuthContext | None = None
     ) -> Result[list[Collection], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             collections = await self._repo.find_by_workspace(
                 input.workspace_id,

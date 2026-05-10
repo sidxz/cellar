@@ -34,6 +34,7 @@ class BatchResponse(BaseModel):
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
     batch_number: str
+    version: int
     salt_entry_id: uuid.UUID | None = None
     salt_name: str | None = None
     salt_smiles: str | None = None
@@ -58,6 +59,7 @@ class BatchResponse(BaseModel):
             workspace_id=b.workspace_id,
             molecule_id=b.molecule_id,
             batch_number=b.batch_number.value,
+            version=b.version,
             salt_entry_id=b.salt_entry_id,
             salt_name=b.salt_name,
             salt_smiles=b.salt_smiles,

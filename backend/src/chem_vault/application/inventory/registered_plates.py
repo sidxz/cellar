@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -184,6 +184,7 @@ class GetPlate:
     async def __call__(
         self, input: GetPlateQuery, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.plate_id
@@ -203,6 +204,7 @@ class ListPlates:
     async def __call__(
         self, input: ListPlatesQuery, auth: AuthContext | None = None
     ) -> Result[list[RegisteredPlate], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             plates = await self._repo.search(
                 input.workspace_id,
@@ -455,6 +457,7 @@ class ListChildren:
     async def __call__(
         self, input: ListChildrenQuery, auth: AuthContext | None = None
     ) -> Result[list[RegisteredPlate], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             children = await self._repo.find_children(input.workspace_id, input.parent_plate_id)
             return Success(children)

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.domain.audit_compliance.models import AuditOperation
 from chem_vault.domain.audit_compliance.repository import AuditRepository
@@ -34,8 +35,9 @@ class ListAuditOperations:
         self._repo = repo
 
     async def __call__(
-        self, input: ListAuditOperationsQuery
+        self, input: ListAuditOperationsQuery, auth: AuthContext | None = None
     ) -> Result[list[AuditOperation], DomainError]:
+        require_workspace_role(auth, "viewer")
         operations = await self._repo.find_all(
             input.workspace_id,
             entity_type=input.entity_type,
@@ -59,8 +61,9 @@ class GetAuditOperation:
         self._repo = repo
 
     async def __call__(
-        self, input: GetAuditOperationQuery
+        self, input: GetAuditOperationQuery, auth: AuthContext | None = None
     ) -> Result[AuditOperation, DomainError]:
+        require_workspace_role(auth, "viewer")
         operation = await self._repo.find_by_id_in_workspace(input.workspace_id, input.operation_id)
         if operation is None:
             return Failure(

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.research_organization.collection import Collection
@@ -26,8 +27,9 @@ class ListCollectionsForMolecule:
         self._repo = repo
 
     async def __call__(
-        self, input: ListCollectionsForMoleculeQuery
+        self, input: ListCollectionsForMoleculeQuery, auth: AuthContext | None = None
     ) -> Result[list[Collection], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             collections = await self._repo.find_collections_containing(
                 input.workspace_id, input.molecule_id

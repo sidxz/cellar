@@ -53,7 +53,7 @@ class DeleteVocabulary:
                 )
 
             # Guard: vocabulary must not be referenced by custom field definitions
-            settings = await self._settings_repo.find_by_workspace(input.workspace_id)
+            settings = await self._settings_repo.find_by_workspace_id(input.workspace_id)
             if settings and settings.custom_field_definitions:
                 for field_def in settings.custom_field_definitions:
                     if isinstance(field_def, dict) and field_def.get("vocabulary_name") == vocab.name:

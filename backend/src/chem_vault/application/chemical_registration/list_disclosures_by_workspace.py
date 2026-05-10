@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
@@ -30,8 +31,9 @@ class ListDisclosuresByWorkspace:
         self._disclosure_repo = disclosure_repo
 
     async def __call__(
-        self, input: ListDisclosuresByWorkspaceQuery
+        self, input: ListDisclosuresByWorkspaceQuery, auth: AuthContext | None = None
     ) -> Result[list[DisclosureRequest], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             disclosures = await self._disclosure_repo.find_by_workspace(
                 input.workspace_id, status=input.status

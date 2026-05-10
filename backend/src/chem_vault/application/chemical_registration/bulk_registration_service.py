@@ -6,10 +6,10 @@ workflow in S49 for production-grade async execution with progress tracking.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 
-import structlog
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
@@ -40,7 +40,7 @@ from chem_vault.domain.chemical_registration.repository import (
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.errors import DomainError, ValidationError
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

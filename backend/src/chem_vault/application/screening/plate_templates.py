@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -178,8 +178,9 @@ class GetPlateTemplate:
         self._repo = repo
 
     async def __call__(
-        self, input: GetPlateTemplateQuery
+        self, input: GetPlateTemplateQuery, auth: AuthContext | None = None
     ) -> Result[PlateTemplate, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             template = await self._repo.find_by_id_in_workspace(input.workspace_id, input.template_id)
             if template is None:
@@ -193,8 +194,9 @@ class ListPlateTemplates:
         self._repo = repo
 
     async def __call__(
-        self, input: ListPlateTemplatesQuery
+        self, input: ListPlateTemplatesQuery, auth: AuthContext | None = None
     ) -> Result[list[PlateTemplate], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             templates = await self._repo.find_by_workspace(input.workspace_id)
             return Success(templates)

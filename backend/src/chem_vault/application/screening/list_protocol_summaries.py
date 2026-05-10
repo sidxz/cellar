@@ -13,7 +13,7 @@ from datetime import date
 
 from returns.result import Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.repository import (
@@ -65,6 +65,7 @@ class ListProtocolSummaries:
         input: ListProtocolSummariesQuery,
         auth: AuthContext | None = None,
     ) -> Result[list[ProtocolSummary], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             protocols = await self._protocol_repo.find_by_workspace(input.workspace_id)
             targets = await self._target_repo.find_by_workspace(input.workspace_id)

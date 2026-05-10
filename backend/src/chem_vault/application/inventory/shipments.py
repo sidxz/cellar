@@ -8,7 +8,7 @@ from datetime import date
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -196,6 +196,7 @@ class GetShipment:
     async def __call__(
         self, input: GetShipmentQuery, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.shipment_id
@@ -213,6 +214,7 @@ class ListShipments:
     async def __call__(
         self, input: ListShipmentsQuery, auth: AuthContext | None = None
     ) -> Result[list[Shipment], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             shipments = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status

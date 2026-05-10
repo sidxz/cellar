@@ -121,7 +121,11 @@ class FakeMoleculeReader:
         self._repo = repo
 
     async def search_substructure(
-        self, workspace_id: uuid.UUID, smarts: str
+        self,
+        workspace_id: uuid.UUID,
+        query: str,
+        *,
+        kind: str | None = None,
     ) -> list[Molecule]:
         # Simplified fake: return all molecules in workspace
         return [m for m in self._repo._store.values() if m.workspace_id == workspace_id]

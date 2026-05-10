@@ -22,7 +22,7 @@ from chem_vault.domain.shared.errors import ConflictError, DomainError, NotFound
 class UpdateProjectCommand(Command):
     workspace_id: uuid.UUID
     project_id: uuid.UUID
-    name: str | None = None
+    name: str | object = UNSET
     description: str | None | object = UNSET
 
 
@@ -47,8 +47,8 @@ class UpdateProject:
             if project is None:
                 return Failure(NotFoundError("Project", str(input.project_id)))
 
-            # Name uniqueness check
-            if input.name is not None:
+            # Name uniqueness check (only when caller actually provided a name)
+            if input.name is not UNSET and input.name is not None:
                 existing = await self._repo.find_by_name(
                     input.workspace_id, input.name.strip()
                 )
@@ -57,9 +57,11 @@ class UpdateProject:
                         ConflictError(f"Project '{input.name.strip()}' already exists")
                     )
 
-            # Build kwargs — only include fields that were provided
+            # Build kwargs — only include fields that were provided.
+            # UNSET = field omitted; an explicit null on a required field
+            # propagates to domain validation and surfaces as 422.
             fields: dict[str, Any] = {}
-            if input.name is not None:
+            if input.name is not UNSET:
                 fields["name"] = input.name
             if input.description is not UNSET:
                 fields["description"] = input.description

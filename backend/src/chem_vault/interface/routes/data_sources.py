@@ -125,7 +125,7 @@ async def list_data_sources(
     use_case: ListDataSourcesDep,
 ) -> list[DataSourceResponse]:
     query = ListDataSourcesQuery(workspace_id=auth.workspace_id)
-    sources = result_to_response(await use_case(query))
+    sources = result_to_response(await use_case(query, auth=auth))
     return [DataSourceResponse.from_domain(ds) for ds in sources]
 
 
@@ -163,7 +163,7 @@ async def get_data_source(
         workspace_id=auth.workspace_id,
         data_source_id=data_source_id,
     )
-    ds = result_to_response(await use_case(query))
+    ds = result_to_response(await use_case(query, auth=auth))
     return DataSourceResponse.from_domain(ds)
 
 

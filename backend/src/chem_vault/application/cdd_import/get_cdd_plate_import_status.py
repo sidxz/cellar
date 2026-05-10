@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import CddPlateImportRepository
@@ -49,6 +49,7 @@ class GetCddPlateImportStatusFromDb:
         input: GetCddPlateImportStatusQuery,
         auth: AuthContext | None = None,
     ) -> Result[CddPlateImportStatusResult, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             imp = await self._repo.find_by_workflow_id_in_workspace(
                 input.workspace_id, input.workflow_id

@@ -86,7 +86,7 @@ async def list_api_keys(
     use_case: ListExternalApiKeysDep,
 ) -> list[ExternalApiKeyResponse]:
     query = ListExternalApiKeysQuery(workspace_id=auth.workspace_id)
-    entries = result_to_response(await use_case(query))
+    entries = result_to_response(await use_case(query, auth=auth))
     return [ExternalApiKeyResponse.from_domain(e) for e in entries]
 
 

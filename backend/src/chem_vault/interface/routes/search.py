@@ -7,13 +7,11 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
-from rdkit import Chem
 
 from chem_vault.application.research_organization.count_search import CountSearchQuery
 from chem_vault.application.research_organization.execute_search import ExecuteSearchQuery
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.sar_analysis.search_modes import SearchMode
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from chem_vault.interface.dependencies import AuthDep, CountSearchDep, ExecuteSearchDep
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import clamp_limit, parse_cursor
@@ -21,7 +19,11 @@ from chem_vault.interface.routes.molecules import MoleculeResponse
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
 
-_registry = FingerprintRegistry.default()
+# RDKit / fingerprint-registry semantic checks are intentionally NOT performed
+# here. Pydantic validators below cover only structural shape (discriminator,
+# required fields, basic conflicts). Substantive validation — SMILES/SMARTS
+# parseability, fingerprint algorithm existence — is the application layer's
+# job and surfaces as a ValidationError → 422 from the use case.
 
 
 # ---------------------------------------------------------------------------
@@ -54,8 +56,6 @@ class _ExactMatch(BaseModel):
         # Allow either smiles OR inchi_key. The composer accepts inchi_key path.
         if self.smiles is None and self.inchi_key is None:
             raise ValueError("exact match requires smiles or inchi_key")
-        if self.smiles is not None and Chem.MolFromSmiles(self.smiles) is None:
-            raise ValueError("smiles failed RDKit parse")
         return self
 
 
@@ -74,16 +74,6 @@ class _SubstructureMatch(BaseModel):
         text_value = self.smiles_or_smarts or self.smarts
         if not text_value:
             raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
-        if self.query_kind == "smiles":
-            if Chem.MolFromSmiles(text_value) is None:
-                raise ValueError("query_kind=smiles requires SMILES-parseable input")
-        elif self.query_kind == "smarts":
-            if Chem.MolFromSmarts(text_value) is None:
-                raise ValueError("query_kind=smarts requires SMARTS-parseable input")
-        else:
-            if (Chem.MolFromSmiles(text_value) is None
-                    and Chem.MolFromSmarts(text_value) is None):
-                raise ValueError("smiles_or_smarts failed RDKit parse")
         if self.generalized and self.query_kind == "smarts":
             # The cartridge's mol_to_xqmol path requires a real `mol`,
             # not a `qmol`. Generalized + SMARTS would silently match
@@ -105,20 +95,12 @@ class _SimilarityMatch(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> "_SimilarityMatch":
-        if Chem.MolFromSmiles(self.smiles) is None:
-            raise ValueError("smiles failed RDKit parse")
         # Power-user override: if `algorithm` is set without `mode`,
         # `metric` and `threshold` must also be set explicitly.
         if (self.mode is None and self.algorithm is not None
                 and (self.metric is None or self.threshold is None)):
             raise ValueError(
                 "explicit algorithm requires metric + threshold (or use mode)"
-            )
-        # Legacy shape (just smiles + optional threshold) is accepted; the
-        # composer falls back to morgan + tanimoto + supplied/default threshold.
-        if self.algorithm is not None and self.algorithm not in _registry.names():
-            raise ValueError(
-                f"unknown algorithm: {self.algorithm!r}; valid: {sorted(_registry.names())}"
             )
         return self
 

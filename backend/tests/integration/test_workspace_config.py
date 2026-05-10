@@ -263,7 +263,7 @@ class TestControlledVocabularyRepository:
 
         async with uow:
             repo = SQLAlchemyControlledVocabularyRepository(uow)
-            await repo.delete(vocab.id)
+            await repo.delete(ws_id, vocab.id)
             await uow.commit()
 
         async with uow:

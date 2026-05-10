@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -168,6 +168,7 @@ class GetSampleRequest:
     async def __call__(
         self, input: GetSampleRequestQuery, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -185,6 +186,7 @@ class ListSampleRequests:
     async def __call__(
         self, input: ListSampleRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SampleRequest], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             requests = await self._repo.find_by_workspace(
                 input.workspace_id, status=input.status

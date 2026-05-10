@@ -8,31 +8,20 @@ from __future__ import annotations
 
 import uuid
 
-import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
-from returns.result import Failure, Success
 
-log = structlog.get_logger(__name__)
-
-from chem_vault.application.admin.admin_hard_delete import (
-    AdminHardDeleteCommand,
-    BlockedByDependenciesError,
-)
+from chem_vault.application.admin.admin_hard_delete import AdminHardDeleteCommand
 from chem_vault.application.admin.cascade_preview import CascadePreviewQuery
 from chem_vault.application.admin.cascade_delete import CascadeDeleteCommand
 from chem_vault.domain.shared.cascade import CascadeNode
-from chem_vault.domain.shared.errors import (
-    AuthorizationError,
-    NotFoundError,
-    ValidationError,
-)
 from chem_vault.interface.dependencies import (
     AdminHardDeleteDep,
     AuthDep,
     CascadePreviewDep,
     CascadeDeleteDep,
 )
+from chem_vault.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -78,37 +67,8 @@ async def admin_hard_delete(
         reason=body.reason,
     )
     result = await use_case(cmd, auth=auth)
-
-    if isinstance(result, Success):
-        return None
-
-    err = result.failure()
-    if isinstance(err, BlockedByDependenciesError):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "delete_blocked_by_dependencies",
-                "blockers": [
-                    {
-                        "table": r.table,
-                        "entity_type": r.entity_type,
-                        "fk_column": r.fk_column,
-                        "count": r.count,
-                        "samples": r.samples,
-                        "truncated": r.truncated,
-                    }
-                    for r in err.blockers
-                ],
-            },
-        )
-    if isinstance(err, AuthorizationError):
-        raise HTTPException(status_code=403, detail=str(err))
-    if isinstance(err, NotFoundError):
-        raise HTTPException(status_code=404, detail=str(err))
-    if isinstance(err, ValidationError):
-        raise HTTPException(status_code=422, detail=str(err))
-    log.error("admin_delete.unexpected_error", entity_type=entity_type, entity_id=str(entity_id), error=str(err))
-    raise HTTPException(status_code=500, detail="Internal server error")
+    result_to_response(result)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -161,15 +121,8 @@ async def cascade_preview(
         ),
         auth=auth,
     )
-    if isinstance(res, Success):
-        return CascadeNodeResponse.from_domain(res.unwrap())
-    err = res.failure()
-    if isinstance(err, AuthorizationError):
-        raise HTTPException(status_code=403, detail=str(err))
-    if isinstance(err, NotFoundError):
-        raise HTTPException(status_code=404, detail=str(err))
-    log.error("admin_delete.cascade_preview_unexpected_error", entity_type=entity_type, entity_id=str(entity_id), error=str(err))
-    raise HTTPException(status_code=500, detail="Internal server error")
+    node = result_to_response(res)
+    return CascadeNodeResponse.from_domain(node)
 
 
 class CascadeDeleteBody(BaseModel):
@@ -198,14 +151,5 @@ async def cascade_delete(
         ),
         auth=auth,
     )
-    if isinstance(res, Success):
-        return None
-    err = res.failure()
-    if isinstance(err, AuthorizationError):
-        raise HTTPException(status_code=403, detail=str(err))
-    if isinstance(err, NotFoundError):
-        raise HTTPException(status_code=404, detail=str(err))
-    if isinstance(err, ValidationError):
-        raise HTTPException(status_code=422, detail=str(err))
-    log.error("admin_delete.cascade_delete_unexpected_error", entity_type=entity_type, entity_id=str(entity_id), error=str(err))
-    raise HTTPException(status_code=500, detail="Internal server error")
+    result_to_response(res)
+    return None

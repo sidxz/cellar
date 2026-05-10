@@ -22,11 +22,11 @@ from chem_vault.domain.shared.errors import DomainError, NotFoundError
 class UpdateCollectionCommand(Command):
     workspace_id: uuid.UUID
     collection_id: uuid.UUID
-    name: str | None = None
+    name: str | object = UNSET
     description: str | None | object = UNSET
     project_id: uuid.UUID | None | object = UNSET
     owned_by_org_id: uuid.UUID | None | object = UNSET
-    visibility: str | None = None
+    visibility: str | object = UNSET
 
 
 class UpdateCollection:
@@ -50,9 +50,11 @@ class UpdateCollection:
             if collection is None:
                 return Failure(NotFoundError("Collection", str(input.collection_id)))
 
-            # Build kwargs — only include fields that were provided
+            # Build kwargs — only include fields that were provided.
+            # UNSET = field omitted; an explicit null on a required field
+            # propagates to domain validation and surfaces as 422.
             fields: dict[str, Any] = {}
-            if input.name is not None:
+            if input.name is not UNSET:
                 fields["name"] = input.name
             if input.description is not UNSET:
                 fields["description"] = input.description
@@ -60,7 +62,7 @@ class UpdateCollection:
                 fields["project_id"] = input.project_id
             if input.owned_by_org_id is not UNSET:
                 fields["owned_by_org_id"] = input.owned_by_org_id
-            if input.visibility is not None:
+            if input.visibility is not UNSET:
                 fields["visibility"] = CollectionVisibility(input.visibility)
 
             if fields:

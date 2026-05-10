@@ -296,7 +296,7 @@ async def preview_shipment_import(
         ImportRow(compound=r.compound, batch=r.batch, sample=r.sample, amount=r.amount)
         for r in body.rows
     ]
-    result = await uc(auth.workspace_id, import_rows)
+    result = await uc(auth.workspace_id, import_rows, auth=auth)
     return ImportPreviewResponse(
         rows=[
             ResolvedRowResponse(

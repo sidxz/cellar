@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -514,6 +514,7 @@ class GetSynthesisRequest:
     async def __call__(
         self, input: GetSynthesisRequestQuery, auth: AuthContext | None = None
     ) -> Result[SynthesisRequest, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -531,6 +532,7 @@ class ListSynthesisRequests:
     async def __call__(
         self, input: ListSynthesisRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SynthesisRequest], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             if input.molecule_id is not None:
                 requests = await self._repo.find_by_molecule(

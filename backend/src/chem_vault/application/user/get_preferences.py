@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.shared.user_preferences import (
@@ -28,8 +29,9 @@ class GetPreferences:
         self._repo = repo
 
     async def __call__(
-        self, input: GetPreferencesQuery
+        self, input: GetPreferencesQuery, auth: AuthContext | None = None
     ) -> Result[UserPreferences, DomainError]:
+        require_workspace_role(auth, "viewer")
         prefs = await self._repo.get_by_user(input.workspace_id, input.user_id)
         if prefs is None:
             prefs = UserPreferences(

@@ -11,8 +11,15 @@ from sqlalchemy.sql import expression
 from chem_vault.domain.shared.pagination import PageResult
 from chem_vault.domain.inventory.batch import Batch
 from chem_vault.domain.inventory.enums import BatchSource
-from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit, LightCondition
-from chem_vault.domain.shared.value_objects import Amount, BatchNumber, Concentration, StorageCondition
+from chem_vault.domain.shared.value_objects import BatchNumber
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
+    amount_from_columns,
+    amount_to_columns,
+    concentration_from_columns,
+    concentration_to_columns,
+    storage_from_columns,
+    storage_to_columns,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -191,19 +198,6 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     # ------------------------------------------------------------------
 
     def _to_domain(self, model: BatchModel) -> Batch:
-        concentration = None
-        if model.concentration_value is not None and model.concentration_unit is not None:
-            concentration = Concentration(
-                value=model.concentration_value,
-                unit=ConcentrationUnit(model.concentration_unit),
-            )
-        storage_conditions = None
-        if model.storage_temperature_celsius is not None:
-            storage_conditions = StorageCondition(
-                temperature_celsius=model.storage_temperature_celsius,
-                relative_humidity_percent=model.storage_humidity_percent,
-                light_condition=LightCondition(model.storage_light_condition) if model.storage_light_condition else None,
-            )
         return Batch(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -215,8 +209,8 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             salt_stoichiometry=model.salt_stoichiometry,
             formula_weight=model.formula_weight,
             purity=model.purity,
-            amount=Amount(value=model.amount_value, unit=AmountUnit(model.amount_unit)),
-            concentration=concentration,
+            amount=amount_from_columns(model),
+            concentration=concentration_from_columns(model),
             source=BatchSource(model.source),
             supplier_org_id=model.supplier_org_id,
             vendor_catalog_number=model.vendor_catalog_number,
@@ -225,7 +219,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             synthesis_date=model.synthesis_date,
             expiry_date=model.expiry_date,
             notebook_reference=model.notebook_reference,
-            storage_conditions=storage_conditions,
+            storage_conditions=storage_from_columns(model),
             storage_conditions_notes=model.storage_conditions_notes,
             appearance=model.appearance,
             custom_fields=model.custom_fields,
@@ -249,10 +243,8 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             salt_stoichiometry=aggregate.salt_stoichiometry,
             formula_weight=aggregate.formula_weight,
             purity=aggregate.purity,
-            amount_value=aggregate.amount.value,
-            amount_unit=aggregate.amount.unit.value,
-            concentration_value=aggregate.concentration.value if aggregate.concentration else None,
-            concentration_unit=aggregate.concentration.unit.value if aggregate.concentration else None,
+            **amount_to_columns(aggregate.amount),
+            **concentration_to_columns(aggregate.concentration),
             source=aggregate.source.value,
             supplier_org_id=aggregate.supplier_org_id,
             vendor_catalog_number=aggregate.vendor_catalog_number,
@@ -261,9 +253,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             synthesis_date=aggregate.synthesis_date,
             expiry_date=aggregate.expiry_date,
             notebook_reference=aggregate.notebook_reference,
-            storage_temperature_celsius=aggregate.storage_conditions.temperature_celsius if aggregate.storage_conditions else None,
-            storage_humidity_percent=aggregate.storage_conditions.relative_humidity_percent if aggregate.storage_conditions else None,
-            storage_light_condition=aggregate.storage_conditions.light_condition.value if aggregate.storage_conditions and aggregate.storage_conditions.light_condition else None,
+            **storage_to_columns(aggregate.storage_conditions),
             storage_conditions_notes=aggregate.storage_conditions_notes,
             appearance=aggregate.appearance,
             custom_fields=aggregate.custom_fields,
@@ -282,10 +272,10 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         model.salt_stoichiometry = aggregate.salt_stoichiometry
         model.formula_weight = aggregate.formula_weight
         model.purity = aggregate.purity
-        model.amount_value = aggregate.amount.value
-        model.amount_unit = aggregate.amount.unit.value
-        model.concentration_value = aggregate.concentration.value if aggregate.concentration else None
-        model.concentration_unit = aggregate.concentration.unit.value if aggregate.concentration else None
+        for k, v in amount_to_columns(aggregate.amount).items():
+            setattr(model, k, v)
+        for k, v in concentration_to_columns(aggregate.concentration).items():
+            setattr(model, k, v)
         model.source = aggregate.source.value
         model.supplier_org_id = aggregate.supplier_org_id
         model.vendor_catalog_number = aggregate.vendor_catalog_number

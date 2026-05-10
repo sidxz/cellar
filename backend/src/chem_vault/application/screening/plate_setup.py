@@ -106,6 +106,7 @@ class ParsePlateMapFile:
         filename: str = "",
         auth: AuthContext | None = None,
     ) -> Result[ParsedPlateMap, DomainError]:
+        require_editor(auth)
         if isinstance(file_content, str):
             file_content = file_content.encode("utf-8")
 

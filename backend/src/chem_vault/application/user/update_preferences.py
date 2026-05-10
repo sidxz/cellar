@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.sentinel import UNSET
 from chem_vault.domain.shared.errors import DomainError
@@ -33,8 +34,9 @@ class UpdatePreferences:
         self._repo = repo
 
     async def __call__(
-        self, input: UpdatePreferencesCommand
+        self, input: UpdatePreferencesCommand, auth: AuthContext | None = None
     ) -> Result[UserPreferences, DomainError]:
+        require_editor(auth)
         prefs = await self._repo.get_by_user(input.workspace_id, input.user_id)
 
         if prefs is None:

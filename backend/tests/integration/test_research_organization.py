@@ -585,7 +585,7 @@ class TestSavedSearchRepository:
 
         async with uow:
             repo = SQLAlchemySavedSearchRepository(uow)
-            await repo.delete(search.id)
+            await repo.delete(ws_id, search.id)
             await uow.commit()
 
         async with uow:

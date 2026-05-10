@@ -65,7 +65,7 @@ async def get_settings(
     use_case: GetWorkspaceSettingsDep,
 ) -> WorkspaceSettingsResponse:
     query = GetWorkspaceSettingsQuery(workspace_id=auth.workspace_id)
-    settings = result_to_response(await use_case(query))
+    settings = result_to_response(await use_case(query, auth=auth))
     return WorkspaceSettingsResponse.from_domain(settings)
 
 

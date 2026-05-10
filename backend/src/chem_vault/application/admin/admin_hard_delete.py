@@ -26,6 +26,10 @@ from chem_vault.application.admin.admin_delete_registry import (
     AdminDeletableRepoMap,
     get_entry,
 )
+from chem_vault.application.admin.cascade_service import (
+    CascadeService,
+    InboundReference,
+)
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.auth import AuthContext, require_admin
 from chem_vault.application.shared.command import Command
@@ -34,13 +38,10 @@ from chem_vault.domain.audit_compliance.enums import AuditAction, OperationType
 from chem_vault.domain.audit_compliance.models import AuditEntry
 from chem_vault.domain.shared.errors import (
     AuthorizationError,
+    ConflictError,
     DomainError,
     NotFoundError,
     ValidationError,
-)
-from chem_vault.infrastructure.cascade.inbound_refs import (
-    InboundReference,
-    find_inbound_references,
 )
 
 
@@ -52,16 +53,33 @@ class AdminHardDeleteCommand(Command):
     reason: str
 
 
-@dataclass(frozen=True)
-class BlockedByDependenciesError(DomainError):
-    """Tier-1 RESTRICT: caller must clean up dependents first."""
+class BlockedByDependenciesError(ConflictError):
+    """Tier-1 RESTRICT: caller must clean up dependents first.
 
-    blockers: Sequence[InboundReference]
+    Maps to HTTP 409 via the ConflictError parent. The blocker list is
+    surfaced in the response body via ``body_extras``.
+    """
 
-    @property
-    def message(self) -> str:  # type: ignore[override]
+    def __init__(self, blockers: Sequence[InboundReference]) -> None:
+        self.blockers = tuple(blockers)
         parts = [f"{r.count} {r.entity_type}(s)" for r in self.blockers]
-        return "Cannot delete: " + ", ".join(parts) + " reference this entity."
+        super().__init__("Cannot delete: " + ", ".join(parts) + " reference this entity.")
+
+    def body_extras(self) -> dict[str, object]:
+        return {
+            "error": "delete_blocked_by_dependencies",
+            "blockers": [
+                {
+                    "table": r.table,
+                    "entity_type": r.entity_type,
+                    "fk_column": r.fk_column,
+                    "count": r.count,
+                    "samples": r.samples,
+                    "truncated": r.truncated,
+                }
+                for r in self.blockers
+            ],
+        }
 
 
 class AdminHardDelete:
@@ -70,12 +88,14 @@ class AdminHardDelete:
         uow: UnitOfWork,
         audit: AuditRecordingService,
         repos: AdminDeletableRepoMap | Callable[[UnitOfWork], AdminDeletableRepoMap],
+        cascade_service: CascadeService,
     ) -> None:
         self._uow = uow
         self._audit = audit
         # Accept either a pre-built map or a factory callable (UoW → map).
         # The factory form allows DI to wire repos that need the active session.
         self._repos = repos
+        self._cascade_service = cascade_service
 
     def _get_repo_map(self, uow: UnitOfWork) -> AdminDeletableRepoMap:
         if callable(self._repos):
@@ -109,14 +129,13 @@ class AdminHardDelete:
             if obj is None:
                 return Failure(NotFoundError(input.entity_type, str(input.entity_id)))
 
-            blockers = await find_inbound_references(
-                self._uow.session,
+            blockers = await self._cascade_service.find_inbound_references(
+                workspace_id=input.workspace_id,
                 parent_table=entry.table,
                 parent_id=input.entity_id,
-                workspace_id=input.workspace_id,
             )
             if blockers:
-                return Failure(BlockedByDependenciesError(blockers=tuple(blockers)))
+                return Failure(BlockedByDependenciesError(blockers))
 
             snapshot = _to_snapshot_dict(obj)
             await repo.delete(input.workspace_id, input.entity_id)

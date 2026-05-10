@@ -27,8 +27,8 @@ export function useAdminDelete(opts?: { onSuccess?: () => void }) {
       opts?.onSuccess?.();
     },
     onError: (err: unknown) => {
-      const detail = (err as any)?.response?.data?.detail;
-      if (detail?.error === "delete_blocked_by_dependencies") return;
+      const data = (err as any)?.response?.data;
+      if (data?.error === "delete_blocked_by_dependencies") return;
       toast.error((err as any)?.message ?? "Failed to delete");
     },
   });

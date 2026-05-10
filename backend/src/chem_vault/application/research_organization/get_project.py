@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.research_organization.project import Project
@@ -26,8 +27,9 @@ class GetProject:
         self._repo = repo
 
     async def __call__(
-        self, input: GetProjectQuery
+        self, input: GetProjectQuery, auth: AuthContext | None = None
     ) -> Result[Project, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             project = await self._repo.find_by_id_in_workspace(input.workspace_id, input.project_id)
             if project is None:
@@ -46,8 +48,9 @@ class ListProjects:
         self._repo = repo
 
     async def __call__(
-        self, input: ListProjectsQuery
+        self, input: ListProjectsQuery, auth: AuthContext | None = None
     ) -> Result[list[Project], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             projects = await self._repo.find_by_workspace(input.workspace_id)
             return Success(projects)

@@ -9,8 +9,13 @@ from sqlalchemy import or_, select
 from chem_vault.domain.shared.pagination import PageResult
 from chem_vault.domain.inventory.enums import ContainerType, SampleStatus
 from chem_vault.domain.inventory.sample import Sample
-from chem_vault.domain.shared.enums import AmountUnit, ConcentrationUnit
-from chem_vault.domain.shared.value_objects import Amount, Barcode, Concentration
+from chem_vault.domain.shared.value_objects import Barcode
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
+    amount_from_columns,
+    amount_to_columns,
+    concentration_from_columns,
+    concentration_to_columns,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -187,20 +192,14 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
     # ------------------------------------------------------------------
 
     def _to_domain(self, model: SampleModel) -> Sample:
-        concentration = None
-        if model.concentration_value is not None and model.concentration_unit is not None:
-            concentration = Concentration(
-                value=model.concentration_value,
-                unit=ConcentrationUnit(model.concentration_unit),
-            )
         return Sample(
             id=model.id,
             workspace_id=model.workspace_id,
             batch_id=model.batch_id,
             barcode=Barcode(value=model.barcode),
             container_type=ContainerType(model.container_type),
-            amount=Amount(value=model.amount_value, unit=AmountUnit(model.amount_unit)),
-            concentration=concentration,
+            amount=amount_from_columns(model),
+            concentration=concentration_from_columns(model),
             solvent=model.solvent,
             status=SampleStatus(model.status),
             location_id=model.location_id,
@@ -218,10 +217,8 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
             batch_id=aggregate.batch_id,
             barcode=aggregate.barcode.value,
             container_type=aggregate.container_type.value,
-            amount_value=aggregate.amount.value,
-            amount_unit=aggregate.amount.unit.value,
-            concentration_value=aggregate.concentration.value if aggregate.concentration else None,
-            concentration_unit=aggregate.concentration.unit.value if aggregate.concentration else None,
+            **amount_to_columns(aggregate.amount),
+            **concentration_to_columns(aggregate.concentration),
             solvent=aggregate.solvent,
             status=aggregate.status.value,
             location_id=aggregate.location_id,
@@ -231,10 +228,10 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
         )
 
     def _update_model(self, model: SampleModel, aggregate: Sample) -> None:
-        model.amount_value = aggregate.amount.value
-        model.amount_unit = aggregate.amount.unit.value
-        model.concentration_value = aggregate.concentration.value if aggregate.concentration else None
-        model.concentration_unit = aggregate.concentration.unit.value if aggregate.concentration else None
+        for k, v in amount_to_columns(aggregate.amount).items():
+            setattr(model, k, v)
+        for k, v in concentration_to_columns(aggregate.concentration).items():
+            setattr(model, k, v)
         model.solvent = aggregate.solvent
         model.status = aggregate.status.value
         model.location_id = aggregate.location_id

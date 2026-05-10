@@ -102,7 +102,7 @@ async def list_plate_templates(
     use_case: ListPlateTemplatesDep,
 ) -> list[PlateTemplateResponse]:
     query = ListPlateTemplatesQuery(workspace_id=auth.workspace_id)
-    templates = result_to_response(await use_case(query))
+    templates = result_to_response(await use_case(query, auth=auth))
     return [PlateTemplateResponse.from_domain(t) for t in templates]
 
 
@@ -115,7 +115,7 @@ async def get_plate_template(
     query = GetPlateTemplateQuery(
         workspace_id=auth.workspace_id, template_id=template_id
     )
-    template = result_to_response(await use_case(query))
+    template = result_to_response(await use_case(query, auth=auth))
     return PlateTemplateResponse.from_domain(template)
 
 

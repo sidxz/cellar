@@ -107,7 +107,7 @@ async def get_merge_history(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
     )
-    events = result_to_response(await use_case(query))
+    events = result_to_response(await use_case(query, auth=auth))
     return [MergeEventResponse.from_domain(e) for e in events]
 
 

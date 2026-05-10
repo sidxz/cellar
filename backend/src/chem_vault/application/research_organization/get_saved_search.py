@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.research_organization.repository import SavedSearchRepository
@@ -26,8 +27,9 @@ class GetSavedSearch:
         self._repo = repo
 
     async def __call__(
-        self, input: GetSavedSearchQuery
+        self, input: GetSavedSearchQuery, auth: AuthContext | None = None
     ) -> Result[SavedSearch, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             search = await self._repo.find_by_id_in_workspace(input.workspace_id, input.saved_search_id)
             if search is None:
@@ -50,8 +52,9 @@ class ListSavedSearches:
         self._repo = repo
 
     async def __call__(
-        self, input: ListSavedSearchesQuery
+        self, input: ListSavedSearchesQuery, auth: AuthContext | None = None
     ) -> Result[list[SavedSearch], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             if input.created_by is not None:
                 searches = await self._repo.find_by_creator(

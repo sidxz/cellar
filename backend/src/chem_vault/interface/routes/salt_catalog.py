@@ -89,7 +89,7 @@ async def list_salt_entries(
         workspace_id=auth.workspace_id,
         active_only=active_only,
     )
-    entries = result_to_response(await use_case(query))
+    entries = result_to_response(await use_case(query, auth=auth))
     return [SaltEntryResponse.from_domain(e) for e in entries]
 
 

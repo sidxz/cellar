@@ -102,8 +102,10 @@ class TestRegisterMolecule:
         )
         assert resp.status_code == 201
         data = resp.json()
-        assert len(data["molecule"]["identifiers"]) == 1
-        assert data["molecule"]["identifiers"][0]["identifier"] == "CAS-15687-27-1"
+        # The name is auto-promoted to a "custom" identifier alongside the explicit CAS.
+        identifiers = {(i["identifier"], i["identifier_type"]) for i in data["molecule"]["identifiers"]}
+        assert ("CAS-15687-27-1", "cas_number") in identifiers
+        assert ("Ibuprofen", "custom") in identifiers
 
     async def test_duplicate_inchi_key_returns_existing(
         self, client: AsyncClient, seed_org: str

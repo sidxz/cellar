@@ -79,7 +79,7 @@ async def list_organizations(
     query = ListOrganizationsQuery(
         workspace_id=auth.workspace_id, include_inactive=include_inactive
     )
-    orgs = result_to_response(await use_case(query))
+    orgs = result_to_response(await use_case(query, auth=auth))
     return [OrganizationResponse.from_domain(o) for o in orgs]
 
 
@@ -90,7 +90,7 @@ async def get_organization(
     use_case: GetOrganizationDep,
 ) -> OrganizationResponse:
     query = GetOrganizationQuery(workspace_id=auth.workspace_id, org_id=org_id)
-    org = result_to_response(await use_case(query))
+    org = result_to_response(await use_case(query, auth=auth))
     return OrganizationResponse.from_domain(org)
 
 

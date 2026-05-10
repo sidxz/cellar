@@ -211,6 +211,15 @@ def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
         effective_kind = "smiles"
 
     if effective_kind == "smiles":
+        # The cartridge would silently return zero rows for non-parseable
+        # SMILES (atom-list or other SMARTS-only constructs); validate
+        # Python-side so the chemist gets a clear 422 with the bad input.
+        from rdkit.Chem import MolFromSmiles  # local import — keeps module light
+        if MolFromSmiles(query_text) is None:
+            raise ValueError(
+                f"query_kind='smiles' but {query_text!r} is not a valid SMILES "
+                "(atom lists / SMARTS primitives require query_kind='smarts')"
+            )
         # Cartridge's mol_from_smiles handles aromaticity perception on
         # both sides, no Python-side normalization needed.
         bound_query = query_text

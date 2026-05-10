@@ -10,23 +10,15 @@ Association/join tables that have no ``id`` column are count-only
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
 
 from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chem_vault.application.admin.cascade_service import InboundReference
 from chem_vault.infrastructure.cascade.label_fields import label_for_table
 from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
 
-
-@dataclass(frozen=True)
-class InboundReference:
-    table: str
-    fk_column: str
-    entity_type: str
-    count: int
-    samples: list[dict] = field(default_factory=list)
-    truncated: bool = False
+__all__ = ["InboundReference", "find_inbound_references"]
 
 
 async def find_inbound_references(

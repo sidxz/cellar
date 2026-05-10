@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
@@ -50,8 +51,9 @@ class GetDataSourceForImport:
         self._secret_provider = secret_provider
 
     async def __call__(
-        self, input: GetDataSourceForImportQuery
+        self, input: GetDataSourceForImportQuery, auth: AuthContext | None = None
     ) -> Result[DataSourceImportConfig, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             ds = await self._ds_repo.find_active_by_source_type(
                 input.workspace_id, input.source_type

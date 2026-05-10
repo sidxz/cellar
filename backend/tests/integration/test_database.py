@@ -231,6 +231,7 @@ class TestUnitOfWork:
         event = _DummyCreated(
             aggregate_id=agg.id,
             aggregate_type="DummyAggregate",
+            workspace_id=agg.workspace_id,
             name="event-test",
         )
         agg.register_event(event)
@@ -254,6 +255,7 @@ class TestUnitOfWork:
         event = _DummyCreated(
             aggregate_id=agg.id,
             aggregate_type="DummyAggregate",
+            workspace_id=agg.workspace_id,
             name="rollback-test",
         )
         agg.register_event(event)

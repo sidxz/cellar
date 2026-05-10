@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.admin.admin_delete_registry import get_entry
-from chem_vault.application.admin.cascade_service import CascadeService
+from chem_vault.application.admin.cascade_service import (
+    CascadeExecutionError,
+    CascadeService,
+)
 from chem_vault.application.admin.tier2_entities import TIER2_ENTITY_TYPES
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.auth import AuthContext, require_admin
@@ -16,8 +19,6 @@ from chem_vault.domain.audit_compliance.enums import OperationType
 from chem_vault.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError, ValidationError,
 )
-from chem_vault.infrastructure.cascade.cascade_runner import CascadeExecutionError
-from chem_vault.infrastructure.cascade.label_fields import label_for_table
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -57,9 +58,10 @@ class CascadeDelete:
             return Failure(NotFoundError("entity_type", input.entity_type))
 
         async with self._uow:
-            actual_label = await _fetch_label(
-                self._uow.session, entry.table, input.entity_id,
+            actual_label = await self._cascade_service.fetch_typed_name_label(
                 workspace_id=input.workspace_id,
+                table=entry.table,
+                entity_id=input.entity_id,
             )
             if actual_label is None:
                 return Failure(NotFoundError(input.entity_type, str(input.entity_id)))
@@ -93,18 +95,3 @@ class CascadeDelete:
             await self._uow.commit()
 
         return Success(None)
-
-
-async def _fetch_label(
-    session, table_name: str, id_: uuid.UUID, *, workspace_id: uuid.UUID
-):
-    from sqlalchemy import select
-    from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
-    _et, label_col = label_for_table(table_name)
-    if not label_col:
-        return None
-    t = Base.metadata.tables[table_name]
-    stmt = select(t.c[label_col]).where(t.c.id == id_)
-    if "workspace_id" in t.c:
-        stmt = stmt.where(t.c["workspace_id"] == workspace_id)
-    return (await session.execute(stmt)).scalar_one_or_none()

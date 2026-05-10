@@ -19,6 +19,7 @@ from chem_vault.domain.shared.errors import (
     DataLockedError,
     DomainError,
     NotFoundError,
+    ServiceUnavailableError,
     ValidationError,
 )
 
@@ -30,6 +31,7 @@ _ERROR_STATUS_MAP: dict[type[DomainError], int] = {
     ConcurrencyConflictError: 409,
     AuthorizationError: 403,
     DataLockedError: 423,
+    ServiceUnavailableError: 503,
 }
 
 
@@ -51,6 +53,7 @@ def _error_to_body(error: DomainError) -> dict[str, Any]:
         body["detail"] = error.detail
     if isinstance(error, ConcurrencyConflictError):
         body["retry"] = True
+    body.update(error.body_extras())
     return body
 
 

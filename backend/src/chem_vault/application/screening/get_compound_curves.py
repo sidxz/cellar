@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.screening.compound_curves_reader import (
     CompoundCurvesReader,
 )
@@ -38,6 +38,7 @@ class GetCompoundCurves:
     async def __call__(
         self, input: GetCompoundCurvesQuery, auth: AuthContext | None = None
     ) -> Result[list[dict], DomainError]:
+        require_workspace_role(auth, "viewer")
         # IC50 unit comes from the protocol — single source of truth.
         async with self._uow:
             protocol = await self._protocol_repo.find_by_id_in_workspace(

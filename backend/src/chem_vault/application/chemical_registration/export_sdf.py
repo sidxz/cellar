@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.chemical_registration.protocols import StructureProcessorProtocol
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -43,6 +43,7 @@ class ExportMoleculesSDF:
     async def __call__(
         self, input: ExportSDFQuery, *, auth: AuthContext | None = None
     ) -> Result[str, DomainError]:
+        require_workspace_role(auth, "viewer")
         if len(input.molecule_ids) > MAX_SDF_EXPORT:
             return Failure(
                 ValidationError(

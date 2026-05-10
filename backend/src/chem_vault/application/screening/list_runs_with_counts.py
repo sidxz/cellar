@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
@@ -45,6 +45,7 @@ class ListRunsWithCounts:
         input: ListRunsWithCountsQuery,
         auth: AuthContext | None = None,
     ) -> Result[list[RunWithCounts], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             runs = await self._run_repo.find_by_protocol(
                 input.workspace_id, input.protocol_id

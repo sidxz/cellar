@@ -29,7 +29,7 @@ def _auth(workspace_id, role="admin"):
 
 @pytest.mark.asyncio
 async def test_non_admin_blocked():
-    uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={})
+    uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={}, cascade_service=MagicMock())
     result = await uc(
         AdminHardDeleteCommand(
             workspace_id=uuid.uuid4(),
@@ -50,7 +50,7 @@ async def test_empty_reason_rejected():
         table="controlled_vocabularies",
         label_field="name",
     )
-    uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={})
+    uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={}, cascade_service=MagicMock())
     result = await uc(
         AdminHardDeleteCommand(
             workspace_id=uuid.uuid4(),
@@ -66,7 +66,7 @@ async def test_empty_reason_rejected():
 
 @pytest.mark.asyncio
 async def test_unknown_entity_type_404():
-    uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={})
+    uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={}, cascade_service=MagicMock())
     result = await uc(
         AdminHardDeleteCommand(
             workspace_id=uuid.uuid4(),

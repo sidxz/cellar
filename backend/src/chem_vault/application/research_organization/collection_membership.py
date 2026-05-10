@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.molecule_resolver import (
@@ -198,8 +198,9 @@ class ListCollectionMolecules:
         self._collection_repo = collection_repo
 
     async def __call__(
-        self, input: ListCollectionMoleculesQuery
+        self, input: ListCollectionMoleculesQuery, auth: AuthContext | None = None
     ) -> Result[list[uuid.UUID], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             collection = await self._collection_repo.find_by_id_in_workspace(input.workspace_id, input.collection_id)
             if collection is None:

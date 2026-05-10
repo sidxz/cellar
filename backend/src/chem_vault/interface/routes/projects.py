@@ -87,7 +87,7 @@ async def list_projects(
     use_case: ListProjectsDep,
 ) -> list[ProjectResponse]:
     query = ListProjectsQuery(workspace_id=auth.workspace_id)
-    projects = result_to_response(await use_case(query))
+    projects = result_to_response(await use_case(query, auth=auth))
     return [ProjectResponse.from_domain(p) for p in projects]
 
 
@@ -110,7 +110,7 @@ async def get_project_scope_stats(
         workspace_id=auth.workspace_id,
         project_ids=tuple(project_ids),
     )
-    stats = result_to_response(await use_case(query))
+    stats = result_to_response(await use_case(query, auth=auth))
     return {
         pid: ProjectScopeStatsResponse(
             molecule_count=s.molecule_count,
@@ -128,7 +128,7 @@ async def get_project(
     use_case: GetProjectDep,
 ) -> ProjectResponse:
     query = GetProjectQuery(workspace_id=auth.workspace_id, project_id=project_id)
-    project = result_to_response(await use_case(query))
+    project = result_to_response(await use_case(query, auth=auth))
     return ProjectResponse.from_domain(project)
 
 
@@ -159,7 +159,7 @@ async def update_project(
     command = UpdateProjectCommand(
         workspace_id=auth.workspace_id,
         project_id=project_id,
-        name=body.name if "name" in provided else None,
+        name=body.name if "name" in provided else UNSET,
         description=body.description if "description" in provided else UNSET,
     )
     project = result_to_response(await use_case(command, auth=auth))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.amount_parser import parse_amount
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
@@ -71,8 +72,12 @@ class PreviewShipmentImport:
         self._sample_repo = sample_repo
 
     async def __call__(
-        self, workspace_id: uuid.UUID, rows: list[ImportRow]
+        self,
+        workspace_id: uuid.UUID,
+        rows: list[ImportRow],
+        auth: AuthContext | None = None,
     ) -> ImportPreviewResult:
+        require_workspace_role(auth, "viewer")
         results: list[ResolvedRow] = []
 
         async with self._uow:

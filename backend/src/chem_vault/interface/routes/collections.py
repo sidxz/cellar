@@ -127,7 +127,7 @@ async def list_collections(
         workspace_id=auth.workspace_id,
         project_ids=tuple(project_ids) if project_ids else None,
     )
-    collections = result_to_response(await use_case(query))
+    collections = result_to_response(await use_case(query, auth=auth))
     return [CollectionResponse.from_domain(c) for c in collections]
 
 
@@ -158,7 +158,7 @@ async def get_collection(
     query = GetCollectionQuery(
         workspace_id=auth.workspace_id, collection_id=collection_id
     )
-    collection = result_to_response(await use_case(query))
+    collection = result_to_response(await use_case(query, auth=auth))
     return CollectionResponse.from_domain(collection)
 
 
@@ -192,11 +192,11 @@ async def update_collection(
     command = UpdateCollectionCommand(
         workspace_id=auth.workspace_id,
         collection_id=collection_id,
-        name=body.name if "name" in provided else None,
+        name=body.name if "name" in provided else UNSET,
         description=body.description if "description" in provided else UNSET,
         project_id=body.project_id if "project_id" in provided else UNSET,
         owned_by_org_id=body.owned_by_org_id if "owned_by_org_id" in provided else UNSET,
-        visibility=body.visibility if "visibility" in provided else None,
+        visibility=body.visibility if "visibility" in provided else UNSET,
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)
@@ -278,5 +278,5 @@ async def list_collection_molecules(
         offset=offset,
         limit=limit,
     )
-    molecule_ids = result_to_response(await use_case(query))
+    molecule_ids = result_to_response(await use_case(query, auth=auth))
     return molecule_ids

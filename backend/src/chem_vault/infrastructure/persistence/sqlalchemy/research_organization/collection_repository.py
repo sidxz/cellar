@@ -329,14 +329,16 @@ class SQLAlchemyCollectionRepository(
         # Step 1: Remove duplicate entries — collections that already have
         # the target molecule; the source entry would cause a PK conflict.
         # Scoped to workspace via JOIN to collections table.
+        # Postgres doesn't allow JOIN inside DELETE ... USING; list the
+        # workspace-scope table as a comma-separated USING source instead.
         await self._session.execute(
             sa.text(
                 "DELETE FROM collection_molecules cm1 "
-                "USING collection_molecules cm2 "
-                "JOIN collections c ON c.id = cm1.collection_id "
+                "USING collection_molecules cm2, collections c "
                 "WHERE cm1.molecule_id = :source "
                 "AND cm2.molecule_id = :target "
                 "AND cm1.collection_id = cm2.collection_id "
+                "AND c.id = cm1.collection_id "
                 "AND c.workspace_id = :ws"
             ),
             params,

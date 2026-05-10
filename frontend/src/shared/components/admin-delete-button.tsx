@@ -58,9 +58,9 @@ export function AdminDeleteButton({
     try {
       await m.mutateAsync({ entityType, entityId, reason });
     } catch (err: unknown) {
-      const detail = (err as any)?.response?.data?.detail;
-      if (detail?.error === "delete_blocked_by_dependencies") {
-        setBlockers(detail.blockers as AdminDeleteBlocker[]);
+      const data = (err as any)?.response?.data;
+      if (data?.error === "delete_blocked_by_dependencies") {
+        setBlockers(data.blockers as AdminDeleteBlocker[]);
       }
     }
   }

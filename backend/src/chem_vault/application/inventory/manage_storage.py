@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.auth import AuthContext, require_editor, require_workspace_role
 from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.query import Query
@@ -97,6 +97,7 @@ class ListStorageLocations:
     async def __call__(
         self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             locations = await self._repo.find_by_workspace(input.workspace_id)
             return Success(locations)
@@ -110,6 +111,7 @@ class GetStorageLocationChildren:
     async def __call__(
         self, input: GetStorageLocationChildrenQuery, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             children = await self._repo.find_children(
                 input.workspace_id, input.parent_id
@@ -127,6 +129,7 @@ class ListStorageLocationsWithCounts:
     async def __call__(
         self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
     ) -> Result[list[dict], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             rows = await self._repo.find_by_workspace_with_counts(input.workspace_id)
             return Success(rows)

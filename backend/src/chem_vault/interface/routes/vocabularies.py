@@ -64,7 +64,7 @@ async def list_vocabularies(
     use_case: ListVocabulariesDep,
 ) -> list[VocabularyResponse]:
     query = ListVocabulariesQuery(workspace_id=auth.workspace_id)
-    vocabs = result_to_response(await use_case(query))
+    vocabs = result_to_response(await use_case(query, auth=auth))
     return [VocabularyResponse.from_domain(v) for v in vocabs]
 
 

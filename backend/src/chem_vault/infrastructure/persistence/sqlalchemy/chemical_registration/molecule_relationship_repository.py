@@ -53,7 +53,7 @@ class SQLAlchemyMoleculeRelationshipRepository:
             created_by=entity.created_by,
         )
 
-    async def find_by_id(self, id: uuid.UUID) -> MoleculeRelationship | None:
+    async def _find_by_id_unscoped(self, id: uuid.UUID) -> MoleculeRelationship | None:
         model = await self._session.get(MoleculeRelationshipModel, id)
         return self._to_domain(model) if model else None
 

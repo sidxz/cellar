@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.protocol import Protocol
@@ -34,6 +34,7 @@ class GetProtocol:
     async def __call__(
         self, input: GetProtocolQuery, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(input.workspace_id, input.protocol_id)
             if protocol is None:
@@ -49,6 +50,7 @@ class ListProtocols:
     async def __call__(
         self, input: ListProtocolsQuery, auth: AuthContext | None = None
     ) -> Result[list[Protocol], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             protocols = await self._repo.find_by_workspace(input.workspace_id)
             return Success(protocols)

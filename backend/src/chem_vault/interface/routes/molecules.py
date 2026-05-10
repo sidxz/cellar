@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends
-from lagom import Container
+from fastapi import APIRouter
 from pydantic import BaseModel
 
+from chem_vault.application.chemical_registration.depict_molecules import (
+    DepictMoleculesQuery,
+)
 from chem_vault.application.chemical_registration.get_molecule import GetMoleculeQuery
 from chem_vault.application.chemical_registration.identifiers import (
     AddIdentifierCommand,
@@ -24,7 +26,7 @@ from chem_vault.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMoleculeCommand,
 )
-from chem_vault.application.inventory.create_batch import CreateBatch, CreateBatchCommand
+from chem_vault.application.inventory.create_batch import CreateBatchCommand
 from chem_vault.application.inventory.salt_matcher import compute_formula_weight
 from chem_vault.interface.routes.batches import BatchResponse
 from chem_vault.application.chemical_registration.search_molecules import SearchMoleculesQuery
@@ -35,9 +37,14 @@ from chem_vault.domain.chemical_registration.molecule_identifier import Molecule
 from chem_vault.application.research_organization.manage_molecule_projects import (
     ListMoleculeProjectsQuery,
 )
+from chem_vault.application.research_organization.get_collections_for_molecule import (
+    ListCollectionsForMoleculeQuery,
+)
 from chem_vault.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
+    CreateBatchDep,
+    DepictMoleculesDep,
     GetMoleculeByIdentifierDep,
     GetMoleculeDep,
     ListCollectionsForMoleculeDep,
@@ -45,12 +52,12 @@ from chem_vault.interface.dependencies import (
     ListMoleculeProjectsDep,
     ListMoleculesDep,
     MoleculeActivityServiceDep,
+    PlateReadModelServiceDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
     SaltMatcherUoWDep,
     SearchMoleculesDep,
     UpdateMoleculeDep,
-    get_container,
 )
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import (
@@ -327,16 +334,12 @@ class AddIdentifierBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _get_create_batch(c: Annotated[Container, Depends(get_container)]) -> CreateBatch:
-    return c[CreateBatch]
-
-
 @router.post("", response_model=RegistrationResponse, status_code=201)
 async def register_molecule(
     body: RegisterMoleculeBody,
     auth: AuthDep,
     use_case: RegisterMoleculeDep,
-    create_batch_uc: Annotated[CreateBatch, Depends(_get_create_batch)],
+    create_batch_uc: CreateBatchDep,
     salt_matcher_uow: SaltMatcherUoWDep,
 ) -> RegistrationResponse:
     command = RegisterMoleculeCommand(
@@ -460,7 +463,7 @@ async def list_molecules(
         cursor_id=parse_cursor(cursor),
         limit=effective_limit,
     )
-    page = result_to_response(await use_case(query))
+    page = result_to_response(await use_case(query, auth=auth))
     return PaginatedResponse(
         items=[MoleculeResponse.from_domain(m) for m in page.items],
         next_cursor=page.next_cursor,
@@ -495,7 +498,7 @@ async def search_molecules(
         threshold=threshold,
         query_kind=query_kind,
     )
-    results = result_to_response(await use_case(q))
+    results = result_to_response(await use_case(q, auth=auth))
 
     if search_type == "similarity":
         from chem_vault.application.chemical_registration.search_molecules import SimilarityResult
@@ -528,7 +531,7 @@ async def get_molecule_by_identifier(
         workspace_id=auth.workspace_id,
         identifier=identifier,
     )
-    mol = result_to_response(await use_case(q))
+    mol = result_to_response(await use_case(q, auth=auth))
     return MoleculeResponse.from_domain(mol)
 
 
@@ -549,33 +552,27 @@ class DepictResponse(BaseModel):
 
 
 @router.post("/depict", response_model=DepictResponse)
-async def depict_structures(body: DepictRequest, _auth: AuthDep) -> DepictResponse:
+async def depict_structures(
+    body: DepictRequest,
+    auth: AuthDep,
+    use_case: DepictMoleculesDep,
+) -> DepictResponse:
     """Render 2D structure depictions for a batch of SMILES strings.
 
     Returns a dict mapping each valid SMILES to a base64-encoded PNG.
-    Invalid SMILES are silently skipped.  Max 200 SMILES per request.
+    Invalid SMILES are silently skipped. Max 200 SMILES per request.
     """
-    if len(body.smiles_list) > 200:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="Max 200 SMILES per request")
-    import base64
-    import io
-
-    from rdkit import Chem
-    from rdkit.Chem import Draw
-
-    images: dict[str, str] = {}
-    for smiles in body.smiles_list:
-        if not smiles or smiles in images:
-            continue
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            continue
-        img = Draw.MolToImage(mol, size=(body.width, body.height))
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        images[smiles] = base64.b64encode(buf.getvalue()).decode()
-
+    images = result_to_response(
+        await use_case(
+            DepictMoleculesQuery(
+                workspace_id=auth.workspace_id,
+                smiles_list=body.smiles_list,
+                width=body.width,
+                height=body.height,
+            ),
+            auth=auth,
+        )
+    )
     return DepictResponse(images=images)
 
 
@@ -628,13 +625,11 @@ async def get_molecule_activity(
 async def list_molecule_plates(
     molecule_id: uuid.UUID,
     auth: AuthDep,
-    c: Annotated[Container, Depends(get_container)],
+    service: PlateReadModelServiceDep,
 ):
     """List all registered plates containing batches of this molecule."""
-    from chem_vault.application.inventory.plate_read_model import PlateReadModelService
     from chem_vault.interface.routes.registered_plates import MoleculePlateResponse
 
-    service: PlateReadModelService = c[PlateReadModelService]
     entries = await service.find_plates_for_molecule(auth.workspace_id, molecule_id)
     return [MoleculePlateResponse.from_entry(e) for e in entries]
 
@@ -646,16 +641,14 @@ async def list_molecule_collections(
     use_case: ListCollectionsForMoleculeDep,
 ):
     """List collections containing this molecule."""
-    from chem_vault.application.research_organization.get_collections_for_molecule import (
-        ListCollectionsForMoleculeQuery,
-    )
     from chem_vault.interface.routes.collections import CollectionResponse
 
     result = await use_case(
         ListCollectionsForMoleculeQuery(
             workspace_id=auth.workspace_id,
             molecule_id=molecule_id,
-        )
+        ),
+        auth=auth,
     )
     collections = result_to_response(result)
     return [CollectionResponse.from_domain(c) for c in collections]
@@ -680,7 +673,7 @@ async def list_identifiers(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
     )
-    identifiers = result_to_response(await use_case(query))
+    identifiers = result_to_response(await use_case(query, auth=auth))
     return [IdentifierResponse.from_domain(i) for i in identifiers]
 
 
@@ -737,6 +730,7 @@ async def list_molecule_projects(
         ListMoleculeProjectsQuery(
             workspace_id=auth.workspace_id,
             molecule_id=molecule_id,
-        )
+        ),
+        auth=auth,
     )
     return result_to_response(result)

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from chem_vault.domain.shared.entity import AggregateRoot
 from chem_vault.domain.shared.events import DomainEvent
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncUnitOfWork:
@@ -79,7 +82,13 @@ class AsyncUnitOfWork:
         exc_tb: TracebackType | None,
     ) -> None:
         if exc_type is not None:
-            await self.rollback()
+            try:
+                await self.rollback()
+            except Exception:
+                # rollback failure must not mask the original exception that
+                # caused the body to exit. Close the session and re-raise the
+                # original by letting __aexit__ return None.
+                logger.exception("UnitOfWork rollback failed during __aexit__")
         if self._session is not None:
             await self._session.close()
         self._session = None

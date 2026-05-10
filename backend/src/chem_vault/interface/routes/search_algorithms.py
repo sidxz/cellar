@@ -7,10 +7,9 @@ from pydantic import BaseModel
 
 from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS
 from chem_vault.domain.sar_analysis.similarity_metric import serialize_metric
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from chem_vault.interface.dependencies import AuthDep, FingerprintRegistryDep
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
-_registry = FingerprintRegistry.default()
 
 _ALGORITHM_DESCRIPTIONS = {
     "morgan": (
@@ -44,11 +43,13 @@ class _AlgorithmsResponse(BaseModel):
 
 
 @router.get("/algorithms", response_model=_AlgorithmsResponse)
-async def list_algorithms() -> _AlgorithmsResponse:
+async def list_algorithms(
+    _auth: AuthDep,
+    registry: FingerprintRegistryDep,
+) -> _AlgorithmsResponse:
     """Return available search modes and fingerprint algorithms.
 
-    This endpoint is metadata-only — no auth dependency, no DB access.
-    Frontend uses it to render mode radios and threshold defaults.
+    Frontend uses this to render mode radios and threshold defaults.
     """
     modes = [
         _ModeInfo(
@@ -66,6 +67,6 @@ async def list_algorithms() -> _AlgorithmsResponse:
             name=a.name,
             description=_ALGORITHM_DESCRIPTIONS.get(a.name, ""),
         )
-        for a in _registry.all()
+        for a in registry.all()
     ]
     return _AlgorithmsResponse(modes=modes, algorithms=algorithms)

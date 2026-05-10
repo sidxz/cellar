@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.inventory.repository import SampleRepository
@@ -35,6 +35,7 @@ class GetSample:
     async def __call__(
         self, input: GetSampleQuery, auth: AuthContext | None = None
     ) -> Result[Sample, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             sample = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.sample_id
@@ -54,6 +55,7 @@ class ListSamplesByBatch:
         input: ListSamplesByBatchQuery,
         auth: AuthContext | None = None,
     ) -> Result[list[Sample], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             samples = await self._repo.find_by_batch(
                 input.workspace_id, input.batch_id

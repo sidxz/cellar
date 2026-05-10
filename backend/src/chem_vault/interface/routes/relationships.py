@@ -110,7 +110,7 @@ async def list_relationships(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
     )
-    rels = result_to_response(await use_case(query))
+    rels = result_to_response(await use_case(query, auth=auth))
     return [RelationshipResponse.from_domain(r) for r in rels]
 
 

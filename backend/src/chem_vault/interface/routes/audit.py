@@ -97,7 +97,7 @@ async def list_audit_operations(
         user_id=user_id,
         limit=limit,
     )
-    operations = result_to_response(await use_case(query))
+    operations = result_to_response(await use_case(query, auth=auth))
     return [AuditOperationResponse.from_domain(op) for op in operations]
 
 
@@ -108,5 +108,5 @@ async def get_audit_operation(
     use_case: GetAuditOperationDep,
 ) -> AuditOperationResponse:
     query = GetAuditOperationQuery(workspace_id=auth.workspace_id, operation_id=operation_id)
-    operation = result_to_response(await use_case(query))
+    operation = result_to_response(await use_case(query, auth=auth))
     return AuditOperationResponse.from_domain(operation)

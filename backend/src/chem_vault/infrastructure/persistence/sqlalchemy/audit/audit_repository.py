@@ -53,8 +53,11 @@ class SQLAlchemyAuditRepository:
         model = self._to_operation_model(operation)
         session.add(model)
 
-    async def find_by_id(self, id: uuid.UUID) -> AuditOperation | None:
-        """Retrieve an audit operation by ID (with entries + signature eager-loaded)."""
+    async def _find_by_id_unscoped(self, id: uuid.UUID) -> AuditOperation | None:
+        """Retrieve an audit operation by ID with NO workspace check.
+
+        Internal — production code must use ``find_by_id_in_workspace``.
+        """
         stmt = (
             select(AuditOperationModel)
             .where(AuditOperationModel.id == id)

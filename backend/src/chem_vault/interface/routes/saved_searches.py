@@ -95,7 +95,7 @@ async def list_saved_searches(
         project_id=project_id,
         created_by=auth.user_id if mine else None,
     )
-    searches = result_to_response(await use_case(query))
+    searches = result_to_response(await use_case(query, auth=auth))
     return [SavedSearchResponse.from_domain(s) for s in searches]
 
 
@@ -108,7 +108,7 @@ async def get_saved_search(
     query = GetSavedSearchQuery(
         workspace_id=auth.workspace_id, saved_search_id=search_id
     )
-    search = result_to_response(await use_case(query))
+    search = result_to_response(await use_case(query, auth=auth))
     return SavedSearchResponse.from_domain(search)
 
 

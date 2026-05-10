@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 
-import structlog
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
@@ -16,7 +16,7 @@ from chem_vault.domain.attachment.repository import AttachmentRepository
 from chem_vault.application.attachment.storage import StorageClient
 from chem_vault.domain.shared.errors import DomainError, NotFoundError
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)

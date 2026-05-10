@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.pagination import PageResult
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
@@ -32,8 +33,9 @@ class ListMolecules:
         self._repo = repo
 
     async def __call__(
-        self, input: ListMoleculesQuery
+        self, input: ListMoleculesQuery, auth: AuthContext | None = None
     ) -> Result[PageResult[Molecule], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             filters = {}
             if input.molecule_type:

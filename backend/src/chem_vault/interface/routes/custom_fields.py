@@ -106,7 +106,7 @@ async def list_custom_fields(
         applies_to=applies_to,
         active_only=active_only,
     )
-    fields = result_to_response(await use_case(query))
+    fields = result_to_response(await use_case(query, auth=auth))
     return [CustomFieldResponse.from_domain(f) for f in fields]
 
 

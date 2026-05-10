@@ -1,18 +1,25 @@
 """RDKit infrastructure errors."""
 
-from chem_vault.domain.shared.errors import DomainError
+from chem_vault.domain.shared.errors import DomainError, ValidationError
 
 
-class InvalidSmilesError(DomainError):
-    """Raised when SMILES cannot be parsed."""
+class InvalidSmilesError(ValidationError):
+    """Raised when SMILES cannot be parsed.
+
+    This is bad user input, so it maps to HTTP 422 via ``ValidationError``.
+    """
 
     def __init__(self, smiles: str, reason: str = "Failed to parse SMILES") -> None:
         self.smiles = smiles
         super().__init__(f"Invalid SMILES '{smiles}': {reason}")
 
 
-class StandardizationError(DomainError):
-    """Raised when structure standardization fails."""
+class StandardizationError(ValidationError):
+    """Raised when structure standardization fails (e.g. InChI generation).
+
+    Maps to HTTP 422 — the input is structurally invalid even though it
+    parsed as SMILES.
+    """
 
     def __init__(self, smiles: str, reason: str) -> None:
         self.smiles = smiles

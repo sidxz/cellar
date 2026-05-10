@@ -7,8 +7,13 @@ from chem_vault.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
 from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 
-class UnknownAlgorithmError(KeyError):
-    """Raised when a query references an algorithm not in the registry."""
+class UnknownAlgorithmError(ValueError):
+    """Raised when a query references an algorithm not in the registry.
+
+    Subclasses ``ValueError`` (not ``KeyError``) so the search boundary's
+    ``except ValueError → ValidationError`` mapping picks it up and the
+    message renders without ``KeyError``'s extra quoting.
+    """
 
 
 class FingerprintRegistry:

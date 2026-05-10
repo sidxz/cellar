@@ -79,7 +79,7 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
     container.define(StructureProcessorProtocol, lambda c: c[StructureProcessor])
 
     # --- Fingerprint Registry ---
-    container.define(FingerprintRegistry, Singleton(FingerprintRegistry.default))
+    container.define(FingerprintRegistry, Singleton(lambda: FingerprintRegistry.default()))
 
     # --- Curve Fitting ---
     container.define(LmfitCurveFitter, Singleton(LmfitCurveFitter))

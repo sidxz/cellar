@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.auth import AuthContext
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.screening_assay.repository import RunRepository
@@ -35,6 +35,7 @@ class GetRun:
     async def __call__(
         self, input: GetRunQuery, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
@@ -52,6 +53,7 @@ class ListRunsByProtocol:
         input: ListRunsByProtocolQuery,
         auth: AuthContext | None = None,
     ) -> Result[list[Run], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             runs = await self._repo.find_by_protocol(
                 input.workspace_id, input.protocol_id

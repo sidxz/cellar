@@ -2,20 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from chem_vault.application.chemical_registration.protocols import Fingerprints
 from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
-
-@dataclass(frozen=True)
-class Fingerprints:
-    """Computed fingerprints for a single molecule.
-
-    Only Morgan is computed in Python (stereo-aware). FCFP is computed by
-    a Postgres trigger from the canonical SMILES.
-    """
-
-    morgan: bytes
+__all__ = ["FingerprintGenerator", "Fingerprints"]
 
 
 class FingerprintGenerator:

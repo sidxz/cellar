@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.shared.ontology import OntologyTerm
@@ -27,8 +28,9 @@ class SearchOntology:
         self._search_service = search_service
 
     async def __call__(
-        self, input: SearchOntologyQuery
+        self, input: SearchOntologyQuery, auth: AuthContext | None = None
     ) -> Result[list[OntologyTerm], DomainError]:
+        require_workspace_role(auth, "viewer")
         results = await self._search_service.search(
             query=input.query,
             ontology_sources=input.ontology_sources,

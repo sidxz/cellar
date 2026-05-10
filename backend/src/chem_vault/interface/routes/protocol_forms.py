@@ -92,7 +92,7 @@ async def list_protocol_forms(
     use_case: ListProtocolFormsDep,
 ) -> list[ProtocolFormResponse]:
     query = ListProtocolFormsQuery(workspace_id=auth.workspace_id)
-    forms = result_to_response(await use_case(query))
+    forms = result_to_response(await use_case(query, auth=auth))
     return [ProtocolFormResponse.from_domain(f) for f in forms]
 
 

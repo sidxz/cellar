@@ -9,7 +9,17 @@ from returns.result import Result
 
 from chem_vault.domain.shared.errors import DomainError
 from chem_vault.domain.shared.value_objects import ChemicalStructure, ComputedDescriptors
-from chem_vault.infrastructure.rdkit.fingerprint_generator import Fingerprints
+
+
+@dataclass(frozen=True)
+class Fingerprints:
+    """Computed fingerprints for a single molecule — application-layer DTO.
+
+    Only Morgan is computed in Python (stereo-aware). FCFP is computed by
+    a Postgres trigger from the canonical SMILES.
+    """
+
+    morgan: bytes
 
 
 @dataclass(frozen=True)

@@ -113,19 +113,17 @@ async def test_admin_hard_delete_audit_failure_prevents_commit(
     fake_audit = MagicMock()
     fake_audit.record = AsyncMock(side_effect=boom)
 
-    # Patch find_inbound_references so it returns no blockers
-    with (
-        patch(
-            "chem_vault.application.admin.admin_hard_delete.find_inbound_references",
-            new=AsyncMock(return_value=[]),
-        ),
-        pytest.raises(RuntimeError, match="audit DB is down"),
-    ):
+    # CascadeService stub returns no blockers
+    fake_cascade = MagicMock()
+    fake_cascade.find_inbound_references = AsyncMock(return_value=[])
+
+    with pytest.raises(RuntimeError, match="audit DB is down"):
         # repos is a dict mapping entity_type -> repo; no container needed
         uc = AdminHardDelete(
             uow=fake_uow,
             audit=fake_audit,
             repos={"vocabulary": fake_repo},
+            cascade_service=fake_cascade,
         )
         await uc(
             AdminHardDeleteCommand(
@@ -178,12 +176,9 @@ async def test_cascade_delete_audit_failure_prevents_commit(
     fake_entries: list = []
     fake_cascade_service = MagicMock()
     fake_cascade_service.execute = AsyncMock(return_value=fake_entries)
+    fake_cascade_service.fetch_typed_name_label = AsyncMock(return_value=proto_name)
 
     with (
-        patch(
-            "chem_vault.application.admin.cascade_delete._fetch_label",
-            new=AsyncMock(return_value=proto_name),
-        ),
         patch(
             "chem_vault.application.admin.cascade_delete.TIER2_ENTITY_TYPES",
             new={"protocol"},

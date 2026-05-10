@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from chem_vault.application.auth import AuthContext, require_workspace_role
 from chem_vault.application.shared.query import Query
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.shared.errors import DomainError
@@ -26,8 +27,9 @@ class ListOrganizations:
         self._repo = repo
 
     async def __call__(
-        self, input: ListOrganizationsQuery
+        self, input: ListOrganizationsQuery, auth: AuthContext | None = None
     ) -> Result[list[Organization], DomainError]:
+        require_workspace_role(auth, "viewer")
         async with self._uow:
             orgs = await self._repo.find_by_workspace(
                 input.workspace_id, include_inactive=input.include_inactive
