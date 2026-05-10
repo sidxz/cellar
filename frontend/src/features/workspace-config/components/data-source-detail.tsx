@@ -314,6 +314,7 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
   // Local edit state
   const [name, setName] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [createBatchOnDup, setCreateBatchOnDup] = useState(false);
   const [mappings, setMappings] = useState<EntityMapping[]>([]);
   const [dirty, setDirty] = useState(false);
 
@@ -329,6 +330,7 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
     if (ds) {
       setName(ds.name);
       setIsActive(ds.is_active);
+      setCreateBatchOnDup(ds.create_batch_on_duplicate);
       setMappings(structuredClone(ds.entity_mappings));
       setDirty(false);
       if (ds.entity_mappings.length > 0) {
@@ -348,6 +350,7 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
     await update.mutateAsync({
       name: name.trim(),
       is_active: isActive,
+      create_batch_on_duplicate: createBatchOnDup,
       entity_mappings: mappings,
     });
     setDirty(false);
@@ -443,6 +446,26 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
           <Label htmlFor="ds-active" className="cursor-pointer">
             Active
           </Label>
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+          <div>
+            <Label htmlFor="ds-cbod" className="text-sm font-medium">
+              Create batch on re-import
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              When off, scheduled syncs from this source only update existing
+              molecules with new metadata; they do not create duplicate batches.
+            </p>
+          </div>
+          <Switch
+            id="ds-cbod"
+            checked={createBatchOnDup}
+            onCheckedChange={(c) => {
+              setCreateBatchOnDup(c);
+              setDirty(true);
+            }}
+          />
         </div>
       </div>
 

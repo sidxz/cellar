@@ -36,6 +36,7 @@ export interface DataSource {
   config: Record<string, unknown>;
   api_key_name: string | null;
   is_active: boolean;
+  create_batch_on_duplicate: boolean;
   entity_mappings: EntityMapping[];
   created_by: string;
   version: number;
@@ -51,6 +52,7 @@ export interface CreateDataSourceInput {
 export interface UpdateDataSourceInput {
   name?: string;
   is_active?: boolean;
+  create_batch_on_duplicate?: boolean | null;
   config?: Record<string, unknown>;
   api_key_name?: string | null;
   entity_mappings?: EntityMapping[];
