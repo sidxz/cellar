@@ -48,6 +48,7 @@ class StartBulkRegistrationFromFileCommand(Command):
     filename: str
     file_format: str
     content: bytes
+    create_batch_on_duplicate: bool | None = None  # None → use workspace default
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,7 @@ class StartBulkRegistration:
             filename=input.filename,
             file_format=input.file_format,
             content=input.content,
+            create_batch_on_duplicate=input.create_batch_on_duplicate,
         )
 
         try:
@@ -150,6 +152,7 @@ class StartBulkRegistration:
                 items=items,
                 submitted_by=input.submitted_by,
                 originating_org_id=input.originating_org_id,
+                create_batch_on_duplicate=input.create_batch_on_duplicate,
             ),
             auth=auth,
         )

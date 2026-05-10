@@ -22,6 +22,7 @@ class StartBulkRegistrationRequest:
     filename: str
     file_format: str
     content: bytes
+    create_batch_on_duplicate: bool | None = None  # None → use workspace default
 
 
 @dataclass(frozen=True, kw_only=True)

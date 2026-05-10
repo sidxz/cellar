@@ -71,6 +71,7 @@ class StartBulkRegistrationCommand(Command):
     items: list[BulkRegistrationItem]
     submitted_by: uuid.UUID
     originating_org_id: uuid.UUID
+    create_batch_on_duplicate: bool | None = None  # None → use workspace default
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,7 @@ class BulkRegistrationItemResult:
     salt_matched: bool = False
     error: str | None = None
     batch_error: str | None = None
+    batch_skipped: bool = False
 
 
 @dataclass(frozen=True)

@@ -153,6 +153,7 @@ async def start_bulk_registration(
     file: UploadFile = File(...),
     originating_org_id: uuid.UUID = Form(...),
     file_format: str = Form(...),
+    create_batch_on_duplicate: bool | None = Form(None),
 ):
     """Upload a file (SDF, CSV, XLSX) to register molecules in bulk.
 
@@ -170,6 +171,7 @@ async def start_bulk_registration(
         filename=filename,
         file_format=file_format,
         content=content,
+        create_batch_on_duplicate=create_batch_on_duplicate,
     )
 
     result = await use_case(cmd, auth=auth)
