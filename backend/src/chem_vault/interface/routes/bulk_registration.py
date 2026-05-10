@@ -1,25 +1,26 @@
 """Bulk registration API routes.
 
-Supports both async (Temporal, 202) and sync (fallback, 201) modes.
+Supports both async (Temporal, 202) and sync (fallback, 201) modes — the
+branching lives inside the ``StartBulkRegistration`` use case; this layer
+just inspects the result mode to pick a response code.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from pydantic import BaseModel
 from returns.result import Failure
 
 from chem_vault.application.chemical_registration.bulk_registration_service import (
-    BulkRegistrationItem,
     BulkRegistrationItemResult,
-    StartBulkRegistrationCommand,
 )
 from chem_vault.application.chemical_registration.confirm_disclosure import (
-    ConfirmDisclosure,
     ConfirmDisclosureCommand,
+)
+from chem_vault.application.chemical_registration.get_bulk_registration_runtime_status import (
+    GetBulkRegistrationRuntimeStatusQuery,
 )
 from chem_vault.application.chemical_registration.list_bulk_registration_items import (
     ListBulkRegistrationItemsQuery,
@@ -28,18 +29,21 @@ from chem_vault.application.chemical_registration.preview_bulk_registration_file
     PreviewBulkRegistrationFileQuery,
 )
 from chem_vault.application.chemical_registration.reject_disclosure import (
-    RejectDisclosure,
     RejectDisclosureCommand,
 )
+from chem_vault.application.chemical_registration.start_bulk_registration import (
+    StartBulkRegistrationFromFileCommand,
+)
 from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
-from chem_vault.infrastructure.parsers.chemical_file_parser import get_parser
+from chem_vault.domain.shared.errors import NotFoundError, ValidationError
 from chem_vault.interface.dependencies import (
     AuthDep,
-    BulkRegistrationServiceDep,
     ConfirmDisclosureDep,
+    GetBulkRegistrationRuntimeStatusDep,
     ListBulkRegistrationItemsDep,
     PreviewBulkRegistrationFileDep,
     RejectDisclosureDep,
+    StartBulkRegistrationDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -136,139 +140,95 @@ class ConfirmMergesResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.post("")
+@router.post(
+    "",
+    responses={
+        202: {"model": BulkRegistrationAcceptedResponse},
+        201: {"model": BulkRegistrationResponse},
+    },
+)
 async def start_bulk_registration(
-    request: Request,
     auth: AuthDep,
-    service: BulkRegistrationServiceDep,
+    use_case: StartBulkRegistrationDep,
     file: UploadFile = File(...),
     originating_org_id: uuid.UUID = Form(...),
     file_format: str = Form(...),
-) -> JSONResponse:
+):
     """Upload a file (SDF, CSV, XLSX) to register molecules in bulk.
 
     Returns 202 when Temporal is available (async), 201 otherwise (sync).
+    The use case branches on orchestrator availability; this handler
+    inspects the result's ``mode`` to pick the response shape.
     """
     content = await file.read()
-    if len(content) > 50 * 1024 * 1024:  # 50 MB
-        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+    filename = file.filename or "unknown"
 
-    try:
-        fmt = BulkRegistrationFileFormat(file_format)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Unsupported file format: {file_format!r}")
-    temporal_client = getattr(request.app.state, "temporal_client", None)
-
-    # --- Async path (Temporal available) ---
-    if temporal_client is not None:
-        from chem_vault.infrastructure.temporal.activities.file_parsing import save_upload_to_storage
-        from chem_vault.infrastructure.temporal.workflows.bulk_registration import (
-            BulkRegistrationWorkflow,
-            BulkRegistrationWorkflowInput,
-        )
-
-        storage_path = save_upload_to_storage(content, file.filename or "unknown")
-        workflow_id = f"bulk-reg-{auth.workspace_id}-{uuid.uuid4()}"
-
-        await temporal_client.start_workflow(
-            BulkRegistrationWorkflow.run,
-            BulkRegistrationWorkflowInput(
-                workspace_id=str(auth.workspace_id),
-                originating_org_id=str(originating_org_id),
-                submitted_by=str(auth.user_id),
-                source_file=file.filename or "unknown",
-                file_format=file_format,
-                storage_path=storage_path,
-                filename=file.filename or "unknown",
-            ),
-            id=workflow_id,
-            task_queue="chem-vault-main",
-        )
-
-        body = BulkRegistrationAcceptedResponse(workflow_id=workflow_id)
-        return JSONResponse(status_code=202, content=body.model_dump())
-
-    # --- Sync fallback (no Temporal) ---
-    parser = get_parser(fmt)
-    parsed = parser.parse(content, file.filename or "unknown")
-
-    items = [
-        BulkRegistrationItem(
-            row_index=p.row_index,
-            name=p.name,
-            smiles=p.smiles,
-            molecule_type=p.molecule_type,
-            external_ids=p.external_ids,
-            error=p.error,
-            amount_value=p.amount_value,
-            amount_unit=p.amount_unit,
-            salt_code=p.salt_code,
-            salt_stoichiometry=p.salt_stoichiometry,
-            purity=p.purity,
-            batch_source=p.batch_source,
-            appearance=p.appearance,
-        )
-        for p in parsed
-    ]
-
-    cmd = StartBulkRegistrationCommand(
+    cmd = StartBulkRegistrationFromFileCommand(
         workspace_id=auth.workspace_id,
-        source_file=file.filename or "unknown",
-        file_format=file_format,
-        items=items,
-        submitted_by=auth.user_id,
         originating_org_id=originating_org_id,
+        submitted_by=auth.user_id,
+        filename=filename,
+        file_format=file_format,
+        content=content,
     )
 
-    result = await service(cmd, auth=auth)
+    result = await use_case(cmd, auth=auth)
     outcome = result_to_response(result)
 
-    body = BulkRegistrationResponse(
-        id=outcome.bulk_registration.id,
-        status=outcome.bulk_registration.status.value,
-        total_count=outcome.bulk_registration.total_count,
-        registered_count=outcome.bulk_registration.registered_count,
-        duplicate_count=outcome.bulk_registration.duplicate_count,
-        error_count=outcome.bulk_registration.error_count,
-        items=[BulkRegistrationItemResponse.from_item(i) for i in outcome.item_results],
+    if outcome.mode == "async":
+        return _accepted_response(outcome.workflow_id or "")
+
+    sync = outcome.sync_outcome
+    assert sync is not None  # mode == "sync" guarantees this
+    return BulkRegistrationResponse(
+        id=sync.bulk_registration.id,
+        status=sync.bulk_registration.status.value,
+        total_count=sync.bulk_registration.total_count,
+        registered_count=sync.bulk_registration.registered_count,
+        duplicate_count=sync.bulk_registration.duplicate_count,
+        error_count=sync.bulk_registration.error_count,
+        items=[BulkRegistrationItemResponse.from_item(i) for i in sync.item_results],
     )
-    return JSONResponse(status_code=201, content=body.model_dump(mode="json"))
+
+
+def _accepted_response(workflow_id: str):
+    """Build a 202-Accepted JSON response for the async Temporal path."""
+    from fastapi.responses import JSONResponse
+    body = BulkRegistrationAcceptedResponse(workflow_id=workflow_id)
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=body.model_dump())
 
 
 @router.get("/{workflow_id}/status", response_model=BulkRegistrationStatusResponse)
 async def get_bulk_registration_status(
-    request: Request,
     auth: AuthDep,
     workflow_id: str,
+    runtime_status_uc: GetBulkRegistrationRuntimeStatusDep,
 ) -> BulkRegistrationStatusResponse:
     """Poll progress of an async bulk registration workflow."""
     _verify_workspace_prefix(workflow_id, auth.workspace_id)
 
-    temporal_client = getattr(request.app.state, "temporal_client", None)
-    if temporal_client is None:
-        raise HTTPException(status_code=503, detail="Temporal is not available.")
-
-    try:
-        from chem_vault.infrastructure.temporal.workflows.bulk_registration import BulkRegistrationWorkflow
-
-        handle = temporal_client.get_workflow_handle(workflow_id)
-        progress = await handle.query(BulkRegistrationWorkflow.get_progress)
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
+    result = await runtime_status_uc(
+        GetBulkRegistrationRuntimeStatusQuery(
+            workspace_id=auth.workspace_id,
+            workflow_id=workflow_id,
+        ),
+        auth=auth,
+    )
+    data = result_to_response(result)
 
     return BulkRegistrationStatusResponse(
-        bulk_reg_id=progress.bulk_reg_id,
-        status=progress.status,
-        total_count=progress.total_count,
-        registered_count=progress.registered_count,
-        duplicate_count=progress.duplicate_count,
-        error_count=progress.error_count,
-        disclosed_count=progress.disclosed_count,
-        merge_candidate_count=progress.merge_candidate_count,
-        conflict_count=progress.conflict_count,
-        merge_candidates=progress.merge_candidates,
-        chunks_processed=progress.chunks_processed,
-        chunks_total=progress.chunks_total,
+        bulk_reg_id=data.bulk_reg_id,
+        status=data.status,
+        total_count=data.total_count,
+        registered_count=data.registered_count,
+        duplicate_count=data.duplicate_count,
+        error_count=data.error_count,
+        disclosed_count=data.disclosed_count,
+        merge_candidate_count=data.merge_candidate_count,
+        conflict_count=data.conflict_count,
+        merge_candidates=data.merge_candidates,
+        chunks_processed=data.chunks_processed,
+        chunks_total=data.chunks_total,
     )
 
 
@@ -406,9 +366,8 @@ def _detect_file_format(filename: str) -> BulkRegistrationFileFormat:
         return BulkRegistrationFileFormat.XLSX
     if lower.endswith((".sdf", ".sd")):
         return BulkRegistrationFileFormat.SDF
-    raise HTTPException(
-        status_code=422,
-        detail=f"Unsupported file extension on {filename!r} — use .csv, .xlsx, .sdf or .sd",
+    raise ValidationError(
+        f"Unsupported file extension on {filename!r} — use .csv, .xlsx, .sdf or .sd"
     )
 
 
@@ -541,10 +500,7 @@ def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
     """
     prefix = "bulk-reg-"
     if not workflow_id.startswith(prefix):
-        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
+        raise NotFoundError("Workflow", workflow_id)
     remainder = workflow_id[len(prefix) :]
-    if len(remainder) < 37:
-        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
-    embedded_ws = remainder[:36]
-    if embedded_ws != str(workspace_id):
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    if len(remainder) < 37 or remainder[:36] != str(workspace_id):
+        raise NotFoundError("Workflow", workflow_id)

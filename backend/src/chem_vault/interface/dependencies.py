@@ -29,16 +29,34 @@ from chem_vault.application.attachment.upload_attachment import UploadAttachment
 from chem_vault.application.audit.audit_recording_service import AuditRecordingService
 from chem_vault.application.audit.query_audit import GetAuditOperation, ListAuditOperations
 from chem_vault.application.chemical_registration.bulk_registration_service import BulkRegistrationService
+from chem_vault.application.chemical_registration.get_bulk_registration_runtime_status import (
+    GetBulkRegistrationRuntimeStatus,
+)
 from chem_vault.application.chemical_registration.list_bulk_registration_items import (
     ListBulkRegistrationItems,
 )
 from chem_vault.application.chemical_registration.preview_bulk_registration_file import (
     PreviewBulkRegistrationFile,
 )
+from chem_vault.application.chemical_registration.start_bulk_registration import (
+    StartBulkRegistration,
+)
+from chem_vault.application.cdd_import.cancel_cdd_molecule_import import (
+    CancelCddMoleculeImport,
+)
+from chem_vault.application.cdd_import.cancel_cdd_plate_import import CancelCddPlateImport
+from chem_vault.application.cdd_import.get_cdd_molecule_import_runtime_status import (
+    GetCddMoleculeImportRuntimeStatus,
+)
+from chem_vault.application.cdd_import.get_cdd_plate_import_runtime_status import (
+    GetCddPlateImportRuntimeStatus,
+)
 from chem_vault.application.chemical_registration.export_sdf import ExportMoleculesSDF
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
 from chem_vault.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
+from chem_vault.application.chemical_registration.depict_molecules import DepictMolecules
+from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
 from chem_vault.application.chemical_registration.get_merge_impact import GetMergeImpact
@@ -377,6 +395,12 @@ def _get_use_case(uc_type: type):  # noqa: ANN001
     return _dep
 
 
+# --- Infrastructure singletons exposed to routes ---
+FingerprintRegistryDep = Annotated[
+    FingerprintRegistry, Depends(_get_use_case(FingerprintRegistry))
+]
+
+
 # --- Admin dependencies ---
 AdminHardDeleteDep = Annotated[AdminHardDelete, Depends(_get_use_case(AdminHardDelete))]
 CascadePreviewDep = Annotated[CascadePreview, Depends(_get_use_case(CascadePreview))]
@@ -447,6 +471,7 @@ GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
 ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules))]
 UpdateMoleculeDep = Annotated[UpdateMolecule, Depends(_get_use_case(UpdateMolecule))]
 SearchMoleculesDep = Annotated[SearchMolecules, Depends(_get_use_case(SearchMolecules))]
+DepictMoleculesDep = Annotated[DepictMolecules, Depends(_get_use_case(DepictMolecules))]
 ExportMoleculesSDFDep = Annotated[ExportMoleculesSDF, Depends(_get_use_case(ExportMoleculesSDF))]
 GetMoleculeByIdentifierDep = Annotated[GetMoleculeByIdentifier, Depends(_get_use_case(GetMoleculeByIdentifier))]
 AddIdentifierDep = Annotated[AddIdentifier, Depends(_get_use_case(AddIdentifier))]
@@ -468,6 +493,13 @@ ConfirmDisclosureDep = Annotated[ConfirmDisclosure, Depends(_get_use_case(Confir
 RejectDisclosureDep = Annotated[RejectDisclosure, Depends(_get_use_case(RejectDisclosure))]
 GetMergeImpactDep = Annotated[GetMergeImpact, Depends(_get_use_case(GetMergeImpact))]
 BulkRegistrationServiceDep = Annotated[BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))]
+StartBulkRegistrationDep = Annotated[
+    StartBulkRegistration, Depends(_get_use_case(StartBulkRegistration))
+]
+GetBulkRegistrationRuntimeStatusDep = Annotated[
+    GetBulkRegistrationRuntimeStatus,
+    Depends(_get_use_case(GetBulkRegistrationRuntimeStatus)),
+]
 PreviewBulkRegistrationFileDep = Annotated[
     PreviewBulkRegistrationFile, Depends(_get_use_case(PreviewBulkRegistrationFile))
 ]
@@ -654,6 +686,13 @@ from chem_vault.application.cdd_import.get_cdd_molecule_import_status import (
 )
 GetCddMoleculeImportStatusFromDbDep = Annotated[GetCddMoleculeImportStatusFromDb, Depends(_get_use_case(GetCddMoleculeImportStatusFromDb))]
 SyncFailedCddMoleculeImportDep = Annotated[SyncFailedCddMoleculeImport, Depends(_get_use_case(SyncFailedCddMoleculeImport))]
+GetCddMoleculeImportRuntimeStatusDep = Annotated[
+    GetCddMoleculeImportRuntimeStatus,
+    Depends(_get_use_case(GetCddMoleculeImportRuntimeStatus)),
+]
+CancelCddMoleculeImportDep = Annotated[
+    CancelCddMoleculeImport, Depends(_get_use_case(CancelCddMoleculeImport))
+]
 StartCddPlateImportDep = Annotated[StartCddPlateImport, Depends(_get_use_case(StartCddPlateImport))]
 ListCddPlateImportsDep = Annotated[ListCddPlateImports, Depends(_get_use_case(ListCddPlateImports))]
 ForceFailCddPlateImportDep = Annotated[ForceFailCddPlateImport, Depends(_get_use_case(ForceFailCddPlateImport))]
@@ -663,6 +702,13 @@ from chem_vault.application.cdd_import.get_cdd_plate_import_status import (
 )
 GetCddPlateImportStatusFromDbDep = Annotated[GetCddPlateImportStatusFromDb, Depends(_get_use_case(GetCddPlateImportStatusFromDb))]
 SyncFailedCddPlateImportDep = Annotated[SyncFailedCddPlateImport, Depends(_get_use_case(SyncFailedCddPlateImport))]
+GetCddPlateImportRuntimeStatusDep = Annotated[
+    GetCddPlateImportRuntimeStatus,
+    Depends(_get_use_case(GetCddPlateImportRuntimeStatus)),
+]
+CancelCddPlateImportDep = Annotated[
+    CancelCddPlateImport, Depends(_get_use_case(CancelCddPlateImport))
+]
 
 # --- Dashboard dependencies ---
 GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDashboardStats))]

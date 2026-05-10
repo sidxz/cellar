@@ -6,13 +6,29 @@ import httpx
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from chem_vault.application.cdd_import.cancel_cdd_molecule_import import (
+    CancelCddMoleculeImport,
+)
+from chem_vault.application.cdd_import.cancel_cdd_plate_import import CancelCddPlateImport
+from chem_vault.application.cdd_import.cdd_molecule_import_orchestrator import (
+    CddMoleculeImportOrchestrator,
+)
+from chem_vault.application.cdd_import.cdd_plate_import_orchestrator import (
+    CddPlateImportOrchestrator,
+)
 from chem_vault.application.cdd_import.force_fail_cdd_molecule_import import (
     ForceFailCddMoleculeImport,
 )
 from chem_vault.application.cdd_import.force_fail_cdd_plate_import import ForceFailCddPlateImport
+from chem_vault.application.cdd_import.get_cdd_molecule_import_runtime_status import (
+    GetCddMoleculeImportRuntimeStatus,
+)
 from chem_vault.application.cdd_import.get_cdd_molecule_import_status import (
     GetCddMoleculeImportStatusFromDb,
     SyncFailedCddMoleculeImport,
+)
+from chem_vault.application.cdd_import.get_cdd_plate_import_runtime_status import (
+    GetCddPlateImportRuntimeStatus,
 )
 from chem_vault.application.cdd_import.get_cdd_plate_import_status import (
     GetCddPlateImportStatusFromDb,
@@ -94,7 +110,10 @@ def register_cdd_import(container: Container) -> None:
             api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
             secret_provider=c[SecretProvider],
         )
-        return StartCddMoleculeImport(get_data_source=get_ds)
+        return StartCddMoleculeImport(
+            get_data_source=get_ds,
+            orchestrator=c[CddMoleculeImportOrchestrator],
+        )
 
     def _list_cdd_mol_imports(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -132,6 +151,19 @@ def register_cdd_import(container: Container) -> None:
     container.define(GetCddMoleculeImportStatusFromDb, _get_cdd_mol_import_status_from_db)
     container.define(SyncFailedCddMoleculeImport, _sync_failed_cdd_mol_import)
 
+    container.define(
+        GetCddMoleculeImportRuntimeStatus,
+        lambda c: GetCddMoleculeImportRuntimeStatus(
+            orchestrator=c[CddMoleculeImportOrchestrator],
+            db_status=c[GetCddMoleculeImportStatusFromDb],
+            sync_failed=c[SyncFailedCddMoleculeImport],
+        ),
+    )
+    container.define(
+        CancelCddMoleculeImport,
+        lambda c: CancelCddMoleculeImport(orchestrator=c[CddMoleculeImportOrchestrator]),
+    )
+
     # --- CDD Plate Import ---
     def _start_cdd_plate_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -141,7 +173,10 @@ def register_cdd_import(container: Container) -> None:
             api_key_repo=SQLAlchemyExternalApiKeyRepository(uow),
             secret_provider=c[SecretProvider],
         )
-        return StartCddPlateImport(get_data_source=get_ds)
+        return StartCddPlateImport(
+            get_data_source=get_ds,
+            orchestrator=c[CddPlateImportOrchestrator],
+        )
 
     def _list_cdd_plate_imports(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -178,3 +213,16 @@ def register_cdd_import(container: Container) -> None:
 
     container.define(GetCddPlateImportStatusFromDb, _get_cdd_plate_import_status_from_db)
     container.define(SyncFailedCddPlateImport, _sync_failed_cdd_plate_import)
+
+    container.define(
+        GetCddPlateImportRuntimeStatus,
+        lambda c: GetCddPlateImportRuntimeStatus(
+            orchestrator=c[CddPlateImportOrchestrator],
+            db_status=c[GetCddPlateImportStatusFromDb],
+            sync_failed=c[SyncFailedCddPlateImport],
+        ),
+    )
+    container.define(
+        CancelCddPlateImport,
+        lambda c: CancelCddPlateImport(orchestrator=c[CddPlateImportOrchestrator]),
+    )

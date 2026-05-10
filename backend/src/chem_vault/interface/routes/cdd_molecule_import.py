@@ -4,30 +4,25 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 from pydantic import BaseModel
-from temporalio.client import WorkflowExecutionStatus
-from temporalio.service import RPCError, RPCStatusCode
 
-from chem_vault.application.auth import require_editor
-from chem_vault.application.cdd_import.get_cdd_molecule_import_status import (
-    GetCddMoleculeImportStatusQuery,
+from chem_vault.application.cdd_import.cancel_cdd_molecule_import import (
+    CancelCddMoleculeImportCommand,
+)
+from chem_vault.application.cdd_import.get_cdd_molecule_import_runtime_status import (
+    GetCddMoleculeImportRuntimeStatusQuery,
 )
 from chem_vault.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImportCommand,
 )
-from chem_vault.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
-from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import (
-    CddVaultImportWorkflow,
-    CddVaultImportWorkflowInput,
-)
 from chem_vault.interface.dependencies import (
     AuthDep,
+    CancelCddMoleculeImportDep,
     ForceFailCddMoleculeImportDep,
-    GetCddMoleculeImportStatusFromDbDep,
+    GetCddMoleculeImportRuntimeStatusDep,
     ListCddMoleculeImportsDep,
     StartCddMoleculeImportDep,
-    SyncFailedCddMoleculeImportDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -80,22 +75,6 @@ class CddMoleculeImportSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_temporal_client(request: Request):
-    """Resolve the Temporal client or raise 503."""
-    client = getattr(request.app.state, "temporal_client", None)
-    if client is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Temporal is not available. Bulk CDD import requires Temporal.",
-        )
-    return client
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -136,115 +115,45 @@ async def list_cdd_molecule_imports(
 
 @router.post("", response_model=CddMoleculeImportAcceptedResponse, status_code=202)
 async def start_cdd_molecule_import(
-    request: Request,
     auth: AuthDep,
     use_case: StartCddMoleculeImportDep,
     body: StartCddMoleculeImportBody,
 ) -> CddMoleculeImportAcceptedResponse:
     """Start a CDD vault molecule import. Returns 202 with workflow_id."""
-    temporal_client = _get_temporal_client(request)
-
-    # Validate CDD config (use case enforces require_editor)
     cmd = StartCddMoleculeImportCommand(
         workspace_id=auth.workspace_id,
+        submitted_by=auth.user_id,
+        originating_org_id=body.originating_org_id,
         import_mode=body.import_mode,
         filter_criteria=body.filter_criteria,
+        max_molecules=body.max_molecules,
     )
     result = await use_case(cmd, auth=auth)
-    config = result_to_response(result)
-
-    # Start Temporal workflow — embed workspace_id for ownership checks
-    workflow_id = f"cdd-mol-import-{auth.workspace_id}-{uuid.uuid4()}"
-    await temporal_client.start_workflow(
-        CddVaultImportWorkflow.run,
-        CddVaultImportWorkflowInput(
-            workspace_id=str(auth.workspace_id),
-            cdd_vault_id=config.vault_id,
-            import_mode=body.import_mode,
-            submitted_by=str(auth.user_id),
-            originating_org_id=str(body.originating_org_id),
-            secret_ref=config.secret_ref,
-            filter_criteria=body.filter_criteria,
-            max_molecules=body.max_molecules,
-            entity_mappings=config.entity_mappings,
-        ),
-        id=workflow_id,
-        task_queue=MAIN_TASK_QUEUE,
-    )
-
+    outcome = result_to_response(result)
     return CddMoleculeImportAcceptedResponse(
-        workflow_id=workflow_id,
+        workflow_id=outcome.workflow_id,
         status="pending",
     )
 
 
 @router.get("/{workflow_id}/status", response_model=CddMoleculeImportStatusResponse)
 async def get_cdd_molecule_import_status(
-    request: Request,
     auth: AuthDep,
     workflow_id: str,
-    db_status_uc: GetCddMoleculeImportStatusFromDbDep,
-    sync_failed_uc: SyncFailedCddMoleculeImportDep,
+    runtime_status_uc: GetCddMoleculeImportRuntimeStatusDep,
 ) -> CddMoleculeImportStatusResponse:
     """Poll progress of a CDD molecule import workflow.
 
-    Workspace-scoped: the workflow_id prefix contains the workspace_id,
-    and the Temporal query is validated against the requesting workspace.
+    Workspace ownership is enforced by the embedded ``workspace_id`` prefix
+    in the workflow_id; the use case verifies the requesting workspace.
     """
-    temporal_client = _get_temporal_client(request)
-
-    # Verify workspace ownership via workflow_id convention
-    _verify_workspace_prefix(workflow_id, auth.workspace_id)
-
-    try:
-        handle = temporal_client.get_workflow_handle(workflow_id)
-        progress = await handle.query(CddVaultImportWorkflow.get_progress)
-        status = progress.status
-
-        # Detect crashed workflows: Temporal says progress is non-terminal
-        # but the execution actually failed/terminated (activity retries exhausted, etc.)
-        if status not in ("completed", "completed_with_errors", "failed"):
-            try:
-                desc = await handle.describe()
-                exec_status = desc.status
-                if exec_status in (
-                    WorkflowExecutionStatus.FAILED,
-                    WorkflowExecutionStatus.TERMINATED,
-                    WorkflowExecutionStatus.TIMED_OUT,
-                    WorkflowExecutionStatus.CANCELED,
-                ):
-                    status = "failed"
-                    # Sync DB aggregate to match — otherwise history
-                    # still shows "processing" and the UI loops.
-                    await sync_failed_uc(auth.workspace_id, progress.import_id)
-            except Exception:
-                import structlog
-                structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id, detail="describe() failed")
-
-        return CddMoleculeImportStatusResponse(
-            import_id=progress.import_id,
-            status=status,
-            total_count=progress.total_count,
-            registered_count=progress.registered_count,
-            duplicate_count=progress.duplicate_count,
-            error_count=progress.error_count,
-            skipped_count=progress.skipped_count,
-            current_offset=progress.current_offset,
-            pages_processed=progress.pages_processed,
-        )
-    except RPCError as exc:
-        if exc.status == RPCStatusCode.NOT_FOUND:
-            raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
-        # Fall through to DB lookup for nondeterminism errors, etc.
-    except Exception:
-        import structlog
-        structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id)
-
-    # Fallback: read from DB (handles completed/failed workflows and code-change replays)
-    query = GetCddMoleculeImportStatusQuery(
-        workspace_id=auth.workspace_id, workflow_id=workflow_id
+    result = await runtime_status_uc(
+        GetCddMoleculeImportRuntimeStatusQuery(
+            workspace_id=auth.workspace_id,
+            workflow_id=workflow_id,
+        ),
+        auth=auth,
     )
-    result = await db_status_uc(query, auth=auth)
     data = result_to_response(result)
     return CddMoleculeImportStatusResponse(
         import_id=data.import_id,
@@ -261,24 +170,19 @@ async def get_cdd_molecule_import_status(
 
 @router.post("/{workflow_id}/cancel", status_code=204)
 async def cancel_cdd_molecule_import(
-    request: Request,
     auth: AuthDep,
     workflow_id: str,
+    cancel_uc: CancelCddMoleculeImportDep,
 ) -> None:
     """Send a cancel signal to a running CDD molecule import workflow."""
-    require_editor(auth)
-    temporal_client = _get_temporal_client(request)
-    _verify_workspace_prefix(workflow_id, auth.workspace_id)
-
-    try:
-        handle = temporal_client.get_workflow_handle(workflow_id)
-        await handle.signal(CddVaultImportWorkflow.cancel)
-    except RPCError as exc:
-        if exc.status == RPCStatusCode.NOT_FOUND:
-            # Workflow already terminated (crashed/completed) — that's fine,
-            # the user wants it stopped and it already is. Return success.
-            return
-        raise
+    result = await cancel_uc(
+        CancelCddMoleculeImportCommand(
+            workspace_id=auth.workspace_id,
+            workflow_id=workflow_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
 
 
 @router.post("/{import_id}/force-fail", status_code=204)
@@ -300,24 +204,3 @@ async def force_fail_cdd_molecule_import(
         auth=auth,
     )
     result_to_response(result)
-
-
-def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
-    """Verify the workflow belongs to the requesting workspace.
-
-    Workflow IDs have the format: ``cdd-mol-import-{workspace_id}-{uuid}``.
-    We extract the embedded workspace_id and compare.
-    """
-    prefix = "cdd-mol-import-"
-    if not workflow_id.startswith(prefix):
-        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
-    remainder = workflow_id[len(prefix):]
-    # remainder = "{workspace_uuid}-{random_uuid}"
-    # workspace UUID is 36 chars
-    if len(remainder) < 37:
-        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
-    embedded_ws = remainder[:36]
-    if embedded_ws != str(workspace_id):
-        raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
-
-

@@ -4,30 +4,25 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 from pydantic import BaseModel
-from temporalio.client import WorkflowExecutionStatus
-from temporalio.service import RPCError, RPCStatusCode
 
-from chem_vault.application.auth import require_editor
-from chem_vault.application.cdd_import.get_cdd_plate_import_status import (
-    GetCddPlateImportStatusQuery,
+from chem_vault.application.cdd_import.cancel_cdd_plate_import import (
+    CancelCddPlateImportCommand,
+)
+from chem_vault.application.cdd_import.get_cdd_plate_import_runtime_status import (
+    GetCddPlateImportRuntimeStatusQuery,
 )
 from chem_vault.application.cdd_import.start_cdd_plate_import import (
     StartCddPlateImportCommand,
 )
-from chem_vault.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
-from chem_vault.infrastructure.temporal.workflows.cdd_plate_import import (
-    CddPlateImportWorkflow,
-    CddPlateImportWorkflowInput,
-)
 from chem_vault.interface.dependencies import (
     AuthDep,
+    CancelCddPlateImportDep,
     ForceFailCddPlateImportDep,
-    GetCddPlateImportStatusFromDbDep,
+    GetCddPlateImportRuntimeStatusDep,
     ListCddPlateImportsDep,
     StartCddPlateImportDep,
-    SyncFailedCddPlateImportDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 
@@ -74,21 +69,6 @@ class CddPlateImportSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_temporal_client(request: Request):
-    client = getattr(request.app.state, "temporal_client", None)
-    if client is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Temporal is not available. Plate import requires Temporal.",
-        )
-    return client
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -128,88 +108,31 @@ async def list_cdd_plate_imports(
 
 @router.post("", response_model=CddPlateImportAcceptedResponse, status_code=202)
 async def start_cdd_plate_import(
-    request: Request,
     auth: AuthDep,
     use_case: StartCddPlateImportDep,
 ) -> CddPlateImportAcceptedResponse:
-    temporal_client = _get_temporal_client(request)
-
-    cmd = StartCddPlateImportCommand(workspace_id=auth.workspace_id)
-    result = await use_case(cmd, auth=auth)
-    config = result_to_response(result)
-
-    workflow_id = f"cdd-plate-import-{auth.workspace_id}-{uuid.uuid4()}"
-    await temporal_client.start_workflow(
-        CddPlateImportWorkflow.run,
-        CddPlateImportWorkflowInput(
-            workspace_id=str(auth.workspace_id),
-            cdd_vault_id=config.vault_id,
-            submitted_by=str(auth.user_id),
-            secret_ref=config.secret_ref,
-            entity_mappings=config.entity_mappings,
-        ),
-        id=workflow_id,
-        task_queue=MAIN_TASK_QUEUE,
+    cmd = StartCddPlateImportCommand(
+        workspace_id=auth.workspace_id,
+        submitted_by=auth.user_id,
     )
-
-    return CddPlateImportAcceptedResponse(workflow_id=workflow_id, status="pending")
+    result = await use_case(cmd, auth=auth)
+    outcome = result_to_response(result)
+    return CddPlateImportAcceptedResponse(workflow_id=outcome.workflow_id, status="pending")
 
 
 @router.get("/{workflow_id}/status", response_model=CddPlateImportStatusResponse)
 async def get_cdd_plate_import_status(
-    request: Request,
     auth: AuthDep,
     workflow_id: str,
-    db_status_uc: GetCddPlateImportStatusFromDbDep,
-    sync_failed_uc: SyncFailedCddPlateImportDep,
+    runtime_status_uc: GetCddPlateImportRuntimeStatusDep,
 ) -> CddPlateImportStatusResponse:
-    temporal_client = _get_temporal_client(request)
-    _verify_workspace_prefix(workflow_id, auth.workspace_id)
-
-    try:
-        handle = temporal_client.get_workflow_handle(workflow_id)
-        progress = await handle.query(CddPlateImportWorkflow.get_progress)
-        status = progress.status
-
-        if status not in ("completed", "completed_with_errors", "failed"):
-            try:
-                desc = await handle.describe()
-                if desc.status in (
-                    WorkflowExecutionStatus.FAILED,
-                    WorkflowExecutionStatus.TERMINATED,
-                    WorkflowExecutionStatus.TIMED_OUT,
-                    WorkflowExecutionStatus.CANCELED,
-                ):
-                    status = "failed"
-                    await sync_failed_uc(auth.workspace_id, progress.import_id)
-            except Exception:
-                import structlog
-                structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id, detail="describe() failed")
-
-        return CddPlateImportStatusResponse(
-            import_id=progress.import_id,
-            status=status,
-            total_count=progress.total_count,
-            plates_registered=progress.plates_registered,
-            plates_duplicate=progress.plates_duplicate,
-            plates_error=progress.plates_error,
-            wells_mapped=progress.wells_mapped,
-            wells_unresolved=progress.wells_unresolved,
-            current_offset=progress.current_offset,
-            pages_processed=progress.pages_processed,
-        )
-    except RPCError as exc:
-        if exc.status == RPCStatusCode.NOT_FOUND:
-            raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}") from exc
-    except Exception:
-        import structlog
-        structlog.get_logger().warning("temporal_query_failed", workflow_id=workflow_id)
-
-    # Fallback: read from DB (handles completed/failed workflows and code-change replays)
-    query = GetCddPlateImportStatusQuery(
-        workspace_id=auth.workspace_id, workflow_id=workflow_id
+    result = await runtime_status_uc(
+        GetCddPlateImportRuntimeStatusQuery(
+            workspace_id=auth.workspace_id,
+            workflow_id=workflow_id,
+        ),
+        auth=auth,
     )
-    result = await db_status_uc(query, auth=auth)
     data = result_to_response(result)
     return CddPlateImportStatusResponse(
         import_id=data.import_id,
@@ -227,21 +150,18 @@ async def get_cdd_plate_import_status(
 
 @router.post("/{workflow_id}/cancel", status_code=204)
 async def cancel_cdd_plate_import(
-    request: Request,
     auth: AuthDep,
     workflow_id: str,
+    cancel_uc: CancelCddPlateImportDep,
 ) -> None:
-    require_editor(auth)
-    temporal_client = _get_temporal_client(request)
-    _verify_workspace_prefix(workflow_id, auth.workspace_id)
-
-    try:
-        handle = temporal_client.get_workflow_handle(workflow_id)
-        await handle.signal(CddPlateImportWorkflow.cancel)
-    except RPCError as exc:
-        if exc.status == RPCStatusCode.NOT_FOUND:
-            return
-        raise
+    result = await cancel_uc(
+        CancelCddPlateImportCommand(
+            workspace_id=auth.workspace_id,
+            workflow_id=workflow_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
 
 
 @router.post("/{import_id}/force-fail", status_code=204)
@@ -262,17 +182,3 @@ async def force_fail_cdd_plate_import(
         auth=auth,
     )
     result_to_response(result)
-
-
-def _verify_workspace_prefix(workflow_id: str, workspace_id: uuid.UUID) -> None:
-    prefix = "cdd-plate-import-"
-    if not workflow_id.startswith(prefix):
-        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
-    remainder = workflow_id[len(prefix):]
-    if len(remainder) < 37:
-        raise HTTPException(status_code=404, detail="Invalid workflow ID format")
-    embedded_ws = remainder[:36]
-    if embedded_ws != str(workspace_id):
-        raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
-
-

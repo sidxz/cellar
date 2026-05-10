@@ -1,4 +1,4 @@
-"""StartCddPlateImport command — validate DataSource config for plate import."""
+"""StartCddPlateImport command — validate config and dispatch the plate-import workflow."""
 
 from __future__ import annotations
 
@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.cdd_import.cdd_plate_import_orchestrator import (
+    CddPlateImportOrchestrator,
+    StartCddPlateImportRequest,
+)
 from chem_vault.application.shared.command import Command
 from chem_vault.application.workspace_config.get_data_source_for_import import (
     DataSourceImportConfig,
@@ -21,43 +25,42 @@ from chem_vault.domain.workspace_config.data_source import DataSourceType
 @dataclass(frozen=True, kw_only=True)
 class StartCddPlateImportCommand(Command):
     workspace_id: uuid.UUID
+    submitted_by: uuid.UUID
 
 
 @dataclass(frozen=True)
-class CddPlateImportConfig:
-    """Validated CDD config needed to start the plate import workflow."""
-
-    vault_id: str
-    secret_ref: str
-    entity_mappings: list[dict]  # serialized EntityMapping dicts for Temporal
+class StartCddPlateImportResult:
+    workflow_id: str
 
 
 class StartCddPlateImport:
-    """Validate CDD DataSource config for plate import.
+    """Validate CDD DataSource config and dispatch the plate-import workflow."""
 
-    Returns vault_id + secret_ref. The API route starts the Temporal workflow.
-    """
-
-    def __init__(self, get_data_source: GetDataSourceForImport) -> None:
+    def __init__(
+        self,
+        get_data_source: GetDataSourceForImport,
+        orchestrator: CddPlateImportOrchestrator,
+    ) -> None:
         self._get_data_source = get_data_source
+        self._orchestrator = orchestrator
 
     async def __call__(
         self,
         input: StartCddPlateImportCommand,
         auth: AuthContext | None = None,
-    ) -> Result[CddPlateImportConfig, DomainError]:
+    ) -> Result[StartCddPlateImportResult, DomainError]:
         require_editor(auth)
 
-        result = await self._get_data_source(
+        ds_result = await self._get_data_source(
             GetDataSourceForImportQuery(
                 workspace_id=input.workspace_id,
                 source_type=DataSourceType.CDD_VAULT,
             )
         )
-        if isinstance(result, Failure):
-            return result
+        if isinstance(ds_result, Failure):
+            return ds_result
 
-        config: DataSourceImportConfig = result.unwrap()
+        config: DataSourceImportConfig = ds_result.unwrap()
         vault_id = config.data_source.config.get("vault_id", "")
         if not vault_id:
             return Failure(
@@ -66,10 +69,13 @@ class StartCddPlateImport:
 
         secret_ref = f"{input.workspace_id}:{config.data_source.api_key_name}"
 
-        return Success(
-            CddPlateImportConfig(
-                vault_id=str(vault_id),
-                secret_ref=secret_ref,
-                entity_mappings=[em.to_dict() for em in config.data_source.entity_mappings],
-            )
+        request = StartCddPlateImportRequest(
+            workspace_id=input.workspace_id,
+            cdd_vault_id=str(vault_id),
+            submitted_by=input.submitted_by,
+            secret_ref=secret_ref,
+            entity_mappings=[em.to_dict() for em in config.data_source.entity_mappings],
         )
+
+        workflow_id = await self._orchestrator.start(request)
+        return Success(StartCddPlateImportResult(workflow_id=workflow_id))

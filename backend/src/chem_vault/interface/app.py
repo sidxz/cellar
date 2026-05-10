@@ -55,6 +55,48 @@ def create_app() -> FastAPI:
             structlog.get_logger().warning("temporal_unavailable", msg="Temporal not reachable — bulk ops will run synchronously")
             app.state.temporal_client = None
 
+        # Workflow orchestrators — bind concrete adapter or null stand-in based
+        # on Temporal availability. Routes/use cases see only the application
+        # Protocols and never reach into ``temporalio`` themselves.
+        from chem_vault.application.chemical_registration.bulk_registration_orchestrator import (
+            BulkRegistrationOrchestrator,
+        )
+        from chem_vault.application.cdd_import.cdd_molecule_import_orchestrator import (
+            CddMoleculeImportOrchestrator,
+        )
+        from chem_vault.application.cdd_import.cdd_plate_import_orchestrator import (
+            CddPlateImportOrchestrator,
+        )
+        from chem_vault.infrastructure.temporal.orchestrators import (
+            NullBulkRegistrationOrchestrator,
+            NullCddMoleculeImportOrchestrator,
+            NullCddPlateImportOrchestrator,
+            TemporalBulkRegistrationOrchestrator,
+            TemporalCddMoleculeImportOrchestrator,
+            TemporalCddPlateImportOrchestrator,
+        )
+
+        if app.state.temporal_client is not None:
+            mol_orch: CddMoleculeImportOrchestrator = TemporalCddMoleculeImportOrchestrator(
+                app.state.temporal_client
+            )
+            plate_orch: CddPlateImportOrchestrator = TemporalCddPlateImportOrchestrator(
+                app.state.temporal_client
+            )
+            bulk_orch: BulkRegistrationOrchestrator = TemporalBulkRegistrationOrchestrator(
+                app.state.temporal_client
+            )
+        else:
+            mol_orch = NullCddMoleculeImportOrchestrator()
+            plate_orch = NullCddPlateImportOrchestrator()
+            bulk_orch = NullBulkRegistrationOrchestrator()
+
+        from lagom import Singleton
+
+        container.define(CddMoleculeImportOrchestrator, Singleton(lambda: mol_orch))
+        container.define(CddPlateImportOrchestrator, Singleton(lambda: plate_orch))
+        container.define(BulkRegistrationOrchestrator, Singleton(lambda: bulk_orch))
+
         # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
         async with sentinel.lifespan(app):
             yield

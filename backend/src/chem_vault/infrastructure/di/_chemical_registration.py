@@ -11,8 +11,17 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from chem_vault.application.chemical_registration.bulk_registration_item_reader import (
     BulkRegistrationItemReader,
 )
+from chem_vault.application.chemical_registration.bulk_registration_orchestrator import (
+    BulkRegistrationOrchestrator,
+)
 from chem_vault.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationService,
+)
+from chem_vault.application.chemical_registration.get_bulk_registration_runtime_status import (
+    GetBulkRegistrationRuntimeStatus,
+)
+from chem_vault.application.chemical_registration.start_bulk_registration import (
+    StartBulkRegistration,
 )
 from chem_vault.application.chemical_registration.list_bulk_registration_items import (
     ListBulkRegistrationItems,
@@ -24,6 +33,10 @@ from chem_vault.application.chemical_registration.preview_bulk_registration_file
 from chem_vault.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from chem_vault.application.chemical_registration.create_relationship import CreateRelationship
 from chem_vault.application.chemical_registration.delete_relationship import DeleteRelationship
+from chem_vault.application.chemical_registration.depict_molecules import (
+    DepictMolecules,
+    DepictionService,
+)
 from chem_vault.application.chemical_registration.disclosure_service import DisclosureService
 from chem_vault.application.chemical_registration.export_sdf import ExportMoleculesSDF
 from chem_vault.application.chemical_registration.get_disclosure import GetDisclosure
@@ -129,6 +142,7 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entr
     SQLAlchemySaltEntryRepository,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from chem_vault.infrastructure.rdkit.depiction import DepictionGenerator
 from chem_vault.infrastructure.storage.fsspec_client import FsspecStorageClient
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 
@@ -136,6 +150,11 @@ from chem_vault.application.admin.admin_delete_registry import register_admin_de
 def register_chemical_registration(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
     import chem_vault.infrastructure.cascade.rules_chemical_registration  # noqa: F401
+
+    # --- Depiction service (stateless infra, singleton) ---
+    container[DepictionGenerator] = Singleton(DepictionGenerator)
+    container[DepictionService] = lambda c: c[DepictionGenerator]
+    container[DepictMolecules] = lambda c: DepictMolecules(c[DepictionService])
 
     # --- Molecule use cases ---
     def _mol_cmd(uc_cls: type):
@@ -444,6 +463,21 @@ def register_chemical_registration(container: Container) -> None:
         )
 
     container.define(ListBulkRegistrationItems, _list_bulk_reg_items)
+
+    container.define(
+        StartBulkRegistration,
+        lambda c: StartBulkRegistration(
+            orchestrator=c[BulkRegistrationOrchestrator],
+            sync_service=c[BulkRegistrationService],
+            parser=c[BulkFileParserProtocol],
+        ),
+    )
+    container.define(
+        GetBulkRegistrationRuntimeStatus,
+        lambda c: GetBulkRegistrationRuntimeStatus(
+            orchestrator=c[BulkRegistrationOrchestrator],
+        ),
+    )
 
     # --- Synthesis Routes ---
     def _synth_route_cmd(uc_cls: type):
