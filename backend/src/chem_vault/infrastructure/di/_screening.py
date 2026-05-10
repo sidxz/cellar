@@ -56,6 +56,7 @@ from chem_vault.application.screening.import_run_file import (
     ImportRunFile,
     InMemoryPreviewStore,
     PreviewRunFile,
+    RepreviewRunFile,
 )
 from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
 from chem_vault.application.screening.list_compound_flags import ListCompoundFlags
@@ -579,6 +580,21 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(PreviewRunFile, _preview_run_file)
+
+    def _repreview_run_file(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RepreviewRunFile(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            preview_store=c[InMemoryPreviewStore],
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
+        )
+
+    container.define(RepreviewRunFile, _repreview_run_file)
 
     def _import_run_file(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

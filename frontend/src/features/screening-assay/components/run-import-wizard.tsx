@@ -14,6 +14,7 @@ import {
   useCreateRunImportTemplate,
   useImportRunFile,
   usePreviewRunFile,
+  useRepreviewRunFile,
   useRunImportTemplates,
   type ColumnMappingPayload,
   type HeaderSuggestion,
@@ -172,6 +173,7 @@ export function RunImportWizard({
   const [isDragging, setIsDragging] = useState(false);
 
   const previewMutation = usePreviewRunFile(runId);
+  const repreviewMutation = useRepreviewRunFile(runId);
   const importMutation = useImportRunFile(runId);
   const createTemplate = useCreateRunImportTemplate();
   const { data: templates = [] } = useRunImportTemplates();
@@ -308,6 +310,34 @@ export function RunImportWizard({
       ...d,
       readoutDefByHeader: { ...d.readoutDefByHeader, [header]: defId },
     }));
+  };
+
+  // ─── Step 2 → 3 — re-resolve with the chemist's confirmed mapping ─────────
+
+  const handleContinueFromMapping = () => {
+    if (!preview) return;
+    const mapping = buildMapping();
+    if (!mapping) {
+      showError("Mapping incomplete — pick a Well column.");
+      return;
+    }
+    repreviewMutation.mutate(
+      {
+        preview_id: preview.preview_id,
+        mapping,
+      },
+      {
+        onSuccess: (data) => {
+          setPreview(data);
+          // The set of ambiguous molecules can change when the mapping
+          // changes (different column → different compound refs).
+          // Drop stale picks so the panel forces a fresh decision.
+          setCompoundPicks({});
+          setStep(3);
+        },
+        onError: () => showError("Could not re-resolve with the new mapping"),
+      },
+    );
   };
 
   // ─── Step 4 — submit ─────────────────────────────────────────────────────────
@@ -458,10 +488,11 @@ export function RunImportWizard({
           )}
           {step === 2 && (
             <Button
-              onClick={() => setStep(3)}
-              disabled={!canContinueStep2}
+              onClick={handleContinueFromMapping}
+              disabled={!canContinueStep2 || repreviewMutation.isPending}
             >
-              Continue <ChevronRight className="h-4 w-4" />
+              {repreviewMutation.isPending ? "Resolving…" : "Continue"}
+              {!repreviewMutation.isPending && <ChevronRight className="h-4 w-4" />}
             </Button>
           )}
           {step === 3 && (

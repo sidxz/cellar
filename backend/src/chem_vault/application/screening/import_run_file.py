@@ -134,6 +134,7 @@ class PreviewStore(Protocol):
 
     def save(self, key: uuid.UUID, payload: _StoredPreview) -> None: ...
     def consume(self, key: uuid.UUID) -> _StoredPreview | None: ...
+    def peek(self, key: uuid.UUID) -> _StoredPreview | None: ...
 
 
 class InMemoryPreviewStore:
@@ -154,6 +155,16 @@ class InMemoryPreviewStore:
     def consume(self, key: uuid.UUID) -> _StoredPreview | None:
         self._evict_expired()
         return self._items.pop(key, None)
+
+    def peek(self, key: uuid.UUID) -> _StoredPreview | None:
+        """Return the cached payload without removing it.
+
+        Used by ``RepreviewRunFile`` so the chemist can refine the column
+        mapping in the wizard's mapping step and re-run resolution
+        without re-uploading the file.
+        """
+        self._evict_expired()
+        return self._items.get(key)
 
     def _evict_expired(self) -> None:
         now = self._clock()
@@ -233,6 +244,22 @@ class PreviewRunFileResult:
     unmatched_compound_refs: tuple[str, ...] = ()
     ambiguous_compounds: tuple[AmbiguousCompoundDTO, ...] = ()
     row_conflicts: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RepreviewRunFileQuery(Command):
+    """Re-run resolution against a cached preview using a refined mapping.
+
+    Fired when the chemist edits the column-role assignments in the
+    wizard's mapping step (e.g. switches a column from Batch Ref to
+    Compound Ref) and the preview panel needs to reflect the new
+    resolution outcome before they commit the import.
+    """
+
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
+    preview_id: uuid.UUID
+    mapping: ColumnMapping
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -480,6 +507,184 @@ class PreviewRunFile:
                 will_skip_readouts=tuple(readout_conflicts),
                 matched_compounds=matched_compounds,
                 unmatched_compound_refs=tuple(sorted(unmatched_compound_set)),
+                ambiguous_compounds=ambiguous_dto,
+                row_conflicts=row_conflict_strings,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# RepreviewRunFile use case
+# ---------------------------------------------------------------------------
+
+
+class RepreviewRunFile:
+    """Re-run resolution against a cached preview using a user mapping.
+
+    The initial ``PreviewRunFile`` runs with an auto-guessed mapping —
+    fine for showing the chemist what we *think* the columns are, but
+    stale once they hand-correct any role assignment. This use case
+    consumes the existing ``preview_id`` (without invalidating it),
+    re-normalizes with the chemist-confirmed mapping, re-resolves
+    batches + compounds, and returns the same DTO shape so the wizard
+    can swap the panel data in place.
+    """
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        run_repo: RunRepository,
+        readout_data_repo: ReadoutDataRepository,
+        batch_repo: BatchRepository,
+        molecule_repo: MoleculeRepository,
+        preview_store: PreviewStore,
+        protocol_repo: ProtocolRepository,
+        plate_template_repo: PlateTemplateRepository,
+    ) -> None:
+        self._uow = uow
+        self._run_repo = run_repo
+        self._readout_data_repo = readout_data_repo
+        self._batch_repo = batch_repo
+        self._molecule_repo = molecule_repo
+        self._store = preview_store
+        self._protocol_repo = protocol_repo
+        self._plate_template_repo = plate_template_repo
+
+    async def __call__(
+        self,
+        input: RepreviewRunFileQuery,
+        auth: AuthContext | None = None,
+    ) -> Result[PreviewRunFileResult, DomainError]:
+        require_editor(auth)
+
+        async with self._uow:
+            return await self._execute(input)
+
+    async def _execute(
+        self, input: RepreviewRunFileQuery
+    ) -> Result[PreviewRunFileResult, DomainError]:
+        cached = self._store.peek(input.preview_id)
+        if cached is None:
+            return Failure(NotFoundError("Preview", str(input.preview_id)))
+        if cached.workspace_id != input.workspace_id or cached.run_id != input.run_id:
+            return Failure(
+                ValidationError("preview_id does not match this workspace + run")
+            )
+
+        run = await self._run_repo.find_by_id_in_workspace(
+            input.workspace_id, input.run_id
+        )
+        if run is None:
+            return Failure(NotFoundError("Run", str(input.run_id)))
+
+        protocol = await self._protocol_repo.find_by_id_in_workspace(
+            input.workspace_id, run.protocol_id
+        )
+        readout_def_refs: tuple[ReadoutDefRef, ...] = (
+            tuple(
+                ReadoutDefRef(
+                    id=rd.id,
+                    name=rd.name,
+                    data_type=rd.data_type.value,
+                )
+                for rd in protocol.readout_definitions
+            )
+            if protocol is not None
+            else ()
+        )
+
+        # Re-run header inference for the response (so the wizard can
+        # still display confidence badges) but use the user-supplied
+        # mapping for normalization.
+        suggested = infer_mapping(cached.table, readout_defs=readout_def_refs)
+
+        normalized = normalize(cached.table, input.mapping)
+        if isinstance(normalized, Failure):
+            return normalized
+        norm: NormalizedTable = normalized.unwrap()
+
+        plates = _summarize_plates(norm.rows, norm.plate_formats)
+        batch_index = await _build_batch_lookup(
+            norm.rows, input.workspace_id, self._batch_repo
+        )
+        compound_index = await _build_compound_index(
+            norm.rows,
+            input.workspace_id,
+            self._molecule_repo,
+            self._batch_repo,
+        )
+        resolutions = resolve_rows(
+            norm.rows, batch_index=batch_index, compound_index=compound_index
+        )
+
+        validation_errors: list[str] = []
+        will_create_plates = 0
+        will_create_wells = 0
+        will_create_readouts = 0
+        well_conflicts: list[WellConflict] = []
+        readout_conflicts: list[ReadoutConflict] = []
+
+        if protocol is not None:
+            templates_by_format = await _load_templates_by_format(
+                protocol,
+                norm.plate_formats,
+                input.workspace_id,
+                self._plate_template_repo,
+            )
+            validation_errors = _validate_controls_required(
+                protocol, norm.plate_formats, templates_by_format
+            )
+            existing_readouts = await self._readout_data_repo.find_by_run(
+                input.workspace_id, run.id
+            )
+            plan = _scan_conflicts(
+                norm,
+                run,
+                existing_readouts,
+                templates_by_format,
+                resolutions=resolutions,
+            )
+            will_create_plates = plan.create_plate_count
+            will_create_wells = plan.create_well_count
+            will_create_readouts = plan.create_readout_count
+            well_conflicts = plan.well_conflicts
+            readout_conflicts = plan.readout_conflicts
+
+        ambiguous_dto = tuple(
+            _to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds
+        )
+        row_conflict_strings = tuple(
+            f"{c.plate_name} {c.well_label}: {c.reason}"
+            for c in resolutions.row_conflicts
+        )
+
+        sample = tuple(
+            {h: (r.get(h) or "") for h in cached.table.headers}
+            for r in cached.table.rows[:5]
+        )
+        ttl = getattr(self._store, "ttl_seconds", 60.0)
+
+        return Success(
+            PreviewRunFileResult(
+                preview_id=input.preview_id,
+                headers=tuple(cached.table.headers),
+                suggestions=suggested.suggestions,
+                sample_rows=sample,
+                plates=plates,
+                matched_batches=len(batch_index),
+                unmatched_batches=tuple(sorted(resolutions.unmatched_batch_refs)),
+                total_rows=cached.table.row_count,
+                expires_in_seconds=int(ttl),
+                validation_errors=tuple(validation_errors),
+                will_create_plates=will_create_plates,
+                will_create_wells=will_create_wells,
+                will_create_readouts=will_create_readouts,
+                will_skip_wells=tuple(well_conflicts),
+                will_skip_readouts=tuple(readout_conflicts),
+                matched_compounds=resolutions.matched_compound_count,
+                unmatched_compound_refs=tuple(
+                    sorted(resolutions.unmatched_compound_refs)
+                ),
                 ambiguous_compounds=ambiguous_dto,
                 row_conflicts=row_conflict_strings,
             )

@@ -171,6 +171,22 @@ export function usePreviewRunFile(runId: string) {
   });
 }
 
+export interface RepreviewRunFilePayload {
+  preview_id: string;
+  mapping: ColumnMappingPayload;
+}
+
+export function useRepreviewRunFile(runId: string) {
+  return useMutation({
+    mutationFn: async (payload: RepreviewRunFilePayload) =>
+      customInstance<PreviewRunFileResponse>({
+        url: `/api/v1/runs/${runId}/repreview-file`,
+        method: "POST",
+        data: payload,
+      }),
+  });
+}
+
 export function useImportRunFile(runId: string) {
   const qc = useQueryClient();
   return useMutation({

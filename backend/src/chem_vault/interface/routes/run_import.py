@@ -14,6 +14,7 @@ from chem_vault.application.screening.import_run_file import (
     ImportRunFileResult,
     PreviewRunFileQuery,
     PreviewRunFileResult,
+    RepreviewRunFileQuery,
 )
 from chem_vault.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -32,6 +33,7 @@ from chem_vault.interface.dependencies import (
     ImportRunFileDep,
     ListRunImportTemplatesDep,
     PreviewRunFileDep,
+    RepreviewRunFileDep,
     UpdateRunImportTemplateDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
@@ -220,7 +222,7 @@ async def preview_run_file(
 
 
 # ---------------------------------------------------------------------------
-# Import
+# Re-preview (after the chemist refines the column mapping)
 # ---------------------------------------------------------------------------
 
 
@@ -236,6 +238,131 @@ class ColumnMappingRequest(BaseModel):
     batch_ref: str | None = None
     compound_ref: str | None = None
     readout_columns: list[ReadoutColumnRequest] = Field(default_factory=list)
+
+
+class RepreviewRunFileRequest(BaseModel):
+    preview_id: uuid.UUID
+    mapping: ColumnMappingRequest
+
+
+def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileResponse:
+    return PreviewRunFileResponse(
+        preview_id=preview.preview_id,
+        headers=list(preview.headers),
+        suggestions=[
+            HeaderSuggestionModel(
+                header=s.header,
+                role=s.role,
+                confidence=s.confidence,
+                reason=s.reason,
+                readout_definition_id=s.readout_definition_id,
+            )
+            for s in preview.suggestions
+        ],
+        sample_rows=list(preview.sample_rows),
+        plates=[
+            PlatePreviewModel(
+                plate_name=p.plate_name,
+                plate_format=p.plate_format,
+                well_count=p.well_count,
+                sample_count=p.sample_count,
+                blank_count=p.blank_count,
+            )
+            for p in preview.plates
+        ],
+        matched_batches=preview.matched_batches,
+        unmatched_batches=list(preview.unmatched_batches),
+        total_rows=preview.total_rows,
+        expires_in_seconds=preview.expires_in_seconds,
+        validation_errors=list(preview.validation_errors),
+        will_create_plates=preview.will_create_plates,
+        will_create_wells=preview.will_create_wells,
+        will_create_readouts=preview.will_create_readouts,
+        will_skip_wells=[
+            WellConflictModel(
+                plate_name=c.plate_name,
+                well_position=c.well_position,
+                reason=c.reason,
+            )
+            for c in preview.will_skip_wells
+        ],
+        will_skip_readouts=[
+            ReadoutConflictModel(
+                plate_name=c.plate_name,
+                well_position=c.well_position,
+                readout_definition_id=c.readout_definition_id,
+                readout_name=c.readout_name,
+            )
+            for c in preview.will_skip_readouts
+        ],
+        matched_compounds=preview.matched_compounds,
+        unmatched_compound_refs=list(preview.unmatched_compound_refs),
+        ambiguous_compounds=[
+            AmbiguousCompoundModel(
+                compound_ref=a.compound_ref,
+                molecule_id=a.molecule_id,
+                molecule_name=a.molecule_name,
+                batch_options=[
+                    BatchOptionModel(
+                        batch_id=b.batch_id,
+                        batch_number=b.batch_number,
+                        salt_form=b.salt_form,
+                        purity=b.purity,
+                        created_at=b.created_at,
+                    )
+                    for b in a.batch_options
+                ],
+                affected_row_count=a.affected_row_count,
+            )
+            for a in preview.ambiguous_compounds
+        ],
+        row_conflicts=list(preview.row_conflicts),
+    )
+
+
+@router.post(
+    "/runs/{run_id}/repreview-file",
+    response_model=PreviewRunFileResponse,
+    status_code=200,
+)
+async def repreview_run_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    body: RepreviewRunFileRequest,
+    uc: RepreviewRunFileDep,
+) -> PreviewRunFileResponse:
+    """Re-resolve a cached preview using the chemist's refined mapping.
+
+    Called by the wizard when the chemist changes a column role in the
+    mapping step (e.g. Batch Ref → Compound Ref). The original preview
+    is reused without re-uploading the file; the response shape mirrors
+    ``preview_run_file`` so the wizard can swap state in place.
+    """
+    mapping = ColumnMapping(
+        well=body.mapping.well,
+        plate_name=body.mapping.plate_name,
+        concentration=body.mapping.concentration,
+        batch_ref=body.mapping.batch_ref,
+        compound_ref=body.mapping.compound_ref,
+        readout_columns=tuple(
+            ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
+            for rc in body.mapping.readout_columns
+        ),
+    )
+    query = RepreviewRunFileQuery(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        preview_id=body.preview_id,
+        mapping=mapping,
+    )
+    result = await uc(query, auth=auth)
+    preview: PreviewRunFileResult = result_to_response(result)
+    return _to_preview_response(preview)
+
+
+# ---------------------------------------------------------------------------
+# Import
+# ---------------------------------------------------------------------------
 
 
 class CompoundBatchOverrideRequest(BaseModel):

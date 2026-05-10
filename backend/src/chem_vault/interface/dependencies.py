@@ -234,7 +234,11 @@ from chem_vault.application.screening.molecule_activity_service import MoleculeA
 from chem_vault.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from chem_vault.application.screening.plate_setup import ParsePlateMapFile, SetUpRunPlate
 from chem_vault.application.screening.import_run_readouts import ImportRunReadouts
-from chem_vault.application.screening.import_run_file import ImportRunFile, PreviewRunFile
+from chem_vault.application.screening.import_run_file import (
+    ImportRunFile,
+    PreviewRunFile,
+    RepreviewRunFile,
+)
 from chem_vault.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     DeleteRunImportTemplate,
@@ -667,6 +671,7 @@ ImportRunReadoutsDep = Annotated[ImportRunReadouts, Depends(_get_use_case(Import
 
 # --- Long-format run-file import dependencies ---
 PreviewRunFileDep = Annotated[PreviewRunFile, Depends(_get_use_case(PreviewRunFile))]
+RepreviewRunFileDep = Annotated[RepreviewRunFile, Depends(_get_use_case(RepreviewRunFile))]
 ImportRunFileDep = Annotated[ImportRunFile, Depends(_get_use_case(ImportRunFile))]
 CreateRunImportTemplateDep = Annotated[CreateRunImportTemplate, Depends(_get_use_case(CreateRunImportTemplate))]
 UpdateRunImportTemplateDep = Annotated[UpdateRunImportTemplate, Depends(_get_use_case(UpdateRunImportTemplate))]

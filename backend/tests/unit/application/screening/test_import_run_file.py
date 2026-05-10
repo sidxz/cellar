@@ -18,6 +18,8 @@ from chem_vault.application.screening.import_run_file import (
     InMemoryPreviewStore,
     PreviewRunFile,
     PreviewRunFileQuery,
+    RepreviewRunFile,
+    RepreviewRunFileQuery,
 )
 from chem_vault.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -1402,3 +1404,145 @@ class TestConflictAwareReimport:
         assert upload_cmd.file_name == "run-data.csv"
         assert upload_cmd.attachable_id == run.id
         assert result.unwrap().attachment_id is not None
+
+
+# ---------------------------------------------------------------------------
+# RepreviewRunFile — re-resolve a cached preview with a refined mapping
+# ---------------------------------------------------------------------------
+
+
+def _build_repreview_uc(
+    *,
+    run: Run,
+    store: InMemoryPreviewStore,
+    batches_by_ref: dict[str, FakeBatch] | None = None,
+    protocol: Protocol | None = None,
+) -> RepreviewRunFile:
+    run_repo = AsyncMock()
+    run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+
+    batch_repo = AsyncMock()
+
+    async def _find(_ws, ref):
+        return (batches_by_ref or {}).get(ref)
+
+    batch_repo.find_by_batch_number = _find
+    batch_repo.find_by_molecule = AsyncMock(return_value=[])
+
+    molecule_repo = AsyncMock()
+    molecule_repo.find_by_identifier = AsyncMock(return_value=None)
+
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+
+    readout_data_repo = AsyncMock()
+    readout_data_repo.find_by_run = AsyncMock(return_value=[])
+
+    return RepreviewRunFile(
+        uow=FakeUoW(),
+        run_repo=run_repo,
+        readout_data_repo=readout_data_repo,
+        batch_repo=batch_repo,
+        molecule_repo=molecule_repo,
+        preview_store=store,
+        protocol_repo=protocol_repo,
+        plate_template_repo=_make_plate_template_repo(None),
+    )
+
+
+class TestRepreviewRunFile:
+    @pytest.mark.asyncio
+    async def test_repreview_re_resolves_with_user_mapping(self) -> None:
+        """Auto-guess mapped column to Batch Ref → 1 unmatched. User
+        switches column to Compound Ref via repreview → batch_ref column
+        is now empty so no unmatched_batches reported."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        # Stash a preview directly so we don't need a Preview round-trip.
+        csv = (
+            b"Plate Name,Well,LGCY Batch Name,Concentration,Raw\n"
+            b"P1,A1,MMV2215819,50,0.5\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(run=run, store=store, batches_by_ref={})
+
+        # User maps the column as Compound Ref instead of Batch Ref.
+        # No molecule matches in this test (find_by_identifier returns
+        # None) so the value lands in unmatched_compound_refs, NOT
+        # unmatched_batches.
+        mapping = ColumnMapping(
+            well="Well",
+            plate_name="Plate Name",
+            concentration="Concentration",
+            compound_ref="LGCY Batch Name",
+            readout_columns=(),
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=mapping,
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        preview = result.unwrap()
+        # Same preview_id reused — caller can keep referring to it.
+        assert preview.preview_id == preview_id
+        # Mapping change took effect: no batch_ref column was used.
+        assert preview.unmatched_batches == ()
+        assert "MMV2215819" in preview.unmatched_compound_refs
+
+    @pytest.mark.asyncio
+    async def test_repreview_does_not_consume_preview(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = b"Well,Raw\nA1,0.5\n"
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(run=run, store=store)
+        mapping = ColumnMapping(well="Well", readout_columns=())
+
+        await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=mapping,
+            ),
+            auth=auth,
+        )
+        # Still in the store — chemist can repreview again or import.
+        assert preview_id in store._items  # noqa: SLF001
+
+    @pytest.mark.asyncio
+    async def test_repreview_unknown_preview_id_returns_not_found(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        uc = _build_repreview_uc(run=run, store=store)
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=uuid.uuid4(),
+                mapping=ColumnMapping(well="Well", readout_columns=()),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), NotFoundError)
