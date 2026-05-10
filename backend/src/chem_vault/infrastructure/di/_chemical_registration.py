@@ -141,6 +141,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.custom_fi
 from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
     SQLAlchemySaltEntryRepository,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+    SQLAlchemyWorkspaceSettingsRepository,
+)
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.infrastructure.rdkit.depiction import DepictionGenerator
 from chem_vault.infrastructure.storage.fsspec_client import FsspecStorageClient
@@ -439,6 +442,7 @@ def register_chemical_registration(container: Container) -> None:
             structure_processor=c[StructureProcessorProtocol],
             salt_matcher=SaltMatcher(SQLAlchemySaltEntryRepository(uow)),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
         )
 
     container.define(BulkRegistrationService, _bulk_registration_service)

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.inventory.batch_policy import should_create_batch
 from chem_vault.application.chemical_registration.protocols import (
     DetectedSaltDTO,
     StructureProcessorProtocol,
@@ -39,6 +40,7 @@ from chem_vault.domain.chemical_registration.repository import (
 )
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.shared.errors import DomainError, ValidationError
+from chem_vault.domain.workspace_config.repository import WorkspaceSettingsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +115,7 @@ class BulkRegistrationService:
         structure_processor: StructureProcessorProtocol,
         salt_matcher: SaltMatcher,
         batch_repo: BatchRepository,
+        settings_repo: WorkspaceSettingsRepository,
     ) -> None:
         self._uow = uow
         self._bulk_reg_repo = bulk_reg_repo
@@ -121,6 +124,7 @@ class BulkRegistrationService:
         self._structure_processor = structure_processor
         self._salt_matcher = salt_matcher
         self._batch_repo = batch_repo
+        self._settings_repo = settings_repo
 
     async def __call__(
         self,
@@ -136,6 +140,16 @@ class BulkRegistrationService:
 
         if not input.items:
             return Failure(ValidationError("File contains no records"))
+
+        # Read workspace default once per workflow; per-request override wins if set.
+        async with self._uow:
+            ws_settings = await self._settings_repo.find_by_workspace_id(input.workspace_id)
+        workspace_default = ws_settings.create_batch_on_duplicate if ws_settings else False
+        effective_policy_default = (
+            input.create_batch_on_duplicate
+            if input.create_batch_on_duplicate is not None
+            else workspace_default
+        )
 
         # 1. Create BulkRegistration tracking aggregate
         async with self._uow:
@@ -160,6 +174,7 @@ class BulkRegistrationService:
             originating_org_id=input.originating_org_id,
             submitted_by=input.submitted_by,
             auth=auth,
+            effective_policy_default=effective_policy_default,
         )
 
         # 3. Complete
@@ -186,6 +201,7 @@ class BulkRegistrationService:
         originating_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
         auth: AuthContext | None,
+        effective_policy_default: bool,
     ) -> list[BulkRegistrationItemResult]:
         results: list[BulkRegistrationItemResult] = []
         register_uc = RegisterMolecule(
@@ -262,14 +278,27 @@ class BulkRegistrationService:
                     else BulkRegistrationItemAction.DEDUPLICATED
                 )
 
-                # Create a batch for the registered molecule
-                batch_id, batch_number, salt_matched, batch_err = await self._create_batch_for_item(
-                    item=item,
-                    reg_outcome=outcome,
-                    workspace_id=workspace_id,
-                    submitted_by=submitted_by,
-                    auth=auth,
+                # Consult policy: always batch new molecules; for dups, use effective default.
+                create_batch_now = should_create_batch(
+                    is_new_molecule=outcome.is_new,
+                    override=None,  # workflow-level decision already collapsed into effective_policy_default
+                    workspace_default=effective_policy_default,
                 )
+
+                if create_batch_now:
+                    batch_id, batch_number, salt_matched, batch_err = (
+                        await self._create_batch_for_item(
+                            item=item,
+                            reg_outcome=outcome,
+                            workspace_id=workspace_id,
+                            submitted_by=submitted_by,
+                            auth=auth,
+                        )
+                    )
+                    batch_skipped = False
+                else:
+                    batch_id, batch_number, salt_matched, batch_err = None, None, False, None
+                    batch_skipped = True
 
                 pending.append(
                     {
@@ -295,6 +324,7 @@ class BulkRegistrationService:
                         batch_number=batch_number,
                         salt_matched=salt_matched,
                         batch_error=batch_err,
+                        batch_skipped=batch_skipped,
                     )
                 )
 
