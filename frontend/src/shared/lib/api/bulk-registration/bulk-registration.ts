@@ -26,6 +26,8 @@ import type {
 import type {
   BodyPreviewBulkRegistrationApiV1BulkRegistrationsPreviewPost,
   BodyStartBulkRegistrationApiV1BulkRegistrationsPost,
+  BulkRegistrationAcceptedResponse,
+  BulkRegistrationResponse,
   BulkRegistrationStatusResponse,
   ConfirmMergesBody,
   ConfirmMergesResponse,
@@ -44,6 +46,8 @@ import { customInstance } from '.././custom-instance';
  * Upload a file (SDF, CSV, XLSX) to register molecules in bulk.
 
 Returns 202 when Temporal is available (async), 201 otherwise (sync).
+The use case branches on orchestrator availability; this handler
+inspects the result's ``mode`` to pick the response shape.
  * @summary Start Bulk Registration
  */
 export const startBulkRegistrationApiV1BulkRegistrationsPost = (
@@ -55,8 +59,11 @@ export const startBulkRegistrationApiV1BulkRegistrationsPost = (
 formData.append(`file`, bodyStartBulkRegistrationApiV1BulkRegistrationsPost.file)
 formData.append(`originating_org_id`, bodyStartBulkRegistrationApiV1BulkRegistrationsPost.originating_org_id)
 formData.append(`file_format`, bodyStartBulkRegistrationApiV1BulkRegistrationsPost.file_format)
+if(bodyStartBulkRegistrationApiV1BulkRegistrationsPost.create_batch_on_duplicate !== undefined && bodyStartBulkRegistrationApiV1BulkRegistrationsPost.create_batch_on_duplicate !== null) {
+ formData.append(`create_batch_on_duplicate`, bodyStartBulkRegistrationApiV1BulkRegistrationsPost.create_batch_on_duplicate.toString())
+ }
 
-      return customInstance<unknown>(
+      return customInstance<unknown | BulkRegistrationResponse | BulkRegistrationAcceptedResponse>(
       {url: `/api/v1/bulk-registrations`, method: 'POST',
       headers: {'Content-Type': 'multipart/form-data', },
        data: formData, signal

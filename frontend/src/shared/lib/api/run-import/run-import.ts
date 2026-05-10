@@ -30,6 +30,7 @@ import type {
   ImportRunFileRequest,
   ImportRunFileResponse,
   PreviewRunFileResponse,
+  RepreviewRunFileRequest,
   RunImportTemplateResponse,
   UpdateRunImportTemplateRequest
 } from '.././model';
@@ -112,6 +113,77 @@ export const usePreviewRunFileApiV1RunsRunIdPreviewFilePost = <TError = HTTPVali
       > => {
 
       const mutationOptions = getPreviewRunFileApiV1RunsRunIdPreviewFilePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Re-resolve a cached preview using the chemist's refined mapping.
+
+Called by the wizard when the chemist changes a column role in the
+mapping step (e.g. Batch Ref → Compound Ref). The original preview
+is reused without re-uploading the file; the response shape mirrors
+``preview_run_file`` so the wizard can swap state in place.
+ * @summary Repreview Run File
+ */
+export const repreviewRunFileApiV1RunsRunIdRepreviewFilePost = (
+    runId: string,
+    repreviewRunFileRequest: RepreviewRunFileRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PreviewRunFileResponse>(
+      {url: `/api/v1/runs/${runId}/repreview-file`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: repreviewRunFileRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getRepreviewRunFileApiV1RunsRunIdRepreviewFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof repreviewRunFileApiV1RunsRunIdRepreviewFilePost>>, TError,{runId: string;data: RepreviewRunFileRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof repreviewRunFileApiV1RunsRunIdRepreviewFilePost>>, TError,{runId: string;data: RepreviewRunFileRequest}, TContext> => {
+
+const mutationKey = ['repreviewRunFileApiV1RunsRunIdRepreviewFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof repreviewRunFileApiV1RunsRunIdRepreviewFilePost>>, {runId: string;data: RepreviewRunFileRequest}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  repreviewRunFileApiV1RunsRunIdRepreviewFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RepreviewRunFileApiV1RunsRunIdRepreviewFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof repreviewRunFileApiV1RunsRunIdRepreviewFilePost>>>
+    export type RepreviewRunFileApiV1RunsRunIdRepreviewFilePostMutationBody = RepreviewRunFileRequest
+    export type RepreviewRunFileApiV1RunsRunIdRepreviewFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Repreview Run File
+ */
+export const useRepreviewRunFileApiV1RunsRunIdRepreviewFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof repreviewRunFileApiV1RunsRunIdRepreviewFilePost>>, TError,{runId: string;data: RepreviewRunFileRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof repreviewRunFileApiV1RunsRunIdRepreviewFilePost>>,
+        TError,
+        {runId: string;data: RepreviewRunFileRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getRepreviewRunFileApiV1RunsRunIdRepreviewFilePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

@@ -21,6 +21,7 @@ export interface BatchResponse {
   workspace_id: string;
   molecule_id: string;
   batch_number: string;
+  version: number;
   salt_entry_id?: BatchResponseSaltEntryId;
   salt_name?: BatchResponseSaltName;
   salt_smiles?: BatchResponseSaltSmiles;

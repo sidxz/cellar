@@ -7,6 +7,7 @@
 import type { ColumnMappingRequestPlateName } from './columnMappingRequestPlateName';
 import type { ColumnMappingRequestConcentration } from './columnMappingRequestConcentration';
 import type { ColumnMappingRequestBatchRef } from './columnMappingRequestBatchRef';
+import type { ColumnMappingRequestCompoundRef } from './columnMappingRequestCompoundRef';
 import type { ReadoutColumnRequest } from './readoutColumnRequest';
 
 export interface ColumnMappingRequest {
@@ -14,5 +15,6 @@ export interface ColumnMappingRequest {
   plate_name?: ColumnMappingRequestPlateName;
   concentration?: ColumnMappingRequestConcentration;
   batch_ref?: ColumnMappingRequestBatchRef;
+  compound_ref?: ColumnMappingRequestCompoundRef;
   readout_columns?: ReadoutColumnRequest[];
 }

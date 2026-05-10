@@ -9,6 +9,7 @@ import type { PreviewRunFileResponseSampleRowsItem } from './previewRunFileRespo
 import type { PlatePreviewModel } from './platePreviewModel';
 import type { WellConflictModel } from './wellConflictModel';
 import type { ReadoutConflictModel } from './readoutConflictModel';
+import type { AmbiguousCompoundModel } from './ambiguousCompoundModel';
 
 export interface PreviewRunFileResponse {
   preview_id: string;
@@ -26,4 +27,8 @@ export interface PreviewRunFileResponse {
   will_create_readouts?: number;
   will_skip_wells?: WellConflictModel[];
   will_skip_readouts?: ReadoutConflictModel[];
+  matched_compounds?: number;
+  unmatched_compound_refs?: string[];
+  ambiguous_compounds?: AmbiguousCompoundModel[];
+  row_conflicts?: string[];
 }

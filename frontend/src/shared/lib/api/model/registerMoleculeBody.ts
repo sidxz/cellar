@@ -8,6 +8,7 @@ import type { RegisterMoleculeBodySmiles } from './registerMoleculeBodySmiles';
 import type { ExternalIdBody } from './externalIdBody';
 import type { RegisterMoleculeBodyCustomFields } from './registerMoleculeBodyCustomFields';
 import type { RegisterMoleculeBodyBatch } from './registerMoleculeBodyBatch';
+import type { RegisterMoleculeBodyCreateBatchOnDuplicate } from './registerMoleculeBodyCreateBatchOnDuplicate';
 
 export interface RegisterMoleculeBody {
   name: string;
@@ -18,4 +19,5 @@ export interface RegisterMoleculeBody {
   custom_fields?: RegisterMoleculeBodyCustomFields;
   batch?: RegisterMoleculeBodyBatch;
   auto_approve?: boolean;
+  create_batch_on_duplicate?: RegisterMoleculeBodyCreateBatchOnDuplicate;
 }

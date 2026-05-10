@@ -9,6 +9,7 @@ import type { UpdateDataSourceBodyIsActive } from './updateDataSourceBodyIsActiv
 import type { UpdateDataSourceBodyConfig } from './updateDataSourceBodyConfig';
 import type { UpdateDataSourceBodyApiKeyName } from './updateDataSourceBodyApiKeyName';
 import type { UpdateDataSourceBodyEntityMappings } from './updateDataSourceBodyEntityMappings';
+import type { UpdateDataSourceBodyCreateBatchOnDuplicate } from './updateDataSourceBodyCreateBatchOnDuplicate';
 
 export interface UpdateDataSourceBody {
   name?: UpdateDataSourceBodyName;
@@ -16,4 +17,5 @@ export interface UpdateDataSourceBody {
   config?: UpdateDataSourceBodyConfig;
   api_key_name?: UpdateDataSourceBodyApiKeyName;
   entity_mappings?: UpdateDataSourceBodyEntityMappings;
+  create_batch_on_duplicate?: UpdateDataSourceBodyCreateBatchOnDuplicate;
 }

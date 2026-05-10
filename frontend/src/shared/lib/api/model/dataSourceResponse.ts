@@ -19,4 +19,5 @@ export interface DataSourceResponse {
   entity_mappings: EntityMappingResponse[];
   created_by: string;
   version: number;
+  create_batch_on_duplicate?: boolean;
 }

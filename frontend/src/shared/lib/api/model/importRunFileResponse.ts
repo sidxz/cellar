@@ -16,6 +16,7 @@ export interface ImportRunFileResponse {
   wells_created: number;
   readouts_created: number;
   unmatched_batches: string[];
+  unmatched_compound_refs?: string[];
   controls_from_template: number;
   controls_unclassified: number;
   skipped_rows: number;

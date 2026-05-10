@@ -406,7 +406,7 @@ export function useGetMoleculeByIdentifierApiV1MoleculesByIdentifierIdentifierGe
  * Render 2D structure depictions for a batch of SMILES strings.
 
 Returns a dict mapping each valid SMILES to a base64-encoded PNG.
-Invalid SMILES are silently skipped.  Max 200 SMILES per request.
+Invalid SMILES are silently skipped. Max 200 SMILES per request.
  * @summary Depict Structures
  */
 export const depictStructuresApiV1MoleculesDepictPost = (

@@ -5,10 +5,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ColumnMappingRequest } from './columnMappingRequest';
-import type { CompoundBatchOverrideRequest } from './compoundBatchOverrideRequest';
 
-export interface ImportRunFileRequest {
+export interface RepreviewRunFileRequest {
   preview_id: string;
   mapping: ColumnMappingRequest;
-  compound_batch_overrides?: CompoundBatchOverrideRequest[];
 }

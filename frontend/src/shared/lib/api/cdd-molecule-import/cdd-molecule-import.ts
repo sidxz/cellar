@@ -197,8 +197,8 @@ export const useStartCddMoleculeImportApiV1CddImportMoleculesPost = <TError = HT
     /**
  * Poll progress of a CDD molecule import workflow.
 
-Workspace-scoped: the workflow_id prefix contains the workspace_id,
-and the Temporal query is validated against the requesting workspace.
+Workspace ownership is enforced by the embedded ``workspace_id`` prefix
+in the workflow_id; the use case verifies the requesting workspace.
  * @summary Get Cdd Molecule Import Status
  */
 export const getCddMoleculeImportStatusApiV1CddImportMoleculesWorkflowIdStatusGet = (

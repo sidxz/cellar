@@ -4,9 +4,11 @@
  * Chem-Vault
  * OpenAPI spec version: 0.1.0
  */
+import type { BodyStartBulkRegistrationApiV1BulkRegistrationsPostCreateBatchOnDuplicate } from './bodyStartBulkRegistrationApiV1BulkRegistrationsPostCreateBatchOnDuplicate';
 
 export interface BodyStartBulkRegistrationApiV1BulkRegistrationsPost {
   file: string;
   originating_org_id: string;
   file_format: string;
+  create_batch_on_duplicate?: BodyStartBulkRegistrationApiV1BulkRegistrationsPostCreateBatchOnDuplicate;
 }

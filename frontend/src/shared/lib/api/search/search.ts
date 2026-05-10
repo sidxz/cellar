@@ -173,8 +173,7 @@ export const useCountSearchApiV1SearchCountPost = <TError = HTTPValidationError,
     /**
  * Return available search modes and fingerprint algorithms.
 
-This endpoint is metadata-only — no auth dependency, no DB access.
-Frontend uses it to render mode radios and threshold defaults.
+Frontend uses this to render mode radios and threshold defaults.
  * @summary List Algorithms
  */
 export const listAlgorithmsApiV1SearchAlgorithmsGet = (

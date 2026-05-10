@@ -16,6 +16,7 @@ export interface RegistrationResponse {
   is_new: boolean;
   qc_warnings: string[];
   batch?: RegistrationResponseBatch;
+  batch_skipped?: boolean;
   detected_salt?: RegistrationResponseDetectedSalt;
   action?: string;
   needs_merge_confirmation?: boolean;
