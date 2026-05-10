@@ -15,6 +15,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Switch } from "@/shared/components/ui/switch";
 import { MOLECULE_TYPE_LABELS } from "@/features/chemical-registration/types";
 import {
   useUpdateWorkspaceSettings,
@@ -49,6 +50,7 @@ export function WorkspaceSettingsForm() {
   const [sigRequired, setSigRequired] = useState<string[]>([]);
   const [formulationScheme, setFormulationScheme] = useState("");
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
+  const [createBatchOnDup, setCreateBatchOnDup] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -63,6 +65,9 @@ export function WorkspaceSettingsForm() {
         Array.isArray(settings.custom_field_definitions)
           ? settings.custom_field_definitions
           : []
+      );
+      setCreateBatchOnDup(
+        !!settings.registration_rules?.create_batch_on_duplicate
       );
     }
   }, [settings]);
@@ -84,6 +89,10 @@ export function WorkspaceSettingsForm() {
       signature_required_for: sigRequired,
       formulation_number_scheme: formulationScheme || null,
       custom_field_definitions: customFields.filter((f) => f.name.trim()),
+      registration_rules: {
+        ...(settings?.registration_rules ?? {}),
+        create_batch_on_duplicate: createBatchOnDup,
+      },
     });
   };
 
@@ -136,6 +145,28 @@ export function WorkspaceSettingsForm() {
               <p className="text-xs text-muted-foreground">
                 Pattern for auto-generated formulation numbers.
               </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Registration */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Registration</h2>
+          <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label htmlFor="cbod">Create batch on re-registration</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  When off, registering the same compound again only merges new
+                  identifiers and synonyms — no new batch is created. Override
+                  per-import in the bulk and CDD wizards.
+                </p>
+              </div>
+              <Switch
+                id="cbod"
+                checked={createBatchOnDup}
+                onCheckedChange={setCreateBatchOnDup}
+              />
             </div>
           </div>
         </Card>

@@ -45,8 +45,12 @@ export interface CustomFieldDefinition {
   vocabulary_name?: string | null;
 }
 
+export interface RegistrationRules {
+  create_batch_on_duplicate?: boolean;
+}
+
 export interface WorkspaceSettings {
-  registration_rules: Record<string, unknown>;
+  registration_rules: RegistrationRules;
   custom_field_definitions: CustomFieldDefinition[];
   default_molecule_type: string | null;
   audit_reason_policy: AuditReasonPolicy;
