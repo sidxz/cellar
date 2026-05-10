@@ -65,3 +65,18 @@ class TestUpdateSettings:
         resp = await client.get("/api/v1/settings")
         assert resp.status_code == 200
         assert resp.json()["default_molecule_type"] == "biologic"
+
+    async def test_create_batch_on_duplicate_round_trips(self, client: AsyncClient) -> None:
+        """create_batch_on_duplicate stored in registration_rules dict and readable back."""
+        # Set the policy via PATCH
+        resp = await client.patch(
+            "/api/v1/settings",
+            json={"registration_rules": {"create_batch_on_duplicate": True}},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["registration_rules"]["create_batch_on_duplicate"] is True
+
+        # Read back via GET — confirms persistence, not just in-memory echo
+        got = await client.get("/api/v1/settings")
+        assert got.status_code == 200
+        assert got.json()["registration_rules"]["create_batch_on_duplicate"] is True
