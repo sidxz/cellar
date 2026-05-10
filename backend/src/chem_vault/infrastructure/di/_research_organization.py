@@ -21,6 +21,7 @@ from chem_vault.application.research_organization.create_saved_search import Cre
 from chem_vault.application.research_organization.delete_collection import DeleteCollection
 from chem_vault.application.research_organization.delete_saved_search import DeleteSavedSearch
 from chem_vault.application.chemical_registration.molecule_reader import MoleculeReader
+from chem_vault.application.research_organization.count_search import CountSearch
 from chem_vault.application.research_organization.execute_search import ExecuteSearch
 from chem_vault.application.research_organization.get_collection import (
     GetCollection,
@@ -245,6 +246,17 @@ def register_research_organization(container: Container) -> None:
         )
 
     container.define(ExecuteSearch, _execute_search)
+
+    # --- Count Search (live "Search N compounds" preview) ---
+    def _count_search(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CountSearch(
+            uow,
+            c[MoleculeReader],
+            SQLAlchemySavedSearchRepository(uow),
+        )
+
+    container.define(CountSearch, _count_search)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

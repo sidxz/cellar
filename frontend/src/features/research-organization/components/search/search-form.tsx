@@ -3,7 +3,8 @@
 import { Button } from "@/shared/components/ui/button";
 import { Separator } from "@/shared/components/ui/separator";
 import { RotateCcw, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchCount } from "../../hooks/use-search-count";
 import type {
   ActivityCriterion,
   GroupCriterion,
@@ -167,6 +168,21 @@ function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] 
     if (!addedCurve) add(`drc:${c.protocol_id}:ic50`);
   }
   return columns;
+}
+
+// Walks the composed criteria tree looking for any similarity structure clause.
+// We surface a "ranked list, top N shown" caption when one is present, since
+// the count covers *candidates above the threshold* but the result panel only
+// shows the top-K by similarity score.
+function containsSimilarity(criteria: SearchCriterion[]): boolean {
+  for (const c of criteria) {
+    if (c.type === "structure" && c.search_type === "similarity") return true;
+    if (c.type === "group") {
+      const inner = (c as GroupCriterion).criteria;
+      if (containsSimilarity(inner)) return true;
+    }
+  }
+  return false;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -382,7 +398,32 @@ export function SearchForm({
     onProjectsChange([]);
   }
 
-  const criteriaCount = composeCriteria().length;
+  // Compose once per render; both the filter-count display and the live
+  // count preview key off the same composed query so they never drift.
+  const composedCriteria = composeCriteria();
+  const criteriaCount = composedCriteria.length;
+  const composedQuery: SearchQuery = useMemo(
+    () => ({ criteria: composedCriteria, logic: "and" }),
+    // The composedCriteria array is rebuilt every render but its serialization
+    // is stable across no-op renders, so consumers (useSearchCount) can debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(composedCriteria)],
+  );
+
+  // Similarity searches return everything above the threshold; the panel only
+  // shows the top-K ranked. Surface that distinction so the chemist knows the
+  // raw count is bigger than what they see in the result list.
+  const isSimilarityQuery = useMemo(
+    () => containsSimilarity(composedCriteria),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(composedCriteria)],
+  );
+
+  // Skip the count when there are no criteria — the badge is hidden in that
+  // case and we don't want to fire a workspace-wide COUNT(*) on every render.
+  const countQuery = useSearchCount(composedQuery, criteriaCount > 0);
+  const totalCount = countQuery.data?.total_count;
+  const countIsFetching = countQuery.isFetching;
 
   // ⌘/Ctrl+Enter from anywhere inside the form fires Search.
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -457,9 +498,42 @@ export function SearchForm({
           <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
         </Button>
         <div className="flex items-center gap-3">
+          {/* Forecast lives next to the action, not inside it. The button is
+              an action affordance ("click to run"); the count is metadata
+              about the composed query ("this many will come back"). Mixing
+              the two reads as "Search [these N compounds]" -- the wrong
+              semantic. We fall back to the raw filter count only when the
+              live preview hasn't returned yet. */}
           {criteriaCount > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {criteriaCount} filter{criteriaCount === 1 ? "" : "s"}
+            <span
+              className={`text-xs text-muted-foreground transition-opacity ${
+                countIsFetching ? "opacity-60" : "opacity-100"
+              }`}
+              aria-live="polite"
+            >
+              {totalCount !== undefined ? (
+                <>
+                  <span
+                    className={`tabular-nums ${
+                      totalCount === 0
+                        ? "font-medium text-amber-600 dark:text-amber-500"
+                        : "text-foreground/80"
+                    }`}
+                  >
+                    {totalCount.toLocaleString()}
+                  </span>{" "}
+                  compound{totalCount === 1 ? "" : "s"} match
+                  {isSimilarityQuery && (
+                    <span className="ml-1.5 text-muted-foreground/70">
+                      · ranked, top 50 shown
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  {criteriaCount} filter{criteriaCount === 1 ? "" : "s"}
+                </>
+              )}
             </span>
           )}
           <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground/60 sm:inline">
@@ -468,11 +542,6 @@ export function SearchForm({
           <Button onClick={handleSearch} disabled={isLoading} className="px-5">
             <Search className="h-4 w-4 mr-2" />
             Search
-            {criteriaCount > 0 && (
-              <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                {criteriaCount}
-              </span>
-            )}
           </Button>
         </div>
       </div>

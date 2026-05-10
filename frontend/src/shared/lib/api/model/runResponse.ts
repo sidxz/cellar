@@ -20,6 +20,7 @@ export interface RunResponse {
   workspace_id: string;
   protocol_id: string;
   run_date: string;
+  created_at: string;
   operator: string;
   status: string;
   is_locked: boolean;
@@ -28,6 +29,7 @@ export interface RunResponse {
   qc_metrics?: RunResponseQcMetrics;
   notes?: RunResponseNotes;
   plate_count: number;
+  plate_barcodes?: string[];
   molecule_count?: number;
   performed_at_org_id?: RunResponsePerformedAtOrgId;
   parent_run_id?: RunResponseParentRunId;

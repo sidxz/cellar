@@ -10,4 +10,5 @@ search_type: string;
 query: string;
 threshold?: number;
 limit?: number;
+query_kind?: string | null;
 };

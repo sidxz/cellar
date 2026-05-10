@@ -127,6 +127,7 @@ from chem_vault.application.research_organization.collection_membership import (
 )
 from chem_vault.application.research_organization.compose_collections import ComposeCollections
 from chem_vault.application.research_organization.create_collection import CreateCollection
+from chem_vault.application.research_organization.count_search import CountSearch
 from chem_vault.application.research_organization.execute_search import ExecuteSearch
 from chem_vault.application.research_organization.create_project import CreateProject
 from chem_vault.application.research_organization.create_saved_search import CreateSavedSearch
@@ -612,6 +613,7 @@ DeleteSavedSearchDep = Annotated[DeleteSavedSearch, Depends(_get_use_case(Delete
 GetSavedSearchDep = Annotated[GetSavedSearch, Depends(_get_use_case(GetSavedSearch))]
 ListSavedSearchesDep = Annotated[ListSavedSearches, Depends(_get_use_case(ListSavedSearches))]
 ExecuteSearchDep = Annotated[ExecuteSearch, Depends(_get_use_case(ExecuteSearch))]
+CountSearchDep = Annotated[CountSearch, Depends(_get_use_case(CountSearch))]
 AddProjectMemberDep = Annotated[AddProjectMember, Depends(_get_use_case(AddProjectMember))]
 RemoveProjectMemberDep = Annotated[RemoveProjectMember, Depends(_get_use_case(RemoveProjectMember))]
 UpdateProjectMemberRoleDep = Annotated[UpdateProjectMemberRole, Depends(_get_use_case(UpdateProjectMemberRole))]

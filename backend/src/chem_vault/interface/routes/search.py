@@ -9,11 +9,12 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 from rdkit import Chem
 
+from chem_vault.application.research_organization.count_search import CountSearchQuery
 from chem_vault.application.research_organization.execute_search import ExecuteSearchQuery
 from chem_vault.domain.chemical_registration.molecule import Molecule
 from chem_vault.domain.sar_analysis.search_modes import SearchMode
 from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
-from chem_vault.interface.dependencies import AuthDep, ExecuteSearchDep
+from chem_vault.interface.dependencies import AuthDep, CountSearchDep, ExecuteSearchDep
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import clamp_limit, parse_cursor
 from chem_vault.interface.routes.molecules import MoleculeResponse
@@ -203,3 +204,42 @@ async def execute_search(
         activity_data=page.activity_data,
         total_count=page.total_count,
     )
+
+
+# ---------------------------------------------------------------------------
+# Count-only endpoint -- powers the live "Search N compounds" preview on the
+# search panel. Deliberately separate from /execute so we never materialize
+# rows, score similarity, or run activity enrichment for a draft preview.
+# ---------------------------------------------------------------------------
+
+
+class CountSearchBody(BaseModel):
+    query: dict[str, Any] | None = None
+    saved_search_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _validate_structure_clauses(self) -> "CountSearchBody":
+        if self.query is None:
+            return self
+        _walk_validate_structures(self.query.get("criteria", []))
+        return self
+
+
+class CountSearchResponse(BaseModel):
+    total_count: int
+
+
+@router.post("/count", response_model=CountSearchResponse)
+async def count_search(
+    body: CountSearchBody,
+    auth: AuthDep,
+    use_case: CountSearchDep,
+) -> CountSearchResponse:
+    """Count compounds matching a draft query without materializing rows."""
+    q = CountSearchQuery(
+        workspace_id=auth.workspace_id,
+        saved_search_id=body.saved_search_id,
+        query=body.query,
+    )
+    total = result_to_response(await use_case(q, auth=auth))
+    return CountSearchResponse(total_count=total)

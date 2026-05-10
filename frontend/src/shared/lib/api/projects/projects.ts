@@ -26,6 +26,8 @@ import type {
 import type {
   AddMemberBody,
   CreateProjectBody,
+  GetProjectScopeStatsApiV1ProjectsStatsGet200,
+  GetProjectScopeStatsApiV1ProjectsStatsGetParams,
   HTTPValidationError,
   ProjectMemberResponse,
   ProjectResponse,
@@ -195,6 +197,99 @@ export const useCreateProjectApiV1ProjectsPost = <TError = HTTPValidationError,
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * @summary Get Project Scope Stats
+ */
+export const getProjectScopeStatsApiV1ProjectsStatsGet = (
+    params?: GetProjectScopeStatsApiV1ProjectsStatsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<GetProjectScopeStatsApiV1ProjectsStatsGet200>(
+      {url: `/api/v1/projects/stats`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetProjectScopeStatsApiV1ProjectsStatsGetQueryKey = (params?: GetProjectScopeStatsApiV1ProjectsStatsGetParams,) => {
+    return [
+    `/api/v1/projects/stats`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getGetProjectScopeStatsApiV1ProjectsStatsGetQueryOptions = <TData = Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError = HTTPValidationError>(params?: GetProjectScopeStatsApiV1ProjectsStatsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectScopeStatsApiV1ProjectsStatsGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>> = ({ signal }) => getProjectScopeStatsApiV1ProjectsStatsGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetProjectScopeStatsApiV1ProjectsStatsGetQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>>
+export type GetProjectScopeStatsApiV1ProjectsStatsGetQueryError = HTTPValidationError
+
+
+export function useGetProjectScopeStatsApiV1ProjectsStatsGet<TData = Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError = HTTPValidationError>(
+ params: undefined |  GetProjectScopeStatsApiV1ProjectsStatsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>,
+          TError,
+          Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetProjectScopeStatsApiV1ProjectsStatsGet<TData = Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError = HTTPValidationError>(
+ params?: GetProjectScopeStatsApiV1ProjectsStatsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>,
+          TError,
+          Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetProjectScopeStatsApiV1ProjectsStatsGet<TData = Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError = HTTPValidationError>(
+ params?: GetProjectScopeStatsApiV1ProjectsStatsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Project Scope Stats
+ */
+
+export function useGetProjectScopeStatsApiV1ProjectsStatsGet<TData = Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError = HTTPValidationError>(
+ params?: GetProjectScopeStatsApiV1ProjectsStatsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectScopeStatsApiV1ProjectsStatsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetProjectScopeStatsApiV1ProjectsStatsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * @summary Get Project
  */
 export const getProjectApiV1ProjectsProjectIdGet = (

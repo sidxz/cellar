@@ -327,7 +327,9 @@ function SearchPageInner() {
 
         {!hasSearched && (
           <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-            Build a query above and click Search to find compounds.
+            {/* Action-focused copy. The forecast count lives next to the
+                Search button now, so this prompt no longer contradicts it. */}
+            Press Search or ⌘↵ to load results.
           </div>
         )}
       </div>

@@ -30,9 +30,11 @@ import type {
   CreateProtocolRequest,
   GetConditionGroupsApiV1ProtocolsProtocolIdConditionGroupsGetParams,
   HTTPValidationError,
+  ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
   ListProtocolsApiV1ProtocolsGetParams,
   LockProtocolRequest,
   ProtocolResponse,
+  ProtocolSummaryResponse,
   RetireRequest,
   SetControlLayoutRequest,
   SetOntologyAnnotationRequest,
@@ -192,6 +194,103 @@ export function useListProtocolsApiV1ProtocolsGet<TData = Awaited<ReturnType<typ
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListProtocolsApiV1ProtocolsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * List protocols enriched with run_count + last_run_date for the picker.
+
+When ``project_ids`` is provided, the summaries are restricted to protocols
+linked to any of those projects (union). Empty/omitted ⇒ workspace-wide.
+ * @summary List Protocol Summaries
+ */
+export const listProtocolSummariesApiV1ProtocolsSummaryGet = (
+    params?: ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ProtocolSummaryResponse[]>(
+      {url: `/api/v1/protocols/summary`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getListProtocolSummariesApiV1ProtocolsSummaryGetQueryKey = (params?: ListProtocolSummariesApiV1ProtocolsSummaryGetParams,) => {
+    return [
+    `/api/v1/protocols/summary`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getListProtocolSummariesApiV1ProtocolsSummaryGetQueryOptions = <TData = Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError = HTTPValidationError>(params?: ListProtocolSummariesApiV1ProtocolsSummaryGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProtocolSummariesApiV1ProtocolsSummaryGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>> = ({ signal }) => listProtocolSummariesApiV1ProtocolsSummaryGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProtocolSummariesApiV1ProtocolsSummaryGetQueryResult = NonNullable<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>>
+export type ListProtocolSummariesApiV1ProtocolsSummaryGetQueryError = HTTPValidationError
+
+
+export function useListProtocolSummariesApiV1ProtocolsSummaryGet<TData = Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListProtocolSummariesApiV1ProtocolsSummaryGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolSummariesApiV1ProtocolsSummaryGet<TData = Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError = HTTPValidationError>(
+ params?: ListProtocolSummariesApiV1ProtocolsSummaryGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolSummariesApiV1ProtocolsSummaryGet<TData = Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError = HTTPValidationError>(
+ params?: ListProtocolSummariesApiV1ProtocolsSummaryGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Protocol Summaries
+ */
+
+export function useListProtocolSummariesApiV1ProtocolsSummaryGet<TData = Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError = HTTPValidationError>(
+ params?: ListProtocolSummariesApiV1ProtocolsSummaryGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolSummariesApiV1ProtocolsSummaryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProtocolSummariesApiV1ProtocolsSummaryGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

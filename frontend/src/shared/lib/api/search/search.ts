@@ -24,6 +24,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CountSearchBody,
+  CountSearchResponse,
   ExecuteSearchApiV1SearchExecutePostParams,
   ExecuteSearchBody,
   ExecuteSearchResponse,
@@ -100,6 +102,71 @@ export const useExecuteSearchApiV1SearchExecutePost = <TError = HTTPValidationEr
       > => {
 
       const mutationOptions = getExecuteSearchApiV1SearchExecutePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Count compounds matching a draft query without materializing rows.
+ * @summary Count Search
+ */
+export const countSearchApiV1SearchCountPost = (
+    countSearchBody: CountSearchBody,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CountSearchResponse>(
+      {url: `/api/v1/search/count`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: countSearchBody, signal
+    },
+      );
+    }
+  
+
+
+export const getCountSearchApiV1SearchCountPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof countSearchApiV1SearchCountPost>>, TError,{data: CountSearchBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof countSearchApiV1SearchCountPost>>, TError,{data: CountSearchBody}, TContext> => {
+
+const mutationKey = ['countSearchApiV1SearchCountPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof countSearchApiV1SearchCountPost>>, {data: CountSearchBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  countSearchApiV1SearchCountPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CountSearchApiV1SearchCountPostMutationResult = NonNullable<Awaited<ReturnType<typeof countSearchApiV1SearchCountPost>>>
+    export type CountSearchApiV1SearchCountPostMutationBody = CountSearchBody
+    export type CountSearchApiV1SearchCountPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Count Search
+ */
+export const useCountSearchApiV1SearchCountPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof countSearchApiV1SearchCountPost>>, TError,{data: CountSearchBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof countSearchApiV1SearchCountPost>>,
+        TError,
+        {data: CountSearchBody},
+        TContext
+      > => {
+
+      const mutationOptions = getCountSearchApiV1SearchCountPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

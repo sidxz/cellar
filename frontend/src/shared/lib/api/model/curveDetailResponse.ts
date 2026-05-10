@@ -8,6 +8,8 @@ import type { CurveDetailResponseCurveClass } from './curveDetailResponseCurveCl
 import type { CurveDetailResponseConfidenceIntervalLow } from './curveDetailResponseConfidenceIntervalLow';
 import type { CurveDetailResponseConfidenceIntervalHigh } from './curveDetailResponseConfidenceIntervalHigh';
 import type { CurveDetailResponseRawDataItem } from './curveDetailResponseRawDataItem';
+import type { CurveDetailResponseExcludedPoints } from './curveDetailResponseExcludedPoints';
+import type { InterceptValueResponse } from './interceptValueResponse';
 
 export interface CurveDetailResponse {
   curve_id: string;
@@ -25,4 +27,7 @@ export interface CurveDetailResponse {
   confidence_interval_low?: CurveDetailResponseConfidenceIntervalLow;
   confidence_interval_high?: CurveDetailResponseConfidenceIntervalHigh;
   raw_data?: CurveDetailResponseRawDataItem[];
+  excluded_points?: CurveDetailResponseExcludedPoints;
+  fit_quality_warnings?: string[];
+  intercept_values?: InterceptValueResponse[];
 }

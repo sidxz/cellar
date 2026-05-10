@@ -185,3 +185,129 @@ class TestExecuteSearch:
             },
         )
         assert resp.status_code == 422
+
+
+class TestCountSearch:
+    """API tests for /api/v1/search/count -- the lightweight 'Search N compounds'
+    preview endpoint. Mirrors the structure validation of /execute but never
+    materializes rows, scores similarity, or enriches activity."""
+
+    async def test_inline_text_filter_returns_count(
+        self, client: AsyncClient, org_id: str
+    ) -> None:
+        await client.post(
+            "/api/v1/molecules",
+            json={"name": "CountTarget", "smiles": "CC", "originating_org_id": org_id},
+        )
+        await client.post(
+            "/api/v1/molecules",
+            json={"name": "Other", "smiles": "CCC", "originating_org_id": org_id},
+        )
+        resp = await client.post(
+            "/api/v1/search/count",
+            json={
+                "query": {
+                    "criteria": [
+                        {"type": "text", "field": "name", "operator": "contains", "value": "CountTarget"}
+                    ],
+                    "logic": "and",
+                }
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_count" in data
+        assert data["total_count"] >= 1
+
+    async def test_empty_criteria_counts_all(
+        self, client: AsyncClient, org_id: str
+    ) -> None:
+        await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyMol", "smiles": "C", "originating_org_id": org_id},
+        )
+        resp = await client.post(
+            "/api/v1/search/count",
+            json={"query": {"criteria": [], "logic": "and"}},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total_count"] >= 1
+
+    async def test_zero_match_returns_zero(
+        self, client: AsyncClient, org_id: str
+    ) -> None:
+        resp = await client.post(
+            "/api/v1/search/count",
+            json={
+                "query": {
+                    "criteria": [
+                        {
+                            "type": "text",
+                            "field": "name",
+                            "operator": "equals",
+                            "value": "definitely-not-a-real-molecule-name-zzz",
+                        }
+                    ],
+                    "logic": "and",
+                }
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total_count"] == 0
+
+    async def test_count_matches_execute_total(
+        self, client: AsyncClient, org_id: str
+    ) -> None:
+        """The count endpoint and the execute endpoint must agree on total_count
+        for the same query -- otherwise the chemist sees one number on the
+        button and a different one on the result panel."""
+        for i in range(3):
+            await client.post(
+                "/api/v1/molecules",
+                json={
+                    "name": f"ParityMol{i}",
+                    "smiles": f"{'C' * (i + 4)}",
+                    "originating_org_id": org_id,
+                },
+            )
+        body = {
+            "query": {
+                "criteria": [
+                    {"type": "text", "field": "name", "operator": "contains", "value": "ParityMol"}
+                ],
+                "logic": "and",
+            }
+        }
+
+        count_resp = await client.post("/api/v1/search/count", json=body)
+        exec_resp = await client.post("/api/v1/search/execute", json=body)
+
+        assert count_resp.status_code == 200
+        assert exec_resp.status_code == 200
+        assert count_resp.json()["total_count"] == exec_resp.json()["total_count"]
+
+    async def test_no_query_or_saved_search_422(self, client: AsyncClient) -> None:
+        resp = await client.post("/api/v1/search/count", json={})
+        assert resp.status_code == 422
+
+    async def test_saved_search_not_found_404(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/search/count",
+            json={"saved_search_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 404
+
+    async def test_invalid_structure_clause_422(self, client: AsyncClient) -> None:
+        """Structure-clause validation runs at the route level, same as /execute."""
+        resp = await client.post(
+            "/api/v1/search/count",
+            json={
+                "query": {
+                    "criteria": [
+                        {"type": "structure", "kind": "exact"}  # missing smiles + inchi_key
+                    ],
+                    "logic": "and",
+                }
+            },
+        )
+        assert resp.status_code == 422

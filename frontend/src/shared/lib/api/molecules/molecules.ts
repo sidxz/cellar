@@ -208,7 +208,13 @@ export function useListMoleculesApiV1MoleculesGet<TData = Awaited<ReturnType<typ
 
 
 /**
- * Structure search: exact (by SMILES), substructure (by SMARTS), or similarity (by SMILES).
+ * Structure search: exact (by SMILES), substructure (by SMILES or SMARTS),
+or similarity (by SMILES).
+
+For substructure, ``query_kind`` selects the cartridge interpretation —
+``"smiles"`` for plain structures (cartridge handles aromaticity),
+``"smarts"`` for queries with atom lists / R-groups / query primitives.
+Omitted ⇒ legacy SMARTS path (aromatized defensively).
 
 Results are capped at ``limit`` (max 500, default 100).
  * @summary Search Molecules

@@ -5,6 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListCollectionsApiV1CollectionsGetParams = {
+export type ListProtocolSummariesApiV1ProtocolsSummaryGetParams = {
 project_ids?: string[] | null;
 };
