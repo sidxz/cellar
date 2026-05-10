@@ -7,7 +7,6 @@ WorkspaceSettingsRepository, _create_batch) are mocked.
 
 from __future__ import annotations
 
-import dataclasses
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,7 +20,6 @@ from chem_vault.infrastructure.temporal.activities.dtos import (
     ChunkItem,
 )
 from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
-
 
 # ---------------------------------------------------------------------------
 # Helpers
