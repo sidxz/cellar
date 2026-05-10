@@ -216,18 +216,34 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
       else if (w.well_type === "positive_control") posValues.push(v);
       else if (w.well_type === "sample") sampleValues.push(v);
     }
-    if (negValues.length > 0 && posValues.length > 0) {
-      const negMean = negValues.reduce((a, b) => a + b, 0) / negValues.length;
-      const posMean = posValues.reduce((a, b) => a + b, 0) / posValues.length;
+    const negMean =
+      negValues.length > 0
+        ? negValues.reduce((a, b) => a + b, 0) / negValues.length
+        : undefined;
+    const posMean =
+      posValues.length > 0
+        ? posValues.reduce((a, b) => a + b, 0) / posValues.length
+        : undefined;
+
+    if (negMean != null && posMean != null) {
       return {
         low: negMean,
         high: posMean,
         kind: "linear",
         controlAnchored: true,
+        negMean,
+        posMean,
       };
     }
     if (sampleValues.length === 0) {
-      return { low: 0, high: 1, kind: "linear", controlAnchored: false };
+      return {
+        low: 0,
+        high: 1,
+        kind: "linear",
+        controlAnchored: false,
+        negMean,
+        posMean,
+      };
     }
     const lo = Math.min(...sampleValues);
     const hi = Math.max(...sampleValues);
@@ -236,6 +252,8 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
       high: hi === lo ? lo + 1 : hi,
       kind: "linear",
       controlAnchored: false,
+      negMean,
+      posMean,
     };
   }
 
@@ -371,13 +389,25 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
           // inhibitor dose are part of the dose distribution and the user
           // is here specifically to see where doses landed across the plate.
           const valuesForGradient = new Map<string, number>();
+          const controlTypesSeen = new Set<string>();
           for (const w of plate.wells) {
             const includeControls = isDose;
             if (w.well_type === "sample" || includeControls) {
               const v = activeByWellId.get(w.well_id);
               if (v != null) valuesForGradient.set(w.well_id, v);
             }
+            if (
+              w.well_type === "negative_control" ||
+              w.well_type === "positive_control" ||
+              w.well_type === "blank" ||
+              w.well_type === "reference"
+            ) {
+              controlTypesSeen.add(w.well_type);
+            }
           }
+          const controlTypesPresent = (
+            ["negative_control", "positive_control", "blank", "reference"] as const
+          ).filter((t) => controlTypesSeen.has(t));
 
           return (
             <div key={plate.plate_id} className="space-y-3">
@@ -425,6 +455,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 scale={scale}
                 palette={palette}
                 unit={wantsComputed ? null : rawUnit}
+                controlTypesPresent={controlTypesPresent}
               />
 
               <PlateValueHeatmap

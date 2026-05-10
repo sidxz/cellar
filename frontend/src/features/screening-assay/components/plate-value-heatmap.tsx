@@ -87,6 +87,12 @@ export interface ValueScale {
    *  render σ tick marks. */
   zMean?: number;
   zStd?: number;
+  /** Mean of negative-control wells on the plate, when present. Surfaced
+   *  by the legend as a tick mark on the gradient even when the scale
+   *  isn't anchored on controls — gives the chemist the same "where do
+   *  controls land?" reference CDD shows. */
+  negMean?: number;
+  posMean?: number;
 }
 
 /** Map a value to a normalized [0,1] scale position.
@@ -356,6 +362,10 @@ interface ColorScaleLegendProps {
   scale: ValueScale;
   palette: Palette;
   unit: string | null;
+  /** Which well types actually appear on this plate. Drives the swatch
+   *  key beneath the gradient; types not present are omitted so the key
+   *  doesn't advertise outlines the chemist will never see. */
+  controlTypesPresent?: ReadonlyArray<"negative_control" | "positive_control" | "blank" | "reference">;
   className?: string;
 }
 
@@ -363,18 +373,60 @@ export function ColorScaleLegend({
   scale,
   palette,
   unit,
+  controlTypesPresent,
   className,
 }: ColorScaleLegendProps) {
   const stops = stopsFor(palette)
     .map(([t, [r, g, b]]) => `rgb(${r},${g},${b}) ${t * 100}%`)
     .join(", ");
 
+  const u = unit ? ` ${unit}` : "";
+
+  // Tick-mark positions on the gradient. Linear scales overlay NEG/POS
+  // means when the panel computed them — even when the gradient isn't
+  // anchored on controls, the chemist still wants to see where controls
+  // landed (mirrors CDD's heatmap legend).
+  const ticks: { t: number; label: string; value: number; color: string }[] = [];
+  if (scale.kind === "linear") {
+    if (scale.negMean != null) {
+      ticks.push({
+        t: valueToT(scale.negMean, scale, palette),
+        label: "NEG",
+        value: scale.negMean,
+        color: WELL_TYPE_COLORS.negative_control,
+      });
+    }
+    if (scale.posMean != null) {
+      ticks.push({
+        t: valueToT(scale.posMean, scale, palette),
+        label: "POS",
+        value: scale.posMean,
+        color: WELL_TYPE_COLORS.positive_control,
+      });
+    }
+  }
+
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <div
-        className="h-3 w-full max-w-md rounded-sm"
-        style={{ background: `linear-gradient(to right, ${stops})` }}
-      />
+      <div className="relative h-3 w-full max-w-md">
+        <div
+          className="absolute inset-0 rounded-sm"
+          style={{ background: `linear-gradient(to right, ${stops})` }}
+        />
+        {ticks.map((tk) => (
+          <span
+            key={tk.label}
+            className="pointer-events-none absolute -top-0.5 -bottom-0.5 w-[2px] rounded-sm"
+            style={{
+              left: `calc(${tk.t * 100}% - 1px)`,
+              background: tk.color,
+              boxShadow: "0 0 0 1px rgba(255,255,255,0.7)",
+            }}
+            title={`${tk.label} ${tk.value.toFixed(2)}${u}`}
+          />
+        ))}
+      </div>
+
       <div className="flex max-w-md justify-between text-[10px] text-muted-foreground">
         {scale.kind === "zscore" ? (
           <>
@@ -383,7 +435,7 @@ export function ColorScaleLegend({
               <span className="font-mono tabular-nums">
                 {scale.low.toFixed(2)}
               </span>
-              {unit ? ` ${unit}` : ""}
+              {u}
             </span>
             {scale.zMean != null && (
               <span>
@@ -398,32 +450,24 @@ export function ColorScaleLegend({
               <span className="font-mono tabular-nums">
                 {scale.high.toFixed(2)}
               </span>
-              {unit ? ` ${unit}` : ""}
+              {u}
             </span>
           </>
         ) : scale.controlAnchored ? (
           <>
-            <span className="flex items-center gap-1">
-              <span
-                className="inline-block h-2 w-2 border-2"
-                style={{ borderColor: WELL_TYPE_COLORS.negative_control }}
-              />
+            <span>
               NEG{" "}
               <span className="font-mono tabular-nums">
                 {scale.low.toFixed(2)}
               </span>
-              {unit ? ` ${unit}` : ""}
+              {u}
             </span>
-            <span className="flex items-center gap-1">
-              <span
-                className="inline-block h-2 w-2 border-2"
-                style={{ borderColor: WELL_TYPE_COLORS.positive_control }}
-              />
+            <span>
               POS{" "}
               <span className="font-mono tabular-nums">
                 {scale.high.toFixed(2)}
               </span>
-              {unit ? ` ${unit}` : ""}
+              {u}
             </span>
           </>
         ) : (
@@ -443,6 +487,33 @@ export function ColorScaleLegend({
           </>
         )}
       </div>
+
+      {controlTypesPresent && controlTypesPresent.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          {controlTypesPresent.map((t) => (
+            <span key={t} className="flex items-center gap-1">
+              <span
+                className="inline-block h-2.5 w-2.5"
+                style={{
+                  border: `1.5px solid ${WELL_TYPE_COLORS[t]}`,
+                  background: "transparent",
+                }}
+              />
+              {WELL_TYPE_LABEL[t]}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+const WELL_TYPE_LABEL: Record<
+  "negative_control" | "positive_control" | "blank" | "reference",
+  string
+> = {
+  negative_control: "Negative control",
+  positive_control: "Positive control",
+  blank: "Blank",
+  reference: "Reference",
+};
