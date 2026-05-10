@@ -47,6 +47,7 @@ class CddVaultImportWorkflowInput:
     filter_criteria: dict | None = None
     max_molecules: int | None = None
     entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
+    create_batch_on_duplicate: bool | None = None
     # Resume fields — populated by continue-as-new to carry state across executions
     import_id: str | None = None
     storage_path: str | None = None
@@ -179,6 +180,7 @@ class CddVaultImportWorkflow:
                         submitted_by=input.submitted_by,
                         items=items,
                         chunk_index=chunk_index,
+                        create_batch_on_duplicate=input.create_batch_on_duplicate,
                     ),
                     start_to_close_timeout=timedelta(minutes=5),
                     heartbeat_timeout=timedelta(seconds=120),
@@ -255,6 +257,7 @@ class CddVaultImportWorkflow:
                         filter_criteria=input.filter_criteria,
                         max_molecules=input.max_molecules,
                         entity_mappings=input.entity_mappings,
+                        create_batch_on_duplicate=input.create_batch_on_duplicate,
                         import_id=import_id,
                         storage_path=storage_path,
                         resume_offset=offset,

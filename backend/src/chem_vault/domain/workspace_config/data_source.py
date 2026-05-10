@@ -333,6 +333,19 @@ class DataSource(AggregateRoot):
         )
 
     # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def create_batch_on_duplicate(self) -> bool:
+        """Whether re-running an import for an existing compound also creates a new batch.
+
+        Default ``False`` — re-import merges identifiers but does not create
+        new batches unless the data source is explicitly configured to.
+        """
+        return bool(self.config.get("create_batch_on_duplicate", False))
+
+    # ------------------------------------------------------------------
     # Queries
     # ------------------------------------------------------------------
 

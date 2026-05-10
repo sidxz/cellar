@@ -20,6 +20,10 @@ from chem_vault.application.cdd_import.preview_cdd_protocol_import import (
     PreviewCddProtocolImport,
     PreviewCddProtocolImportQuery,
 )
+from chem_vault.application.cdd_import.start_cdd_molecule_import import (
+    StartCddMoleculeImport,
+    StartCddMoleculeImportCommand,
+)
 from chem_vault.application.workspace_config.get_data_source_for_import import (
     DataSourceImportConfig,
 )
@@ -57,8 +61,15 @@ class FakeGateway:
 
 
 class _FakeDataSource:
-    def __init__(self, vault_id="12345"):
+    def __init__(self, vault_id="12345", create_batch_on_duplicate: bool = False):
         self.config = {"vault_id": vault_id} if vault_id else {}
+        self.api_key_name = "key123"
+        self.entity_mappings = []
+        self._create_batch_on_duplicate = create_batch_on_duplicate
+
+    @property
+    def create_batch_on_duplicate(self) -> bool:
+        return self._create_batch_on_duplicate
 
 
 class FakeGetDataSource:
@@ -73,12 +84,16 @@ class FakeGetDataSource:
         *,
         vault_id: str | None = "12345",
         api_key: str | None = "key123",
+        create_batch_on_duplicate: bool = False,
         result=None,
     ):
         if result is None:
             result = Success(
                 DataSourceImportConfig(
-                    data_source=_FakeDataSource(vault_id=vault_id),
+                    data_source=_FakeDataSource(
+                        vault_id=vault_id,
+                        create_batch_on_duplicate=create_batch_on_duplicate,
+                    ),
                     api_key=api_key,
                 )
             )
@@ -311,3 +326,61 @@ class TestImportCddProtocol:
         protocol = result.unwrap()
         assert len(protocol.condition_definitions) == 1
         assert protocol.condition_definitions[0].name == "Cell Type"
+
+
+# ---------------------------------------------------------------------------
+# StartCddMoleculeImport
+# ---------------------------------------------------------------------------
+
+
+class TestStartCddMoleculeImport:
+    def _make_command(self) -> StartCddMoleculeImportCommand:
+        return StartCddMoleculeImportCommand(
+            workspace_id=WORKSPACE_ID,
+            submitted_by=USER_ID,
+            originating_org_id=uuid.uuid4(),
+            import_mode="full_vault",
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_batch_on_duplicate_true_propagates_to_orchestrator(self):
+        orchestrator = AsyncMock()
+        orchestrator.start = AsyncMock(return_value="wf-123")
+
+        uc = StartCddMoleculeImport(
+            get_data_source=FakeGetDataSource(create_batch_on_duplicate=True),
+            orchestrator=orchestrator,
+        )
+        result = await uc(self._make_command(), auth=_make_auth())
+
+        assert isinstance(result, Success)
+        orchestrator.start.assert_called_once()
+        captured_request = orchestrator.start.call_args[0][0]
+        assert captured_request.create_batch_on_duplicate is True
+
+    @pytest.mark.asyncio
+    async def test_create_batch_on_duplicate_false_propagates_to_orchestrator(self):
+        orchestrator = AsyncMock()
+        orchestrator.start = AsyncMock(return_value="wf-456")
+
+        uc = StartCddMoleculeImport(
+            get_data_source=FakeGetDataSource(create_batch_on_duplicate=False),
+            orchestrator=orchestrator,
+        )
+        result = await uc(self._make_command(), auth=_make_auth())
+
+        assert isinstance(result, Success)
+        orchestrator.start.assert_called_once()
+        captured_request = orchestrator.start.call_args[0][0]
+        assert captured_request.create_batch_on_duplicate is False
+
+    @pytest.mark.asyncio
+    async def test_no_vault_id_returns_failure(self):
+        orchestrator = AsyncMock()
+        uc = StartCddMoleculeImport(
+            get_data_source=FakeGetDataSource(vault_id=None),
+            orchestrator=orchestrator,
+        )
+        result = await uc(self._make_command(), auth=_make_auth())
+        assert isinstance(result, Failure)
+        orchestrator.start.assert_not_called()

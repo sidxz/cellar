@@ -30,6 +30,7 @@ class UpdateDataSourceCommand(Command):
     config: dict[str, Any] | object = UNSET
     api_key_name: str | None | object = UNSET
     entity_mappings: list[dict[str, Any]] | object = UNSET
+    create_batch_on_duplicate: bool | object = UNSET
 
 
 class UpdateDataSource:
@@ -68,6 +69,11 @@ class UpdateDataSource:
                 update_kwargs["entity_mappings"] = _parse_entity_mappings(
                     input.entity_mappings  # type: ignore[arg-type]
                 )
+            if input.create_batch_on_duplicate is not UNSET:
+                # Merge into config without replacing the full config dict.
+                merged_config = dict(ds.config)
+                merged_config["create_batch_on_duplicate"] = bool(input.create_batch_on_duplicate)
+                update_kwargs["config"] = merged_config
 
             if update_kwargs:
                 ds.update(**update_kwargs)

@@ -82,6 +82,7 @@ class DataSourceResponse(BaseModel):
     entity_mappings: list[EntityMappingResponse]
     created_by: uuid.UUID
     version: int
+    create_batch_on_duplicate: bool = False
 
     @classmethod
     def from_domain(cls, ds: DataSource) -> DataSourceResponse:
@@ -96,6 +97,7 @@ class DataSourceResponse(BaseModel):
             entity_mappings=[_em_to_response(em) for em in ds.entity_mappings],
             created_by=ds.created_by,
             version=ds.version,
+            create_batch_on_duplicate=ds.create_batch_on_duplicate,
         )
 
 
@@ -112,6 +114,7 @@ class UpdateDataSourceBody(BaseModel):
     config: dict[str, Any] | None = None
     api_key_name: str | None = None
     entity_mappings: list[dict[str, Any]] | None = None
+    create_batch_on_duplicate: bool | None = None
 
 
 # ======================================================================
@@ -182,6 +185,11 @@ async def update_data_source(
     }
     for attr in ("name", "is_active", "config", "api_key_name", "entity_mappings"):
         cmd_fields[attr] = getattr(body, attr) if attr in body.model_fields_set else UNSET
+
+    if "create_batch_on_duplicate" in body.model_fields_set:
+        cmd_fields["create_batch_on_duplicate"] = body.create_batch_on_duplicate
+    else:
+        cmd_fields["create_batch_on_duplicate"] = UNSET
 
     command = UpdateDataSourceCommand(**cmd_fields)
     ds = result_to_response(await use_case(command, auth=auth))

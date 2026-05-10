@@ -90,6 +90,7 @@ class StartCddMoleculeImport:
             entity_mappings=[em.to_dict() for em in config.data_source.entity_mappings],
             filter_criteria=input.filter_criteria,
             max_molecules=input.max_molecules,
+            create_batch_on_duplicate=config.data_source.create_batch_on_duplicate,
         )
 
         workflow_id = await self._orchestrator.start(request)

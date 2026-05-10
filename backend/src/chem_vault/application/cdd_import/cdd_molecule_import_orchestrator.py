@@ -24,6 +24,7 @@ class StartCddMoleculeImportRequest:
     entity_mappings: list[dict]
     filter_criteria: dict | None = None
     max_molecules: int | None = None
+    create_batch_on_duplicate: bool | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
