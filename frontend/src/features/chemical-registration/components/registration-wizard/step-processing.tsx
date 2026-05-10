@@ -78,7 +78,7 @@ function SingleProcessing() {
             molecule: mol,
             is_new: false,
             qc_warnings: [],
-            batch_skipped: true,
+            batch_skipped: false,
             action: outcome.needs_confirmation
               ? "merge_candidate"
               : outcome.was_merged
