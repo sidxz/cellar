@@ -41,6 +41,7 @@ class BulkRegistrationWorkflowInput:
     file_format: str
     storage_path: str  # absolute path to the uploaded file
     filename: str
+    create_batch_on_duplicate: bool | None = None
     # For continue_as_new
     resume_bulk_reg_id: str | None = None
     resume_chunk_index: int = 0
@@ -166,6 +167,7 @@ class BulkRegistrationWorkflow:
                     submitted_by=input.submitted_by,
                     items=items,
                     chunk_index=i,
+                    create_batch_on_duplicate=input.create_batch_on_duplicate,
                 ),
                 start_to_close_timeout=timedelta(minutes=5),
                 heartbeat_timeout=timedelta(seconds=120),
@@ -228,6 +230,7 @@ class BulkRegistrationWorkflow:
                         file_format=input.file_format,
                         storage_path=input.storage_path,
                         filename=input.filename,
+                        create_batch_on_duplicate=input.create_batch_on_duplicate,
                         resume_bulk_reg_id=bulk_reg_id,
                         resume_chunk_index=self._progress.chunks_processed,
                         resume_total_count=self._progress.total_count,
