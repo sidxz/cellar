@@ -1,7 +1,7 @@
 """GetBulkRegistrationRuntimeStatus — query the orchestrator for live progress.
 
-Bulk registration has no DB-side aggregate to fall back to (in the way the
-CDD imports do), so this is a thin wrapper. Errors propagate as ``Failure``
+Bulk registration has no DB-side aggregate to fall back to, so this is a
+thin wrapper around the orchestrator. Errors propagate as ``Failure``
 results so callers stay on the railway.
 """
 

@@ -519,9 +519,9 @@ function ActivityRow({
 
   const curveTypeOptions = getProtocolCurveTypes(protocol);
   const hasProtocol = Boolean(criterion.protocol_id);
-  // Pristine rows don't surface validation — the row is a passive placeholder
-  // (CDD-style "always-visible empty row"). Only flag invalid once the user
-  // has committed (real row from +Add or saved-search load).
+  // Pristine rows don't surface validation — the row is a passive
+  // "always-visible empty row" placeholder. Only flag invalid once the
+  // user has committed (real row from +Add or saved-search load).
   const protocolInvalid = !hasProtocol && !isPristine;
   // The where-clause is optional: a protocol-only criterion is a valid
   // "any compound screened in this protocol/scope" presence filter.
@@ -742,7 +742,7 @@ export function ProtocolSection({
   // affects all rows so chemists don't toggle it per row when comparing
   // two protocols. Resets implicitly whenever the selected projects change.
   const [showAllProjects, setShowAllProjects] = useState(false);
-  // CDD-style pristine row: when criteria is empty we render one passive
+  // Pristine row: when criteria is empty we render one passive
   // placeholder row with the protocol picker ready, so the most common
   // search shape (`project + protocol + …`) is one click away instead of two.
   // Dismissing the pristine row hides it for the rest of the session — until

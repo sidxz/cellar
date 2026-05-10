@@ -89,8 +89,8 @@ export interface ValueScale {
   zStd?: number;
   /** Mean of negative-control wells on the plate, when present. Surfaced
    *  by the legend as a tick mark on the gradient even when the scale
-   *  isn't anchored on controls — gives the chemist the same "where do
-   *  controls land?" reference CDD shows. */
+   *  isn't anchored on controls — answers "where do controls land?"
+   *  for the chemist at a glance. */
   negMean?: number;
   posMean?: number;
 }
@@ -246,10 +246,10 @@ export function PlateValueHeatmap({
     const isControl = !!outline && well.well_type !== "sample";
     const v = valueByWellId.get(well.well_id);
 
-    // Controls without a gradient value render as type-color outlines —
-    // matches CDD's NEG/POS markers on a value heatmap. Controls *with*
-    // a gradient value (the concentration view, where POS has a fixed
-    // dose worth seeing) get filled and keep the outline as identity.
+    // Controls without a gradient value render as type-color outlines so
+    // their position on the plate is still legible. Controls *with* a
+    // gradient value (the concentration view, where POS has a fixed dose
+    // worth seeing) get filled and keep the outline as identity.
     if (isControl) {
       if (v == null) {
         return { background: "transparent", border: `2px solid ${outline}` };
@@ -385,7 +385,7 @@ export function ColorScaleLegend({
   // Tick-mark positions on the gradient. Linear scales overlay NEG/POS
   // means when the panel computed them — even when the gradient isn't
   // anchored on controls, the chemist still wants to see where controls
-  // landed (mirrors CDD's heatmap legend).
+  // landed.
   const ticks: { t: number; label: string; value: number; color: string }[] = [];
   if (scale.kind === "linear") {
     if (scale.negMean != null) {

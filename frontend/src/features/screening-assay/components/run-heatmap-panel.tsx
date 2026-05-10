@@ -146,9 +146,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   /** Per-plate scale.
    *
    *  Z-score: μ ± 2σ across every well with a value on this plate. σ
-   *  computed from samples *and* controls combined since otherwise the
+   *  computed from samples *and* controls combined; otherwise the
    *  high-leverage control wells dominate the gradient and crush the
-   *  sample variance — same convention CDD uses.
+   *  sample variance.
    *
    *  Linear (readouts): anchored on NEG/POS means when both controls
    *  have values for the active layer; otherwise min/max of samples.

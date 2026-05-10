@@ -39,10 +39,10 @@ export interface NormalizationCheckboxGroupProps {
 }
 
 /**
- * CDD-style multi-checkbox normalization picker. A single readout def
- * can emit multiple normalized columns at once (raw + %inh + z-score),
- * so this component is multi-select. The empty array represents the
- * legacy "none" option.
+ * Multi-checkbox normalization picker. A single readout def can emit
+ * multiple normalized columns at once (raw + %inh + z-score), so this
+ * component is multi-select. The empty array represents the legacy
+ * "none" option.
  */
 export function NormalizationCheckboxGroup({
   value,

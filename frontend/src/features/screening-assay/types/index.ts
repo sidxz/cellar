@@ -227,18 +227,18 @@ export interface DoseResponseConfig {
   top_constraint: number | null;
   bottom_constraint: number | null;
   /** Range bounds on the upper plateau — the optimizer picks the best
-   *  `top` inside `[top_constraint_min, top_constraint_max]`. CDD's
-   *  IC50calc default is [85, 110] for percent-normalized readouts. */
+   *  `top` inside `[top_constraint_min, top_constraint_max]`. Typical
+   *  default is [85, 110] for percent-normalized readouts. */
   top_constraint_min: number | null;
   top_constraint_max: number | null;
   bottom_constraint_min: number | null;
   bottom_constraint_max: number | null;
   /** Explicit Hill range; overrides the implicit bounds set by
-   *  `hill_slope_constraint`. CDD's default is [0.9, 1.1]. */
+   *  `hill_slope_constraint`. Typical default is [0.9, 1.1]. */
   hill_slope_min: number | null;
   hill_slope_max: number | null;
   /** Auto-outlier removal threshold (residual > σ × SD). Default 3.0;
-   *  null disables. CDD-equivalent default. */
+   *  null disables. */
   outlier_sigma: number | null;
   /** Curve-classification thresholds. Defaults are calibrated for normalized
    *  (% inhibition / % activation / % control) Y axes; override per-protocol

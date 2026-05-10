@@ -53,9 +53,9 @@ interface DoseResponseChartProps {
   protocolConfig?: DoseResponseConfig | null;
   /** Normalization of the Y readout (looked up from
    *  ``protocol.readout_definitions`` by the parent). Used to decide
-   *  whether seeding CDD's [85,110]/[-10,10]/[0.9,1.1] defaults makes
-   *  sense — those bounds are only meaningful for percent-scale
-   *  readouts. Pass null/undefined to disable seeding. */
+   *  whether seeding the [85,110]/[-10,10]/[0.9,1.1] percent-scale
+   *  defaults makes sense — those bounds are only meaningful for
+   *  percent-scale readouts. Pass null/undefined to disable seeding. */
   yReadoutNormalization?: string | null;
 }
 
@@ -215,7 +215,7 @@ function rSquaredColor(r2: number): string {
 }
 
 /** Whether a Y-axis normalization belongs to the percent-scale family that
- *  CDD's [85,110]/[-10,10]/[0.9,1.1] defaults are calibrated for. */
+ *  the [85,110]/[-10,10]/[0.9,1.1] constraint defaults are calibrated for. */
 function isPercentNormalization(norm: string | null | undefined): boolean {
   return (
     norm === "percent_inhibition" || norm === "percent_activation" || norm === "percent_control"
@@ -765,10 +765,11 @@ export function DoseResponseChart({
   // set Top ∈ [85, 110] at the protocol level should see Range here, not
   // a misleading "Free". Editing a per-curve value sends an explicit
   // override; "Reset" clears the override and resnaps to these defaults.
-  // CDD's [85,110]/[-10,10]/[0.9,1.1] only make sense for percent-scale
-  // readouts (% inhibition / activation / control). For raw signal,
-  // Z-score, NONE, etc., we leave range fields empty so the user must
-  // explicitly choose ranges instead of inheriting bogus percent bounds.
+  // The [85,110]/[-10,10]/[0.9,1.1] defaults only make sense for
+  // percent-scale readouts (% inhibition / activation / control). For
+  // raw signal, Z-score, NONE, etc., we leave range fields empty so the
+  // user must explicitly choose ranges instead of inheriting bogus
+  // percent bounds.
   const getConstraints = useCallback(
     (curve: DoseResponseCurve): CurveConstraints =>
       constraintsMap[curve.id] ??

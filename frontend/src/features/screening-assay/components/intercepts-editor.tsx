@@ -36,7 +36,7 @@ export interface InterceptsEditorProps {
   /** Used to seed the initial row when adding the first intercept. */
   curveType: CurveType;
   disabled?: boolean;
-  /** Cap to prevent runaway UI. CDD shows up to 5 in their dialog. */
+  /** Cap to prevent runaway UI. Default 5. */
   max?: number;
 }
 
@@ -47,7 +47,7 @@ function defaultKindFor(curveType: CurveType): InterceptKind {
 }
 
 /**
- * CDD-style "Data Calculations" repeating-row editor for multiple intercepts
+ * Repeating-row editor for multiple "Data Calculations" intercepts
  * derived from the same Hill fit. Mirrors hit-criteria-dialog's array
  * pattern. The default 50% intercept (IC50 or EC50) is implicit on the
  * server when the list is empty — this editor only surfaces *additional*
