@@ -44,6 +44,7 @@ const DEFAULT_BULK_INPUT: BulkInput = {
   fileFormat: "csv",
   parsedRows: [],
   originatingOrgId: null,
+  createBatchOnDuplicate: false,
 };
 
 // ─── Store interface ─────────────────────────────────────────────────────────

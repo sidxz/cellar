@@ -49,6 +49,7 @@ export interface BulkInput {
   fileFormat: "csv" | "xlsx" | "sdf";
   parsedRows: BulkRow[];
   originatingOrgId: string | null;
+  createBatchOnDuplicate: boolean;
 }
 
 // ─── Preview (parse-only) result returned by /preview ───────────────────────

@@ -272,6 +272,7 @@ function BulkProcessing() {
         file: bulkInput.file,
         file_format: bulkInput.fileFormat,
         originating_org_id: bulkInput.originatingOrgId,
+        create_batch_on_duplicate: bulkInput.createBatchOnDuplicate,
       })
       .then((data) => {
         setWorkflowId(data.workflow_id);

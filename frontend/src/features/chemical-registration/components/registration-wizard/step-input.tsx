@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   CloudDownload,
@@ -30,6 +30,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Switch } from "@/shared/components/ui/switch";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Separator } from "@/shared/components/ui/separator";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
@@ -607,7 +608,19 @@ function BulkInputForm() {
   const nextStep = useRegistrationWizard((s) => s.nextStep);
 
   const { data: orgs } = useOrganizations();
+  const { data: settings } = useWorkspaceSettings();
   const [error, setError] = useState<string | null>(null);
+
+  // Hydrate createBatchOnDuplicate from workspace default on first load (before any file is selected)
+  useEffect(() => {
+    if (settings && !bulkInput.file) {
+      updateBulkInput({
+        createBatchOnDuplicate:
+          settings.registration_rules?.create_batch_on_duplicate ?? false,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
   const onDrop = useCallback(
     (accepted: File[]) => {
@@ -688,6 +701,28 @@ function BulkInputForm() {
         <p className="text-xs text-muted-foreground">
           Applied to all compounds in the file.
         </p>
+      </div>
+
+      {/* Batch-on-duplicate checkbox */}
+      <div className="flex items-start gap-3 rounded-md border bg-muted/40 p-3">
+        <Checkbox
+          id="bulk-cbod"
+          checked={bulkInput.createBatchOnDuplicate}
+          onCheckedChange={(c) =>
+            updateBulkInput({ createBatchOnDuplicate: !!c })
+          }
+          className="mt-0.5"
+        />
+        <div className="space-y-1">
+          <Label htmlFor="bulk-cbod" className="text-sm font-medium">
+            Create batch even for compounds that already exist
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {bulkInput.createBatchOnDuplicate
+              ? "A new batch will be created for every row, even when the compound already has one."
+              : "Rows whose compound already exists will only merge new identifiers — no new batch."}
+          </p>
+        </div>
       </div>
 
       {/* Drop zone */}
