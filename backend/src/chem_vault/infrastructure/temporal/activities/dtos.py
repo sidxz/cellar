@@ -46,6 +46,7 @@ class ChunkInput:
     submitted_by: str
     items: list[ChunkItem] = field(default_factory=list)
     chunk_index: int = 0
+    create_batch_on_duplicate: bool | None = None
 
 
 @dataclass
@@ -67,6 +68,7 @@ class ChunkItemResult:
     error: str | None = None
     cdd_molecule_id: int | None = None
     cdd_modified_at: str | None = None
+    batch_skipped: bool = False
 
 
 @dataclass
