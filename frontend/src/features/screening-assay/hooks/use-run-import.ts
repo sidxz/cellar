@@ -21,6 +21,7 @@ export type ImportRole =
   | "plate_name"
   | "concentration"
   | "batch_ref"
+  | "compound_ref"
   | "readout";
 
 export type ImportConfidence = "high" | "medium" | "low";
@@ -57,6 +58,23 @@ export interface ReadoutConflict {
   readout_name: string;
 }
 
+export interface BatchOption {
+  batch_id: string;
+  batch_number: string;
+  salt_form: string | null;
+  purity: number | null;
+  /** ISO-8601 timestamp from the BE serializer. */
+  created_at: string;
+}
+
+export interface AmbiguousCompound {
+  compound_ref: string;
+  molecule_id: string;
+  molecule_name: string;
+  batch_options: BatchOption[];
+  affected_row_count: number;
+}
+
 export interface PreviewRunFileResponse {
   preview_id: string;
   headers: string[];
@@ -73,6 +91,11 @@ export interface PreviewRunFileResponse {
   will_create_readouts: number;
   will_skip_wells: WellConflict[];
   will_skip_readouts: ReadoutConflict[];
+  matched_compounds: number;
+  unmatched_compound_refs: string[];
+  ambiguous_compounds: AmbiguousCompound[];
+  /** Pre-formatted "Plate-1 A12: <reason>" strings for direct render. */
+  row_conflicts: string[];
 }
 
 export interface ReadoutColumnPayload {
@@ -85,12 +108,19 @@ export interface ColumnMappingPayload {
   plate_name: string | null;
   concentration: string | null;
   batch_ref: string | null;
+  compound_ref: string | null;
   readout_columns: ReadoutColumnPayload[];
+}
+
+export interface CompoundBatchOverride {
+  molecule_id: string;
+  batch_id: string;
 }
 
 export interface ImportRunFilePayload {
   preview_id: string;
   mapping: ColumnMappingPayload;
+  compound_batch_overrides: CompoundBatchOverride[];
 }
 
 export interface ImportRunFileResponse {
@@ -99,6 +129,7 @@ export interface ImportRunFileResponse {
   wells_created: number;
   readouts_created: number;
   unmatched_batches: string[];
+  unmatched_compound_refs: string[];
   controls_from_template: number;
   controls_unclassified: number;
   skipped_rows: number;

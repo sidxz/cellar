@@ -76,6 +76,22 @@ class ReadoutConflictModel(BaseModel):
     readout_name: str = ""
 
 
+class BatchOptionModel(BaseModel):
+    batch_id: uuid.UUID
+    batch_number: str
+    salt_form: str | None = None
+    purity: float | None = None
+    created_at: datetime
+
+
+class AmbiguousCompoundModel(BaseModel):
+    compound_ref: str
+    molecule_id: uuid.UUID
+    molecule_name: str
+    batch_options: list[BatchOptionModel] = Field(default_factory=list)
+    affected_row_count: int
+
+
 class PreviewRunFileResponse(BaseModel):
     preview_id: uuid.UUID
     headers: list[str]
@@ -92,6 +108,10 @@ class PreviewRunFileResponse(BaseModel):
     will_create_readouts: int = 0
     will_skip_wells: list[WellConflictModel] = Field(default_factory=list)
     will_skip_readouts: list[ReadoutConflictModel] = Field(default_factory=list)
+    matched_compounds: int = 0
+    unmatched_compound_refs: list[str] = Field(default_factory=list)
+    ambiguous_compounds: list[AmbiguousCompoundModel] = Field(default_factory=list)
+    row_conflicts: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -174,6 +194,28 @@ async def preview_run_file(
             )
             for c in preview.will_skip_readouts
         ],
+        matched_compounds=preview.matched_compounds,
+        unmatched_compound_refs=list(preview.unmatched_compound_refs),
+        ambiguous_compounds=[
+            AmbiguousCompoundModel(
+                compound_ref=a.compound_ref,
+                molecule_id=a.molecule_id,
+                molecule_name=a.molecule_name,
+                batch_options=[
+                    BatchOptionModel(
+                        batch_id=b.batch_id,
+                        batch_number=b.batch_number,
+                        salt_form=b.salt_form,
+                        purity=b.purity,
+                        created_at=b.created_at,
+                    )
+                    for b in a.batch_options
+                ],
+                affected_row_count=a.affected_row_count,
+            )
+            for a in preview.ambiguous_compounds
+        ],
+        row_conflicts=list(preview.row_conflicts),
     )
 
 
@@ -192,12 +234,23 @@ class ColumnMappingRequest(BaseModel):
     plate_name: str | None = None
     concentration: str | None = None
     batch_ref: str | None = None
+    compound_ref: str | None = None
     readout_columns: list[ReadoutColumnRequest] = Field(default_factory=list)
+
+
+class CompoundBatchOverrideRequest(BaseModel):
+    """One disambiguation pick. ``molecule_id`` -> ``batch_id``."""
+
+    molecule_id: uuid.UUID
+    batch_id: uuid.UUID
 
 
 class ImportRunFileRequest(BaseModel):
     preview_id: uuid.UUID
     mapping: ColumnMappingRequest
+    compound_batch_overrides: list[CompoundBatchOverrideRequest] = Field(
+        default_factory=list
+    )
 
 
 class ImportRunFileResponse(BaseModel):
@@ -206,6 +259,7 @@ class ImportRunFileResponse(BaseModel):
     wells_created: int
     readouts_created: int
     unmatched_batches: list[str]
+    unmatched_compound_refs: list[str] = Field(default_factory=list)
     controls_from_template: int
     controls_unclassified: int
     skipped_rows: int
@@ -234,16 +288,19 @@ async def import_run_file(
         plate_name=body.mapping.plate_name,
         concentration=body.mapping.concentration,
         batch_ref=body.mapping.batch_ref,
+        compound_ref=body.mapping.compound_ref,
         readout_columns=tuple(
             ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
             for rc in body.mapping.readout_columns
         ),
     )
+    overrides = {o.molecule_id: o.batch_id for o in body.compound_batch_overrides}
     cmd = ImportRunFileCommand(
         workspace_id=auth.workspace_id,
         run_id=run_id,
         preview_id=body.preview_id,
         mapping=mapping,
+        compound_batch_overrides=overrides,
     )
     result = await uc(cmd, auth=auth)
     out: ImportRunFileResult = result_to_response(result)
@@ -253,6 +310,7 @@ async def import_run_file(
         wells_created=out.wells_created,
         readouts_created=out.readouts_created,
         unmatched_batches=out.unmatched_batches,
+        unmatched_compound_refs=out.unmatched_compound_refs,
         controls_from_template=out.controls_from_template,
         controls_unclassified=out.controls_unclassified,
         skipped_rows=out.skipped_rows,

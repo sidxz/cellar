@@ -41,6 +41,7 @@ Role = Literal[
     "plate_name",
     "concentration",
     "batch_ref",
+    "compound_ref",
     "readout",
 ]
 
@@ -69,12 +70,18 @@ class ReadoutColumn:
 
 @dataclass(frozen=True)
 class ColumnMapping:
-    """Resolved column-role mapping used by ``normalize``."""
+    """Resolved column-role mapping used by ``normalize``.
+
+    ``batch_ref`` and ``compound_ref`` may both be set when a file
+    carries both kinds of column. Per-row precedence is applied later
+    by the compound-ref resolver, not here.
+    """
 
     well: str
     plate_name: str | None = None
     concentration: str | None = None
     batch_ref: str | None = None
+    compound_ref: str | None = None
     readout_columns: tuple[ReadoutColumn, ...] = ()
 
 
@@ -149,6 +156,7 @@ class LongFormatRow:
     plate_name: str
     well: WellPosition
     batch_ref: str | None
+    compound_ref: str | None
     concentration: float | None
     readouts: dict[uuid.UUID, float | str]
 
@@ -213,8 +221,25 @@ _SYNONYMS: dict[Role, frozenset[str]] = {
                 "lot",
                 "lot number",
                 "sample id",
-                "compound id",
                 "lgcy batch name",
+            )
+        ]
+    ),
+    "compound_ref": frozenset(
+        [
+            _norm(x)
+            for x in (
+                "compound",
+                "compound id",
+                "compound name",
+                "molecule",
+                "molecule id",
+                "molecule name",
+                "synonym",
+                "external id",
+                "registration number",
+                "reg number",
+                "cv id",
             )
         ]
     ),
@@ -424,7 +449,12 @@ def normalize(
         return Failure(
             ValidationError(f"Well column '{mapping.well}' not found in file headers")
         )
-    for col in (mapping.plate_name, mapping.concentration, mapping.batch_ref):
+    for col in (
+        mapping.plate_name,
+        mapping.concentration,
+        mapping.batch_ref,
+        mapping.compound_ref,
+    ):
         if col is not None and col not in table.headers:
             return Failure(
                 ValidationError(f"Column '{col}' not found in file headers")
@@ -459,6 +489,11 @@ def normalize(
         batch_ref = (
             (raw.get(mapping.batch_ref) or "").strip() if mapping.batch_ref else ""
         ) or None
+        compound_ref = (
+            (raw.get(mapping.compound_ref) or "").strip()
+            if mapping.compound_ref
+            else ""
+        ) or None
 
         conc = _parse_float(raw.get(mapping.concentration)) if mapping.concentration else None
 
@@ -482,6 +517,7 @@ def normalize(
                 plate_name=plate_name,
                 well=parsed_well,
                 batch_ref=batch_ref,
+                compound_ref=compound_ref,
                 concentration=conc,
                 readouts=readouts,
             )

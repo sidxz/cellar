@@ -51,6 +51,7 @@ const ROLE_OPTIONS: Array<{ value: ImportRole | "ignore"; label: string }> = [
   { value: "plate_name", label: "Plate Name" },
   { value: "concentration", label: "Concentration" },
   { value: "batch_ref", label: "Batch Ref" },
+  { value: "compound_ref", label: "Compound Ref" },
   { value: "readout", label: "Readout" },
   { value: "ignore", label: "Ignore" },
 ];
@@ -120,6 +121,7 @@ function applyTemplateToDraft(
   setIfPresent(mapping.plate_name, "plate_name");
   setIfPresent(mapping.concentration, "concentration");
   setIfPresent(mapping.batch_ref, "batch_ref");
+  setIfPresent(mapping.compound_ref, "compound_ref");
   if (Array.isArray(mapping.readout_headers)) {
     for (const h of mapping.readout_headers) {
       if (typeof h === "string" && headers.includes(h)) {
@@ -162,6 +164,9 @@ export function RunImportWizard({
   );
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  // Per-molecule batch picks from the disambiguation panel. Cleared when
+  // the wizard resets. ``molecule_id -> batch_id``.
+  const [compoundPicks, setCompoundPicks] = useState<Record<string, string>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -191,6 +196,7 @@ export function RunImportWizard({
     setAppliedTemplate(null);
     setSaveAsTemplate(false);
     setTemplateName("");
+    setCompoundPicks({});
     previewMutationRef.current.reset();
     importMutationRef.current.reset();
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -210,6 +216,7 @@ export function RunImportWizard({
           onSuccess: (data) => {
             setPreview(data);
             setDraft(suggestionToInitialDraft(data.suggestions));
+            setCompoundPicks({});
             // Auto-suggest a matching template if any header set lines up.
             const match = pickBestTemplate(templates, data.headers);
             if (match) {
@@ -268,8 +275,16 @@ export function RunImportWizard({
   const handleSetRole = (header: string, role: ImportRole | "ignore") => {
     setDraft((d) => {
       const nextRoles = { ...d.roles };
-      // well, plate_name, concentration, batch_ref are unique — clear any existing.
-      const unique: ImportRole[] = ["well", "plate_name", "concentration", "batch_ref"];
+      // well / plate_name / concentration / batch_ref / compound_ref are
+      // unique — only one column can carry each. Reassigning the same
+      // role to a new header clears the prior holder.
+      const unique: ImportRole[] = [
+        "well",
+        "plate_name",
+        "concentration",
+        "batch_ref",
+        "compound_ref",
+      ];
       const r: ImportRole | null = role === "ignore" ? null : role;
       if (r && unique.includes(r)) {
         for (const [h, existing] of Object.entries(nextRoles)) {
@@ -312,6 +327,7 @@ export function RunImportWizard({
       plate_name: find("plate_name"),
       concentration: find("concentration"),
       batch_ref: find("batch_ref"),
+      compound_ref: find("compound_ref"),
       readout_columns,
     };
   };
@@ -327,6 +343,9 @@ export function RunImportWizard({
       {
         preview_id: preview.preview_id,
         mapping,
+        compound_batch_overrides: Object.entries(compoundPicks).map(
+          ([molecule_id, batch_id]) => ({ molecule_id, batch_id }),
+        ),
       },
       {
         onSuccess: (data) => {
@@ -339,6 +358,7 @@ export function RunImportWizard({
               plate_name: mapping.plate_name,
               concentration: mapping.concentration,
               batch_ref: mapping.batch_ref,
+              compound_ref: mapping.compound_ref,
               readout_headers: mapping.readout_columns.map((rc) => rc.header),
             };
             createTemplate.mutate({
@@ -398,7 +418,13 @@ export function RunImportWizard({
         )}
 
         {step === 3 && preview && (
-          <PreviewStep preview={preview} />
+          <PreviewStep
+            preview={preview}
+            compoundPicks={compoundPicks}
+            onCompoundPick={(moleculeId, batchId) =>
+              setCompoundPicks((p) => ({ ...p, [moleculeId]: batchId }))
+            }
+          />
         )}
 
         {step === 4 && importMutation.data && (
@@ -443,7 +469,11 @@ export function RunImportWizard({
               onClick={handleSubmit}
               disabled={
                 importMutation.isPending ||
-                (preview?.validation_errors.length ?? 0) > 0
+                (preview?.validation_errors.length ?? 0) > 0 ||
+                (preview?.row_conflicts.length ?? 0) > 0 ||
+                (preview?.ambiguous_compounds ?? []).some(
+                  (a) => !compoundPicks[a.molecule_id],
+                )
               }
             >
               {importMutation.isPending
@@ -706,7 +736,15 @@ function MappingStep({
 
 // ─── Step 3 ────────────────────────────────────────────────────────────────
 
-function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
+function PreviewStep({
+  preview,
+  compoundPicks,
+  onCompoundPick,
+}: {
+  preview: PreviewRunFileResponse;
+  compoundPicks: Record<string, string>;
+  onCompoundPick: (moleculeId: string, batchId: string) => void;
+}) {
   const willCreateTotal =
     preview.will_create_plates +
     preview.will_create_wells +
@@ -825,6 +863,129 @@ function PreviewStep({ preview }: { preview: PreviewRunFileResponse }) {
           </p>
         </div>
       )}
+
+      {preview.unmatched_compound_refs.length > 0 && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          <div className="mb-1 flex items-center gap-2 font-medium text-amber-300">
+            <AlertCircle className="h-4 w-4" />
+            {preview.unmatched_compound_refs.length} unmatched compound ref(s)
+          </div>
+          <p className="text-xs text-muted-foreground">
+            No molecule matches these identifiers (or the molecule has no
+            registered batches). Wells will be skipped.
+          </p>
+          <p className="mt-2 break-words font-mono text-xs">
+            {preview.unmatched_compound_refs.slice(0, 20).join(", ")}
+            {preview.unmatched_compound_refs.length > 20 && "…"}
+          </p>
+        </div>
+      )}
+
+      {preview.ambiguous_compounds.length > 0 && (
+        <DisambiguatePanel
+          ambiguous={preview.ambiguous_compounds}
+          picks={compoundPicks}
+          onPick={onCompoundPick}
+        />
+      )}
+
+      {preview.row_conflicts.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
+            <AlertCircle className="h-4 w-4" />
+            Batch Ref / Compound Ref disagree on{" "}
+            {preview.row_conflicts.length} row(s)
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Each row's Batch Ref and Compound Ref point to different molecules.
+            Fix the file (drop one column or correct the values) and re-upload.
+          </p>
+          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
+            {preview.row_conflicts.slice(0, 10).map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+            {preview.row_conflicts.length > 10 && (
+              <li className="text-muted-foreground">
+                …and {preview.row_conflicts.length - 10} more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DisambiguatePanel({
+  ambiguous,
+  picks,
+  onPick,
+}: {
+  ambiguous: import("../hooks/use-run-import").AmbiguousCompound[];
+  picks: Record<string, string>;
+  onPick: (moleculeId: string, batchId: string) => void;
+}) {
+  const resolvedCount = ambiguous.filter((a) => picks[a.molecule_id]).length;
+  return (
+    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+      <div className="mb-2 flex items-center gap-2 font-medium text-amber-300">
+        <AlertCircle className="h-4 w-4" />
+        Disambiguate compounds ({resolvedCount} / {ambiguous.length} picked)
+      </div>
+      <p className="text-xs text-muted-foreground">
+        These compounds have multiple registered batches. Pick the lot that
+        was actually assayed; your choice applies to every row referencing
+        that compound.
+      </p>
+      <div className="mt-3 space-y-2">
+        {ambiguous.map((a) => {
+          const value = picks[a.molecule_id] ?? "";
+          return (
+            <div
+              key={a.molecule_id}
+              className="flex flex-col gap-1 rounded-md border border-muted bg-background/50 p-2 sm:flex-row sm:items-center sm:gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-xs text-foreground">
+                  {a.compound_ref}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {a.molecule_name} · {a.affected_row_count} row
+                  {a.affected_row_count === 1 ? "" : "s"}
+                </div>
+              </div>
+              <Select
+                value={value}
+                onValueChange={(v) => onPick(a.molecule_id, v)}
+              >
+                <SelectTrigger className="h-8 w-full sm:w-80">
+                  <SelectValue placeholder="Pick a batch…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {a.batch_options.map((b) => (
+                    <SelectItem key={b.batch_id} value={b.batch_id}>
+                      <span className="font-mono">{b.batch_number}</span>
+                      {b.salt_form && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          · {b.salt_form}
+                        </span>
+                      )}
+                      {b.purity != null && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          · {b.purity}%
+                        </span>
+                      )}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        · {new Date(b.created_at).toLocaleDateString()}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

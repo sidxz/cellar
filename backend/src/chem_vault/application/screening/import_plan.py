@@ -15,6 +15,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+from chem_vault.application.screening.compound_ref_resolver import Resolutions
 from chem_vault.application.screening.long_format_normalizer import (
     NormalizedTable,
     WellPosition,
@@ -86,7 +87,6 @@ class _ImportPlan:
     well_conflicts: list[WellConflict] = field(default_factory=list)
     readout_conflicts: list[ReadoutConflict] = field(default_factory=list)
     pick_list_violations: list[str] = field(default_factory=list)
-    unmatched_batches: set[str] = field(default_factory=set)
     controls_from_template: int = 0
     controls_unclassified: int = 0
     create_plate_count: int = 0
@@ -105,16 +105,17 @@ def _scan_conflicts(
     existing_readouts: list[ReadoutData],
     templates_by_format: dict[PlateFormat, dict[str, WellType]],
     *,
-    batch_lookup: dict[str, tuple[uuid.UUID, uuid.UUID]] | None = None,
+    resolutions: Resolutions | None = None,
     rd_name_by_id: dict[uuid.UUID, str] | None = None,
     pick_list_allowed: dict[uuid.UUID, set[str]] | None = None,
 ) -> _ImportPlan:
     """Scan a normalized file against existing run state.
 
-    The plan is computed but no I/O happens here. Caller is responsible
-    for resolving batches before calling this when actually writing
-    (the preview-time scan can pass an empty/None batch_lookup; sample
-    rows with unresolved refs are skipped either way).
+    The plan is computed but no I/O happens here. ``resolutions`` carries
+    the per-row outcome of the compound/batch resolver — index ``i``
+    corresponds to ``normalized.rows[i]``. Pass ``None`` only for tests
+    that don't care about resolution; sample rows with no resolution are
+    skipped either way.
 
     `pick_list_allowed` carries each PICK_LIST readout-def's allowed label
     set. Values not in the set are recorded as plan.pick_list_violations
@@ -122,9 +123,9 @@ def _scan_conflicts(
     write.
     """
     plan = _ImportPlan()
-    batch_lookup = batch_lookup or {}
     rd_name_by_id = rd_name_by_id or {}
     pick_list_allowed = pick_list_allowed or {}
+    per_row_resolutions = resolutions.per_row if resolutions is not None else ()
 
     # Index existing run state.
     plates_by_name: dict[str, Plate] = {}
@@ -162,7 +163,7 @@ def _scan_conflicts(
         plan.create_plate_count += 1
 
     # Walk rows.
-    for row in normalized.rows:
+    for row_index, row in enumerate(normalized.rows):
         plate = plates_by_name.get(row.plate_name)
         if plate is None:
             continue  # defensive; plate_formats covered all names
@@ -179,23 +180,34 @@ def _scan_conflicts(
             file_well_type = tmpl_type
             if tmpl_type != WellType.SAMPLE:
                 plan.controls_from_template += 1
-        elif row.batch_ref or row.concentration is not None:
+        elif (
+            row.batch_ref
+            or row.compound_ref
+            or row.concentration is not None
+        ):
             file_well_type = WellType.SAMPLE
         else:
             file_well_type = WellType.SAMPLE
             plan.controls_unclassified += 1
 
-        # Resolve batch_ref to (batch_id, molecule_id).
+        # Apply the resolver's per-row decision.
         file_batch_id: uuid.UUID | None = None
         file_molecule_id: uuid.UUID | None = None
-        if row.batch_ref:
-            resolved = batch_lookup.get(row.batch_ref)
-            if resolved is not None:
-                file_batch_id, file_molecule_id = resolved
-            else:
-                plan.unmatched_batches.add(row.batch_ref)
-                if file_well_type == WellType.SAMPLE:
-                    continue
+        resolution = (
+            per_row_resolutions[row_index]
+            if row_index < len(per_row_resolutions)
+            else None
+        )
+        if resolution is not None and resolution.error is None:
+            file_batch_id = resolution.batch_id
+            file_molecule_id = resolution.molecule_id
+        elif resolution is not None and resolution.error is not None:
+            # Sample rows must resolve. Control rows (mapped from the
+            # plate template) don't need a batch — we keep them.
+            if file_well_type == WellType.SAMPLE and (
+                row.batch_ref or row.compound_ref
+            ):
+                continue
 
         # Look up existing well at this position.
         well_pos_key = (plate.id, row.well.row, row.well.column)

@@ -21,11 +21,11 @@ and are deleted on first consume (idempotency on the import side).
 
 from __future__ import annotations
 
-import re
 import time
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from returns.result import Failure, Result, Success
@@ -35,6 +35,12 @@ from chem_vault.application.attachment.upload_attachment import (
     UploadAttachmentCommand,
 )
 from chem_vault.application.auth import AuthContext, require_editor
+from chem_vault.application.screening.compound_ref_resolver import (
+    AmbiguousCompound,
+    BatchSummary,
+    CompoundCandidate,
+    resolve_rows,
+)
 
 # Re-exported here so existing callers `from import_run_file import WellConflict`
 # keep working; the underscore-prefixed names are also re-imported for any
@@ -180,6 +186,33 @@ class PlatePreview:
 
 
 @dataclass(frozen=True)
+class BatchOption:
+    """One option offered to the chemist when disambiguating a compound."""
+
+    batch_id: uuid.UUID
+    batch_number: str
+    salt_form: str | None
+    purity: float | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class AmbiguousCompoundDTO:
+    """One molecule that needs the chemist to pick a batch.
+
+    The picker UI renders one row per ``AmbiguousCompoundDTO``; the
+    chemist's choice flows back as ``compound_batch_overrides`` on the
+    import command.
+    """
+
+    compound_ref: str
+    molecule_id: uuid.UUID
+    molecule_name: str
+    batch_options: tuple[BatchOption, ...]
+    affected_row_count: int
+
+
+@dataclass(frozen=True)
 class PreviewRunFileResult:
     preview_id: uuid.UUID
     headers: tuple[str, ...]
@@ -196,6 +229,10 @@ class PreviewRunFileResult:
     will_create_readouts: int = 0
     will_skip_wells: tuple[WellConflict, ...] = ()
     will_skip_readouts: tuple[ReadoutConflict, ...] = ()
+    matched_compounds: int = 0
+    unmatched_compound_refs: tuple[str, ...] = ()
+    ambiguous_compounds: tuple[AmbiguousCompoundDTO, ...] = ()
+    row_conflicts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -204,6 +241,9 @@ class ImportRunFileCommand(Command):
     run_id: uuid.UUID
     preview_id: uuid.UUID
     mapping: ColumnMapping
+    # User's per-molecule batch picks from the disambiguation panel.
+    # ``molecule_id → batch_id``. Empty when no disambiguation was needed.
+    compound_batch_overrides: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
 
 
 @dataclass
@@ -213,6 +253,7 @@ class ImportRunFileResult:
     wells_created: int = 0
     readouts_created: int = 0
     unmatched_batches: list[str] = field(default_factory=list)
+    unmatched_compound_refs: list[str] = field(default_factory=list)
     controls_from_template: int = 0
     controls_unclassified: int = 0
     skipped_rows: int = 0
@@ -315,8 +356,12 @@ class PreviewRunFile:
         guessed = _build_guess_mapping(suggested)
 
         plates: tuple[PlatePreview, ...] = ()
-        matched = 0
+        matched_batches = 0
         unmatched_set: set[str] = set()
+        unmatched_compound_set: frozenset[str] = frozenset()
+        ambiguous_dto: tuple[AmbiguousCompoundDTO, ...] = ()
+        row_conflict_strings: tuple[str, ...] = ()
+        matched_compounds = 0
         validation_errors: list[str] = []
         will_create_plates = 0
         will_create_wells = 0
@@ -329,12 +374,39 @@ class PreviewRunFile:
             if isinstance(normalized, Success):
                 norm: NormalizedTable = normalized.unwrap()
                 plates = _summarize_plates(norm.rows, norm.plate_formats)
-                matched, unmatched_set = await _resolve_batches(
+
+                # Build both indexes, then run the resolver. Dry-run only
+                # — no overrides at preview time.
+                batch_index = await _build_batch_lookup(
+                    norm.rows, input.workspace_id, self._batch_repo
+                )
+                compound_index = await _build_compound_index(
                     norm.rows,
                     input.workspace_id,
-                    self._batch_repo,
                     self._molecule_repo,
+                    self._batch_repo,
                 )
+                resolutions = resolve_rows(
+                    norm.rows,
+                    batch_index=batch_index,
+                    compound_index=compound_index,
+                )
+                # `matched_batches` is *distinct* batch refs that
+                # resolved (matches the original `_resolve_batches`
+                # contract — the wire format documents it as a count
+                # of unique refs, not rows).
+                matched_batches = len(batch_index)
+                unmatched_set = set(resolutions.unmatched_batch_refs)
+                unmatched_compound_set = resolutions.unmatched_compound_refs
+                matched_compounds = resolutions.matched_compound_count
+                ambiguous_dto = tuple(
+                    _to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds
+                )
+                row_conflict_strings = tuple(
+                    f"{c.plate_name} {c.well_label}: {c.reason}"
+                    for c in resolutions.row_conflicts
+                )
+
                 if protocol is not None:
                     templates_by_format = await _load_templates_by_format(
                         protocol,
@@ -361,6 +433,7 @@ class PreviewRunFile:
                         run,
                         existing_readouts,
                         templates_by_format,
+                        resolutions=resolutions,
                     )
                     will_create_plates = plan.create_plate_count
                     will_create_wells = plan.create_well_count
@@ -395,7 +468,7 @@ class PreviewRunFile:
                 suggestions=suggested.suggestions,
                 sample_rows=sample,
                 plates=plates,
-                matched_batches=matched,
+                matched_batches=matched_batches,
                 unmatched_batches=tuple(sorted(unmatched_set)),
                 total_rows=table.row_count,
                 expires_in_seconds=int(ttl),
@@ -405,6 +478,10 @@ class PreviewRunFile:
                 will_create_readouts=will_create_readouts,
                 will_skip_wells=tuple(well_conflicts),
                 will_skip_readouts=tuple(readout_conflicts),
+                matched_compounds=matched_compounds,
+                unmatched_compound_refs=tuple(sorted(unmatched_compound_set)),
+                ambiguous_compounds=ambiguous_dto,
+                row_conflicts=row_conflict_strings,
             )
         )
 
@@ -527,6 +604,7 @@ class ImportRunFile:
             plate_name=cmd.mapping.plate_name,
             concentration=cmd.mapping.concentration,
             batch_ref=cmd.mapping.batch_ref,
+            compound_ref=cmd.mapping.compound_ref,
             readout_columns=tuple(typed_readouts),
         )
 
@@ -549,13 +627,54 @@ class ImportRunFile:
         if control_errors:
             return Failure(ValidationError("; ".join(control_errors)))
 
-        # 6. Resolve batch references.
-        batch_lookup = await _build_batch_lookup(
+        # 6. Resolve batch + compound references with the chemist's
+        # disambiguation overrides applied.
+        batch_index = await _build_batch_lookup(
             normalized.rows,
             cmd.workspace_id,
             self._batch_repo,
-            self._molecule_repo,
         )
+        compound_index = await _build_compound_index(
+            normalized.rows,
+            cmd.workspace_id,
+            self._molecule_repo,
+            self._batch_repo,
+        )
+        resolutions = resolve_rows(
+            normalized.rows,
+            batch_index=batch_index,
+            compound_index=compound_index,
+            overrides=cmd.compound_batch_overrides,
+        )
+
+        # 6b. Re-validate the FE-provided picks. If anything is still
+        # ambiguous after applying overrides, the chemist's submission
+        # was incomplete; refuse the write.
+        if resolutions.ambiguous_compounds:
+            names = ", ".join(
+                a.molecule_name for a in resolutions.ambiguous_compounds
+            )
+            return Failure(
+                ValidationError(
+                    f"Compound disambiguation required for: {names}. "
+                    "Re-open the preview and pick a batch for each ambiguous compound."
+                )
+            )
+        if resolutions.row_conflicts:
+            joined = "\n  - ".join(
+                f"{c.plate_name} {c.well_label}: {c.reason}"
+                for c in resolutions.row_conflicts[:10]
+            )
+            tail = (
+                f"\n  ... and {len(resolutions.row_conflicts) - 10} more"
+                if len(resolutions.row_conflicts) > 10
+                else ""
+            )
+            return Failure(
+                ValidationError(
+                    f"Batch Ref / Compound Ref disagree on:\n  - {joined}{tail}"
+                )
+            )
 
         # 7. Load existing readouts for the run; build the conflict scan.
         existing_readouts = await self._readout_data_repo.find_by_run(
@@ -575,7 +694,7 @@ class ImportRunFile:
             run,
             existing_readouts,
             templates_by_format,
-            batch_lookup=batch_lookup,
+            resolutions=resolutions,
             rd_name_by_id=rd_name_by_id,
             pick_list_allowed=pick_list_allowed,
         )
@@ -605,7 +724,8 @@ class ImportRunFile:
             conflicts_readout=list(plan.readout_conflicts),
             controls_from_template=plan.controls_from_template,
             controls_unclassified=plan.controls_unclassified,
-            unmatched_batches=sorted(plan.unmatched_batches),
+            unmatched_batches=sorted(resolutions.unmatched_batch_refs),
+            unmatched_compound_refs=sorted(resolutions.unmatched_compound_refs),
         )
 
         # Track new plates first so we can emit creation counters.
@@ -622,10 +742,9 @@ class ImportRunFile:
             run.wells.append(w)
             result.wells_created += 1
 
-        # Resolve molecule_id for each new readout from the well's
-        # batch -> molecule lookup. Wells can be brand new (so we use
-        # batch_lookup directly) or existing (we read the well's
-        # batch_id and look up the molecule via the existing batch).
+        # The resolver has already attached molecule_id + batch_id to
+        # each row; the conflict scan threaded those through into the
+        # _ReadoutWrite records. Just forward them to ReadoutData.
         new_readouts: list[ReadoutData] = []
         for rd_write in plan.new_readouts:
             new_readouts.append(
@@ -744,10 +863,30 @@ def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
         plate_name=suggested.first("plate_name"),
         concentration=suggested.first("concentration"),
         batch_ref=suggested.first("batch_ref"),
+        compound_ref=suggested.first("compound_ref"),
         readout_columns=tuple(
             ReadoutColumn(header=s.header, readout_definition_id=uuid.uuid4())
             for s in readouts
         ),
+    )
+
+
+def _to_ambiguous_dto(amb: AmbiguousCompound) -> AmbiguousCompoundDTO:
+    return AmbiguousCompoundDTO(
+        compound_ref=amb.compound_ref,
+        molecule_id=amb.molecule_id,
+        molecule_name=amb.molecule_name,
+        batch_options=tuple(
+            BatchOption(
+                batch_id=b.batch_id,
+                batch_number=b.batch_number,
+                salt_form=b.salt_form,
+                purity=b.purity,
+                created_at=b.created_at,
+            )
+            for b in amb.batch_options
+        ),
+        affected_row_count=amb.affected_row_count,
     )
 
 
@@ -773,77 +912,74 @@ def _summarize_plates(
     return tuple(out)
 
 
-# Trailing -NNN (1-3 digits) is treated as the local batch sequence.
-_BATCH_REF_PATTERN = re.compile(r"^(?P<mol>.+)-(?P<seq>\d{1,3})$")
-
-
-async def _resolve_batch_ref(
-    batch_ref: str,
-    workspace_id: uuid.UUID,
-    batch_repo: BatchRepository,
-    molecule_repo: MoleculeRepository,
-) -> tuple[uuid.UUID, uuid.UUID] | None:
-    direct = await batch_repo.find_by_batch_number(workspace_id, batch_ref)
-    if direct is not None:
-        return direct.id, direct.molecule_id
-
-    m = _BATCH_REF_PATTERN.match(batch_ref)
-    if m is None:
-        return None
-    mol_synonym = m.group("mol")
-    seq = int(m.group("seq"))
-
-    molecule = await molecule_repo.find_by_identifier(workspace_id, mol_synonym)
-    if molecule is None:
-        return None
-
-    cv_batch_number = f"{molecule.registration_number.value}-{seq:03d}"
-    batch = await batch_repo.find_by_batch_number(workspace_id, cv_batch_number)
-    if batch is None:
-        return None
-    return batch.id, batch.molecule_id
-
-
-async def _resolve_batches(
-    rows: Iterable[LongFormatRow],
-    workspace_id: uuid.UUID,
-    batch_repo: BatchRepository,
-    molecule_repo: MoleculeRepository,
-) -> tuple[int, set[str]]:
-    matched = 0
-    unmatched: set[str] = set()
-    seen: set[str] = set()
-    for r in rows:
-        if not r.batch_ref or r.batch_ref in seen:
-            continue
-        seen.add(r.batch_ref)
-        resolved = await _resolve_batch_ref(
-            r.batch_ref, workspace_id, batch_repo, molecule_repo
-        )
-        if resolved is None:
-            unmatched.add(r.batch_ref)
-        else:
-            matched += 1
-    return matched, unmatched
-
-
 async def _build_batch_lookup(
     rows: Iterable[LongFormatRow],
     workspace_id: uuid.UUID,
     batch_repo: BatchRepository,
-    molecule_repo: MoleculeRepository,
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
+    """Resolve every distinct ``batch_ref`` to ``(batch_id, molecule_id)``.
+
+    Strict batch-number lookup. Compound-level resolution is the
+    Compound Ref role's job; this helper used to do hidden compound-name
+    fallback via ``<name>-<seq>``, but that fallback was retired when
+    Compound Ref shipped.
+    """
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
     seen: set[str] = set()
     for r in rows:
         if not r.batch_ref or r.batch_ref in seen:
             continue
         seen.add(r.batch_ref)
-        resolved = await _resolve_batch_ref(
-            r.batch_ref, workspace_id, batch_repo, molecule_repo
+        batch = await batch_repo.find_by_batch_number(workspace_id, r.batch_ref)
+        if batch is not None:
+            out[r.batch_ref] = (batch.id, batch.molecule_id)
+    return out
+
+
+async def _build_compound_index(
+    rows: Iterable[LongFormatRow],
+    workspace_id: uuid.UUID,
+    molecule_repo: MoleculeRepository,
+    batch_repo: BatchRepository,
+) -> dict[str, CompoundCandidate]:
+    """Resolve every distinct ``compound_ref`` to a ``CompoundCandidate``.
+
+    One ``find_by_identifier`` per distinct compound_ref + one
+    ``find_by_molecule`` per distinct molecule_id (so re-listed compounds
+    don't re-fetch). Identifiers that resolve to no molecule are simply
+    omitted; the resolver then surfaces them as ``unmatched_compound_refs``.
+    """
+    out: dict[str, CompoundCandidate] = {}
+    seen_refs: set[str] = set()
+    batches_by_molecule: dict[uuid.UUID, tuple[BatchSummary, ...]] = {}
+    for r in rows:
+        if not r.compound_ref or r.compound_ref in seen_refs:
+            continue
+        seen_refs.add(r.compound_ref)
+        molecule = await molecule_repo.find_by_identifier(
+            workspace_id, r.compound_ref
         )
-        if resolved is not None:
-            out[r.batch_ref] = resolved
+        if molecule is None:
+            continue
+        cached = batches_by_molecule.get(molecule.id)
+        if cached is None:
+            batches = await batch_repo.find_by_molecule(workspace_id, molecule.id)
+            cached = tuple(
+                BatchSummary(
+                    batch_id=b.id,
+                    batch_number=b.batch_number.value,
+                    salt_form=b.salt_name,
+                    purity=b.purity,
+                    created_at=b.created_at,
+                )
+                for b in batches
+            )
+            batches_by_molecule[molecule.id] = cached
+        out[r.compound_ref] = CompoundCandidate(
+            molecule_id=molecule.id,
+            molecule_name=molecule.name,
+            batches=cached,
+        )
     return out
 
 

@@ -39,6 +39,29 @@ _NADD_FIXTURE = "/Users/sidx/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx"
 
 
 class TestInferMappingSynonyms:
+    def test_compound_ref_synonyms_recognized(self) -> None:
+        # Compound name / synonym / external id all map to compound_ref,
+        # not batch_ref. Reg number does too.
+        for header in ("Compound", "Compound Name", "Synonym", "External ID", "Reg Number"):
+            table = _make_table(
+                ["Well", header, "Raw"],
+                [{"Well": "A1", header: "MOL-A", "Raw": "0.5"}],
+            )
+            suggestion = infer_mapping(table)
+            roles = {s.header: s.role for s in suggestion.suggestions}
+            assert roles[header] == "compound_ref", header
+
+    def test_compound_id_no_longer_maps_to_batch_ref(self) -> None:
+        # Pre-resolver wiring, "Compound ID" was a batch_ref synonym;
+        # it should now map to compound_ref instead.
+        table = _make_table(
+            ["Well", "Compound ID", "Raw"],
+            [{"Well": "A1", "Compound ID": "MOL-A", "Raw": "0.5"}],
+        )
+        suggestion = infer_mapping(table)
+        roles = {s.header: s.role for s in suggestion.suggestions}
+        assert roles["Compound ID"] == "compound_ref"
+
     def test_nadd_headers_resolved_via_synonyms(self) -> None:
         table = _make_table(
             ["Plate Name", "Well", "Concentration", "LGCY BATCH NAME", "Raw Data", "Scientist"],
@@ -315,6 +338,27 @@ class TestNormalizeBlankDetection:
         row = normalize(table, mapping).unwrap().rows[0]
         assert row.batch_ref is None
         assert row.concentration is None
+
+    def test_compound_ref_propagated_to_row(self) -> None:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Compound", "Batch", "Raw"],
+            [
+                {"Well": "A1", "Compound": "MOL-A", "Batch": "", "Raw": "0.5"},
+                {"Well": "A2", "Compound": "", "Batch": "CV-1", "Raw": "0.4"},
+            ],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            batch_ref="Batch",
+            compound_ref="Compound",
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
+        )
+        rows = normalize(table, mapping).unwrap().rows
+        assert rows[0].compound_ref == "MOL-A"
+        assert rows[0].batch_ref is None
+        assert rows[1].compound_ref is None
+        assert rows[1].batch_ref == "CV-1"
 
     def test_with_batch_is_sample_row(self) -> None:
         rd_id = uuid.uuid4()
