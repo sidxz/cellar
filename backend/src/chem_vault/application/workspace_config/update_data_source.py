@@ -71,7 +71,10 @@ class UpdateDataSource:
                 )
             if input.create_batch_on_duplicate is not UNSET:
                 # Merge into config without replacing the full config dict.
-                merged_config = dict(ds.config)
+                # Use the already-staged config (if config was also patched this
+                # request) so that a combined PATCH preserves both changes.
+                base_config = update_kwargs.get("config", ds.config)
+                merged_config = dict(base_config)
                 merged_config["create_batch_on_duplicate"] = bool(input.create_batch_on_duplicate)
                 update_kwargs["config"] = merged_config
 
