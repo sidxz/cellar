@@ -209,7 +209,7 @@ class GetPublishedCampaign:
 
         # Step 10 — serialize.
         doc: dict[str, Any] = {
-            "campaign": _serialize_campaign_with_project(campaign, project),
+            "campaign": _serialize_campaign(campaign, project),
             "compound_source": _serialize_compound_source(campaign.compound_source),
             "source_protocols": list(campaign.source_protocols),  # snapshot set at close
             "channels": [
@@ -233,8 +233,8 @@ class GetPublishedCampaign:
 # ---------------------------------------------------------------------------
 
 
-def _serialize_campaign(campaign: Any) -> dict[str, Any]:
-    """Serialize the campaign header fields."""
+def _serialize_campaign(campaign: Any, project: Any | None) -> dict[str, Any]:
+    """Serialize the campaign header, embedding the already-resolved project (or None)."""
     # TODO Sentinel-resolved user name: closed_by is a UUID; name resolution requires Sentinel.
     closed_by_dict: dict[str, Any] | None = None
     if campaign.closed_by is not None:
@@ -255,10 +255,11 @@ def _serialize_campaign(campaign: Any) -> dict[str, Any]:
         "id": str(campaign.id),
         "name": campaign.name,
         "description": campaign.description,
-        "project": {
-            "id": str(campaign.project_id),
-            "name": None,  # resolved separately; set at caller if project loaded
-        },
+        "project": (
+            {"id": str(project.id), "name": project.name}
+            if project is not None
+            else None
+        ),
         "status": campaign.status.value,
         "closed_at": campaign.closed_at.isoformat() if campaign.closed_at is not None else None,
         "closed_by": closed_by_dict,
@@ -274,17 +275,6 @@ def _serialize_campaign(campaign: Any) -> dict[str, Any]:
             else None
         ),
     }
-
-
-def _serialize_campaign_with_project(
-    campaign: Any, project: Any | None
-) -> dict[str, Any]:
-    d = _serialize_campaign(campaign)
-    if project is not None:
-        d["project"] = {"id": str(project.id), "name": project.name}
-    else:
-        d["project"] = None
-    return d
 
 
 def _serialize_compound_source(source: Any) -> dict[str, Any]:
@@ -440,10 +430,3 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
         "source": source,
     }
 
-
-# ---------------------------------------------------------------------------
-# Wiring helper: build the full doc with project resolved inline
-# ---------------------------------------------------------------------------
-# NOTE: The __call__ builds the doc with a placeholder project dict, then
-# replaces it with the resolved project. This is handled directly in __call__
-# via _serialize_campaign_with_project — we patch the campaign dict after building.

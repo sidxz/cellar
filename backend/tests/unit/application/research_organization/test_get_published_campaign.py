@@ -472,8 +472,6 @@ class TestGetPublishedCampaign:
             auth.workspace_id,
             signature_id=None,  # force no signature
         )
-        # Patch signature_id directly since _make_closed_campaign always sets one.
-        object.__setattr__(campaign, "signature_id", None) if False else None
         campaign.signature_id = None  # type: ignore[misc]
 
         uc, _ = _build_use_case(campaign)
