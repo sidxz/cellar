@@ -25,23 +25,9 @@ import { ResultsGrid } from "./results-grid";
 import { DecisionPanel } from "./decision-panel";
 import { CompoundListPane } from "./compound-list-pane";
 import { CloseSignDialog } from "./close-sign-dialog";
+import { CampaignView } from "./campaign-view";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import type { CampaignResultResponse } from "../types";
-
-// ── Closed / superseded placeholder ──────────────────────────────────────────
-
-function CampaignView({ name }: { name: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full py-24 text-center gap-4">
-      <Lock className="h-12 w-12 text-muted-foreground" />
-      <h2 className="text-xl font-semibold">{name}</h2>
-      <p className="text-muted-foreground">
-        This campaign is closed. Detailed closed-campaign view is coming in
-        Phase 9.
-      </p>
-    </div>
-  );
-}
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -81,7 +67,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
   }
 
   if (campaign.status !== "draft") {
-    return <CampaignView name={campaign.name} />;
+    return <CampaignView campaign={campaign} />;
   }
 
   return (

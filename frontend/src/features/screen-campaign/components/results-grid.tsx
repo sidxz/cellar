@@ -236,9 +236,11 @@ interface ResultsGridProps {
   campaign: CampaignResponse;
   selectedResultId: string | null;
   onRowSelect: (result: CampaignResultResponse | null) => void;
+  /** When true, disables cell overrides and row selection (closed/superseded view). */
+  readOnly?: boolean;
 }
 
-export function ResultsGrid({ campaign, selectedResultId, onRowSelect }: ResultsGridProps) {
+export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly = false }: ResultsGridProps) {
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
     channel: CampaignChannelResponse;
@@ -282,18 +284,20 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect }: Results
             {m.is_manual_override && (
               <Badge variant="secondary" className="text-[9px] px-1 py-0">OVR</Badge>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 opacity-0 group-hover:opacity-100 ml-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                const result = params.data!.result;
-                setOverrideTarget({ result, channel: ch, measurement: m });
-              }}
-            >
-              <ChevronRight className="h-3 w-3" />
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 opacity-0 group-hover:opacity-100 ml-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const result = params.data!.result;
+                  setOverrideTarget({ result, channel: ch, measurement: m });
+                }}
+              >
+                <ChevronRight className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         );
       },
@@ -334,12 +338,12 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect }: Results
 
   const handleRowClicked = useCallback(
     (event: { data?: ResultRow }) => {
-      if (!event.data) return;
+      if (!event.data || readOnly) return;
       onRowSelect(
         event.data.result.id === selectedResultId ? null : event.data.result,
       );
     },
-    [onRowSelect, selectedResultId],
+    [onRowSelect, selectedResultId, readOnly],
   );
 
   if (rowData.length === 0) {
