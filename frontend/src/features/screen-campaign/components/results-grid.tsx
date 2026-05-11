@@ -14,7 +14,7 @@
  * Cell click on a channel column → opens OverrideModal.
  */
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
@@ -117,6 +117,34 @@ function OverrideModal({
   const [qualifier, setQualifier] = useState(measurement?.value_qualifier ?? "=");
   const [unit, setUnit] = useState(measurement?.unit ?? "");
   const [hitCall, setHitCall] = useState<string>(measurement?.hit_call ?? "");
+  const [reason, setReason] = useState(measurement?.override_reason ?? "");
+
+  const isPlaceholderQualifier = qualifier === "nd" || qualifier === "excluded";
+
+  // B7: when qualifier flips to ND/excluded, clear value + unit; backend
+  // accepts empty unit for these qualifiers and forces value to null.
+  useEffect(() => {
+    if (isPlaceholderQualifier) {
+      setValue("");
+      setUnit("");
+      setHitCall("");
+    }
+  }, [isPlaceholderQualifier]);
+
+  // B8: reason is required when the override changes the auto-resolved value.
+  const valueDiffersFromAuto = (() => {
+    if (!measurement) return true;
+    const numValue = value !== "" ? Number(value) : null;
+    return (
+      numValue !== (measurement.value ?? null) ||
+      qualifier !== measurement.value_qualifier ||
+      (!isPlaceholderQualifier && unit !== measurement.unit) ||
+      hitCall !== (measurement.hit_call ?? "")
+    );
+  })();
+  const reasonRequired = valueDiffersFromAuto;
+  const reasonOk = !reasonRequired || reason.trim().length > 0;
+  const unitOk = isPlaceholderQualifier || unit.trim().length > 0;
 
   const overrideMutation =
     useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch({
@@ -129,15 +157,21 @@ function OverrideModal({
     });
 
   const handleSubmit = () => {
+    if (!reasonOk || !unitOk) return;
     overrideMutation.mutate({
       campaignId,
       resultId: result.id,
       channelId: channel.id,
       data: {
-        value: value !== "" ? Number(value) : undefined,
+        value: isPlaceholderQualifier
+          ? null
+          : value !== ""
+            ? Number(value)
+            : undefined,
         value_qualifier: qualifier,
-        unit,
-        hit_call: hitCall || undefined,
+        unit: isPlaceholderQualifier ? "" : unit,
+        hit_call: isPlaceholderQualifier ? undefined : (hitCall || undefined),
+        reason: reason.trim() || undefined,
       },
     });
   };
@@ -165,6 +199,11 @@ function OverrideModal({
             <p className="text-xs text-muted-foreground">
               {measurement.protocol_name_snapshot} v{measurement.protocol_version_snapshot}
             </p>
+            {measurement.override_reason && (
+              <p className="text-xs text-muted-foreground italic">
+                Previous reason: {measurement.override_reason}
+              </p>
+            )}
           </div>
         )}
 
@@ -194,6 +233,7 @@ function OverrideModal({
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder="0.00"
+                disabled={isPlaceholderQualifier}
               />
             </div>
             <div className="space-y-1">
@@ -202,13 +242,18 @@ function OverrideModal({
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
                 placeholder="µM"
+                disabled={isPlaceholderQualifier}
               />
             </div>
           </div>
 
           <div className="space-y-1">
             <Label>Hit call (optional)</Label>
-            <Select value={hitCall} onValueChange={setHitCall}>
+            <Select
+              value={hitCall}
+              onValueChange={setHitCall}
+              disabled={isPlaceholderQualifier}
+            >
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="">None</SelectItem>
@@ -218,11 +263,42 @@ function OverrideModal({
               </SelectContent>
             </Select>
           </div>
+
+          {/* B8: reason — required when value differs from auto-resolved */}
+          <div className="space-y-1">
+            <Label>
+              Reason {reasonRequired ? (
+                <span className="text-destructive">*</span>
+              ) : (
+                <span className="text-muted-foreground text-xs">(optional)</span>
+              )}
+            </Label>
+            <Input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={
+                reasonRequired
+                  ? "Required — why are you changing the auto-resolved value?"
+                  : "Optional rationale"
+              }
+            />
+            {reasonRequired && !reasonOk && (
+              <p className="text-xs text-destructive">
+                Required: explain the deviation for audit trail.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handleSubmit} disabled={overrideMutation.isPending}>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={
+              overrideMutation.isPending || !reasonOk || !unitOk
+            }
+          >
             {overrideMutation.isPending ? "Saving..." : "Save Override"}
           </Button>
         </div>
@@ -317,7 +393,13 @@ export function ResultsGrid({
             </span>
             {m.hit_call && <HitCallChip hitCall={m.hit_call as string} />}
             {m.is_manual_override && (
-              <Badge variant="secondary" className="text-[9px] px-1 py-0">OVR</Badge>
+              <Badge
+                variant="secondary"
+                className="text-[9px] px-1 py-0"
+                title={m.override_reason ?? "Manually overridden (no reason)"}
+              >
+                OVR
+              </Badge>
             )}
             {!readOnly && (
               <Button

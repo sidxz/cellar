@@ -235,6 +235,7 @@ class OverrideCellRequest(BaseModel):
     value_qualifier: str
     unit: str
     hit_call: str | None = None
+    reason: str | None = None  # B8 — required when value differs from auto-resolved
 
 
 class AddResultRowRequest(BaseModel):
@@ -735,6 +736,7 @@ async def override_result_cell(
         value_qualifier=ValueQualifier(body.value_qualifier),
         unit=body.unit,
         hit_call=HitCall(body.hit_call) if body.hit_call is not None else None,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

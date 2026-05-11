@@ -6,10 +6,12 @@
  */
 import type { OverrideCellRequestValue } from './overrideCellRequestValue';
 import type { OverrideCellRequestHitCall } from './overrideCellRequestHitCall';
+import type { OverrideCellRequestReason } from './overrideCellRequestReason';
 
 export interface OverrideCellRequest {
   value?: OverrideCellRequestValue;
   value_qualifier: string;
   unit: string;
   hit_call?: OverrideCellRequestHitCall;
+  reason?: OverrideCellRequestReason;
 }
