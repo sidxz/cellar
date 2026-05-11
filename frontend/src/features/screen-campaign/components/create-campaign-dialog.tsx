@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * CreateCampaignDialog — Task 8.1
+ * CreateCampaignDialog — Task 8.1 (updated for per-result attribution model)
  *
- * RHF + Zod form. Fields: name, description, publishes_collection,
- * compound_source (via CompoundSourcePicker tabs).
+ * RHF + Zod form. Fields: name, description, publishes_collection.
+ * Campaigns are created empty; compounds are added incrementally via
+ * the "Add compounds" menu in the builder.
+ *
  * On submit: POSTs to /api/v1/campaigns and navigates to the builder.
  */
 
@@ -30,13 +32,12 @@ import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Textarea } from "@/shared/components/ui/textarea";
 
 import { useCreateCampaignApiV1CampaignsPost } from "@/shared/lib/api/campaigns/campaigns";
-// TODO: rewrite per add-from model (commit 3) — CompoundSourcePicker deleted
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  name: z.string().min(1, "Name is required").max(200),
-  description: z.string().max(2000).optional(),
+  name: z.string().trim().min(1, "Name is required").max(200),
+  description: z.string().optional(),
   publishes_collection: z.boolean(),
 });
 
@@ -64,7 +65,6 @@ export function CreateCampaignDialog({
 }: CreateCampaignDialogProps) {
   const router = useRouter();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  // TODO: rewrite per add-from model (commit 3) — source/sourceError state removed
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
@@ -96,7 +96,6 @@ export function CreateCampaignDialog({
     setOpen(next);
   };
 
-  // TODO: rewrite per add-from model (commit 3) — onSubmit simplified (no compound_source)
   const onSubmit = async (values: FormValues) => {
     const result = await mutation.mutateAsync({
       data: {
@@ -116,12 +115,12 @@ export function CreateCampaignDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
 
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create Campaign</DialogTitle>
           <DialogDescription>
-            Define a screening campaign by naming it and selecting its compound
-            source. Channels are added in the builder.
+            Name your campaign. Channels and compounds are curated in the
+            builder after creation.
           </DialogDescription>
         </DialogHeader>
 
@@ -167,8 +166,6 @@ export function CreateCampaignDialog({
               Publish a frozen Collection on close
             </Label>
           </div>
-
-          {/* TODO: rewrite per add-from model (commit 3) — CompoundSourcePicker removed; compounds added incrementally */}
 
           {mutation.error && (
             <p className="text-xs text-destructive">
