@@ -51,6 +51,7 @@ import {
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
 import { AddFromCollectionDialog } from "./add-from-collection-dialog";
 import { AddFromCampaignDialog } from "./add-from-campaign-dialog";
+import { AddFromRunsDialog } from "./add-from-runs-dialog";
 import type { CampaignResponse, CampaignResultResponse } from "../types";
 
 // ── Add compound dialog (single / manual) ────────────────────────────────────
@@ -154,6 +155,7 @@ export function CompoundListPane({
   const [manualOpen, setManualOpen] = useState(false);
   const [fromCollectionOpen, setFromCollectionOpen] = useState(false);
   const [fromCampaignOpen, setFromCampaignOpen] = useState(false);
+  const [fromRunsOpen, setFromRunsOpen] = useState(false);
 
   const removeMutation = useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete({
     mutation: {
@@ -209,8 +211,8 @@ export function CompoundListPane({
             <DropdownMenuItem disabled>
               From a saved search (coming soon)
             </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              From a protocol run (use run-import flow)
+            <DropdownMenuItem onClick={() => setFromRunsOpen(true)}>
+              From protocol run(s)…
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -318,6 +320,11 @@ export function CompoundListPane({
         campaignId={campaign.id}
         open={fromCampaignOpen}
         onClose={() => setFromCampaignOpen(false)}
+      />
+      <AddFromRunsDialog
+        campaignId={campaign.id}
+        open={fromRunsOpen}
+        onClose={() => setFromRunsOpen(false)}
       />
     </div>
   );
