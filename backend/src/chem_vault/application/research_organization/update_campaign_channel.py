@@ -166,6 +166,7 @@ class UpdateCampaignChannel:
                         result_id=result.id,
                         molecule_id=result.molecule_id,
                     )
+                    new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT
                     result.remove_measurement_for_channel(channel.id)
                     result.add_measurement(new_measurement)
 

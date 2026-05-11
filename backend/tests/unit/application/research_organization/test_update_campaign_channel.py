@@ -350,3 +350,36 @@ class TestUpdateCampaignChannel:
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), AuthorizationError)
+
+    @pytest.mark.asyncio
+    async def test_re_resolve_preserves_measurement_id(self) -> None:
+        """Re-resolved measurement inherits the old measurement's id to avoid DELETE+INSERT."""
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(
+            auth.workspace_id,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        )
+        original_m = result.find_measurement(channel.id)
+        assert original_m is not None
+        original_id = original_m.id
+
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            selection_rule=SelectionRule.MEAN_ACROSS_RUNS,  # triggers re-resolve
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        rebuilt = result.find_measurement(channel.id)
+        assert rebuilt is not None
+        assert rebuilt.value == 99.0  # genuinely replaced
+        assert rebuilt.id == original_id  # id preserved for UPDATE semantics
