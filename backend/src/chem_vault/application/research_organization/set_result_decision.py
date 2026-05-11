@@ -1,8 +1,8 @@
 """SetResultDecision — set the screener's per-compound decision on a DRAFT campaign.
 
 Accepts SELECTED, DEFERRED, or REJECTED along with an optional free-text
-reason. The campaign must be in DRAFT status; closed and superseded campaigns
-are immutable.
+reason and notes. The campaign must be in DRAFT status; closed and superseded
+campaigns are immutable.
 """
 
 from __future__ import annotations
@@ -28,6 +28,23 @@ from chem_vault.domain.shared.errors import (
 )
 
 
+class _Unset:
+    """Singleton sentinel meaning "caller did not supply this field"."""
+
+    _instance: "_Unset | None" = None
+
+    def __new__(cls) -> "_Unset":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+UNSET = _Unset()
+
+
 @dataclass(frozen=True, kw_only=True)
 class SetResultDecisionCommand(Command):
     workspace_id: uuid.UUID
@@ -35,6 +52,8 @@ class SetResultDecisionCommand(Command):
     result_id: uuid.UUID
     decision: CampaignDecision
     reason: str | None = None
+    # UNSET means "don't touch"; None means "clear the notes"
+    notes: "str | None | _Unset" = UNSET  # type: ignore[assignment]
 
 
 class SetResultDecision:
@@ -92,6 +111,8 @@ class SetResultDecision:
                 return Failure(NotFoundError("CampaignResult", str(input.result_id)))
 
             result.set_decision(input.decision, reason=input.reason)
+            if not isinstance(input.notes, _Unset):
+                result.notes = input.notes  # type: ignore[assignment]
             campaign.updated_at = datetime.now(UTC)
 
             await self._campaign_repo.save(campaign)

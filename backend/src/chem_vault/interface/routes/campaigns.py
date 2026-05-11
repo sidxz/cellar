@@ -40,6 +40,7 @@ from chem_vault.application.research_organization.reseed_campaign import (
     ReseedCampaignCommand,
 )
 from chem_vault.application.research_organization.set_result_decision import (
+    UNSET as DECISION_UNSET,
     SetResultDecisionCommand,
 )
 from chem_vault.application.research_organization.supersede_campaign import (
@@ -239,6 +240,9 @@ class UpdateChannelRequest(BaseModel):
 class SetResultDecisionRequest(BaseModel):
     decision: str
     reason: str | None = None
+    notes: str | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 class OverrideCellRequest(BaseModel):
@@ -585,13 +589,16 @@ async def set_result_decision(
     uc: SetResultDecisionDep,
 ) -> CampaignResponse:
     """Set a screener's per-compound decision (SELECTED / DEFERRED / REJECTED)."""
-    cmd = SetResultDecisionCommand(
-        workspace_id=auth.workspace_id,
-        campaign_id=campaign_id,
-        result_id=result_id,
-        decision=CampaignDecision(body.decision),
-        reason=body.reason,
-    )
+    cmd_kwargs: dict = {
+        "workspace_id": auth.workspace_id,
+        "campaign_id": campaign_id,
+        "result_id": result_id,
+        "decision": CampaignDecision(body.decision),
+        "reason": body.reason,
+    }
+    if "notes" in body.model_fields_set:
+        cmd_kwargs["notes"] = body.notes
+    cmd = SetResultDecisionCommand(**cmd_kwargs)
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
 

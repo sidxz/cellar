@@ -5,8 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SetResultDecisionRequestReason } from './setResultDecisionRequestReason';
+import type { SetResultDecisionRequestNotes } from './setResultDecisionRequestNotes';
 
 export interface SetResultDecisionRequest {
   decision: string;
   reason?: SetResultDecisionRequestReason;
+  notes?: SetResultDecisionRequestNotes;
 }

@@ -866,6 +866,7 @@ export * from './setControlLayoutRequest';
 export * from './setOntologyAnnotationRequest';
 export * from './setOntologyAnnotationRequestTermsItem';
 export * from './setResultDecisionRequest';
+export * from './setResultDecisionRequestNotes';
 export * from './setResultDecisionRequestReason';
 export * from './setUpRunPlateRequest';
 export * from './setUpRunPlateRequestConcentrationSeries';

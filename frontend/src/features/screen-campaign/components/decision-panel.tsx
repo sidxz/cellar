@@ -83,6 +83,7 @@ export function DecisionPanel({ campaignId, result, onUpdate }: DecisionPanelPro
         data: {
           decision: debouncedDecision,
           reason: debouncedReason || undefined,
+          notes: debouncedNotes || null,
         },
       },
       { onSuccess: () => onUpdate?.() },

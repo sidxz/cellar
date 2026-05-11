@@ -301,6 +301,51 @@ class TestCampaignResults:
         assert updated_result["decision"] == "selected"
         assert updated_result["decision_reason"] == "Great potency"
 
+    async def test_set_result_decision_with_notes(self, client: AsyncClient) -> None:
+        """Notes sent in the PATCH body are persisted on the result."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
+            json={"decision": "selected", "reason": "Strong hit", "notes": "Watch hERG"},
+        )
+        assert resp.status_code == 200, resp.text
+        updated_result = next(
+            r for r in resp.json()["results"] if r["id"] == result_id
+        )
+        assert updated_result["notes"] == "Watch hERG"
+
+    async def test_set_result_decision_omit_notes_preserves_existing(
+        self, client: AsyncClient
+    ) -> None:
+        """Omitting notes from the PATCH body leaves any prior notes value intact."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes2")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        # First PATCH sets notes
+        await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
+            json={"decision": "selected", "notes": "keep me"},
+        )
+
+        # Second PATCH omits notes — value must be preserved
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
+            json={"decision": "deferred"},
+        )
+        assert resp.status_code == 200, resp.text
+        updated_result = next(
+            r for r in resp.json()["results"] if r["id"] == result_id
+        )
+        assert updated_result["notes"] == "keep me"
+
 
 # ---------------------------------------------------------------------------
 # Close / Lock guard
