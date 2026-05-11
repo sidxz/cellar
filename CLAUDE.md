@@ -183,4 +183,40 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-11 — Screen Campaign feature, mid-flight on `fe2`
+
+**Spec:** `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`
+**Plan:** `docs/superpowers/plans/2026-05-10-screen-campaign.md` (10 phases, 40 tasks)
+**Execution mode:** subagent-driven (one implementer + spec reviewer + quality reviewer per task)
+
+**Shipped (22 commits, `3552174f..0666340b`):**
+- Phase 1 ✅ — `Collection.is_frozen` + `derived_from_campaign_id`, freeze guard, migration 026, ORM round-trip
+- Phase 2 ✅ — Campaign domain (aggregate root, channel/result/measurement entities, CompoundSource VO, enums, events, lock guard, repo protocol)
+- Phase 3 ✅ — SQLAlchemy models, Alembic migration 027 (with PG defense-in-depth trigger blocking writes to closed campaigns + FK from collections.derived_from_campaign_id → campaign.id ON DELETE SET NULL), full SQLAlchemyCampaignRepository with cascade reconciliation
+- Phase 4 ✅ — ChannelResolver service + SQL ChannelResolutionQuery (joins curve/readout → run → protocol, extracts z_prime from qc_metrics jsonb)
+- Phase 5 🔄 — 1 of 8 done: `CreateCampaign` use case (`0666340b`)
+
+**Test state:** 1922 unit tests pass, 13 integration tests pass (incl. campaign repository + frozen membership). No regressions.
+
+**Next task: 5.2 `ManageCampaignChannels`** (add / update / remove channel) — see plan §5.2. Then 5.3 reseed, 5.4 manage results, 5.5 refresh, 5.6 close (largest — e-sig + recompute + emit frozen Collection), 5.7 supersede, 5.8 get-published. Then Phase 6 API (15 endpoints + DAIKON contract JSON-schema test), then Phases 7-9 frontend (orval regen → list page → builder UI with AG Grid pivot → closed view + supersede + Playwright), then Phase 10 docs.
+
+**Known gotchas (load-bearing for the rest):**
+- `CampaignMeasurement.__post_init__` rejects empty `unit`. The resolver currently uses `unit="-"` placeholder for ND cells; **close-campaign must pass the real unit from `ReadoutDefinition.unit` when seeding measurements** so the snapshot is meaningful.
+- `Collection.freeze(derived_from_campaign_id=...)` now requires a real campaign id (FK from migration 027). When close-campaign emits the frozen Collection, save the Campaign first so its id exists before freezing.
+- `SavedSearchSource` currently returns `Failure(ValidationError)` in `CreateCampaign` — wire SavedSearch execution into the resolver in a follow-up before exposing that source kind in the API.
+- `ProtocolModel.version` column is named `protocol_version` (not `version`).
+- `ReadoutData` uses split columns (`value_numeric`, `value_qualifier`, `value_text`, `is_outlier`) — not a single QualifiedValue JSONB. Resolver SQL handles this.
+- Test fixture pattern: use the existing `uow` fixture + `SQLAlchemyXRepository(uow)` instantiation per `tests/integration/test_database.py`; the plan referenced a non-existent `uow_factory` fixture.
+
+**Use-case scaffolding pattern** (established by `create_campaign.py`):
+- Frozen `@dataclass(kw_only=True)` Command extending `application.shared.command.Command`.
+- `__call__(self, input, auth=None) -> Result[T, DomainError]` — auth optional for system actors.
+- Constructor uses kw-only deps (`uow`, repos, `dispatcher: EventDispatcherProtocol`).
+- `require_editor(auth)` first; auth carries workspace_id implicitly.
+- Work inside `async with self._uow:`, then dispatch events outside.
+
+**Out of scope for v1 (per spec §11):** DAIKON transport mechanism, external CSV import bypassing Runs, cross-campaign SAR queries.
+
+To resume: read this block + the spec + the plan, then dispatch implementer for Task 5.2.
+
 Long-lived state (current branch, what's shipped, what's next, operational backlog) lives in `~/.claude` memory — see `MEMORY.md` for the index.
