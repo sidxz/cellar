@@ -27,8 +27,13 @@ import uuid
 import pytest
 import sqlalchemy as sa
 
+from chem_vault.domain.research_organization.campaign import Campaign
 from chem_vault.domain.research_organization.collection import Collection
+from chem_vault.domain.research_organization.compound_source import ExplicitListSource
 from chem_vault.domain.shared.errors import CollectionFrozenError
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
+    SQLAlchemyCampaignRepository,
+)
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
     SQLAlchemyCollectionRepository,
 )
@@ -69,6 +74,29 @@ async def _insert_molecule(
         await uow.commit()
 
 
+async def _create_dummy_campaign(
+    uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+) -> uuid.UUID:
+    """Create a minimal draft Campaign and return its id (for FK satisfaction).
+
+    Migration 027 added ``fk_collections_derived_from_campaign`` on
+    ``collections.derived_from_campaign_id``; tests that freeze a collection
+    must therefore reference a real campaign row.
+    """
+    campaign_repo = SQLAlchemyCampaignRepository(uow)
+    c = Campaign.create(
+        workspace_id=workspace_id,
+        project_id=uuid.uuid4(),
+        name="Dummy origin campaign",
+        description=None,
+        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
+        publishes_collection=False,
+        created_by=uuid.uuid4(),
+    )
+    await campaign_repo.save(c)
+    return c.id
+
+
 # ---------------------------------------------------------------------------
 # add_molecules / remove_molecules — guard
 # ---------------------------------------------------------------------------
@@ -85,11 +113,12 @@ class TestFrozenMembershipGuard:
         await _insert_molecule(uow, mol_id, ws_id)
 
         async with uow:
+            campaign_id = await _create_dummy_campaign(uow, ws_id)
             repo = SQLAlchemyCollectionRepository(uow)
             coll = Collection.create(
                 workspace_id=ws_id, name="Frozen Hits", created_by=user_id
             )
-            coll.freeze(derived_from_campaign_id=uuid.uuid4())
+            coll.freeze(derived_from_campaign_id=campaign_id)
             await repo.save(coll)
             await uow.commit()
 
@@ -120,10 +149,11 @@ class TestFrozenMembershipGuard:
 
         # Freeze the persisted collection.
         async with uow:
+            campaign_id = await _create_dummy_campaign(uow, ws_id)
             repo = SQLAlchemyCollectionRepository(uow)
             loaded = await repo.find_by_id_in_workspace(ws_id, coll.id)
             assert loaded is not None
-            loaded.freeze(derived_from_campaign_id=uuid.uuid4())
+            loaded.freeze(derived_from_campaign_id=campaign_id)
             await repo.save(loaded)
             await uow.commit()
 
@@ -165,10 +195,11 @@ class TestFrozenMembershipGuard:
 
         # Freeze the first AFTER membership is set.
         async with uow:
+            campaign_id = await _create_dummy_campaign(uow, ws_id)
             repo = SQLAlchemyCollectionRepository(uow)
             loaded = await repo.find_by_id_in_workspace(ws_id, frozen.id)
             assert loaded is not None
-            loaded.freeze(derived_from_campaign_id=uuid.uuid4())
+            loaded.freeze(derived_from_campaign_id=campaign_id)
             await repo.save(loaded)
             await uow.commit()
 
