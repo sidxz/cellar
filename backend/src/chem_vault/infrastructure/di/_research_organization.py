@@ -88,6 +88,7 @@ from chem_vault.application.research_organization.close_campaign import CloseCam
 from chem_vault.application.research_organization.create_campaign import CreateCampaign as CreateCampaignUC
 from chem_vault.application.research_organization.get_published_campaign import GetPublishedCampaign
 from chem_vault.application.research_organization.override_result_cell import OverrideResultCell
+from chem_vault.application.research_organization.recompute_channel import RecomputeChannel
 from chem_vault.application.research_organization.refresh_campaign_from_sources import RefreshFromSources
 from chem_vault.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from chem_vault.application.research_organization.remove_result_row import RemoveResultRow
@@ -95,6 +96,7 @@ from chem_vault.application.research_organization.reseed_campaign import ReseedC
 from chem_vault.application.research_organization.set_result_decision import SetResultDecision
 from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
 from chem_vault.application.research_organization.update_campaign_channel import UpdateCampaignChannel
+from chem_vault.application.research_organization.update_campaign_metadata import UpdateCampaignMetadata
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.research_organization.repository import CampaignRepository
@@ -392,6 +394,23 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _recompute_channel(c: Container) -> RecomputeChannel:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RecomputeChannel(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _update_campaign_metadata(c: Container) -> UpdateCampaignMetadata:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateCampaignMetadata(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     def _refresh(c: Container) -> RefreshFromSources:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RefreshFromSources(
@@ -441,6 +460,8 @@ def register_research_organization(container: Container) -> None:
     container.define(OverrideResultCell, _override_cell)
     container.define(AddResultRow, _add_result_row)
     container.define(RemoveResultRow, _remove_result_row)
+    container.define(RecomputeChannel, _recompute_channel)
+    container.define(UpdateCampaignMetadata, _update_campaign_metadata)
     container.define(RefreshFromSources, _refresh)
     container.define(CloseCampaign, _close_campaign)
     container.define(SupersedeCampaignUC, _supersede)

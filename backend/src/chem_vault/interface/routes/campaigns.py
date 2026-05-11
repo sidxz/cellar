@@ -49,6 +49,10 @@ from chem_vault.application.research_organization.update_campaign_channel import
     UNSET,
     UpdateCampaignChannelCommand,
 )
+from chem_vault.application.research_organization.update_campaign_metadata import (
+    UNSET as METADATA_UNSET,
+    UpdateCampaignMetadataCommand,
+)
 from chem_vault.domain.research_organization.campaign import Campaign
 from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
 from chem_vault.domain.research_organization.campaign_measurement import (
@@ -88,6 +92,7 @@ from chem_vault.interface.dependencies import (
     SetResultDecisionDep,
     SupersedeCampaignDep,
     UpdateCampaignChannelDep,
+    UpdateCampaignMetadataDep,
     AuthDep,
     UoWDep,
 )
@@ -459,41 +464,20 @@ async def update_campaign(
     campaign_id: uuid.UUID,
     body: UpdateCampaignRequest,
     auth: AuthDep,
-    uow: UoWDep,
+    uc: UpdateCampaignMetadataDep,
 ) -> CampaignResponse:
     """Update campaign name/description (source mutation is done via reseed)."""
-    from datetime import UTC, datetime as dt
-
-    from chem_vault.application.auth import require_editor
-    from chem_vault.domain.research_organization.enums import CampaignStatus
-    from chem_vault.domain.shared.errors import DataLockedError, NotFoundError, ValidationError
-
-    try:
-        require_editor(auth)
-    except Exception as e:
-        raise e
-
-    repo = SQLAlchemyCampaignRepository(uow)
-    async with uow:
-        campaign = await repo.find_by_id_in_workspace(auth.workspace_id, campaign_id)
-        if campaign is None:
-            raise NotFoundError("Campaign", str(campaign_id))
-
-        if campaign.status != CampaignStatus.DRAFT:
-            raise DataLockedError(f"Campaign {campaign_id} is {campaign.status.value} and cannot be modified")
-
-        provided = body.model_fields_set
-        if "name" in provided and body.name is not None:
-            if not body.name.strip():
-                raise ValidationError("Campaign.name must not be empty")
-            campaign.name = body.name.strip()
-        if "description" in provided:
-            campaign.description = body.description
-
-        campaign.updated_at = dt.now(UTC)
-        await repo.save(campaign)
-        await uow.commit()
-
+    provided = body.model_fields_set
+    cmd_kwargs: dict = {
+        "workspace_id": auth.workspace_id,
+        "campaign_id": campaign_id,
+    }
+    if "name" in provided:
+        cmd_kwargs["name"] = body.name
+    if "description" in provided:
+        cmd_kwargs["description"] = body.description
+    cmd = UpdateCampaignMetadataCommand(**cmd_kwargs)
+    campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
 
 

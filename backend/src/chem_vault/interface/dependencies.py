@@ -731,7 +731,9 @@ from chem_vault.application.research_organization.remove_result_row import Remov
 from chem_vault.application.research_organization.reseed_campaign import ReseedCampaign as ReseedCampaignUC
 from chem_vault.application.research_organization.set_result_decision import SetResultDecision
 from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
+from chem_vault.application.research_organization.recompute_channel import RecomputeChannel
 from chem_vault.application.research_organization.update_campaign_channel import UpdateCampaignChannel
+from chem_vault.application.research_organization.update_campaign_metadata import UpdateCampaignMetadata
 from chem_vault.domain.research_organization.repository import CampaignRepository
 
 
@@ -755,3 +757,5 @@ RefreshFromSourcesDep = Annotated[RefreshFromSources, Depends(_get_use_case(Refr
 CloseCampaignDep = Annotated[CloseCampaign, Depends(_get_use_case(CloseCampaign))]
 SupersedeCampaignDep = Annotated[SupersedeCampaignUC, Depends(_get_use_case(SupersedeCampaignUC))]
 GetPublishedCampaignDep = Annotated[GetPublishedCampaign, Depends(_get_use_case(GetPublishedCampaign))]
+RecomputeChannelDep = Annotated[RecomputeChannel, Depends(_get_use_case(RecomputeChannel))]
+UpdateCampaignMetadataDep = Annotated[UpdateCampaignMetadata, Depends(_get_use_case(UpdateCampaignMetadata))]
