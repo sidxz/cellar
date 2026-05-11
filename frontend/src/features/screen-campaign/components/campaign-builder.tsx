@@ -26,6 +26,7 @@ import { DecisionPanel } from "./decision-panel";
 import { CompoundListPane } from "./compound-list-pane";
 import { CloseSignDialog } from "./close-sign-dialog";
 import { CampaignView } from "./campaign-view";
+import { SourcesSummaryCard } from "./sources-summary-card";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import type { CampaignResultResponse } from "../types";
 
@@ -92,7 +93,8 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <SourcesSummaryCard campaign={campaign} />
           <Button
             variant="outline"
             size="sm"

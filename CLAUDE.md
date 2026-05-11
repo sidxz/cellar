@@ -183,6 +183,29 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-11 — Screen Campaign refactor: per-result attribution on `fe2`
+
+**Branch:** `fe2`  **Commits:** `bd33686b..` (5 commits this session)
+
+**What changed (backend + FE, fully shipped):**
+- `compound_source` (singular) removed from `Campaign` aggregate and `CampaignResponse`.
+- `added_from: SourceRef | None` added to `CampaignResult` — discriminated VO with kinds: `manual`, `collection`, `campaign`, `run`.
+- `ReseedCampaign` use case, route, and FE hook deleted.
+- Three new use cases: `AddResultsFromCollection`, `AddResultsFromCampaign`, `AddResultsFromRun`.
+- `CampaignResponse.compound_sources` (list) derived server-side from per-result attribution — replaces the old singular `compound_source` field.
+- DAIKON contract: `compound_source` (obj) → `compound_sources` (list of `{kind, ref, description?, count}`).
+
+**FE changes this session:**
+- Commit 1: orval regen — new add-from hooks, `AddResultsOutcomeResponse`, `compound_sources` plural.
+- Commit 2: deleted `compound-source-picker.tsx`; stripped `ReseedRequest` and reseed wiring.
+- Commit 3: `CreateCampaignDialog` stripped to 3 fields (name, description, publishes_collection).
+- Commit 4: `CompoundListPane` toolbar replaced with "Add compounds" `DropdownMenu` → Manual / Collection / Campaign / SavedSearch (disabled) / Run (disabled). New `AddFromCollectionDialog` and `AddFromCampaignDialog`.
+- Commit 5: `SourcesSummaryCard` in builder header reading `campaign.compound_sources` list.
+
+**Open follow-ups from prior session still valid** (see block below).
+
+---
+
 ### 2026-05-11 — Screen Campaign feature, **ALL 10 phases complete** on `fe2`
 
 **Status:** Plan executed end-to-end. 34 commits this session (`001a18de..bb3c0c78`). Backend: 2038 unit tests pass + 180 API tests + integration tests, zero regressions. Frontend: `pnpm tsc --noEmit` clean across all 12 FE commits. Phases 1–4 had already shipped in the prior session; Phases 5–10 landed in this one.
