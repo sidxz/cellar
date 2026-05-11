@@ -14,6 +14,61 @@
 
 ---
 
+## 2026-05-11 PM — Deeper gap analysis vs. stated intent
+
+A second pass against the stated intent ("snapshot for DAIKON publication; screener freedom till close & sign-off") surfaced gaps not in the original H/M/L list. **Use this section as the current priority view;** the older H/M/L list below remains for reference.
+
+### A — Blockers to "publishing final results for DAIKON"
+
+- **A1. Real e-signature** (= M6). `crypto.randomUUID()` stub in `close-sign-dialog.tsx:79`. Without a real re-auth → signature, the "signed off" artifact has no provenance — 21 CFR Part 11 non-compliant.
+- **A2. `closed_by.name` + `signature.signed_at` resolution** (= L1+L2). Published JSON emits `null` for both today. These are *exactly* the audit fields DAIKON consumers need.
+- **A3. DAIKON transport / discovery** *(NEW)*. No webhook, no `/campaigns?status=closed` index, no explicit "publish" action. Pull-based DAIKON has nothing to discover; push-based has nowhere to push. Decide and build.
+- **A4. PATCH-after-close 423 test** (= H3). Currently asserts 404 against a fake UUID. Immutability proof missing.
+- **A5. `AddResultsFromSavedSearch`** (= H1). Backend file doesn't exist; FE dropdown disabled. User framed campaigns as "snapshot of a saved search" — natural seed path is missing.
+
+### B — Screener UX (the "UI is crude" complaint) ← **next-session focus**
+
+- **B1. Structure thumbnails in grid** (= M3). Chemists work by sight, not by reg-id.
+- **B2. Dose-response curve preview** *(NEW)*. Cells from `dose_response_curve` channels should open the curve inline (or in a popover). Reuse existing curve renderer.
+- **B3. Bulk decision** *(NEW)*. Multi-select rows → set decision + reason. New endpoint + UI.
+- **B4. Bulk remove rows** (= M2).
+- **B5. Decision-count chip filter row** *(NEW)*. Chips at top of grid: `Selected (12) / Deferred (88) / Rejected (4)`; click to filter the grid.
+- **B6. Run import bridge + multi-run + hit-criteria preview** *(EXPANDED from H2)*. New requirements this session:
+  - Picker supports **one OR many runs** (multi-select).
+  - Default filter = each run's protocol `hit_criterion` (presented, editable per channel/readout).
+  - Override hit-criteria, then **preview** which compounds would be added (and which would be hit-flagged) before committing.
+  - DRY: reuse existing `HitCriterion.evaluate` + dose-response fit machinery. No new hit-calling logic.
+- **B7. Override-cell ND/excluded gating** (= M4). Backend requires non-empty unit for ND today.
+- **B8. Override reason field** *(NEW)*. `OverrideCellRequest` carries no rationale — audit-relevant.
+- **B9. CSV/Excel export of draft grid** *(NEW)*. AG Grid Community supports it; wire it.
+- **B10. Refresh-from-sources staleness signal** *(NEW)*. Badge/banner when a source Run was unlocked + re-fitted after the last refresh.
+- **B11. Sources summary card on drafts** (= L8). Card reads `compound_sources` which is server-derived only on published view.
+- **B12. Workspace-wide campaign list** (= M1). Per-project entry only today.
+- **B13. Per-row decision audit history** *(NEW)*. Audit context records it; UI never surfaces it.
+
+### C — Snapshot-integrity verifications (correctness, unproven)
+
+- **C1. Molecule-merge behavior on closed campaign** *(NEW)*. Spec says draft rewires, closed doesn't. No integration test proving it.
+- **C2. Admin cascade-delete of Run vs `source_run_id`** *(NEW)*. If a Run is hard-deleted, does the FK cascade into `campaign_measurement` and corrupt the snapshot? Verify FK ON DELETE.
+- **C3. Latent unique-constraint fix verification**. Memory says commit `80e9ebed` applied measurement-id preservation to `RefreshFromSources` / `RecomputeChannel` / `UpdateCampaignChannel`. Confirm in code; add real-DB integration tests.
+- **C4. `source_protocols` snapshot on supersede target** *(NEW)*. Verify the new campaign's snapshot is computed independently at close, not shared with the superseded one.
+
+### D — Plumbing / type safety
+- D1-D7 captured below (orval-zod, Playwright, browser smoke, viewer guard, RecomputeChannel route, Alembic drift, find_by_ids).
+
+### E — Conceptual gaps the spec didn't address
+- **E1. Operational meaning of "published"** — closed=published-automatically or separate publish action?
+- **E2. Compare campaign vs supersede target** *(NEW)* — "what changed between v1 and v2"; supersede is a graveyard without it.
+- **E3. Channel-set templates** *(NEW)* — "the standard kinase panel"; spec §11 lists post-v1.
+- **E4. Replicate drill-in per cell** *(NEW)* — `mean_across_runs` collapses to one cell; no UI to see contributors.
+- **E5. ELN linkage from closed campaign** *(NEW)* — spec §11 mentions; not built.
+
+### Next-session plan
+1. Address B gaps, ordered as: B6 (multi-run + preview) → B1 + B5 (thumbnails + hit chips) → B7 + B8 (override polish + reason) → B2 (curve preview) → B3 + B4 (bulk ops) → B9/B10/B11/B12/B13.
+2. Code-reuse rule: scan existing curve-fit + hit-call machinery first; no reinvention.
+
+---
+
 ## High priority (do first)
 
 ### H1. SavedSearch wiring into AddResultsFromSavedSearch
