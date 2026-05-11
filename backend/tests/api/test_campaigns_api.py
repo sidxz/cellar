@@ -495,3 +495,67 @@ class TestGetPublishedCampaign:
 
         resp = await client.get(f"/api/v1/campaigns/{campaign_id}/published")
         assert resp.status_code == 422, resp.text
+
+    async def test_preview_published_on_draft_returns_200(self, client: AsyncClient) -> None:
+        """GET /preview-published lifts the status check for DRAFT (B6 bonus)."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-prevpub")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+
+        resp = await client.get(f"/api/v1/campaigns/{campaign_id}/preview-published")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["campaign"]["status"] == "draft"
+        assert "channels" in body
+        assert "results" in body
+
+
+# ---------------------------------------------------------------------------
+# Multi-run import (B6) — smoke for the new endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestRunImport:
+    async def test_preview_run_import_empty_runs_returns_422(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-runprev")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/preview-run-import",
+            json={"run_ids": [], "channel_configs": []},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_add_from_runs_empty_runs_returns_422(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-runadd")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-runs",
+            json={"run_ids": [], "channel_configs": []},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_old_add_from_run_route_returns_404(
+        self, client: AsyncClient
+    ) -> None:
+        """The deprecated single-run /add-from-run is removed."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-old")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-run",
+            json={"run_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 404, resp.text

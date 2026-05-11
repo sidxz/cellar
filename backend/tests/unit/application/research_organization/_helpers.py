@@ -25,7 +25,7 @@ class _FakeSession:
 
     The ``execute`` method returns whatever is set on ``_execute_result``.
     Set ``session._execute_result = your_mock_result`` before calling a use
-    case that does SQL queries (e.g. AddResultsFromRun).
+    case that does SQL queries (e.g. some legacy paths).
     """
 
     def __init__(self) -> None:

@@ -21,8 +21,12 @@ from chem_vault.application.research_organization.add_results_from_campaign impo
 from chem_vault.application.research_organization.add_results_from_collection import (
     AddResultsFromCollectionCommand,
 )
-from chem_vault.application.research_organization.add_results_from_run import (
-    AddResultsFromRunCommand,
+from chem_vault.application.research_organization.add_results_from_runs import (
+    AddResultsFromRunsCommand,
+)
+from chem_vault.application.research_organization.preview_run_import import (
+    ChannelImportConfig,
+    PreviewRunImportQuery,
 )
 from chem_vault.application.research_organization.close_campaign import (
     CloseCampaignCommand,
@@ -84,8 +88,9 @@ from chem_vault.interface.dependencies import (
     AddResultRowDep,
     AddResultsFromCampaignDep,
     AddResultsFromCollectionDep,
-    AddResultsFromRunDep,
+    AddResultsFromRunsDep,
     CloseCampaignDep,
+    PreviewRunImportDep,
     CreateCampaignDep,
     GetPublishedCampaignDep,
     OverrideResultCellDep,
@@ -156,9 +161,38 @@ class AddFromCampaignRequest(BaseModel):
     description: str | None = None
 
 
-class AddFromRunRequest(BaseModel):
-    run_id: uuid.UUID
+class ChannelImportConfigDTO(BaseModel):
+    protocol_id: uuid.UUID
+    readout_definition_id: uuid.UUID
+    label: str
+    source_kind: str
+    selection_rule: str
+    hit_threshold: HitCriterionDTO | None = None
+    use_for_filter: bool = True
+
+    def to_domain(self) -> ChannelImportConfig:
+        return ChannelImportConfig(
+            protocol_id=self.protocol_id,
+            readout_definition_id=self.readout_definition_id,
+            label=self.label,
+            source_kind=ChannelSourceKind(self.source_kind),
+            selection_rule=SelectionRule(self.selection_rule),
+            hit_threshold=self.hit_threshold.to_domain() if self.hit_threshold else None,
+            use_for_filter=self.use_for_filter,
+        )
+
+
+class PreviewRunImportRequest(BaseModel):
+    run_ids: list[uuid.UUID]
+    channel_configs: list[ChannelImportConfigDTO]
+    filter_mode: str = "all"  # "any" | "all"
+
+
+class AddFromRunsRequest(PreviewRunImportRequest):
+    scope: str = "hits_only"  # "hits_only" | "all"
+    default_decision: str = "selected"
     description: str | None = None
+    refresh_existing_cells: bool = False
 
 
 class AddChannelRequest(BaseModel):
@@ -529,19 +563,50 @@ async def add_results_from_campaign(
     return AddResultsOutcomeResponse.from_outcome(outcome)
 
 
-@router.post("/{campaign_id}/add-from-run", response_model=AddResultsOutcomeResponse)
-async def add_results_from_run(
+@router.post("/{campaign_id}/preview-run-import")
+async def preview_run_import(
     campaign_id: uuid.UUID,
-    body: AddFromRunRequest,
+    body: PreviewRunImportRequest,
     auth: AuthDep,
-    uc: AddResultsFromRunDep,
-) -> AddResultsOutcomeResponse:
-    """Add compound results from a protocol Run's molecule set (idempotent)."""
-    cmd = AddResultsFromRunCommand(
+    uc: PreviewRunImportDep,
+) -> dict[str, Any]:
+    """Compute the would-be-added cells for the multi-run import dialog (B6).
+
+    Read-only. Returns ``{summary, channels, rows}`` — see spec §3.2.
+    """
+    q = PreviewRunImportQuery(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        run_id=body.run_id,
+        run_ids=body.run_ids,
+        channel_configs=[c.to_domain() for c in body.channel_configs],
+        filter_mode=body.filter_mode,
+    )
+    return result_to_response(await uc(q, auth=auth))
+
+
+@router.post("/{campaign_id}/add-from-runs", response_model=AddResultsOutcomeResponse)
+async def add_results_from_runs(
+    campaign_id: uuid.UUID,
+    body: AddFromRunsRequest,
+    auth: AuthDep,
+    uc: AddResultsFromRunsDep,
+) -> AddResultsOutcomeResponse:
+    """Add compound results from one or more protocol Runs (B6).
+
+    Creates campaign channels for each unique (protocol_id, readout_definition_id),
+    reusing existing ones. Filters molecules by hit-criteria when scope=hits_only.
+    Snapshots concentration/replicate/QC per cell.
+    """
+    cmd = AddResultsFromRunsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        run_ids=body.run_ids,
+        channel_configs=[c.to_domain() for c in body.channel_configs],
+        filter_mode=body.filter_mode,
+        scope=body.scope,
+        default_decision=CampaignDecision(body.default_decision),
         description=body.description,
+        refresh_existing_cells=body.refresh_existing_cells,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return AddResultsOutcomeResponse.from_outcome(outcome)
@@ -779,5 +844,28 @@ async def get_published_campaign(
         campaign_id=campaign_id,
         cursor=cursor,
         page_size=page_size,
+    )
+    return result_to_response(await uc(query, auth=auth))
+
+
+@router.get("/{campaign_id}/preview-published")
+async def preview_published_campaign(
+    campaign_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetPublishedCampaignDep,
+    cursor: str | None = Query(default=None),
+    page_size: int | None = Query(default=None),
+) -> dict[str, Any]:
+    """Render any campaign (incl. DRAFT) through the DAIKON serializer.
+
+    Lifts the closed/superseded status guard so the screener can preview
+    what the published artifact will look like before closing.
+    """
+    query = GetPublishedCampaignQuery(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        cursor=cursor,
+        page_size=page_size,
+        bypass_status_check=True,
     )
     return result_to_response(await uc(query, auth=auth))

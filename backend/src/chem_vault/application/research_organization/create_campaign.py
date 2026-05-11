@@ -1,7 +1,7 @@
 """CreateCampaign — create a draft Campaign (empty, curated workspace).
 
 Creates an empty Campaign aggregate. Compounds are added later via
-AddResultsFromCollection, AddResultsFromCampaign, AddResultsFromRun, or
+AddResultsFromCollection, AddResultsFromCampaign, AddResultsFromRuns, or
 AddResultRow. Each CampaignResult carries its own source attribution.
 """
 

@@ -69,6 +69,7 @@ class GetPublishedCampaignQuery(Command):
     campaign_id: uuid.UUID
     cursor: str | None = None       # opaque offset cursor
     page_size: int | None = None    # if None, return all results (no pagination)
+    bypass_status_check: bool = False  # True for "preview as published" on DRAFT campaigns
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,12 @@ class GetPublishedCampaign:
             return Failure(NotFoundError("Campaign", str(input.campaign_id)))
 
         # Step 3 — only closed or superseded campaigns can be published.
-        if campaign.status not in (CampaignStatus.CLOSED, CampaignStatus.SUPERSEDED):
+        # bypass_status_check=True lifts this for the "preview as published"
+        # surface in the builder (shows DAIKON shape against a DRAFT).
+        if not input.bypass_status_check and campaign.status not in (
+            CampaignStatus.CLOSED,
+            CampaignStatus.SUPERSEDED,
+        ):
             return Failure(
                 ValidationError("Only closed/superseded campaigns can be published")
             )
