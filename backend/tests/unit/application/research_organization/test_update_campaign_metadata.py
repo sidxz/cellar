@@ -15,7 +15,6 @@ from chem_vault.application.research_organization.update_campaign_metadata impor
     UpdateCampaignMetadataCommand,
 )
 from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.compound_source import ExplicitListSource
 from chem_vault.domain.research_organization.enums import CampaignStatus
 from chem_vault.domain.shared.errors import (
     AuthorizationError,
@@ -49,7 +48,6 @@ def _make_draft_campaign(
         name=name,
         description=description,
         status=status,
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=False,
         created_by=uuid.uuid4(),
     )

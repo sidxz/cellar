@@ -92,7 +92,7 @@ from chem_vault.application.research_organization.recompute_channel import Recom
 from chem_vault.application.research_organization.refresh_campaign_from_sources import RefreshFromSources
 from chem_vault.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from chem_vault.application.research_organization.remove_result_row import RemoveResultRow
-from chem_vault.application.research_organization.reseed_campaign import ReseedCampaign as ReseedCampaignUC
+
 from chem_vault.application.research_organization.set_result_decision import SetResultDecision
 from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
 from chem_vault.application.research_organization.update_campaign_channel import UpdateCampaignChannel
@@ -320,17 +320,6 @@ def register_research_organization(container: Container) -> None:
         return CreateCampaignUC(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            collection_repo=SQLAlchemyCollectionRepository(uow),
-            dispatcher=c[EventDispatcher],
-        )
-
-    def _reseed_campaign(c: Container) -> ReseedCampaignUC:
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return ReseedCampaignUC(
-            uow=uow,
-            campaign_repo=SQLAlchemyCampaignRepository(uow),
-            collection_repo=SQLAlchemyCollectionRepository(uow),
-            resolver=c[ChannelResolver],
             dispatcher=c[EventDispatcher],
         )
 
@@ -452,7 +441,6 @@ def register_research_organization(container: Container) -> None:
         )
 
     container.define(CreateCampaignUC, _create_campaign)
-    container.define(ReseedCampaignUC, _reseed_campaign)
     container.define(AddCampaignChannel, _add_channel)
     container.define(UpdateCampaignChannel, _update_channel)
     container.define(RemoveCampaignChannel, _remove_channel)

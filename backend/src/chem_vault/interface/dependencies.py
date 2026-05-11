@@ -728,7 +728,7 @@ from chem_vault.application.research_organization.override_result_cell import Ov
 from chem_vault.application.research_organization.refresh_campaign_from_sources import RefreshFromSources
 from chem_vault.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from chem_vault.application.research_organization.remove_result_row import RemoveResultRow
-from chem_vault.application.research_organization.reseed_campaign import ReseedCampaign as ReseedCampaignUC
+
 from chem_vault.application.research_organization.set_result_decision import SetResultDecision
 from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
 from chem_vault.application.research_organization.recompute_channel import RecomputeChannel
@@ -745,7 +745,6 @@ def get_campaign_repo(container: Annotated[Container, Depends(get_container)]) -
 CampaignRepositoryDep = Annotated[CampaignRepository, Depends(get_campaign_repo)]
 
 CreateCampaignDep = Annotated[CreateCampaignUC, Depends(_get_use_case(CreateCampaignUC))]
-ReseedCampaignDep = Annotated[ReseedCampaignUC, Depends(_get_use_case(ReseedCampaignUC))]
 AddCampaignChannelDep = Annotated[AddCampaignChannel, Depends(_get_use_case(AddCampaignChannel))]
 UpdateCampaignChannelDep = Annotated[UpdateCampaignChannel, Depends(_get_use_case(UpdateCampaignChannel))]
 RemoveCampaignChannelDep = Annotated[RemoveCampaignChannel, Depends(_get_use_case(RemoveCampaignChannel))]

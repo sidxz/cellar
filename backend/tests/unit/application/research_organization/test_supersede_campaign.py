@@ -18,7 +18,6 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import ExplicitListSource
 from chem_vault.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
@@ -51,7 +50,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID, *, name: str = "Test") -> Camp
         project_id=uuid.uuid4(),
         name=name,
         description=None,
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=False,
         created_by=uuid.uuid4(),
     )
@@ -65,7 +63,6 @@ def _make_closed_campaign(workspace_id: uuid.UUID, *, name: str = "Old") -> Camp
         name=name,
         description=None,
         status=CampaignStatus.CLOSED,
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=False,
         created_by=uuid.uuid4(),
         closed_at=None,
@@ -82,7 +79,6 @@ def _make_superseded_campaign(workspace_id: uuid.UUID) -> Campaign:
         name="Already Superseded",
         description=None,
         status=CampaignStatus.SUPERSEDED,
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=False,
         created_by=uuid.uuid4(),
         superseded_by_campaign_id=uuid.uuid4(),

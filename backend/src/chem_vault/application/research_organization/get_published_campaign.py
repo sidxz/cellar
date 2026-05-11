@@ -24,12 +24,7 @@ from chem_vault.domain.chemical_registration.repository import (
     MoleculeRepository,
 )
 from chem_vault.domain.inventory.repository import BatchRepository
-from chem_vault.domain.research_organization.compound_source import (
-    CollectionSource,
-    DerivedFromCampaignSource,
-    ExplicitListSource,
-    SavedSearchSource,
-)
+from chem_vault.domain.research_organization.source_ref import ManualRef, SourceRef
 from chem_vault.domain.research_organization.enums import CampaignStatus
 from chem_vault.domain.research_organization.repository import (
     CampaignRepository,
@@ -217,7 +212,7 @@ class GetPublishedCampaign:
         # Step 10 — serialize.
         doc: dict[str, Any] = {
             "campaign": _serialize_campaign(campaign, project),
-            "compound_source": _serialize_compound_source(campaign.compound_source),
+            "compound_sources": _derive_compound_sources(campaign.results),
             "source_protocols": list(campaign.source_protocols),  # snapshot set at close
             "channels": [
                 _serialize_channel(ch, protocol_lookup, readout_lookup)
@@ -284,36 +279,40 @@ def _serialize_campaign(campaign: Any, project: Any | None) -> dict[str, Any]:
     }
 
 
-def _serialize_compound_source(source: Any) -> dict[str, Any]:
-    if isinstance(source, ExplicitListSource):
-        return {
-            "kind": "explicit_list",
-            "ref": {"molecule_ids": [str(mid) for mid in source.molecule_ids]},
-            "description": None,
-        }
-    if isinstance(source, CollectionSource):
-        return {
-            "kind": "collection",
-            "ref": {"collection_id": str(source.collection_id)},
-            "description": None,
-        }
-    if isinstance(source, SavedSearchSource):
-        return {
-            "kind": "saved_search",
-            "ref": {"saved_search_id": str(source.saved_search_id)},
-            "description": None,
-        }
-    if isinstance(source, DerivedFromCampaignSource):
-        return {
-            "kind": "derived_from_campaign",
-            "ref": {
-                "campaign_id": str(source.campaign_id),
-                "decision_filter": [d.value for d in source.decision_filter],
-            },
-            "description": None,
-        }
-    # Fallback: use to_dict() if new source kinds are added without updating this function.
-    return source.to_dict()
+def _derive_compound_sources(results: list[Any]) -> list[dict[str, Any]]:
+    """Derive a compound_sources summary from per-result added_from attribution.
+
+    Groups results by (kind, canonical ref dict key, description) and emits a
+    list entry per group with a count. Results with added_from=None (or ManualRef)
+    group together as kind="manual".
+
+    DAIKON format:
+      [{"kind": "collection", "ref": {"collection_id": "..."}, "description": "...", "count": N}, ...]
+    """
+    # Use a dict keyed by a stable grouping key to preserve insertion order.
+    groups: dict[tuple, dict[str, Any]] = {}
+
+    for r in results:
+        added_from = getattr(r, "added_from", None)
+        if added_from is None or isinstance(added_from, ManualRef):
+            key = ("manual", None, None)
+            if key not in groups:
+                groups[key] = {"kind": "manual", "ref": {}, "description": None, "count": 0}
+            groups[key]["count"] += 1
+        else:
+            d = added_from.to_dict()
+            kind = d.get("kind", "unknown")
+            description = d.get("description")
+            # Build a canonical ref dict (everything except kind and description).
+            ref = {k: v for k, v in d.items() if k not in ("kind", "description")}
+            # Freeze ref for use as dict key
+            frozen_ref = tuple(sorted(ref.items()))
+            key = (kind, frozen_ref, description)
+            if key not in groups:
+                groups[key] = {"kind": kind, "ref": ref, "description": description, "count": 0}
+            groups[key]["count"] += 1
+
+    return list(groups.values())
 
 
 def _serialize_channel(

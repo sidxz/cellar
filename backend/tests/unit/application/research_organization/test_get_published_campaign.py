@@ -21,12 +21,6 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import (
-    CollectionSource,
-    DerivedFromCampaignSource,
-    ExplicitListSource,
-    SavedSearchSource,
-)
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -35,6 +29,10 @@ from chem_vault.domain.research_organization.enums import (
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
+)
+from chem_vault.domain.research_organization.source_ref import (
+    CollectionRef,
+    ManualRef,
 )
 from chem_vault.domain.shared.errors import (
     AuthorizationError,
@@ -116,7 +114,6 @@ def _make_fake_protocol(
 def _make_closed_campaign(
     workspace_id: uuid.UUID,
     *,
-    compound_source=None,
     publishes_collection: bool = True,
     n_results: int = 2,
     protocol_id: uuid.UUID | None = None,
@@ -130,16 +127,12 @@ def _make_closed_campaign(
     rdid = readout_definition_id or uuid.uuid4()
     mol_ids = [uuid.uuid4() for _ in range(max(n_results, 1))]
 
-    if compound_source is None:
-        compound_source = ExplicitListSource(molecule_ids=mol_ids)
-
     campaign = Campaign(
         workspace_id=workspace_id,
         project_id=uuid.uuid4(),
         name="EGFR Round 2",
         description="Primary screen",
         status=CampaignStatus.CLOSED,
-        compound_source=compound_source,
         publishes_collection=publishes_collection,
         source_protocols=[
             {
@@ -277,7 +270,6 @@ class TestGetPublishedCampaign:
 
         campaign, ch = _make_closed_campaign(
             auth.workspace_id,
-            compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4(), uuid.uuid4()]),
             publishes_collection=True,
             n_results=2,
             protocol_id=pid,
@@ -305,7 +297,7 @@ class TestGetPublishedCampaign:
         doc = out.unwrap()
 
         # Top-level keys present.
-        for key in ("campaign", "compound_source", "source_protocols", "channels", "results", "published_collection"):
+        for key in ("campaign", "compound_sources", "source_protocols", "channels", "results", "published_collection"):
             assert key in doc, f"missing key: {key}"
 
         # Campaign header.
@@ -321,9 +313,8 @@ class TestGetPublishedCampaign:
         assert doc["published_collection"]["id"] == str(coll_id)
         assert doc["published_collection"]["size"] == 12
 
-        # CompoundSource kind.
-        assert doc["compound_source"]["kind"] == "explicit_list"
-        assert "molecule_ids" in doc["compound_source"]["ref"]
+        # compound_sources is now a list (plural).
+        assert isinstance(doc["compound_sources"], list)
 
         # No pagination key when page_size is None.
         assert "pagination" not in doc
@@ -349,51 +340,80 @@ class TestGetPublishedCampaign:
         assert doc["published_collection"] is None
 
     # ------------------------------------------------------------------
-    # 3. CompoundSource serialization — parametrized
+    # 3. compound_sources grouping — collection + manual
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "source,expected_kind,ref_key",
-        [
-            (
-                CollectionSource(collection_id=uuid.uuid4()),
-                "collection",
-                "collection_id",
-            ),
-            (
-                DerivedFromCampaignSource(
-                    campaign_id=uuid.uuid4(),
-                    decision_filter=[CampaignDecision.SELECTED],
-                ),
-                "derived_from_campaign",
-                "campaign_id",
-            ),
-            (
-                SavedSearchSource(saved_search_id=uuid.uuid4()),
-                "saved_search",
-                "saved_search_id",
-            ),
-        ],
-    )
-    async def test_compound_source_serialization(
-        self, source, expected_kind: str, ref_key: str
-    ) -> None:
+    async def test_compound_sources_groups_by_kind(self) -> None:
         auth = fake_auth()
-        campaign, _ = _make_closed_campaign(
-            auth.workspace_id,
-            compound_source=source,
-        )
+        coll_id = uuid.uuid4()
+        ref = CollectionRef(collection_id=coll_id)
+        campaign, ch = _make_closed_campaign(auth.workspace_id, n_results=5)
+        # Give 3 results a CollectionRef, 2 no attribution (manual).
+        for r in campaign.results[:3]:
+            r.added_from = ref
+        # results[3], results[4] remain added_from=None
+
         uc, _ = _build_use_case(campaign)
         q = _make_query(auth.workspace_id, campaign.id)
         out = await uc(q, auth=auth)
 
         assert isinstance(out, Success)
-        cs = out.unwrap()["compound_source"]
-        assert cs["kind"] == expected_kind
-        assert ref_key in cs["ref"]
+        sources = out.unwrap()["compound_sources"]
+        assert isinstance(sources, list)
+        kinds = {s["kind"] for s in sources}
+        assert "collection" in kinds
+        assert "manual" in kinds
+        # collection group count
+        coll_entry = next(s for s in sources if s["kind"] == "collection")
+        assert coll_entry["count"] == 3
+        manual_entry = next(s for s in sources if s["kind"] == "manual")
+        assert manual_entry["count"] == 2
 
     # ------------------------------------------------------------------
-    # 4. Pagination — 5 results, page_size=2
+    # 4. compound_sources — two different collections → 2 entries
+    # ------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_compound_sources_two_collections(self) -> None:
+        auth = fake_auth()
+        coll_a = uuid.uuid4()
+        coll_b = uuid.uuid4()
+        ref_a = CollectionRef(collection_id=coll_a, description="batch-a")
+        ref_b = CollectionRef(collection_id=coll_b, description="batch-b")
+        campaign, _ = _make_closed_campaign(auth.workspace_id, n_results=4)
+        campaign.results[0].added_from = ref_a
+        campaign.results[1].added_from = ref_a
+        campaign.results[2].added_from = ref_b
+        campaign.results[3].added_from = ref_b
+
+        uc, _ = _build_use_case(campaign)
+        q = _make_query(auth.workspace_id, campaign.id)
+        out = await uc(q, auth=auth)
+
+        sources = out.unwrap()["compound_sources"]
+        assert len(sources) == 2
+        counts = sorted(s["count"] for s in sources)
+        assert counts == [2, 2]
+
+    # ------------------------------------------------------------------
+    # 5. compound_sources — all manual (added_from=None) → single entry
+    # ------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_compound_sources_all_manual(self) -> None:
+        auth = fake_auth()
+        campaign, _ = _make_closed_campaign(auth.workspace_id, n_results=3)
+        # All results have added_from=None (default)
+
+        uc, _ = _build_use_case(campaign)
+        q = _make_query(auth.workspace_id, campaign.id)
+        out = await uc(q, auth=auth)
+
+        sources = out.unwrap()["compound_sources"]
+        assert len(sources) == 1
+        assert sources[0]["kind"] == "manual"
+        assert sources[0]["count"] == 3
+
+    # ------------------------------------------------------------------
+    # 6. Pagination — 5 results, page_size=2
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_pagination_five_results(self) -> None:
@@ -432,7 +452,7 @@ class TestGetPublishedCampaign:
         assert doc3["pagination"]["next_cursor"] is None
 
     # ------------------------------------------------------------------
-    # 5. Campaign not found → Failure(NotFoundError)
+    # 7. Campaign not found → Failure(NotFoundError)
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_campaign_not_found(self) -> None:
@@ -445,7 +465,7 @@ class TestGetPublishedCampaign:
         assert isinstance(out.failure(), NotFoundError)
 
     # ------------------------------------------------------------------
-    # 6. Campaign in DRAFT → Failure(ValidationError)
+    # 8. Campaign in DRAFT → Failure(ValidationError)
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_draft_campaign_returns_validation_failure(self) -> None:
@@ -455,7 +475,6 @@ class TestGetPublishedCampaign:
             project_id=uuid.uuid4(),
             name="Draft Campaign",
             status=CampaignStatus.DRAFT,
-            compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
             publishes_collection=False,
             created_by=uuid.uuid4(),
         )
@@ -469,7 +488,7 @@ class TestGetPublishedCampaign:
         assert "closed/superseded" in str(err).lower()
 
     # ------------------------------------------------------------------
-    # 7. Signature is None → "signature": null in output
+    # 9. Signature is None → "signature": null in output
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_signature_none_emits_null(self) -> None:
@@ -488,7 +507,7 @@ class TestGetPublishedCampaign:
         assert out.unwrap()["campaign"]["signature"] is None
 
     # ------------------------------------------------------------------
-    # 8. Missing protocol in lookup → protocol_ref with nulls (defensive)
+    # 10. Missing protocol in lookup → protocol_ref with nulls (defensive)
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_missing_protocol_emits_null_protocol_ref(self) -> None:
@@ -518,7 +537,7 @@ class TestGetPublishedCampaign:
         assert pref["version"] is None
 
     # ------------------------------------------------------------------
-    # 9. Unauthorized (viewer role) → Failure(AuthorizationError)
+    # 11. Unauthorized (viewer role) → Failure(AuthorizationError)
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
@@ -533,7 +552,7 @@ class TestGetPublishedCampaign:
         assert isinstance(out.failure(), AuthorizationError)
 
     # ------------------------------------------------------------------
-    # 10. Superseded campaign is also publishable
+    # 12. Superseded campaign is also publishable
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_superseded_campaign_is_valid(self) -> None:
@@ -549,7 +568,7 @@ class TestGetPublishedCampaign:
         assert out.unwrap()["campaign"]["status"] == "superseded"
 
     # ------------------------------------------------------------------
-    # 11. Molecule and batch resolution in results
+    # 13. Molecule and batch resolution in results
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_molecule_and_batch_resolved_in_results(self) -> None:
