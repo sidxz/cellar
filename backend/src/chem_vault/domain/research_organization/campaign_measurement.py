@@ -32,6 +32,13 @@ class CampaignMeasurement:
     source_curve_id: uuid.UUID | None = None
     source_readout_id: uuid.UUID | None = None
     run_date_snapshot: date | None = None
+    # Migration 029 — report-grade audit + snapshot fields
+    override_reason: str | None = None
+    test_concentration_value: float | None = None
+    test_concentration_unit: str | None = None
+    replicate_count: int | None = None
+    qc_pass: bool | None = None
+    contributing_run_ids: list[uuid.UUID] | None = None
 
     def __post_init__(self) -> None:
         numeric_qualifiers = {
@@ -44,10 +51,17 @@ class CampaignMeasurement:
                 f"qualifier {self.value_qualifier.value!r} requires a numeric value"
             )
         if self.value_qualifier in {ValueQualifier.ND, ValueQualifier.EXCLUDED}:
+            # ND/excluded are placeholders — value must be None and unit may be empty
             self.value = None
+            self.unit = (self.unit or "").strip()
+            return
         if not self.unit or not self.unit.strip():
-            raise ValidationError("CampaignMeasurement.unit must not be empty")
+            raise ValidationError(
+                "CampaignMeasurement.unit must not be empty (use qualifier=nd for missing data)"
+            )
         self.unit = self.unit.strip()
 
-    def mark_manual_override(self) -> None:
+    def mark_manual_override(self, reason: str | None = None) -> None:
         self.is_manual_override = True
+        if reason is not None:
+            self.override_reason = reason

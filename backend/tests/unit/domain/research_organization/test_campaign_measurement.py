@@ -79,7 +79,7 @@ def test_lt_qualifier_requires_value():
         )
 
 
-def test_empty_unit_rejected():
+def test_empty_unit_rejected_for_numeric_qualifier():
     with pytest.raises(ValidationError, match="unit"):
         CampaignMeasurement(
             result_id=uuid.uuid4(),
@@ -90,6 +90,96 @@ def test_empty_unit_rejected():
             protocol_name_snapshot="x",
             protocol_version_snapshot=1,
         )
+
+
+def test_empty_unit_accepted_for_nd_qualifier():
+    """ND placeholders have no real unit — empty string allowed (B7)."""
+    m = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=uuid.uuid4(),
+        value=None,
+        value_qualifier=ValueQualifier.ND,
+        unit="",
+        protocol_name_snapshot="x",
+        protocol_version_snapshot=1,
+    )
+    assert m.unit == ""
+    assert m.value is None
+
+
+def test_empty_unit_accepted_for_excluded_qualifier():
+    """Excluded cells have no real unit — empty string allowed (B7)."""
+    m = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=uuid.uuid4(),
+        value=42.0,  # forced to None by post_init
+        value_qualifier=ValueQualifier.EXCLUDED,
+        unit="",
+        protocol_name_snapshot="x",
+        protocol_version_snapshot=1,
+    )
+    assert m.value is None
+    assert m.unit == ""
+
+
+def test_audit_snapshot_fields_default_to_none():
+    """New B6/B8 fields default to None and persist as set."""
+    m = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=uuid.uuid4(),
+        value=42.0,
+        value_qualifier=ValueQualifier.EQ,
+        unit="nM",
+        protocol_name_snapshot="x",
+        protocol_version_snapshot=1,
+    )
+    assert m.override_reason is None
+    assert m.test_concentration_value is None
+    assert m.test_concentration_unit is None
+    assert m.replicate_count is None
+    assert m.qc_pass is None
+    assert m.contributing_run_ids is None
+
+
+def test_audit_snapshot_fields_set_through_constructor():
+    rid1, rid2 = uuid.uuid4(), uuid.uuid4()
+    m = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=uuid.uuid4(),
+        value=42.0,
+        value_qualifier=ValueQualifier.EQ,
+        unit="nM",
+        protocol_name_snapshot="x",
+        protocol_version_snapshot=1,
+        override_reason="QC fail on plate 3",
+        test_concentration_value=10.0,
+        test_concentration_unit="uM",
+        replicate_count=3,
+        qc_pass=True,
+        contributing_run_ids=[rid1, rid2],
+    )
+    assert m.override_reason == "QC fail on plate 3"
+    assert m.test_concentration_value == 10.0
+    assert m.test_concentration_unit == "uM"
+    assert m.replicate_count == 3
+    assert m.qc_pass is True
+    assert m.contributing_run_ids == [rid1, rid2]
+
+
+def test_mark_manual_override_with_reason():
+    """mark_manual_override accepts an optional reason (B8)."""
+    m = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=uuid.uuid4(),
+        value=10.0,
+        value_qualifier=ValueQualifier.EQ,
+        unit="nM",
+        protocol_name_snapshot="x",
+        protocol_version_snapshot=1,
+    )
+    m.mark_manual_override(reason="QC fail on plate 3")
+    assert m.is_manual_override is True
+    assert m.override_reason == "QC fail on plate 3"
 
 
 def test_with_hit_call_and_source():
