@@ -1,8 +1,9 @@
 """API integration tests for campaign endpoints (/api/v1/campaigns).
 
 Coverage:
-- Create campaign (201, compound_source variants)
+- Create campaign (201, empty canvas)
 - List / get campaigns
+- Add-from-collection, add-from-campaign, add-from-run endpoints
 - Add / update / delete channel
 - Add / remove result rows
 - Set result decision
@@ -68,27 +69,59 @@ async def _create_project(client: AsyncClient, name: str = "Test Project") -> st
     return resp.json()["id"]
 
 
-async def _create_draft_campaign(
+async def _create_empty_campaign(
+    client: AsyncClient,
+    project_id: str,
+    name: str = "Test Campaign",
+    publishes_collection: bool = False,
+    supersedes_campaign_id: str | None = None,
+) -> dict:
+    """Create an empty draft campaign (no compound_source needed)."""
+    body: dict = {
+        "name": name,
+        "project_id": project_id,
+        "publishes_collection": publishes_collection,
+    }
+    if supersedes_campaign_id is not None:
+        body["supersedes_campaign_id"] = supersedes_campaign_id
+    resp = await client.post("/api/v1/campaigns", json=body)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_campaign_with_molecules(
     client: AsyncClient,
     project_id: str,
     molecule_ids: list[str],
     name: str = "Test Campaign",
     publishes_collection: bool = False,
 ) -> dict:
-    resp = await client.post(
-        "/api/v1/campaigns",
-        json={
-            "name": name,
-            "project_id": project_id,
-            "compound_source": {
-                "kind": "explicit_list",
-                "molecule_ids": molecule_ids,
-            },
-            "publishes_collection": publishes_collection,
-        },
+    """Create a draft campaign then add a collection of molecules via add-from-collection.
+
+    This replaces the old explicit_list compound_source approach.  Creates a
+    temporary collection, adds the molecules to it, then calls add-from-collection.
+    """
+    # Create the campaign empty first
+    campaign = await _create_empty_campaign(
+        client, project_id, name=name, publishes_collection=publishes_collection
     )
-    assert resp.status_code == 201, resp.text
-    return resp.json()
+    campaign_id = campaign["id"]
+
+    # Add each molecule directly via add-result-row (simplest integration path
+    # for tests that don't care about the collection machinery)
+    for mol_id in molecule_ids:
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results",
+            json={"molecule_id": mol_id},
+        )
+        assert resp.status_code == 200, resp.text
+        campaign = resp.json()
+
+    return campaign
+
+
+# Keep old alias for tests that don't need to care about the source mechanism.
+_create_draft_campaign = _create_campaign_with_molecules
 
 
 # ---------------------------------------------------------------------------
@@ -97,35 +130,30 @@ async def _create_draft_campaign(
 
 
 class TestCreateCampaign:
-    async def test_create_draft_201(self, client: AsyncClient) -> None:
+    async def test_create_empty_draft_201(self, client: AsyncClient) -> None:
+        """Creating a campaign yields an empty draft — no results, no channels."""
         project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Aspirin")
 
-        data = await _create_draft_campaign(client, project_id, [mol_id])
-
+        resp = await client.post(
+            "/api/v1/campaigns",
+            json={
+                "name": "Blank Canvas",
+                "project_id": project_id,
+                "publishes_collection": False,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
         assert data["status"] == "draft"
-        assert data["name"] == "Test Campaign"
+        assert data["name"] == "Blank Canvas"
         assert data["project_id"] == project_id
-        assert len(data["channels"]) == 0
-        assert len(data["results"]) == 1
-        assert data["results"][0]["molecule_id"] == mol_id
-        assert data["results"][0]["decision"] == "deferred"
-
-    async def test_create_multiple_molecules(self, client: AsyncClient) -> None:
-        project_id = await _create_project(client)
-        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Aspirin2")
-        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caffeine2")
-
-        data = await _create_draft_campaign(client, project_id, [mol1, mol2])
-
-        assert len(data["results"]) == 2
-        mol_ids_in_response = {r["molecule_id"] for r in data["results"]}
-        assert mol_ids_in_response == {mol1, mol2}
+        assert data["results"] == []
+        assert data["channels"] == []
+        assert data["compound_sources"] == []
 
     async def test_create_with_supersedes(self, client: AsyncClient) -> None:
-        """supersedes_campaign_id is stored even if the referenced campaign doesn't exist yet in tests."""
+        """supersedes_campaign_id is stored even if the referenced campaign doesn't exist yet."""
         project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-sup")
         fake_old_id = str(uuid.uuid4())
 
         resp = await client.post(
@@ -133,7 +161,6 @@ class TestCreateCampaign:
             json={
                 "name": "Successor Campaign",
                 "project_id": project_id,
-                "compound_source": {"kind": "explicit_list", "molecule_ids": [mol_id]},
                 "publishes_collection": False,
                 "supersedes_campaign_id": fake_old_id,
             },
@@ -141,19 +168,26 @@ class TestCreateCampaign:
         assert resp.status_code == 201, resp.text
         assert resp.json()["supersedes_campaign_id"] == fake_old_id
 
-    async def test_create_empty_molecule_list_422(self, client: AsyncClient) -> None:
+    async def test_create_then_add_result_row(self, client: AsyncClient) -> None:
+        """Manually adding a molecule via add-result-row creates a result with ManualRef."""
         project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-manual")
+
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+
         resp = await client.post(
-            "/api/v1/campaigns",
-            json={
-                "name": "Empty",
-                "project_id": project_id,
-                "compound_source": {"kind": "explicit_list", "molecule_ids": []},
-                "publishes_collection": False,
-            },
+            f"/api/v1/campaigns/{campaign_id}/results",
+            json={"molecule_id": mol_id},
         )
-        # ExplicitListSource domain validation rejects empty list
-        assert resp.status_code in (422, 500), resp.text
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["molecule_id"] == mol_id
+        assert data["results"][0]["decision"] == "deferred"
+        # compound_sources must now reflect a manual entry
+        assert len(data["compound_sources"]) == 1
+        assert data["compound_sources"][0]["kind"] == "manual"
 
 
 # ---------------------------------------------------------------------------

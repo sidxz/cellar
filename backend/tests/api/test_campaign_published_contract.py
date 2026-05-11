@@ -1,7 +1,7 @@
 """DAIKON published-contract schema validation.
 
 JSON Schema (Draft-07) fixture captures spec §6 shape: campaign +
-compound_source (discriminated 4 kinds) + source_protocols snapshot +
+compound_sources (list, plural) + source_protocols snapshot +
 channels (live protocol+readout refs) + results with nested measurements +
 optional published_collection + optional pagination envelope.
 
@@ -42,7 +42,6 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import ExplicitListSource
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     ChannelSourceKind,
@@ -50,6 +49,7 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from chem_vault.domain.research_organization.source_ref import ManualRef
 from chem_vault.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
@@ -202,7 +202,6 @@ async def _seed_closed_campaign(
         project_id=project_id,
         name="Contract Test Campaign",
         description="Schema validation fixture",
-        compound_source=ExplicitListSource(molecule_ids=[mol_id]),
         publishes_collection=True,
         created_by=user_id,
     )
@@ -218,7 +217,11 @@ async def _seed_closed_campaign(
     )
     campaign.add_channel(ch)
 
-    result = CampaignResult(campaign_id=campaign.id, molecule_id=mol_id)
+    result = CampaignResult(
+        campaign_id=campaign.id,
+        molecule_id=mol_id,
+        added_from=ManualRef(),
+    )
     result.add_measurement(
         CampaignMeasurement(
             result_id=result.id,
@@ -326,8 +329,11 @@ async def test_published_endpoint_matches_daikon_schema(
     # Spot-check key structural invariants beyond schema validation.
     assert body["campaign"]["id"] == str(campaign_id)
     assert body["campaign"]["status"] == "closed"
-    assert body["compound_source"]["kind"] == "explicit_list"
-    assert body["compound_source"]["ref"]["molecule_ids"] == [str(mol_id)]
+    # compound_sources is now a list (plural)
+    assert isinstance(body["compound_sources"], list)
+    assert len(body["compound_sources"]) == 1
+    assert body["compound_sources"][0]["kind"] == "manual"
+    assert body["compound_sources"][0]["count"] == 1
     assert len(body["channels"]) == 1
     assert body["channels"][0]["label"] == "IC50 (target binding)"
     assert len(body["results"]) == 1

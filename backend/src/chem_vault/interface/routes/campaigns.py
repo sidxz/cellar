@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -14,6 +14,15 @@ from chem_vault.application.research_organization.add_campaign_channel import (
 )
 from chem_vault.application.research_organization.add_result_row import (
     AddResultRowCommand,
+)
+from chem_vault.application.research_organization.add_results_from_campaign import (
+    AddResultsFromCampaignCommand,
+)
+from chem_vault.application.research_organization.add_results_from_collection import (
+    AddResultsFromCollectionCommand,
+)
+from chem_vault.application.research_organization.add_results_from_run import (
+    AddResultsFromRunCommand,
 )
 from chem_vault.application.research_organization.close_campaign import (
     CloseCampaignCommand,
@@ -36,9 +45,6 @@ from chem_vault.application.research_organization.remove_campaign_channel import
 from chem_vault.application.research_organization.remove_result_row import (
     RemoveResultRowCommand,
 )
-from chem_vault.application.research_organization.reseed_campaign import (
-    ReseedCampaignCommand,
-)
 from chem_vault.application.research_organization.set_result_decision import (
     UNSET as DECISION_UNSET,
     SetResultDecisionCommand,
@@ -60,13 +66,6 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import (
-    CollectionSource,
-    CompoundSource,
-    DerivedFromCampaignSource,
-    ExplicitListSource,
-    SavedSearchSource,
-)
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     ChannelSourceKind,
@@ -75,6 +74,7 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from chem_vault.domain.research_organization.source_ref import ManualRef, SourceRef
 from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
@@ -82,6 +82,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.camp
 from chem_vault.interface.dependencies import (
     AddCampaignChannelDep,
     AddResultRowDep,
+    AddResultsFromCampaignDep,
+    AddResultsFromCollectionDep,
+    AddResultsFromRunDep,
     CloseCampaignDep,
     CreateCampaignDep,
     GetPublishedCampaignDep,
@@ -89,7 +92,6 @@ from chem_vault.interface.dependencies import (
     RefreshFromSourcesDep,
     RemoveCampaignChannelDep,
     RemoveResultRowDep,
-    ReseedCampaignDep,
     SetResultDecisionDep,
     SupersedeCampaignDep,
     UpdateCampaignChannelDep,
@@ -128,73 +130,10 @@ class HitCriterionDTO(BaseModel):
         )
 
 
-# Discriminated compound-source request models
-class ExplicitListSourceDTO(BaseModel):
-    kind: Literal["explicit_list"] = "explicit_list"
-    molecule_ids: list[uuid.UUID]
-
-    def to_domain(self) -> ExplicitListSource:
-        return ExplicitListSource(molecule_ids=self.molecule_ids)
-
-
-class CollectionSourceDTO(BaseModel):
-    kind: Literal["collection"] = "collection"
-    collection_id: uuid.UUID
-
-    def to_domain(self) -> CollectionSource:
-        return CollectionSource(collection_id=self.collection_id)
-
-
-class SavedSearchSourceDTO(BaseModel):
-    kind: Literal["saved_search"] = "saved_search"
-    saved_search_id: uuid.UUID
-
-    def to_domain(self) -> SavedSearchSource:
-        return SavedSearchSource(saved_search_id=self.saved_search_id)
-
-
-class DerivedFromCampaignSourceDTO(BaseModel):
-    kind: Literal["derived_from_campaign"] = "derived_from_campaign"
-    campaign_id: uuid.UUID
-    decision_filter: list[str] = ["selected"]
-
-    def to_domain(self) -> DerivedFromCampaignSource:
-        return DerivedFromCampaignSource(
-            campaign_id=self.campaign_id,
-            decision_filter=[CampaignDecision(d) for d in self.decision_filter],
-        )
-
-
-# Union type for source parsing — Pydantic v2 discriminated union
-from typing import Union
-from pydantic import Field
-
-CompoundSourceRequest = Annotated[
-    Union[
-        ExplicitListSourceDTO,
-        CollectionSourceDTO,
-        SavedSearchSourceDTO,
-        DerivedFromCampaignSourceDTO,
-    ],
-    Field(discriminator="kind"),
-]
-
-
-def _source_dto_to_domain(src: Any) -> CompoundSource:
-    """Coerce any source DTO to a domain CompoundSource."""
-    return src.to_domain()
-
-
-def _source_to_dict(src: CompoundSource) -> dict[str, Any]:
-    """Serialize a domain CompoundSource to a JSON-compatible dict."""
-    return src.to_dict()
-
-
 class CreateCampaignRequest(BaseModel):
     name: str
     description: str | None = None
     project_id: uuid.UUID
-    compound_source: CompoundSourceRequest
     publishes_collection: bool = True
     supersedes_campaign_id: uuid.UUID | None = None
 
@@ -206,8 +145,20 @@ class UpdateCampaignRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class ReseedRequest(BaseModel):
-    new_source: CompoundSourceRequest
+class AddFromCollectionRequest(BaseModel):
+    collection_id: uuid.UUID
+    description: str | None = None
+
+
+class AddFromCampaignRequest(BaseModel):
+    source_campaign_id: uuid.UUID
+    decision_filter: list[str] = ["selected"]
+    description: str | None = None
+
+
+class AddFromRunRequest(BaseModel):
+    run_id: uuid.UUID
+    description: str | None = None
 
 
 class AddChannelRequest(BaseModel):
@@ -354,6 +305,35 @@ class CampaignChannelResponse(BaseModel):
         )
 
 
+def _derive_compound_sources(results: list[CampaignResult]) -> list[dict[str, Any]]:
+    """Derive compound_sources summary from per-result added_from attribution.
+
+    Groups results by their source ref. Results with added_from=None are
+    treated as ManualRef. Returns a list of {kind, ref, description, count}.
+    """
+    from collections import Counter
+
+    groups: dict[tuple[str, str | None], list[dict[str, Any]]] = {}
+    for r in results:
+        ref = r.added_from if r.added_from is not None else ManualRef()
+        d = ref.to_dict()
+        key = (d.get("kind", "manual"), d.get("description"))
+        if key not in groups:
+            groups[key] = d
+    # Count
+    counts: Counter[tuple[str, str | None]] = Counter()
+    for r in results:
+        ref = r.added_from if r.added_from is not None else ManualRef()
+        d = ref.to_dict()
+        key = (d.get("kind", "manual"), d.get("description"))
+        counts[key] += 1
+
+    return [
+        {**groups[k], "count": counts[k]}
+        for k in groups
+    ]
+
+
 class CampaignResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -361,7 +341,7 @@ class CampaignResponse(BaseModel):
     name: str
     description: str | None = None
     status: str
-    compound_source: dict[str, Any]
+    compound_sources: list[dict[str, Any]]
     publishes_collection: bool
     supersedes_campaign_id: uuid.UUID | None = None
     superseded_by_campaign_id: uuid.UUID | None = None
@@ -386,7 +366,7 @@ class CampaignResponse(BaseModel):
             name=c.name,
             description=c.description,
             status=c.status.value,
-            compound_source=c.compound_source.to_dict(),
+            compound_sources=_derive_compound_sources(c.results),
             publishes_collection=c.publishes_collection,
             supersedes_campaign_id=c.supersedes_campaign_id,
             superseded_by_campaign_id=c.superseded_by_campaign_id,
@@ -404,6 +384,20 @@ class CampaignResponse(BaseModel):
         )
 
 
+class AddResultsOutcomeResponse(BaseModel):
+    added: int
+    skipped: int
+    campaign: CampaignResponse
+
+    @classmethod
+    def from_outcome(cls, outcome: Any) -> AddResultsOutcomeResponse:
+        return cls(
+            added=outcome.added,
+            skipped=outcome.skipped,
+            campaign=CampaignResponse.from_domain(outcome.campaign),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Route handlers
 # ---------------------------------------------------------------------------
@@ -415,13 +409,12 @@ async def create_campaign(
     auth: AuthDep,
     uc: CreateCampaignDep,
 ) -> CampaignResponse:
-    """Create a draft Campaign and seed its results from compound_source."""
+    """Create an empty draft Campaign. Compounds are added via add-from-* endpoints."""
     cmd = CreateCampaignCommand(
         workspace_id=auth.workspace_id,
         project_id=body.project_id,
         name=body.name,
         description=body.description,
-        compound_source=_source_dto_to_domain(body.compound_source),
         publishes_collection=body.publishes_collection,
         created_by=auth.user_id,
         supersedes_campaign_id=body.supersedes_campaign_id,
@@ -470,7 +463,7 @@ async def update_campaign(
     auth: AuthDep,
     uc: UpdateCampaignMetadataDep,
 ) -> CampaignResponse:
-    """Update campaign name/description (source mutation is done via reseed)."""
+    """Update campaign name/description."""
     provided = body.model_fields_set
     cmd_kwargs: dict = {
         "workspace_id": auth.workspace_id,
@@ -485,21 +478,59 @@ async def update_campaign(
     return CampaignResponse.from_domain(campaign)
 
 
-@router.post("/{campaign_id}/reseed", response_model=CampaignResponse)
-async def reseed_campaign(
+@router.post("/{campaign_id}/add-from-collection", response_model=AddResultsOutcomeResponse)
+async def add_results_from_collection(
     campaign_id: uuid.UUID,
-    body: ReseedRequest,
+    body: AddFromCollectionRequest,
     auth: AuthDep,
-    uc: ReseedCampaignDep,
-) -> CampaignResponse:
-    """Replace the compound list of a DRAFT campaign and re-resolve measurements."""
-    cmd = ReseedCampaignCommand(
+    uc: AddResultsFromCollectionDep,
+) -> AddResultsOutcomeResponse:
+    """Add compound results from a Collection to a DRAFT campaign (idempotent)."""
+    cmd = AddResultsFromCollectionCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        new_source=_source_dto_to_domain(body.new_source),
+        collection_id=body.collection_id,
+        description=body.description,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    outcome = result_to_response(await uc(cmd, auth=auth))
+    return AddResultsOutcomeResponse.from_outcome(outcome)
+
+
+@router.post("/{campaign_id}/add-from-campaign", response_model=AddResultsOutcomeResponse)
+async def add_results_from_campaign(
+    campaign_id: uuid.UUID,
+    body: AddFromCampaignRequest,
+    auth: AuthDep,
+    uc: AddResultsFromCampaignDep,
+) -> AddResultsOutcomeResponse:
+    """Add compound results from another Campaign's filtered result set (idempotent)."""
+    cmd = AddResultsFromCampaignCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        source_campaign_id=body.source_campaign_id,
+        decision_filter=[CampaignDecision(d) for d in body.decision_filter],
+        description=body.description,
+    )
+    outcome = result_to_response(await uc(cmd, auth=auth))
+    return AddResultsOutcomeResponse.from_outcome(outcome)
+
+
+@router.post("/{campaign_id}/add-from-run", response_model=AddResultsOutcomeResponse)
+async def add_results_from_run(
+    campaign_id: uuid.UUID,
+    body: AddFromRunRequest,
+    auth: AuthDep,
+    uc: AddResultsFromRunDep,
+) -> AddResultsOutcomeResponse:
+    """Add compound results from a protocol Run's molecule set (idempotent)."""
+    cmd = AddResultsFromRunCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        run_id=body.run_id,
+        description=body.description,
+    )
+    outcome = result_to_response(await uc(cmd, auth=auth))
+    return AddResultsOutcomeResponse.from_outcome(outcome)
 
 
 @router.post("/{campaign_id}/channels", response_model=CampaignResponse, status_code=200)
@@ -637,7 +668,7 @@ async def add_result_row(
     auth: AuthDep,
     uc: AddResultRowDep,
 ) -> CampaignResponse:
-    """Add a new compound result row to a DRAFT campaign."""
+    """Add a new compound result row (manual attribution) to a DRAFT campaign."""
     cmd = AddResultRowCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,

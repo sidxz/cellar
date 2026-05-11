@@ -3,7 +3,7 @@
   "title": "DAIKON Published Campaign Contract",
   "description": "JSON Schema for GET /api/v1/campaigns/{id}/published — spec §6.",
   "type": "object",
-  "required": ["campaign", "compound_source", "source_protocols", "channels", "results", "published_collection"],
+  "required": ["campaign", "compound_sources", "source_protocols", "channels", "results", "published_collection"],
   "additionalProperties": false,
   "properties": {
     "campaign": {
@@ -63,73 +63,18 @@
       }
     },
 
-    "compound_source": {
-      "type": "object",
-      "required": ["kind", "ref"],
-      "additionalProperties": false,
-      "properties": {
-        "kind":        { "type": "string" },
-        "ref":         { "type": "object" },
-        "description": { "type": ["string", "null"] }
-      },
-      "oneOf": [
-        {
-          "properties": {
-            "kind": { "const": "explicit_list" },
-            "ref": {
-              "type": "object",
-              "required": ["molecule_ids"],
-              "additionalProperties": false,
-              "properties": {
-                "molecule_ids": {
-                  "type": "array",
-                  "items": { "type": "string", "format": "uuid" }
-                }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "kind": { "const": "collection" },
-            "ref": {
-              "type": "object",
-              "required": ["collection_id"],
-              "additionalProperties": false,
-              "properties": {
-                "collection_id": { "type": "string", "format": "uuid" }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "kind": { "const": "derived_from_campaign" },
-            "ref": {
-              "type": "object",
-              "required": ["campaign_id", "decision_filter"],
-              "additionalProperties": false,
-              "properties": {
-                "campaign_id":      { "type": "string", "format": "uuid" },
-                "decision_filter":  { "type": "array", "items": { "type": "string" } }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "kind": { "const": "saved_search" },
-            "ref": {
-              "type": "object",
-              "required": ["saved_search_id"],
-              "additionalProperties": false,
-              "properties": {
-                "saved_search_id": { "type": "string", "format": "uuid" }
-              }
-            }
-          }
+    "compound_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "additionalProperties": true,
+        "properties": {
+          "kind":        { "type": "string", "enum": ["manual", "collection", "saved_search", "campaign", "run"] },
+          "description": { "type": ["string", "null"] },
+          "count":       { "type": "integer" }
         }
-      ]
+      }
     },
 
     "source_protocols": {
