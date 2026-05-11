@@ -10,6 +10,12 @@ import type { CampaignMeasurementResponseSourceRunId } from './campaignMeasureme
 import type { CampaignMeasurementResponseSourceCurveId } from './campaignMeasurementResponseSourceCurveId';
 import type { CampaignMeasurementResponseSourceReadoutId } from './campaignMeasurementResponseSourceReadoutId';
 import type { CampaignMeasurementResponseRunDateSnapshot } from './campaignMeasurementResponseRunDateSnapshot';
+import type { CampaignMeasurementResponseOverrideReason } from './campaignMeasurementResponseOverrideReason';
+import type { CampaignMeasurementResponseTestConcentrationValue } from './campaignMeasurementResponseTestConcentrationValue';
+import type { CampaignMeasurementResponseTestConcentrationUnit } from './campaignMeasurementResponseTestConcentrationUnit';
+import type { CampaignMeasurementResponseReplicateCount } from './campaignMeasurementResponseReplicateCount';
+import type { CampaignMeasurementResponseQcPass } from './campaignMeasurementResponseQcPass';
+import type { CampaignMeasurementResponseContributingRunIds } from './campaignMeasurementResponseContributingRunIds';
 
 export interface CampaignMeasurementResponse {
   id: string;
@@ -25,4 +31,10 @@ export interface CampaignMeasurementResponse {
   protocol_name_snapshot: string;
   protocol_version_snapshot: number;
   run_date_snapshot?: CampaignMeasurementResponseRunDateSnapshot;
+  override_reason?: CampaignMeasurementResponseOverrideReason;
+  test_concentration_value?: CampaignMeasurementResponseTestConcentrationValue;
+  test_concentration_unit?: CampaignMeasurementResponseTestConcentrationUnit;
+  replicate_count?: CampaignMeasurementResponseReplicateCount;
+  qc_pass?: CampaignMeasurementResponseQcPass;
+  contributing_run_ids?: CampaignMeasurementResponseContributingRunIds;
 }

@@ -10,6 +10,7 @@ export {
   listCampaignsApiV1CampaignsGet,
   getCampaignApiV1CampaignsCampaignIdGet,
   getPublishedCampaignApiV1CampaignsCampaignIdPublishedGet,
+  previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet,
   // ── Query key helpers ──────────────────────────────────────────────────────
   getListCampaignsApiV1CampaignsGetQueryKey,
   getListCampaignsApiV1CampaignsGetQueryOptions,
@@ -19,12 +20,14 @@ export {
   useListCampaignsApiV1CampaignsGet,
   useGetCampaignApiV1CampaignsCampaignIdGet,
   useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet,
+  usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet,
   // ── Mutation functions ─────────────────────────────────────────────────────
   createCampaignApiV1CampaignsPost,
   updateCampaignApiV1CampaignsCampaignIdPatch,
   addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost,
   addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost,
-  addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost,
+  addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost,
+  previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost,
   addCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
   updateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
   removeCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDelete,

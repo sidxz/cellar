@@ -27,7 +27,7 @@ import type {
   AddChannelRequest,
   AddFromCampaignRequest,
   AddFromCollectionRequest,
-  AddFromRunRequest,
+  AddFromRunsRequest,
   AddResultRowRequest,
   AddResultsOutcomeResponse,
   CampaignResponse,
@@ -38,6 +38,10 @@ import type {
   HTTPValidationError,
   ListCampaignsApiV1CampaignsGetParams,
   OverrideCellRequest,
+  PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet200,
+  PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams,
+  PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost200,
+  PreviewRunImportRequest,
   SetResultDecisionRequest,
   SupersedeRequest,
   UpdateCampaignRequest,
@@ -499,31 +503,33 @@ export const useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPos
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Add compound results from a protocol Run's molecule set (idempotent).
- * @summary Add Results From Run
+ * Compute the would-be-added cells for the multi-run import dialog (B6).
+
+Read-only. Returns ``{summary, channels, rows}`` — see spec §3.2.
+ * @summary Preview Run Import
  */
-export const addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost = (
+export const previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost = (
     campaignId: string,
-    addFromRunRequest: AddFromRunRequest,
+    previewRunImportRequest: PreviewRunImportRequest,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<AddResultsOutcomeResponse>(
-      {url: `/api/v1/campaigns/${campaignId}/add-from-run`, method: 'POST',
+      return customInstance<PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost200>(
+      {url: `/api/v1/campaigns/${campaignId}/preview-run-import`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: addFromRunRequest, signal
+      data: previewRunImportRequest, signal
     },
       );
     }
   
 
 
-export const getAddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, TError,{campaignId: string;data: AddFromRunRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, TError,{campaignId: string;data: AddFromRunRequest}, TContext> => {
+export const getPreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost>>, TError,{campaignId: string;data: PreviewRunImportRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost>>, TError,{campaignId: string;data: PreviewRunImportRequest}, TContext> => {
 
-const mutationKey = ['addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost'];
+const mutationKey = ['previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost'];
 const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -533,10 +539,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, {campaignId: string;data: AddFromRunRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost>>, {campaignId: string;data: PreviewRunImportRequest}> = (props) => {
           const {campaignId,data} = props ?? {};
 
-          return  addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost(campaignId,data,)
+          return  previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost(campaignId,data,)
         }
 
         
@@ -544,23 +550,93 @@ const {mutation: mutationOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type AddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationResult = NonNullable<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>>
-    export type AddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationBody = AddFromRunRequest
-    export type AddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationError = HTTPValidationError
+    export type PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPostMutationResult = NonNullable<Awaited<ReturnType<typeof previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost>>>
+    export type PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPostMutationBody = PreviewRunImportRequest
+    export type PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPostMutationError = HTTPValidationError
 
     /**
- * @summary Add Results From Run
+ * @summary Preview Run Import
  */
-export const useAddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, TError,{campaignId: string;data: AddFromRunRequest}, TContext>, }
+export const usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost>>, TError,{campaignId: string;data: PreviewRunImportRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>,
+        Awaited<ReturnType<typeof previewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost>>,
         TError,
-        {campaignId: string;data: AddFromRunRequest},
+        {campaignId: string;data: PreviewRunImportRequest},
         TContext
       > => {
 
-      const mutationOptions = getAddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationOptions(options);
+      const mutationOptions = getPreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Add compound results from one or more protocol Runs (B6).
+
+Creates campaign channels for each unique (protocol_id, readout_definition_id),
+reusing existing ones. Filters molecules by hit-criteria when scope=hits_only.
+Snapshots concentration/replicate/QC per cell.
+ * @summary Add Results From Runs
+ */
+export const addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost = (
+    campaignId: string,
+    addFromRunsRequest: AddFromRunsRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<AddResultsOutcomeResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/add-from-runs`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addFromRunsRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost>>, TError,{campaignId: string;data: AddFromRunsRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost>>, TError,{campaignId: string;data: AddFromRunsRequest}, TContext> => {
+
+const mutationKey = ['addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost>>, {campaignId: string;data: AddFromRunsRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPostMutationResult = NonNullable<Awaited<ReturnType<typeof addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost>>>
+    export type AddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPostMutationBody = AddFromRunsRequest
+    export type AddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Results From Runs
+ */
+export const useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost>>, TError,{campaignId: string;data: AddFromRunsRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost>>,
+        TError,
+        {campaignId: string;data: AddFromRunsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
@@ -1313,6 +1389,110 @@ export function useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet<TDat
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGetQueryOptions(campaignId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Render any campaign (incl. DRAFT) through the DAIKON serializer.
+
+Lifts the closed/superseded status guard so the screener can preview
+what the published artifact will look like before closing.
+ * @summary Preview Published Campaign
+ */
+export const previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet = (
+    campaignId: string,
+    params?: PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet200>(
+      {url: `/api/v1/campaigns/${campaignId}/preview-published`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getPreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetQueryKey = (campaignId?: string,
+    params?: PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams,) => {
+    return [
+    `/api/v1/campaigns/${campaignId}/preview-published`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getPreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetQueryOptions = <TData = Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError = HTTPValidationError>(campaignId: string,
+    params?: PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetQueryKey(campaignId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>> = ({ signal }) => previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet(campaignId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(campaignId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetQueryResult = NonNullable<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>>
+export type PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetQueryError = HTTPValidationError
+
+
+export function usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet<TData = Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params: undefined |  PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>,
+          TError,
+          Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet<TData = Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params?: PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>,
+          TError,
+          Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet<TData = Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params?: PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Preview Published Campaign
+ */
+
+export function usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet<TData = Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params?: PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof previewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetQueryOptions(campaignId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
