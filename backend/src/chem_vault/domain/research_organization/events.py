@@ -67,3 +67,33 @@ class EntityRemovedFromProject(DomainEvent):
     entity_type: str
     entity_id: uuid.UUID
     project_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignCreated(DomainEvent):
+    """Fired when a screen campaign is created."""
+
+    project_id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignClosed(DomainEvent):
+    """Fired when a campaign is closed (locked) with an electronic signature."""
+
+    closed_by: uuid.UUID
+    signature_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignSuperseded(DomainEvent):
+    """Fired when a closed campaign is replaced by a new one."""
+
+    superseded_by_campaign_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignPublishedCollectionCreated(DomainEvent):
+    """Fired when a campaign publishes its selected molecules as a collection."""
+
+    collection_id: uuid.UUID
