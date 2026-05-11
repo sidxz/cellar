@@ -2,6 +2,11 @@
 
 Owns CampaignChannel[], CampaignResult[] (and CampaignMeasurement[] via results).
 Lifecycle: draft -> closed -> superseded.
+
+Campaigns are curated workspaces. Compounds are added incrementally via
+add_results (bulk) or add_result (single). Each CampaignResult carries its
+own ``added_from: SourceRef | None`` attribution. No compound_source on the
+aggregate — provenance is per-row.
 """
 
 from __future__ import annotations
@@ -12,7 +17,6 @@ from typing import Any
 
 from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import CompoundSource
 from chem_vault.domain.research_organization.enums import CampaignStatus
 from chem_vault.domain.research_organization.events import (
     CampaignClosed,
@@ -29,6 +33,9 @@ class Campaign(AggregateRoot):
     Owns channels and results (results own their measurements).
     Lifecycle: draft -> closed -> superseded. Closed and superseded
     campaigns reject all mutating operations on the aggregate.
+
+    Empty campaigns (no results) are first-class — valid until close, which
+    requires at least one result and one channel.
     """
 
     def __init__(
@@ -40,7 +47,6 @@ class Campaign(AggregateRoot):
         name: str,
         description: str | None = None,
         status: CampaignStatus = CampaignStatus.DRAFT,
-        compound_source: CompoundSource,
         publishes_collection: bool = True,
         source_protocols: list[dict[str, Any]] | None = None,
         closed_at: datetime | None = None,
@@ -66,7 +72,6 @@ class Campaign(AggregateRoot):
         self.name = name.strip()
         self.description = description
         self.status = status
-        self.compound_source = compound_source
         self.publishes_collection = publishes_collection
         self.source_protocols: list[dict[str, Any]] = source_protocols or []
         self.closed_at = closed_at
@@ -89,7 +94,6 @@ class Campaign(AggregateRoot):
         project_id: uuid.UUID,
         name: str,
         description: str | None,
-        compound_source: CompoundSource,
         publishes_collection: bool,
         created_by: uuid.UUID,
         supersedes_campaign_id: uuid.UUID | None = None,
@@ -99,7 +103,6 @@ class Campaign(AggregateRoot):
             project_id=project_id,
             name=name,
             description=description,
-            compound_source=compound_source,
             publishes_collection=publishes_collection,
             supersedes_campaign_id=supersedes_campaign_id,
             created_by=created_by,
@@ -165,13 +168,28 @@ class Campaign(AggregateRoot):
         self.results = [r for r in self.results if r.molecule_id != molecule_id]
         self.updated_at = datetime.now(UTC)
 
-    def reseed_results(self, results: list[CampaignResult]) -> None:
-        self._ensure_draft("re-seed")
+    def add_results(self, results: list[CampaignResult]) -> tuple[int, int]:
+        """Bulk add. Idempotent on (campaign_id, molecule_id).
+
+        Returns (added_count, skipped_count). Existing rows are not touched.
+        Raises ValidationError if any result's campaign_id doesn't match self.id.
+        """
+        self._ensure_draft("add results")
+        existing_molecule_ids = {r.molecule_id for r in self.results}
+        added = 0
+        skipped = 0
         for r in results:
             if r.campaign_id != self.id:
                 raise ValidationError("result.campaign_id mismatch")
-        self.results = list(results)
-        self.updated_at = datetime.now(UTC)
+            if r.molecule_id in existing_molecule_ids:
+                skipped += 1
+                continue
+            self.results.append(r)
+            existing_molecule_ids.add(r.molecule_id)
+            added += 1
+        if added > 0:
+            self.updated_at = datetime.now(UTC)
+        return added, skipped
 
     # ----- close / publish / supersede -----
 

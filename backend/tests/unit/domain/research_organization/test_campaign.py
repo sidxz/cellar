@@ -8,10 +8,6 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import (
-    CollectionSource,
-    ExplicitListSource,
-)
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -25,6 +21,7 @@ from chem_vault.domain.research_organization.events import (
     CampaignCreated,
     CampaignSuperseded,
 )
+from chem_vault.domain.research_organization.source_ref import CollectionRef
 from chem_vault.domain.shared.errors import ValidationError
 
 
@@ -34,7 +31,6 @@ def _make_campaign(**overrides) -> Campaign:
         project_id=uuid.uuid4(),
         name="EGFR Round 2",
         description=None,
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=True,
         created_by=uuid.uuid4(),
     )
@@ -80,6 +76,12 @@ def test_create_rejects_empty_name():
 def test_create_strips_name():
     c = _make_campaign(name="  My Campaign  ")
     assert c.name == "My Campaign"
+
+
+def test_create_starts_empty():
+    c = _make_campaign()
+    assert c.results == []
+    assert c.channels == []
 
 
 # ---------- channels ----------
@@ -129,7 +131,7 @@ def test_remove_channel_drops_channel_and_its_measurements():
     assert r.measurements == []
 
 
-# ---------- results ----------
+# ---------- results — single add ----------
 
 
 def test_add_result_rejects_duplicate_molecule():
@@ -140,13 +142,81 @@ def test_add_result_rejects_duplicate_molecule():
         c.add_result(_make_result(c, molecule_id=mol))
 
 
-def test_reseed_replaces_results():
+# ---------- results — bulk add_results ----------
+
+
+def test_add_results_happy_path():
     c = _make_campaign()
+    mols = [uuid.uuid4() for _ in range(5)]
+    new_results = [CampaignResult(campaign_id=c.id, molecule_id=m) for m in mols]
+    added, skipped = c.add_results(new_results)
+    assert added == 5
+    assert skipped == 0
+    assert len(c.results) == 5
+
+
+def test_add_results_idempotent_dedupe():
+    c = _make_campaign()
+    mol_a, mol_b, mol_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    c.add_result(CampaignResult(campaign_id=c.id, molecule_id=mol_a))
+    c.add_result(CampaignResult(campaign_id=c.id, molecule_id=mol_b))
+    # mol_a and mol_b already in campaign; mol_c is new
+    new_results = [
+        CampaignResult(campaign_id=c.id, molecule_id=mol_a),
+        CampaignResult(campaign_id=c.id, molecule_id=mol_b),
+        CampaignResult(campaign_id=c.id, molecule_id=mol_c),
+    ]
+    added, skipped = c.add_results(new_results)
+    assert added == 1
+    assert skipped == 2
+    assert len(c.results) == 3
+
+
+def test_add_results_dedupe_within_batch():
+    c = _make_campaign()
+    mol = uuid.uuid4()
+    # Same molecule twice in the input list — should be added once
+    new_results = [
+        CampaignResult(campaign_id=c.id, molecule_id=mol),
+        CampaignResult(campaign_id=c.id, molecule_id=mol),
+    ]
+    added, skipped = c.add_results(new_results)
+    assert added == 1
+    assert skipped == 1
+    assert len(c.results) == 1
+
+
+def test_add_results_rejects_mismatched_campaign_id():
+    c = _make_campaign()
+    bad = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
+    with pytest.raises(ValidationError, match="campaign_id mismatch"):
+        c.add_results([bad])
+
+
+def test_add_results_draft_guard():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    c.add_channel(ch)
     c.add_result(_make_result(c))
-    c.add_result(_make_result(c))
-    new_results = [_make_result(c), _make_result(c), _make_result(c)]
-    c.reseed_results(new_results)
-    assert c.results == new_results
+    c.close(closed_by=uuid.uuid4(), signature_id=uuid.uuid4(), source_protocols=[])
+    with pytest.raises(ValidationError):
+        c.add_results([_make_result(c)])
+
+
+def test_add_results_carries_source_ref():
+    c = _make_campaign()
+    coll_id = uuid.uuid4()
+    ref = CollectionRef(collection_id=coll_id)
+    r = CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=ref)
+    c.add_results([r])
+    assert c.results[0].added_from is ref
+
+
+def test_add_results_empty_list_returns_zero_zero():
+    c = _make_campaign()
+    added, skipped = c.add_results([])
+    assert added == 0
+    assert skipped == 0
 
 
 # ---------- close ----------

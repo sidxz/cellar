@@ -4,18 +4,27 @@ Owns N CampaignMeasurements (one per channel). Carries the screener's
 per-compound decision (selected / deferred / rejected). At close, the
 collection of CampaignResults with decision=SELECTED feeds the emitted
 frozen output Collection.
+
+``added_from`` records how the compound entered the campaign. It is
+``None`` for results added manually via ``AddResultRow`` without explicit
+attribution (treated as ManualRef in the published view). Immutable after
+first write — only set at add time, never updated by reconciliation.
 """
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.enums import CampaignDecision
 from chem_vault.domain.shared.errors import ValidationError
+
+if TYPE_CHECKING:
+    from chem_vault.domain.research_organization.source_ref import SourceRef
 
 
 @dataclass
@@ -27,6 +36,7 @@ class CampaignResult:
     decision: CampaignDecision = CampaignDecision.DEFERRED
     decision_reason: str | None = None
     notes: str | None = None
+    added_from: SourceRef | None = None
     measurements: list[CampaignMeasurement] = field(default_factory=list)
 
     def add_measurement(self, m: CampaignMeasurement) -> None:
