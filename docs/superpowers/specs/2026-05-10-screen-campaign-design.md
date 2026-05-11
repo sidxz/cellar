@@ -4,6 +4,7 @@
 **Date:** 2026-05-10
 **Bounded context:** `research_organization` (BC #05) — new aggregate alongside Project / Collection / SavedSearch / ELNEntry
 **Out of scope for v1:** bulk import from external CSV bypassing Runs; cross-campaign SAR queries; DAIKON transport mechanism
+**Plan:** `docs/superpowers/plans/2026-05-10-screen-campaign.md`
 
 ---
 
