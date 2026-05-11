@@ -44,7 +44,6 @@ from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
-    make_collection_repo,
 )
 
 
@@ -461,6 +460,10 @@ class TestCloseCampaign:
             readout_unit="uM",
             resolver_factory=_nd_measurement_factory(),
         )
+        # Capture the existing measurement's id before the use-case call so we
+        # can assert the rebuild path preserved it (avoiding a DELETE+INSERT that
+        # would collide with the non-deferrable unique(result_id, channel_id) constraint).
+        original_id = campaign.results[0].find_measurement(ch.id).id
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
 
@@ -468,6 +471,7 @@ class TestCloseCampaign:
         m = campaign.results[0].find_measurement(ch.id)
         assert m is not None
         assert m.unit == "uM"  # repaired from "-"
+        assert m.id == original_id  # id preserved — no DELETE+INSERT collision
 
     # ------------------------------------------------------------------
     # 6. ND unit NOT repaired when readout's unit is None

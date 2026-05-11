@@ -42,6 +42,9 @@ from chem_vault.application.shared.command import Command
 from chem_vault.application.shared.event_dispatcher import EventDispatcherProtocol
 from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.research_organization.campaign import Campaign
+from chem_vault.domain.research_organization.campaign_measurement import (
+    CampaignMeasurement,
+)
 from chem_vault.domain.research_organization.collection import Collection
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
@@ -188,9 +191,6 @@ class CloseCampaign:
                     if measurement.unit == "-":
                         rd = readout_map.get(channel.readout_definition_id)
                         if rd is not None and rd.unit and rd.unit.strip():
-                            from chem_vault.domain.research_organization.campaign_measurement import (
-                                CampaignMeasurement,
-                            )
                             repaired = CampaignMeasurement(
                                 id=measurement.id,
                                 result_id=measurement.result_id,
