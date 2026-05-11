@@ -12,7 +12,7 @@
  */
 
 import { useState } from "react";
-import { Loader2, RefreshCw, Lock } from "lucide-react";
+import { FileJson, Loader2, RefreshCw, Lock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/shared/components/ui/button";
@@ -32,6 +32,7 @@ import {
   emptyFilters,
   type CampaignFilters,
 } from "./campaign-filter-bar";
+import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import type { CampaignResultResponse } from "../types";
 
@@ -47,6 +48,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
   const { data: campaign, isLoading, error } = useCampaign(campaignId);
   const [selectedResult, setSelectedResult] = useState<CampaignResultResponse | null>(null);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [previewPublishedOpen, setPreviewPublishedOpen] = useState(false);
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
@@ -109,6 +111,14 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
             Refresh
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPreviewPublishedOpen(true)}
+          >
+            <FileJson className="mr-2 h-4 w-4" />
+            Preview as published
           </Button>
           <Button
             size="sm"
@@ -178,6 +188,14 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
         campaign={campaign}
         open={closeDialogOpen}
         onOpenChange={setCloseDialogOpen}
+      />
+
+      {/* Preview as published */}
+      <PreviewAsPublishedDialog
+        campaignId={campaign.id}
+        campaignName={campaign.name}
+        open={previewPublishedOpen}
+        onClose={() => setPreviewPublishedOpen(false)}
       />
     </div>
   );
