@@ -93,7 +93,7 @@ class CollectionModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         Boolean, nullable=False, server_default=text("false")
     )
     derived_from_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), nullable=True, index=True
+        Uuid(as_uuid=True), nullable=True
     )
 
     __table_args__ = (
