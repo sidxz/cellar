@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
+import { Archive, FlaskConical, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +34,7 @@ import { AddProtocolDialog } from "./add-protocol-dialog";
 import { CollectionList } from "./collection-list";
 import { SavedSearchList } from "./saved-search-list";
 import { ProjectMembers } from "./project-members";
+import { CampaignList } from "@/features/screen-campaign/components/campaign-list";
 
 interface ProjectDetailProps {
   projectId: string;
@@ -93,6 +94,10 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
               <TabsTrigger value="collections">
                 <Library className="mr-1.5 size-4" />
                 Collections
+              </TabsTrigger>
+              <TabsTrigger value="campaigns">
+                <FlaskConical className="mr-1.5 size-4" />
+                Campaigns
               </TabsTrigger>
             </TabsList>
 
@@ -157,6 +162,10 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
 
             <TabsContent value="collections">
               <CollectionList projectId={projectId} />
+            </TabsContent>
+
+            <TabsContent value="campaigns" className="space-y-3">
+              <CampaignList projectId={projectId} />
             </TabsContent>
           </Tabs>
         )}
