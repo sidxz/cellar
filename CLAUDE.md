@@ -183,6 +183,12 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-11 — Pending follow-ups punch list
+
+Full backlog: **`docs/backlog/screen-campaign-followups.md`** (force-add — `docs/` is gitignored). Covers 5 high-priority items (SavedSearch wiring, Run-import → campaign, real 423 test, orval-zod plugin, notes-display verify), 6 medium, 8 low-priority engineering items, and a verification checklist (Playwright, browser smoke, backend lint).
+
+---
+
 ### 2026-05-11 — Screen Campaign refactor: per-result attribution on `fe2`
 
 **Branch:** `fe2`  **Commits:** `bd33686b..` (5 commits this session)
