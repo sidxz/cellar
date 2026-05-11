@@ -83,6 +83,9 @@ from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
 from chem_vault.application.research_organization.add_campaign_channel import AddCampaignChannel
 from chem_vault.application.research_organization.add_result_row import AddResultRow
+from chem_vault.application.research_organization.add_results_from_campaign import AddResultsFromCampaign as AddResultsFromCampaignUC
+from chem_vault.application.research_organization.add_results_from_collection import AddResultsFromCollection as AddResultsFromCollectionUC
+from chem_vault.application.research_organization.add_results_from_run import AddResultsFromRun as AddResultsFromRunUC
 from chem_vault.application.research_organization.channel_resolution import ChannelResolver
 from chem_vault.application.research_organization.close_campaign import CloseCampaign
 from chem_vault.application.research_organization.create_campaign import CreateCampaign as CreateCampaignUC
@@ -100,7 +103,7 @@ from chem_vault.application.research_organization.update_campaign_metadata impor
 from chem_vault.domain.chemical_registration.repository import MoleculeRepository
 from chem_vault.domain.inventory.repository import BatchRepository
 from chem_vault.domain.research_organization.repository import CampaignRepository
-from chem_vault.domain.screening_assay.repository import ProtocolRepository
+from chem_vault.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
 )
@@ -115,6 +118,9 @@ from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.mole
 )
 from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+    SQLAlchemyRunRepository,
 )
 
 
@@ -323,6 +329,35 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _add_results_from_collection(c: Container) -> AddResultsFromCollectionUC:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddResultsFromCollectionUC(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            collection_repo=SQLAlchemyCollectionRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _add_results_from_campaign(c: Container) -> AddResultsFromCampaignUC:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddResultsFromCampaignUC(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _add_results_from_run(c: Container) -> AddResultsFromRunUC:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddResultsFromRunUC(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            run_repo=SQLAlchemyRunRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
     def _add_channel(c: Container) -> AddCampaignChannel:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return AddCampaignChannel(
@@ -441,6 +476,9 @@ def register_research_organization(container: Container) -> None:
         )
 
     container.define(CreateCampaignUC, _create_campaign)
+    container.define(AddResultsFromCollectionUC, _add_results_from_collection)
+    container.define(AddResultsFromCampaignUC, _add_results_from_campaign)
+    container.define(AddResultsFromRunUC, _add_results_from_run)
     container.define(AddCampaignChannel, _add_channel)
     container.define(UpdateCampaignChannel, _update_channel)
     container.define(RemoveCampaignChannel, _remove_channel)

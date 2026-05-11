@@ -721,6 +721,9 @@ GetDashboardStatsDep = Annotated[GetDashboardStats, Depends(_get_use_case(GetDas
 # --- Campaign dependencies ---
 from chem_vault.application.research_organization.add_campaign_channel import AddCampaignChannel
 from chem_vault.application.research_organization.add_result_row import AddResultRow
+from chem_vault.application.research_organization.add_results_from_campaign import AddResultsFromCampaign as AddResultsFromCampaignUC
+from chem_vault.application.research_organization.add_results_from_collection import AddResultsFromCollection as AddResultsFromCollectionUC
+from chem_vault.application.research_organization.add_results_from_run import AddResultsFromRun as AddResultsFromRunUC
 from chem_vault.application.research_organization.close_campaign import CloseCampaign
 from chem_vault.application.research_organization.create_campaign import CreateCampaign as CreateCampaignUC
 from chem_vault.application.research_organization.get_published_campaign import GetPublishedCampaign
@@ -745,6 +748,9 @@ def get_campaign_repo(container: Annotated[Container, Depends(get_container)]) -
 CampaignRepositoryDep = Annotated[CampaignRepository, Depends(get_campaign_repo)]
 
 CreateCampaignDep = Annotated[CreateCampaignUC, Depends(_get_use_case(CreateCampaignUC))]
+AddResultsFromCollectionDep = Annotated[AddResultsFromCollectionUC, Depends(_get_use_case(AddResultsFromCollectionUC))]
+AddResultsFromCampaignDep = Annotated[AddResultsFromCampaignUC, Depends(_get_use_case(AddResultsFromCampaignUC))]
+AddResultsFromRunDep = Annotated[AddResultsFromRunUC, Depends(_get_use_case(AddResultsFromRunUC))]
 AddCampaignChannelDep = Annotated[AddCampaignChannel, Depends(_get_use_case(AddCampaignChannel))]
 UpdateCampaignChannelDep = Annotated[UpdateCampaignChannel, Depends(_get_use_case(UpdateCampaignChannel))]
 RemoveCampaignChannelDep = Annotated[RemoveCampaignChannel, Depends(_get_use_case(RemoveCampaignChannel))]

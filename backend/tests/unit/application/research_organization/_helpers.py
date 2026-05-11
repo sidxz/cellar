@@ -21,10 +21,21 @@ from chem_vault.domain.shared.events import DomainEvent
 
 
 class _FakeSession:
-    """Minimal fake session that provides a no-op flush() for use cases that need it."""
+    """Minimal fake session that provides a no-op flush() for use cases that need it.
+
+    The ``execute`` method returns whatever is set on ``_execute_result``.
+    Set ``session._execute_result = your_mock_result`` before calling a use
+    case that does SQL queries (e.g. AddResultsFromRun).
+    """
+
+    def __init__(self) -> None:
+        self._execute_result = AsyncMock()
 
     async def flush(self) -> None:
         pass
+
+    async def execute(self, stmt) -> AsyncMock:
+        return self._execute_result
 
 
 class FakeUnitOfWork:
@@ -32,7 +43,7 @@ class FakeUnitOfWork:
 
     def __init__(self) -> None:
         self._tracked: list = []
-        self.session = _FakeSession()  # satisfies UnitOfWork.session protocol
+        self.session = _FakeSession()
 
     @property
     def is_active(self) -> bool:
