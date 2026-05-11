@@ -55,6 +55,7 @@ dev = [
     "pre-commit>=4.0.0",
     "import-linter>=2.11",
     "respx>=0.23.0",
+    "jsonschema>=4.26.0",
 ]
 
 [build-system]
