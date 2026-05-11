@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, RefreshCcw, Search } from "lucide-react";
+import { Plus, Trash2, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -41,10 +41,9 @@ import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-mo
 import {
   useAddResultRowApiV1CampaignsCampaignIdResultsPost,
   useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete,
-  useReseedCampaignApiV1CampaignsCampaignIdReseedPost,
 } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
-import { CompoundSourcePicker, type CompoundSourceValue } from "./compound-source-picker";
+// TODO: rewrite per add-from model (commit 3/4) — CompoundSourcePicker deleted, ReseedDialog replaced
 import type { CampaignResponse, CampaignResultResponse } from "../types";
 
 // ── Add compound dialog ───────────────────────────────────────────────────────
@@ -132,73 +131,8 @@ function AddCompoundDialog({ campaignId, open, onClose }: AddCompoundDialogProps
   );
 }
 
-// ── Reseed dialog ─────────────────────────────────────────────────────────────
-
-interface ReseedDialogProps {
-  campaign: CampaignResponse;
-  open: boolean;
-  onClose: () => void;
-}
-
-function ReseedDialog({ campaign, open, onClose }: ReseedDialogProps) {
-  const qc = useQueryClient();
-  const [source, setSource] = useState<CompoundSourceValue | null>(null);
-
-  const reseedMutation = useReseedCampaignApiV1CampaignsCampaignIdReseedPost({
-    mutation: {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
-        onClose();
-      },
-    },
-  });
-
-  const handleConfirm = () => {
-    if (!source) return;
-    reseedMutation.mutate({
-      campaignId: campaign.id,
-      data: {
-        new_source: source as Parameters<typeof reseedMutation.mutate>[0]["data"]["new_source"],
-      },
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Re-seed from Source</DialogTitle>
-          <DialogDescription className="text-destructive">
-            Warning: this will replace all current compound rows and
-            re-resolve measurements.
-          </DialogDescription>
-        </DialogHeader>
-
-        <CompoundSourcePicker
-          projectId={campaign.project_id}
-          value={source}
-          onChange={setSource}
-        />
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={!source || reseedMutation.isPending}
-            onClick={handleConfirm}
-          >
-            {reseedMutation.isPending ? "Reseeding…" : "Replace & Re-seed"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ── Main pane ─────────────────────────────────────────────────────────────────
+// TODO: rewrite per add-from model (commit 4) — AddFromCollectionDialog and AddFromCampaignDialog added here
 
 interface CompoundListPaneProps {
   campaign: CampaignResponse;
@@ -214,7 +148,7 @@ export function CompoundListPane({
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [reseedOpen, setReseedOpen] = useState(false);
+  // TODO: rewrite per add-from model (commit 4) — add-from state goes here
 
   const removeMutation = useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete({
     mutation: {
@@ -249,6 +183,7 @@ export function CompoundListPane({
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
+      {/* TODO: rewrite per add-from model (commit 4) — replace with Add compounds dropdown */}
       <div className="px-3 py-2 border-b flex items-center gap-2">
         <Button
           variant="outline"
@@ -258,15 +193,6 @@ export function CompoundListPane({
           onClick={() => setAddOpen(true)}
         >
           <Plus className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          title="Re-seed from source"
-          onClick={() => setReseedOpen(true)}
-        >
-          <RefreshCcw className="h-4 w-4" />
         </Button>
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -361,11 +287,7 @@ export function CompoundListPane({
         open={addOpen}
         onClose={() => setAddOpen(false)}
       />
-      <ReseedDialog
-        campaign={campaign}
-        open={reseedOpen}
-        onClose={() => setReseedOpen(false)}
-      />
+      {/* TODO: rewrite per add-from model (commit 4) — AddFromCollectionDialog and AddFromCampaignDialog go here */}
     </div>
   );
 }

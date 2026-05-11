@@ -22,7 +22,9 @@ export {
   // ── Mutation functions ─────────────────────────────────────────────────────
   createCampaignApiV1CampaignsPost,
   updateCampaignApiV1CampaignsCampaignIdPatch,
-  reseedCampaignApiV1CampaignsCampaignIdReseedPost,
+  addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost,
+  addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost,
+  addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost,
   addCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
   updateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
   removeCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDelete,

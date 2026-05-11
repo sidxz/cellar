@@ -18,9 +18,12 @@ export type {
   UpdateChannelRequest,
   CloseCampaignRequest,
   SupersedeRequest,
-  ReseedRequest,
   SetResultDecisionRequest,
   OverrideCellRequest,
+  AddFromCollectionRequest,
+  AddFromCampaignRequest,
+  AddFromRunRequest,
+  AddResultsOutcomeResponse,
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────

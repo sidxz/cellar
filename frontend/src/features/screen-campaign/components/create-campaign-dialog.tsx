@@ -30,7 +30,7 @@ import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Textarea } from "@/shared/components/ui/textarea";
 
 import { useCreateCampaignApiV1CampaignsPost } from "@/shared/lib/api/campaigns/campaigns";
-import { CompoundSourcePicker, type CompoundSourceValue } from "./compound-source-picker";
+// TODO: rewrite per add-from model (commit 3) — CompoundSourcePicker deleted
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -64,8 +64,7 @@ export function CreateCampaignDialog({
 }: CreateCampaignDialogProps) {
   const router = useRouter();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const [source, setSource] = useState<CompoundSourceValue | null>(null);
-  const [sourceError, setSourceError] = useState<string | null>(null);
+  // TODO: rewrite per add-from model (commit 3) — source/sourceError state removed
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
@@ -93,25 +92,17 @@ export function CreateCampaignDialog({
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       reset();
-      setSource(null);
-      setSourceError(null);
     }
     setOpen(next);
   };
 
+  // TODO: rewrite per add-from model (commit 3) — onSubmit simplified (no compound_source)
   const onSubmit = async (values: FormValues) => {
-    if (!source) {
-      setSourceError("Please select a compound source.");
-      return;
-    }
-    setSourceError(null);
-
     const result = await mutation.mutateAsync({
       data: {
         name: values.name,
         description: values.description || undefined,
         project_id: projectId,
-        compound_source: source as Parameters<typeof mutation.mutateAsync>[0]["data"]["compound_source"],
         publishes_collection: values.publishes_collection,
         supersedes_campaign_id: defaultSupersedesCampaignId ?? undefined,
       },
@@ -177,21 +168,7 @@ export function CreateCampaignDialog({
             </Label>
           </div>
 
-          {/* Source picker */}
-          <div className="space-y-1.5">
-            <Label>Compound source *</Label>
-            <CompoundSourcePicker
-              projectId={projectId}
-              value={source}
-              onChange={(v) => {
-                setSource(v);
-                if (v) setSourceError(null);
-              }}
-            />
-            {sourceError && (
-              <p className="text-xs text-destructive">{sourceError}</p>
-            )}
-          </div>
+          {/* TODO: rewrite per add-from model (commit 3) — CompoundSourcePicker removed; compounds added incrementally */}
 
           {mutation.error && (
             <p className="text-xs text-destructive">
