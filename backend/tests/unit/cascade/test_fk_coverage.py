@@ -213,6 +213,20 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # they must survive deletion of the associated disclosure request.
     # The nullable FK means the DB won't block disclosure_request deletion.
     ("merge_events", "disclosure_request_id", "disclosure_requests"),
+
+    # -------------------------------------------------------------------------
+    # Campaign aggregate — owned children, ORM + DB cascade handles them
+    # -------------------------------------------------------------------------
+    # campaign_channel.campaign_id, campaign_result.campaign_id,
+    # campaign_measurement.result_id, campaign_measurement.channel_id all have
+    # ondelete=CASCADE at the DB level and cascade="all, delete-orphan" on the
+    # ORM relationships. Campaigns are aggregate roots whose lifecycle is
+    # managed via the campaign use cases, not the Tier-1 admin-delete pathway.
+    # No additional categorization needed — the DB engine cascades automatically.
+    ("campaign_channel", "campaign_id", "campaign"),
+    ("campaign_result", "campaign_id", "campaign"),
+    ("campaign_measurement", "result_id", "campaign_result"),
+    ("campaign_measurement", "channel_id", "campaign_channel"),
 }
 
 
