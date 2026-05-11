@@ -58,7 +58,7 @@ const channelSchema = z.object({
   label: z.string().min(1, "Label is required"),
   protocol_id: z.string().min(1, "Protocol is required"),
   readout_definition_id: z.string().min(1, "Readout is required"),
-  source_kind: z.enum(["readout", "curve"]),
+  source_kind: z.enum(["readout_data", "dose_response_curve"]),
   selection_rule: z.enum(["best", "all", "most_recent"]),
   qualifier_handling: z.enum(["numeric", "threshold", "exclude"]),
   require_approved: z.boolean(),
@@ -122,7 +122,9 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
       label: existing?.label ?? "",
       protocol_id: existing?.protocol_id ?? "",
       readout_definition_id: existing?.readout_definition_id ?? "",
-      source_kind: (existing?.source_kind as "readout" | "curve") ?? "readout",
+      source_kind:
+        (existing?.source_kind as "readout_data" | "dose_response_curve") ??
+        "readout_data",
       selection_rule: (existing?.selection_rule as "best" | "all" | "most_recent") ?? "best",
       qualifier_handling: (existing?.qualifier_handling as "numeric" | "threshold" | "exclude") ?? "numeric",
       require_approved: (existingQc?.require_approved as boolean | undefined) ?? false,
@@ -251,8 +253,10 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="readout">Readout data</SelectItem>
-                  <SelectItem value="curve">Dose-response curve</SelectItem>
+                  <SelectItem value="readout_data">Readout data</SelectItem>
+                  <SelectItem value="dose_response_curve">
+                    Dose-response curve
+                  </SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -381,7 +385,7 @@ export function ChannelStrip({ campaign }: ChannelStripProps) {
               <Settings2 className="h-3 w-3 text-muted-foreground" />
               {ch.label}
               <Badge variant="outline" className="text-[10px] px-1 py-0">
-                {ch.source_kind === "curve" ? "DR" : "Raw"}
+                {ch.source_kind === "dose_response_curve" ? "DR" : "Raw"}
               </Badge>
             </button>
           </PopoverTrigger>
