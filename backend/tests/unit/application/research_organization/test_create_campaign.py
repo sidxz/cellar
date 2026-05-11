@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from types import TracebackType
-from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -28,78 +26,12 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.events import DomainEvent
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-class FakeUnitOfWork:
-    def __init__(self) -> None:
-        self._tracked: list = []
-
-    def track(self, aggregate) -> None:
-        if aggregate not in self._tracked:
-            self._tracked.append(aggregate)
-
-    async def commit(self) -> list[DomainEvent]:
-        events: list[DomainEvent] = []
-        for agg in self._tracked:
-            events.extend(agg.collect_events())
-            agg.clear_events()
-        return events
-
-    async def rollback(self) -> None:
-        pass
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        pass
-
-
-def _fake_auth(*, role: str = "editor", is_admin: bool = False):
-    auth = AsyncMock()
-    auth.user_id = uuid.uuid4()
-    auth.workspace_id = uuid.uuid4()
-    auth.workspace_role = role
-    auth.is_admin = is_admin
-    # role hierarchy: viewer < editor < admin
-    rank = {"viewer": 0, "editor": 1, "admin": 2}
-    current = rank.get(role, 0)
-    auth.has_role = lambda min_role: current >= rank.get(min_role, 0)
-    return auth
-
-
-def _make_campaign_repo(saved: list[Campaign] | None = None, *, find_in_ws=None) -> AsyncMock:
-    repo = AsyncMock()
-    captured: list[Campaign] = saved if saved is not None else []
-
-    async def _save(agg: Campaign) -> None:
-        captured.append(agg)
-
-    repo.save = AsyncMock(side_effect=_save)
-    repo.find_by_id_in_workspace = AsyncMock(return_value=find_in_ws)
-    repo.saved = captured  # type: ignore[attr-defined]
-    return repo
-
-
-def _make_collection_repo(
-    *, in_ws: bool = True, molecule_ids: list[uuid.UUID] | None = None
-) -> AsyncMock:
-    repo = AsyncMock()
-    repo.find_by_id_in_workspace = AsyncMock(
-        return_value=object() if in_ws else None
-    )
-    repo.get_molecule_ids = AsyncMock(return_value=molecule_ids or [])
-    return repo
+from tests.unit.application.research_organization._helpers import (
+    FakeUnitOfWork,
+    fake_auth,
+    make_campaign_repo,
+    make_collection_repo,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -110,11 +42,11 @@ def _make_collection_repo(
 class TestCreateCampaign:
     @pytest.mark.asyncio
     async def test_create_campaign_with_explicit_list_seeds_results(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         mol_a, mol_b, mol_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
-        campaign_repo = _make_campaign_repo()
-        collection_repo = _make_collection_repo()
+        campaign_repo = make_campaign_repo()
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -156,12 +88,12 @@ class TestCreateCampaign:
     async def test_create_campaign_with_collection_source_resolves_membership(
         self,
     ) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         coll_id = uuid.uuid4()
         members = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
 
-        campaign_repo = _make_campaign_repo()
-        collection_repo = _make_collection_repo(in_ws=True, molecule_ids=members)
+        campaign_repo = make_campaign_repo()
+        collection_repo = make_collection_repo(in_ws=True, molecule_ids=members)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -199,9 +131,9 @@ class TestCreateCampaign:
     async def test_create_campaign_with_collection_source_not_found_returns_failure(
         self,
     ) -> None:
-        auth = _fake_auth()
-        campaign_repo = _make_campaign_repo()
-        collection_repo = _make_collection_repo(in_ws=False)
+        auth = fake_auth()
+        campaign_repo = make_campaign_repo()
+        collection_repo = make_collection_repo(in_ws=False)
         dispatcher = AsyncMock()
 
         uc = CreateCampaign(
@@ -230,7 +162,7 @@ class TestCreateCampaign:
     async def test_create_campaign_with_derived_from_campaign_filters_selected_only(
         self,
     ) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         # Build an origin campaign with three results in three decisions
         origin = Campaign.create(
             workspace_id=auth.workspace_id,
@@ -254,8 +186,8 @@ class TestCreateCampaign:
         origin.add_result(r_def)
         origin.add_result(r_rej)
 
-        campaign_repo = _make_campaign_repo(find_in_ws=origin)
-        collection_repo = _make_collection_repo()
+        campaign_repo = make_campaign_repo(find_in_ws=origin)
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -289,9 +221,9 @@ class TestCreateCampaign:
 
     @pytest.mark.asyncio
     async def test_create_campaign_derived_from_campaign_not_found(self) -> None:
-        auth = _fake_auth()
-        campaign_repo = _make_campaign_repo(find_in_ws=None)
-        collection_repo = _make_collection_repo()
+        auth = fake_auth()
+        campaign_repo = make_campaign_repo(find_in_ws=None)
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
 
         uc = CreateCampaign(
@@ -321,7 +253,7 @@ class TestCreateCampaign:
 
     @pytest.mark.asyncio
     async def test_create_campaign_rejects_when_resolved_zero_compounds(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         # Origin campaign has no selected results — the derived seed will be empty
         origin = Campaign.create(
             workspace_id=auth.workspace_id,
@@ -337,8 +269,8 @@ class TestCreateCampaign:
         only_def.set_decision(CampaignDecision.DEFERRED)
         origin.add_result(only_def)
 
-        campaign_repo = _make_campaign_repo(find_in_ws=origin)
-        collection_repo = _make_collection_repo()
+        campaign_repo = make_campaign_repo(find_in_ws=origin)
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
 
         uc = CreateCampaign(
@@ -372,9 +304,9 @@ class TestCreateCampaign:
     async def test_create_campaign_saved_search_source_returns_validation_error_for_now(
         self,
     ) -> None:
-        auth = _fake_auth()
-        campaign_repo = _make_campaign_repo()
-        collection_repo = _make_collection_repo()
+        auth = fake_auth()
+        campaign_repo = make_campaign_repo()
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
 
         uc = CreateCampaign(
@@ -403,9 +335,9 @@ class TestCreateCampaign:
 
     @pytest.mark.asyncio
     async def test_create_campaign_rejects_when_unauthorized(self) -> None:
-        auth = _fake_auth(role="viewer")
-        campaign_repo = _make_campaign_repo()
-        collection_repo = _make_collection_repo()
+        auth = fake_auth(role="viewer")
+        campaign_repo = make_campaign_repo()
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
 
         uc = CreateCampaign(

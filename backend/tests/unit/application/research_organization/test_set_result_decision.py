@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from types import TracebackType
-from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,53 +21,15 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.events import DomainEvent
+from tests.unit.application.research_organization._helpers import (
+    FakeUnitOfWork,
+    fake_auth,
+    make_campaign_repo,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-class FakeUnitOfWork:
-    def __init__(self) -> None:
-        self._tracked: list = []
-
-    def track(self, aggregate) -> None:
-        if aggregate not in self._tracked:
-            self._tracked.append(aggregate)
-
-    async def commit(self) -> list[DomainEvent]:
-        events: list[DomainEvent] = []
-        for agg in self._tracked:
-            events.extend(agg.collect_events())
-            agg.clear_events()
-        return events
-
-    async def rollback(self) -> None:
-        pass
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        pass
-
-
-def _fake_auth(*, role: str = "editor", is_admin: bool = False):
-    auth = AsyncMock()
-    auth.user_id = uuid.uuid4()
-    auth.workspace_id = uuid.uuid4()
-    auth.workspace_role = role
-    auth.is_admin = is_admin
-    rank = {"viewer": 0, "editor": 1, "admin": 2}
-    current = rank.get(role, 0)
-    auth.has_role = lambda min_role: current >= rank.get(min_role, 0)
-    return auth
 
 
 def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
@@ -84,13 +44,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
     )
 
 
-def _make_campaign_repo(campaign: Campaign | None) -> AsyncMock:
-    repo = AsyncMock()
-    repo.find_by_id_in_workspace = AsyncMock(return_value=campaign)
-    repo.save = AsyncMock()
-    return repo
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -99,14 +52,14 @@ def _make_campaign_repo(campaign: Campaign | None) -> AsyncMock:
 class TestSetResultDecision:
     @pytest.mark.asyncio
     async def test_selected_with_reason_updates_decision_and_reason(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         campaign.add_result(result)
 
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
-        campaign_repo = _make_campaign_repo(campaign)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
 
         uc = SetResultDecision(
             uow=FakeUnitOfWork(),
@@ -131,14 +84,14 @@ class TestSetResultDecision:
 
     @pytest.mark.asyncio
     async def test_deferred_without_reason_keeps_reason_none(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         campaign.add_result(result)
 
         uc = SetResultDecision(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(campaign),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
             dispatcher=AsyncMock(),
         )
         cmd = SetResultDecisionCommand(
@@ -155,9 +108,9 @@ class TestSetResultDecision:
 
     @pytest.mark.asyncio
     async def test_result_not_found_returns_not_found_failure(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        campaign_repo = _make_campaign_repo(campaign)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
 
         uc = SetResultDecision(
             uow=FakeUnitOfWork(),
@@ -178,8 +131,8 @@ class TestSetResultDecision:
 
     @pytest.mark.asyncio
     async def test_campaign_not_found_returns_not_found_failure(self) -> None:
-        auth = _fake_auth()
-        campaign_repo = _make_campaign_repo(None)
+        auth = fake_auth()
+        campaign_repo = make_campaign_repo(find_in_ws=None)
 
         uc = SetResultDecision(
             uow=FakeUnitOfWork(),
@@ -200,14 +153,14 @@ class TestSetResultDecision:
 
     @pytest.mark.asyncio
     async def test_non_draft_campaign_returns_validation_failure(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         campaign.status = CampaignStatus.CLOSED  # type: ignore[misc]
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         # Bypass aggregate guard by mutating the list directly
         campaign.results.append(result)
 
-        campaign_repo = _make_campaign_repo(campaign)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
         uc = SetResultDecision(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
@@ -227,8 +180,8 @@ class TestSetResultDecision:
 
     @pytest.mark.asyncio
     async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
-        auth = _fake_auth(role="viewer")
-        campaign_repo = _make_campaign_repo(None)
+        auth = fake_auth(role="viewer")
+        campaign_repo = make_campaign_repo(find_in_ws=None)
 
         uc = SetResultDecision(
             uow=FakeUnitOfWork(),

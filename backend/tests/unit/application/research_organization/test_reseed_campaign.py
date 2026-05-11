@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from types import TracebackType
-from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -39,53 +37,13 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.events import DomainEvent
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-class FakeUnitOfWork:
-    def __init__(self) -> None:
-        self._tracked: list = []
-
-    def track(self, aggregate) -> None:
-        if aggregate not in self._tracked:
-            self._tracked.append(aggregate)
-
-    async def commit(self) -> list[DomainEvent]:
-        events: list[DomainEvent] = []
-        for agg in self._tracked:
-            events.extend(agg.collect_events())
-            agg.clear_events()
-        return events
-
-    async def rollback(self) -> None:
-        pass
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        pass
-
-
-def _fake_auth(*, role: str = "editor", is_admin: bool = False):
-    auth = AsyncMock()
-    auth.user_id = uuid.uuid4()
-    auth.workspace_id = uuid.uuid4()
-    auth.workspace_role = role
-    auth.is_admin = is_admin
-    rank = {"viewer": 0, "editor": 1, "admin": 2}
-    current = rank.get(role, 0)
-    auth.has_role = lambda min_role: current >= rank.get(min_role, 0)
-    return auth
+from tests.unit.application.research_organization._helpers import (
+    FakeUnitOfWork,
+    FakeResolver,
+    fake_auth,
+    make_campaign_repo,
+    make_collection_repo,
+)
 
 
 def _make_channel(campaign_id: uuid.UUID) -> CampaignChannel:
@@ -125,51 +83,8 @@ def _make_measurement(result_id: uuid.UUID, channel_id: uuid.UUID) -> CampaignMe
     )
 
 
-class _FakeResolver:
-    def __init__(self) -> None:
-        self.calls: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID]] = []
-
-    async def resolve(self, *, workspace_id, channel, result_id, molecule_id):
-        self.calls.append((channel.id, result_id, molecule_id))
-        return _make_measurement(result_id, channel.id)
-
-
-def _make_campaign_repo(
-    campaign: Campaign | None = None,
-    *,
-    find_dispatch: dict[uuid.UUID, Campaign] | None = None,
-) -> AsyncMock:
-    """Fake campaign repo.
-
-    If ``find_dispatch`` is provided it is used as an id → Campaign map,
-    allowing the same repo to serve multiple campaigns (used by
-    DerivedFromCampaignSource tests).  Otherwise ``campaign`` is returned
-    for every lookup.
-    """
-    repo = AsyncMock()
-
-    if find_dispatch is not None:
-        async def _find(ws_id, camp_id):
-            return find_dispatch.get(camp_id)
-        repo.find_by_id_in_workspace = AsyncMock(side_effect=_find)
-    else:
-        repo.find_by_id_in_workspace = AsyncMock(return_value=campaign)
-
-    repo.save = AsyncMock()
-    return repo
-
-
-def _make_collection_repo(
-    *,
-    in_ws: bool = True,
-    molecule_ids: list[uuid.UUID] | None = None,
-) -> AsyncMock:
-    repo = AsyncMock()
-    repo.find_by_id_in_workspace = AsyncMock(
-        return_value=object() if in_ws else None
-    )
-    repo.get_molecule_ids = AsyncMock(return_value=molecule_ids or [])
-    return repo
+def _reseed_measurement_factory(channel, result_id, molecule_id) -> CampaignMeasurement:
+    return _make_measurement(result_id, channel.id)
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +100,7 @@ class TestReseedCampaign:
     async def test_reseed_with_explicit_list_replaces_results_and_fills_measurements(
         self,
     ) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
 
         # Add one channel
@@ -198,9 +113,9 @@ class TestReseedCampaign:
         campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=old_mol_b))
 
         new_mol_a, new_mol_b, new_mol_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        resolver = _FakeResolver()
-        campaign_repo = _make_campaign_repo(campaign)
-        collection_repo = _make_collection_repo()
+        resolver = FakeResolver(factory=_reseed_measurement_factory)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        collection_repo = make_collection_repo()
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -247,14 +162,14 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_with_collection_source_succeeds(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         coll_id = uuid.uuid4()
         members = [uuid.uuid4(), uuid.uuid4()]
 
-        campaign_repo = _make_campaign_repo(campaign)
-        collection_repo = _make_collection_repo(in_ws=True, molecule_ids=members)
-        resolver = _FakeResolver()
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        collection_repo = make_collection_repo(in_ws=True, molecule_ids=members)
+        resolver = FakeResolver(factory=_reseed_measurement_factory)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -284,7 +199,7 @@ class TestReseedCampaign:
     async def test_reseed_with_derived_from_campaign_filters_by_decision(
         self,
     ) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         # The campaign being reseeded
         target_campaign = _make_draft_campaign(auth.workspace_id)
 
@@ -305,14 +220,14 @@ class TestReseedCampaign:
         origin_campaign.add_result(r_rej)
 
         # Dispatch by id: target_campaign id → target_campaign, origin id → origin
-        campaign_repo = _make_campaign_repo(
+        campaign_repo = make_campaign_repo(
             find_dispatch={
                 target_campaign.id: target_campaign,
                 origin_campaign.id: origin_campaign,
             }
         )
-        collection_repo = _make_collection_repo()
-        resolver = _FakeResolver()
+        collection_repo = make_collection_repo()
+        resolver = FakeResolver(factory=_reseed_measurement_factory)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -343,15 +258,15 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_with_saved_search_source_returns_validation_error(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        campaign_repo = _make_campaign_repo(campaign)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            collection_repo=_make_collection_repo(),
-            resolver=_FakeResolver(),
+            collection_repo=make_collection_repo(),
+            resolver=FakeResolver(factory=_reseed_measurement_factory),
             dispatcher=AsyncMock(),
         )
         cmd = ReseedCampaignCommand(
@@ -374,17 +289,17 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_rejects_when_resolved_zero_compounds(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        campaign_repo = _make_campaign_repo(campaign)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
         # Collection found but returns zero molecule_ids
-        collection_repo = _make_collection_repo(in_ws=True, molecule_ids=[])
+        collection_repo = make_collection_repo(in_ws=True, molecule_ids=[])
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=_FakeResolver(),
+            resolver=FakeResolver(factory=_reseed_measurement_factory),
             dispatcher=AsyncMock(),
         )
         cmd = ReseedCampaignCommand(
@@ -405,14 +320,14 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_campaign_not_found_returns_not_found_error(self) -> None:
-        auth = _fake_auth()
-        campaign_repo = _make_campaign_repo(None)
-        resolver = _FakeResolver()
+        auth = fake_auth()
+        campaign_repo = make_campaign_repo(find_in_ws=None)
+        resolver = FakeResolver(factory=_reseed_measurement_factory)
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            collection_repo=_make_collection_repo(),
+            collection_repo=make_collection_repo(),
             resolver=resolver,
             dispatcher=AsyncMock(),
         )
@@ -433,18 +348,18 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_non_draft_campaign_returns_validation_error(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         # Force status to CLOSED without calling close() (which has guards)
         campaign.status = CampaignStatus.CLOSED  # type: ignore[misc]
 
-        campaign_repo = _make_campaign_repo(campaign)
-        resolver = _FakeResolver()
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        resolver = FakeResolver(factory=_reseed_measurement_factory)
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            collection_repo=_make_collection_repo(),
+            collection_repo=make_collection_repo(),
             resolver=resolver,
             dispatcher=AsyncMock(),
         )
@@ -467,16 +382,16 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_collection_not_found_returns_not_found_error(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        campaign_repo = _make_campaign_repo(campaign)
-        collection_repo = _make_collection_repo(in_ws=False)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        collection_repo = make_collection_repo(in_ws=False)
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=_FakeResolver(),
+            resolver=FakeResolver(factory=_reseed_measurement_factory),
             dispatcher=AsyncMock(),
         )
         cmd = ReseedCampaignCommand(
@@ -497,24 +412,24 @@ class TestReseedCampaign:
     async def test_reseed_derived_campaign_origin_not_found_returns_not_found_error(
         self,
     ) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         target_campaign = _make_draft_campaign(auth.workspace_id)
         missing_origin_id = uuid.uuid4()
 
         # target_campaign found, but origin (missing_origin_id) returns None
-        campaign_repo = _make_campaign_repo(
+        campaign_repo = make_campaign_repo(
             find_dispatch={
                 target_campaign.id: target_campaign,
                 # missing_origin_id intentionally absent → returns None
             }
         )
-        collection_repo = _make_collection_repo()
+        collection_repo = make_collection_repo()
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=_FakeResolver(),
+            resolver=FakeResolver(factory=_reseed_measurement_factory),
             dispatcher=AsyncMock(),
         )
         cmd = ReseedCampaignCommand(
@@ -536,14 +451,14 @@ class TestReseedCampaign:
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_reseed_unauthorized_viewer_returns_authorization_error(self) -> None:
-        auth = _fake_auth(role="viewer")
-        campaign_repo = _make_campaign_repo()
-        resolver = _FakeResolver()
+        auth = fake_auth(role="viewer")
+        campaign_repo = make_campaign_repo()
+        resolver = FakeResolver(factory=_reseed_measurement_factory)
 
         uc = ReseedCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            collection_repo=_make_collection_repo(),
+            collection_repo=make_collection_repo(),
             resolver=resolver,
             dispatcher=AsyncMock(),
         )

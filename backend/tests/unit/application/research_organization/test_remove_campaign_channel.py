@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from types import TracebackType
-from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -31,53 +29,15 @@ from chem_vault.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
 )
-from chem_vault.domain.shared.events import DomainEvent
+from tests.unit.application.research_organization._helpers import (
+    FakeUnitOfWork,
+    fake_auth,
+    make_campaign_repo,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-class FakeUnitOfWork:
-    def __init__(self) -> None:
-        self._tracked: list = []
-
-    def track(self, aggregate) -> None:
-        if aggregate not in self._tracked:
-            self._tracked.append(aggregate)
-
-    async def commit(self) -> list[DomainEvent]:
-        events: list[DomainEvent] = []
-        for agg in self._tracked:
-            events.extend(agg.collect_events())
-            agg.clear_events()
-        return events
-
-    async def rollback(self) -> None:
-        pass
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        pass
-
-
-def _fake_auth(*, role: str = "editor", is_admin: bool = False):
-    auth = AsyncMock()
-    auth.user_id = uuid.uuid4()
-    auth.workspace_id = uuid.uuid4()
-    auth.workspace_role = role
-    auth.is_admin = is_admin
-    rank = {"viewer": 0, "editor": 1, "admin": 2}
-    current = rank.get(role, 0)
-    auth.has_role = lambda min_role: current >= rank.get(min_role, 0)
-    return auth
 
 
 def _make_campaign_with_channel_and_result(
@@ -119,13 +79,6 @@ def _make_campaign_with_channel_and_result(
     return campaign, channel, result
 
 
-def _make_campaign_repo(campaign: Campaign | None) -> AsyncMock:
-    repo = AsyncMock()
-    repo.find_by_id_in_workspace = AsyncMock(return_value=campaign)
-    repo.save = AsyncMock()
-    return repo
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -134,7 +87,7 @@ def _make_campaign_repo(campaign: Campaign | None) -> AsyncMock:
 class TestRemoveCampaignChannel:
     @pytest.mark.asyncio
     async def test_happy_path_channel_and_measurements_removed(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel_and_result(
             auth.workspace_id
         )
@@ -146,7 +99,7 @@ class TestRemoveCampaignChannel:
 
         uc = RemoveCampaignChannel(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(campaign),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
             dispatcher=dispatcher,
         )
         cmd = RemoveCampaignChannelCommand(
@@ -170,10 +123,10 @@ class TestRemoveCampaignChannel:
 
     @pytest.mark.asyncio
     async def test_campaign_not_found_returns_not_found_failure(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         uc = RemoveCampaignChannel(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(None),
+            campaign_repo=make_campaign_repo(find_in_ws=None),
             dispatcher=AsyncMock(),
         )
         cmd = RemoveCampaignChannelCommand(
@@ -188,12 +141,12 @@ class TestRemoveCampaignChannel:
 
     @pytest.mark.asyncio
     async def test_channel_not_found_on_campaign_returns_not_found_failure(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign, _, _ = _make_campaign_with_channel_and_result(auth.workspace_id)
 
         uc = RemoveCampaignChannel(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(campaign),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
             dispatcher=AsyncMock(),
         )
         cmd = RemoveCampaignChannelCommand(
@@ -210,14 +163,14 @@ class TestRemoveCampaignChannel:
 
     @pytest.mark.asyncio
     async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
-        auth = _fake_auth(role="viewer")
+        auth = fake_auth(role="viewer")
         campaign, channel, _ = _make_campaign_with_channel_and_result(
             auth.workspace_id
         )
 
         uc = RemoveCampaignChannel(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(campaign),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
             dispatcher=AsyncMock(),
         )
         cmd = RemoveCampaignChannelCommand(

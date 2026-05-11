@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from types import TracebackType
-from typing import Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -33,53 +31,12 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.events import DomainEvent
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-class FakeUnitOfWork:
-    def __init__(self) -> None:
-        self._tracked: list = []
-
-    def track(self, aggregate) -> None:
-        if aggregate not in self._tracked:
-            self._tracked.append(aggregate)
-
-    async def commit(self) -> list[DomainEvent]:
-        events: list[DomainEvent] = []
-        for agg in self._tracked:
-            events.extend(agg.collect_events())
-            agg.clear_events()
-        return events
-
-    async def rollback(self) -> None:
-        pass
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        pass
-
-
-def _fake_auth(*, role: str = "editor", is_admin: bool = False):
-    auth = AsyncMock()
-    auth.user_id = uuid.uuid4()
-    auth.workspace_id = uuid.uuid4()
-    auth.workspace_role = role
-    auth.is_admin = is_admin
-    rank = {"viewer": 0, "editor": 1, "admin": 2}
-    current = rank.get(role, 0)
-    auth.has_role = lambda min_role: current >= rank.get(min_role, 0)
-    return auth
+from tests.unit.application.research_organization._helpers import (
+    FakeUnitOfWork,
+    FakeResolver,
+    fake_auth,
+    make_campaign_repo,
+)
 
 
 def _make_channel(campaign_id: uuid.UUID, *, display_order: int = 0) -> CampaignChannel:
@@ -116,15 +73,8 @@ def _make_measurement(
     return m
 
 
-def _make_campaign_repo(campaign: Campaign | None) -> AsyncMock:
-    repo = AsyncMock()
-    repo.find_by_id_in_workspace = AsyncMock(return_value=campaign)
-    repo.save = AsyncMock()
-    return repo
-
-
 def _new_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
-    """Factory used by _FakeResolver to return a distinguishable fresh measurement."""
+    """Factory used by FakeResolver to return a distinguishable fresh measurement."""
     return CampaignMeasurement(
         result_id=result_id,
         channel_id=channel.id,
@@ -134,16 +84,6 @@ def _new_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
         protocol_name_snapshot="Proto",
         protocol_version_snapshot=1,
     )
-
-
-class _FakeResolver:
-    def __init__(self, factory=None):
-        self._factory = factory or _new_measurement
-        self.calls: list = []
-
-    async def resolve(self, *, workspace_id, channel, result_id, molecule_id):
-        self.calls.append((channel.id, result_id, molecule_id))
-        return self._factory(channel, result_id, molecule_id)
 
 
 def _build_campaign_two_channels_three_results(
@@ -196,15 +136,15 @@ class TestRecomputeChannel:
     @pytest.mark.asyncio
     async def test_happy_path_only_target_channel_re_resolved(self) -> None:
         """RecomputeChannel re-resolves only channel A × 3 results; channel B untouched."""
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign, ch_a, ch_b, results = _build_campaign_two_channels_three_results(
             auth.workspace_id
         )
 
-        resolver = _FakeResolver()  # returns value=99.0
+        resolver = FakeResolver(factory=_new_measurement)  # returns value=99.0
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
-        campaign_repo = _make_campaign_repo(campaign)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
 
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
@@ -242,17 +182,17 @@ class TestRecomputeChannel:
     @pytest.mark.asyncio
     async def test_override_preservation_for_targeted_channel(self) -> None:
         """Manual override on the targeted channel is preserved; others are re-resolved."""
-        auth = _fake_auth()
+        auth = fake_auth()
         # result=1, channel=0 (ch_a) is a manual override
         override_indices = {(1, 0)}
         campaign, ch_a, ch_b, results = _build_campaign_two_channels_three_results(
             auth.workspace_id, override_indices=override_indices
         )
 
-        resolver = _FakeResolver()
+        resolver = FakeResolver(factory=_new_measurement)
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(campaign),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
             resolver=resolver,
             dispatcher=AsyncMock(),
         )
@@ -282,12 +222,12 @@ class TestRecomputeChannel:
 
     @pytest.mark.asyncio
     async def test_channel_not_found_returns_not_found_failure(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign, ch_a, ch_b, _ = _build_campaign_two_channels_three_results(
             auth.workspace_id
         )
-        resolver = _FakeResolver()
-        campaign_repo = _make_campaign_repo(campaign)
+        resolver = FakeResolver(factory=_new_measurement)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
 
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
@@ -311,9 +251,9 @@ class TestRecomputeChannel:
 
     @pytest.mark.asyncio
     async def test_campaign_not_found_returns_not_found_failure(self) -> None:
-        auth = _fake_auth()
-        campaign_repo = _make_campaign_repo(None)
-        resolver = _FakeResolver()
+        auth = fake_auth()
+        campaign_repo = make_campaign_repo(find_in_ws=None)
+        resolver = FakeResolver(factory=_new_measurement)
 
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
@@ -335,14 +275,14 @@ class TestRecomputeChannel:
 
     @pytest.mark.asyncio
     async def test_campaign_not_draft_returns_validation_failure(self) -> None:
-        auth = _fake_auth()
+        auth = fake_auth()
         campaign, ch_a, _, _ = _build_campaign_two_channels_three_results(
             auth.workspace_id
         )
         campaign.status = CampaignStatus.CLOSED  # type: ignore[misc]
 
-        campaign_repo = _make_campaign_repo(campaign)
-        resolver = _FakeResolver()
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        resolver = FakeResolver(factory=_new_measurement)
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
@@ -362,11 +302,11 @@ class TestRecomputeChannel:
 
     @pytest.mark.asyncio
     async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
-        auth = _fake_auth(role="viewer")
+        auth = fake_auth(role="viewer")
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
-            campaign_repo=_make_campaign_repo(None),
-            resolver=_FakeResolver(),
+            campaign_repo=make_campaign_repo(find_in_ws=None),
+            resolver=FakeResolver(factory=_new_measurement),
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
