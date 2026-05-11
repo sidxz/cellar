@@ -49,6 +49,8 @@ interface CreateCampaignDialogProps {
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Pre-fill the supersedes_campaign_id field (e.g. when opened from SupersedeDialog). */
+  defaultSupersedesCampaignId?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ export function CreateCampaignDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  defaultSupersedesCampaignId,
 }: CreateCampaignDialogProps) {
   const router = useRouter();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
@@ -110,6 +113,7 @@ export function CreateCampaignDialog({
         project_id: projectId,
         compound_source: source as Parameters<typeof mutation.mutateAsync>[0]["data"]["compound_source"],
         publishes_collection: values.publishes_collection,
+        supersedes_campaign_id: defaultSupersedesCampaignId ?? undefined,
       },
     });
 
