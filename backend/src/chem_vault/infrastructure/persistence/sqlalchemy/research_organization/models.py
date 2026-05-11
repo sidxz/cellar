@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -87,6 +89,12 @@ class CollectionModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, server_default="private")
+    is_frozen: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    derived_from_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True, index=True
+    )
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "name", name="uq_collection_ws_name"),

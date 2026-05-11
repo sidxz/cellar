@@ -36,6 +36,8 @@ class SQLAlchemyCollectionRepository(
             created_by=model.created_by,
             molecule_count=0,
             visibility=CollectionVisibility(model.visibility),
+            is_frozen=model.is_frozen,
+            derived_from_campaign_id=model.derived_from_campaign_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -57,6 +59,8 @@ class SQLAlchemyCollectionRepository(
             owned_by_org_id=aggregate.owned_by_org_id,
             created_by=aggregate.created_by,
             visibility=aggregate.visibility.value,
+            is_frozen=aggregate.is_frozen,
+            derived_from_campaign_id=aggregate.derived_from_campaign_id,
             version=aggregate.version,
         )
 
@@ -66,6 +70,8 @@ class SQLAlchemyCollectionRepository(
         model.project_id = aggregate.project_id
         model.owned_by_org_id = aggregate.owned_by_org_id
         model.visibility = aggregate.visibility.value
+        model.is_frozen = aggregate.is_frozen
+        model.derived_from_campaign_id = aggregate.derived_from_campaign_id
 
     # ------------------------------------------------------------------
     # Workspace-scoped lookup (overrides base to include molecule_count)
