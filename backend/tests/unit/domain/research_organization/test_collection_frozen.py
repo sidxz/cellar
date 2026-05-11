@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.shared.errors import ValidationError
+from chem_vault.domain.shared.errors import CollectionFrozenError
 
 
 def test_collection_defaults_to_not_frozen():
@@ -34,8 +34,10 @@ def test_freeze_is_idempotent_with_same_origin():
         workspace_id=uuid.uuid4(), name="X", created_by=uuid.uuid4()
     )
     coll.freeze(derived_from_campaign_id=campaign_id)
-    coll.freeze(derived_from_campaign_id=campaign_id)  # no-op, no error
+    ts_after_first = coll.updated_at
+    coll.freeze(derived_from_campaign_id=campaign_id)  # no-op
     assert coll.is_frozen is True
+    assert coll.updated_at == ts_after_first
 
 
 def test_freeze_rejects_different_origin_after_freeze():
@@ -43,7 +45,7 @@ def test_freeze_rejects_different_origin_after_freeze():
         workspace_id=uuid.uuid4(), name="X", created_by=uuid.uuid4()
     )
     coll.freeze(derived_from_campaign_id=uuid.uuid4())
-    with pytest.raises(ValidationError, match="already frozen"):
+    with pytest.raises(CollectionFrozenError, match="already frozen"):
         coll.freeze(derived_from_campaign_id=uuid.uuid4())
 
 
@@ -52,5 +54,5 @@ def test_update_rejects_when_frozen():
         workspace_id=uuid.uuid4(), name="X", created_by=uuid.uuid4()
     )
     coll.freeze(derived_from_campaign_id=uuid.uuid4())
-    with pytest.raises(ValidationError, match="frozen"):
+    with pytest.raises(CollectionFrozenError, match="frozen"):
         coll.update(name="renamed")

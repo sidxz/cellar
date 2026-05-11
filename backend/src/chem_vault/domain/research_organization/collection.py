@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from chem_vault.domain.research_organization.enums import CollectionBooleanOp, CollectionVisibility
 from chem_vault.domain.research_organization.events import CollectionCreated
 from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.errors import ValidationError
+from chem_vault.domain.shared.errors import CollectionFrozenError, ValidationError
 
 
 class Collection(AggregateRoot):
@@ -99,7 +99,7 @@ class Collection(AggregateRoot):
         explicitly pass ``None`` to clear them.
         """
         if self.is_frozen:
-            raise ValidationError("Cannot update a frozen collection")
+            raise CollectionFrozenError("Cannot update a frozen collection")
         if name is not None:
             if not name.strip():
                 raise ValidationError("Collection name must not be empty")
@@ -119,10 +119,12 @@ class Collection(AggregateRoot):
 
         Idempotent when called with the same origin. Raises if already
         frozen with a different origin.
+
+        A no-op re-entry (same origin) does not advance updated_at.
         """
         if self.is_frozen:
             if self.derived_from_campaign_id != derived_from_campaign_id:
-                raise ValidationError(
+                raise CollectionFrozenError(
                     "Collection is already frozen with a different origin"
                 )
             return

@@ -84,6 +84,10 @@ class DataLockedError(DomainError):
     """Raised when attempting to modify a locked entity (e.g., locked Run data)."""
 
 
+class CollectionFrozenError(DataLockedError):
+    """Raised when an operation is attempted on a frozen Collection."""
+
+
 class ServiceUnavailableError(DomainError):
     """Raised when an external service required by the operation is unreachable.
 
