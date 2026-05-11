@@ -25,7 +25,11 @@ import type {
 
 import type {
   AddChannelRequest,
+  AddFromCampaignRequest,
+  AddFromCollectionRequest,
+  AddFromRunRequest,
   AddResultRowRequest,
+  AddResultsOutcomeResponse,
   CampaignResponse,
   CloseCampaignRequest,
   CreateCampaignRequest,
@@ -34,7 +38,6 @@ import type {
   HTTPValidationError,
   ListCampaignsApiV1CampaignsGetParams,
   OverrideCellRequest,
-  ReseedRequest,
   SetResultDecisionRequest,
   SupersedeRequest,
   UpdateCampaignRequest,
@@ -47,7 +50,7 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
- * Create a draft Campaign and seed its results from compound_source.
+ * Create an empty draft Campaign. Compounds are added via add-from-* endpoints.
  * @summary Create Campaign
  */
 export const createCampaignApiV1CampaignsPost = (
@@ -299,7 +302,7 @@ export function useGetCampaignApiV1CampaignsCampaignIdGet<TData = Awaited<Return
 
 
 /**
- * Update campaign name/description (source mutation is done via reseed).
+ * Update campaign name/description.
  * @summary Update Campaign
  */
 export const updateCampaignApiV1CampaignsCampaignIdPatch = (
@@ -364,31 +367,31 @@ export const useUpdateCampaignApiV1CampaignsCampaignIdPatch = <TError = HTTPVali
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Replace the compound list of a DRAFT campaign and re-resolve measurements.
- * @summary Reseed Campaign
+ * Add compound results from a Collection to a DRAFT campaign (idempotent).
+ * @summary Add Results From Collection
  */
-export const reseedCampaignApiV1CampaignsCampaignIdReseedPost = (
+export const addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost = (
     campaignId: string,
-    reseedRequest: ReseedRequest,
+    addFromCollectionRequest: AddFromCollectionRequest,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<CampaignResponse>(
-      {url: `/api/v1/campaigns/${campaignId}/reseed`, method: 'POST',
+      return customInstance<AddResultsOutcomeResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/add-from-collection`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: reseedRequest, signal
+      data: addFromCollectionRequest, signal
     },
       );
     }
   
 
 
-export const getReseedCampaignApiV1CampaignsCampaignIdReseedPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reseedCampaignApiV1CampaignsCampaignIdReseedPost>>, TError,{campaignId: string;data: ReseedRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof reseedCampaignApiV1CampaignsCampaignIdReseedPost>>, TError,{campaignId: string;data: ReseedRequest}, TContext> => {
+export const getAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost>>, TError,{campaignId: string;data: AddFromCollectionRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost>>, TError,{campaignId: string;data: AddFromCollectionRequest}, TContext> => {
 
-const mutationKey = ['reseedCampaignApiV1CampaignsCampaignIdReseedPost'];
+const mutationKey = ['addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost'];
 const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -398,10 +401,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reseedCampaignApiV1CampaignsCampaignIdReseedPost>>, {campaignId: string;data: ReseedRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost>>, {campaignId: string;data: AddFromCollectionRequest}> = (props) => {
           const {campaignId,data} = props ?? {};
 
-          return  reseedCampaignApiV1CampaignsCampaignIdReseedPost(campaignId,data,)
+          return  addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost(campaignId,data,)
         }
 
         
@@ -409,23 +412,155 @@ const {mutation: mutationOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ReseedCampaignApiV1CampaignsCampaignIdReseedPostMutationResult = NonNullable<Awaited<ReturnType<typeof reseedCampaignApiV1CampaignsCampaignIdReseedPost>>>
-    export type ReseedCampaignApiV1CampaignsCampaignIdReseedPostMutationBody = ReseedRequest
-    export type ReseedCampaignApiV1CampaignsCampaignIdReseedPostMutationError = HTTPValidationError
+    export type AddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPostMutationResult = NonNullable<Awaited<ReturnType<typeof addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost>>>
+    export type AddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPostMutationBody = AddFromCollectionRequest
+    export type AddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPostMutationError = HTTPValidationError
 
     /**
- * @summary Reseed Campaign
+ * @summary Add Results From Collection
  */
-export const useReseedCampaignApiV1CampaignsCampaignIdReseedPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reseedCampaignApiV1CampaignsCampaignIdReseedPost>>, TError,{campaignId: string;data: ReseedRequest}, TContext>, }
+export const useAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost>>, TError,{campaignId: string;data: AddFromCollectionRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof reseedCampaignApiV1CampaignsCampaignIdReseedPost>>,
+        Awaited<ReturnType<typeof addResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost>>,
         TError,
-        {campaignId: string;data: ReseedRequest},
+        {campaignId: string;data: AddFromCollectionRequest},
         TContext
       > => {
 
-      const mutationOptions = getReseedCampaignApiV1CampaignsCampaignIdReseedPostMutationOptions(options);
+      const mutationOptions = getAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Add compound results from another Campaign's filtered result set (idempotent).
+ * @summary Add Results From Campaign
+ */
+export const addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost = (
+    campaignId: string,
+    addFromCampaignRequest: AddFromCampaignRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<AddResultsOutcomeResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/add-from-campaign`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addFromCampaignRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost>>, TError,{campaignId: string;data: AddFromCampaignRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost>>, TError,{campaignId: string;data: AddFromCampaignRequest}, TContext> => {
+
+const mutationKey = ['addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost>>, {campaignId: string;data: AddFromCampaignRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPostMutationResult = NonNullable<Awaited<ReturnType<typeof addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost>>>
+    export type AddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPostMutationBody = AddFromCampaignRequest
+    export type AddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Results From Campaign
+ */
+export const useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost>>, TError,{campaignId: string;data: AddFromCampaignRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost>>,
+        TError,
+        {campaignId: string;data: AddFromCampaignRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Add compound results from a protocol Run's molecule set (idempotent).
+ * @summary Add Results From Run
+ */
+export const addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost = (
+    campaignId: string,
+    addFromRunRequest: AddFromRunRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<AddResultsOutcomeResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/add-from-run`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addFromRunRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getAddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, TError,{campaignId: string;data: AddFromRunRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, TError,{campaignId: string;data: AddFromRunRequest}, TContext> => {
+
+const mutationKey = ['addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, {campaignId: string;data: AddFromRunRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationResult = NonNullable<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>>
+    export type AddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationBody = AddFromRunRequest
+    export type AddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Results From Run
+ */
+export const useAddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>, TError,{campaignId: string;data: AddFromRunRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addResultsFromRunApiV1CampaignsCampaignIdAddFromRunPost>>,
+        TError,
+        {campaignId: string;data: AddFromRunRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getAddResultsFromRunApiV1CampaignsCampaignIdAddFromRunPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
@@ -824,7 +959,7 @@ export const useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsCh
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Add a new compound result row to a DRAFT campaign.
+ * Add a new compound result row (manual attribution) to a DRAFT campaign.
  * @summary Add Result Row
  */
 export const addResultRowApiV1CampaignsCampaignIdResultsPost = (

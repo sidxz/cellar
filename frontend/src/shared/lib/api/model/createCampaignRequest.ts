@@ -5,14 +5,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateCampaignRequestDescription } from './createCampaignRequestDescription';
-import type { CreateCampaignRequestCompoundSource } from './createCampaignRequestCompoundSource';
 import type { CreateCampaignRequestSupersedesCampaignId } from './createCampaignRequestSupersedesCampaignId';
 
 export interface CreateCampaignRequest {
   name: string;
   description?: CreateCampaignRequestDescription;
   project_id: string;
-  compound_source: CreateCampaignRequestCompoundSource;
   publishes_collection?: boolean;
   supersedes_campaign_id?: CreateCampaignRequestSupersedesCampaignId;
 }

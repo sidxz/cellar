@@ -5,7 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CampaignResponseDescription } from './campaignResponseDescription';
-import type { CampaignResponseCompoundSource } from './campaignResponseCompoundSource';
+import type { CampaignResponseCompoundSourcesItem } from './campaignResponseCompoundSourcesItem';
 import type { CampaignResponseSupersedesCampaignId } from './campaignResponseSupersedesCampaignId';
 import type { CampaignResponseSupersededByCampaignId } from './campaignResponseSupersededByCampaignId';
 import type { CampaignResponsePublishedCollectionId } from './campaignResponsePublishedCollectionId';
@@ -23,7 +23,7 @@ export interface CampaignResponse {
   name: string;
   description?: CampaignResponseDescription;
   status: string;
-  compound_source: CampaignResponseCompoundSource;
+  compound_sources: CampaignResponseCompoundSourcesItem[];
   publishes_collection: boolean;
   supersedes_campaign_id?: CampaignResponseSupersedesCampaignId;
   superseded_by_campaign_id?: CampaignResponseSupersededByCampaignId;
