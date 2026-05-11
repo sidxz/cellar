@@ -12,7 +12,9 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Badge } from "@/shared/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
+import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 import { useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch } from "@/shared/lib/api/campaigns/campaigns";
+import { useMoleculesByIds } from "../lib/hooks";
 import type {
   CampaignResultResponse,
   CampaignChannelResponse,
@@ -92,13 +94,25 @@ export function DecisionPanel({ campaignId, result, onUpdate }: DecisionPanelPro
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId, debouncedDecision, debouncedReason, debouncedNotes, result.id]);
 
+  const { data: moleculesPage } = useMoleculesByIds([result.molecule_id]);
+  const mol = moleculesPage?.items?.[0];
+
   return (
     <div className="p-4 space-y-5">
-      <div>
-        <h3 className="text-sm font-semibold mb-1">Compound</h3>
-        <p className="font-mono text-xs text-muted-foreground break-all">
-          {result.molecule_id}
-        </p>
+      <div className="flex flex-col items-start gap-2">
+        <MoleculeThumbnail
+          smiles={mol?.structure?.smiles ?? null}
+          size="md"
+          fallback={mol?.registration_number ?? "no structure"}
+        />
+        <div>
+          <h3 className="text-sm font-semibold">
+            {mol?.registration_number ?? "Compound"}
+          </h3>
+          {mol?.name && (
+            <p className="text-xs text-muted-foreground">{mol.name}</p>
+          )}
+        </div>
       </div>
 
       {/* Measurements read-only list */}

@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
+import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 
 import { useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
@@ -329,8 +330,8 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
         colId: "__molecule__",
         headerName: "Compound",
         pinned: "left" as const,
-        width: 180,
-        cellClass: "font-mono text-xs",
+        width: 220,
+        autoHeight: true,
         cellRenderer: (params: ICellRendererParams<ResultRow>) => {
           if (!params.data) return null;
           const isSelected = params.data.result.id === selectedResultId;
@@ -339,10 +340,22 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
             mol?.registration_number ??
             mol?.name ??
             `${params.data.molecule_id.slice(0, 8)}…`;
+          const smiles = mol?.structure?.smiles ?? null;
           return (
-            <span className={`font-mono text-xs${isSelected ? " font-semibold text-primary" : ""}`}>
-              {label}
-            </span>
+            <div className="flex items-center gap-2 py-1">
+              <MoleculeThumbnail
+                smiles={smiles}
+                size="sm"
+                fallback={label.slice(0, 6)}
+              />
+              <span
+                className={`font-mono text-xs${
+                  isSelected ? " font-semibold text-primary" : ""
+                }`}
+              >
+                {label}
+              </span>
+            </div>
           );
         },
       },
