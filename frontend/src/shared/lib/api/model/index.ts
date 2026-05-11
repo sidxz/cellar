@@ -207,6 +207,7 @@ export * from './cddProtocolMappingResultResponseDescription';
 export * from './cddProtocolSummaryResponse';
 export * from './changeStatusBody';
 export * from './channelImportConfigDTO';
+export * from './channelImportConfigDTOAllowedCurveClasses';
 export * from './channelImportConfigDTOHitThreshold';
 export * from './chemVaultInterfaceRoutesPlateImportImportPreviewResponse';
 export * from './chemVaultInterfaceRoutesPlateImportImportPreviewResponseSuggestedTemplateId';

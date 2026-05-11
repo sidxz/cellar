@@ -5,4 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type HitCriterionDTOValue = number | number[] | string[];
+export type ChannelImportConfigDTOAllowedCurveClasses = string[] | null;

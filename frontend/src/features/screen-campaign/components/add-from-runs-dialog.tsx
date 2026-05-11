@@ -65,10 +65,20 @@ interface ChannelConfigUI {
   label: string;
   source_kind: "readout_data" | "dose_response_curve";
   selection_rule: "latest_approved_run" | "mean_across_runs" | "geometric_mean";
-  hit_operator: string;       // "lt" | "lte" | "gt" | "gte" | ""
-  hit_value: string;          // empty when no threshold
+  /** "lt" | "lte" | "gt" | "gte" | "between" | "" (no threshold) */
+  hit_operator: string;
+  /** For lt/gt/etc: a single number string. For "between": empty (use hit_value_low/high). */
+  hit_value: string;
+  /** For "between" operator only. */
+  hit_value_low: string;
+  hit_value_high: string;
   use_for_filter: boolean;
+  /** Multi-select of curve classes ("full", "partial", "bell_shaped", "inactive").
+   *  Empty array means "no class filter — all classes pass". DR-curve channels only. */
+  allowed_curve_classes: string[];
 }
+
+const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as const;
 
 interface AddFromRunsDialogProps {
   campaignId: string;
@@ -127,15 +137,22 @@ export function AddFromRunsDialog({ campaignId, open, onClose }: AddFromRunsDial
         ) as { operator?: string; value?: number | string[] } | undefined;
         const hasNumericRecommended =
           recommended != null && typeof recommended.value === "number";
+        // Auto-pick source kind: dose-response readouts come from the curves
+        // table (fitted IC50/EC50/etc.), not the per-well ReadoutData.
+        const isDoseResponse = rd.data_type === "dose_response";
         const result: ChannelConfigUI = {
           protocol_id: protocolDetail.id,
           readout_definition_id: rd.id,
           label: rd.name,
-          source_kind: "readout_data",
+          source_kind: isDoseResponse ? "dose_response_curve" : "readout_data",
           selection_rule: "latest_approved_run",
           hit_operator: hasNumericRecommended ? (recommended!.operator ?? "lt") : "",
           hit_value: hasNumericRecommended ? String(recommended!.value) : "",
-          use_for_filter: hasNumericRecommended,
+          hit_value_low: "",
+          hit_value_high: "",
+          // DR-curve readouts are the natural hit candidates → filter ON by default.
+          use_for_filter: hasNumericRecommended || isDoseResponse,
+          allowed_curve_classes: [],
         };
         return result;
       });
@@ -165,23 +182,44 @@ export function AddFromRunsDialog({ campaignId, open, onClose }: AddFromRunsDial
       label: string;
       source_kind: string;
       selection_rule: string;
-      hit_threshold: { readout_name: string; operator: string; value: number } | null;
+      hit_threshold:
+        | { readout_name: string; operator: string; value: number | number[] }
+        | null;
       use_for_filter: boolean;
+      allowed_curve_classes?: string[] | null;
     }[];
     filter_mode: "any" | "all";
   } {
     return {
       run_ids: [...selectedRunIds],
       channel_configs: channelConfigs.map((c) => {
-        const numericValue = c.hit_value === "" ? null : Number(c.hit_value);
-        const hitThreshold =
-          c.hit_operator && numericValue !== null && !Number.isNaN(numericValue)
-            ? {
-                readout_name: c.label,
-                operator: c.hit_operator,
-                value: numericValue,
-              }
-            : null;
+        let hitThreshold:
+          | { readout_name: string; operator: string; value: number | number[] }
+          | null = null;
+        if (c.hit_operator === "between") {
+          const low = c.hit_value_low === "" ? null : Number(c.hit_value_low);
+          const high = c.hit_value_high === "" ? null : Number(c.hit_value_high);
+          if (
+            low !== null && !Number.isNaN(low) &&
+            high !== null && !Number.isNaN(high) &&
+            low <= high
+          ) {
+            hitThreshold = {
+              readout_name: c.label,
+              operator: "between",
+              value: [low, high],
+            };
+          }
+        } else if (c.hit_operator) {
+          const numericValue = c.hit_value === "" ? null : Number(c.hit_value);
+          if (numericValue !== null && !Number.isNaN(numericValue)) {
+            hitThreshold = {
+              readout_name: c.label,
+              operator: c.hit_operator,
+              value: numericValue,
+            };
+          }
+        }
         return {
           protocol_id: c.protocol_id,
           readout_definition_id: c.readout_definition_id,
@@ -190,6 +228,10 @@ export function AddFromRunsDialog({ campaignId, open, onClose }: AddFromRunsDial
           selection_rule: c.selection_rule,
           hit_threshold: hitThreshold,
           use_for_filter: c.use_for_filter,
+          allowed_curve_classes:
+            c.source_kind === "dose_response_curve" && c.allowed_curve_classes.length > 0
+              ? c.allowed_curve_classes
+              : null,
         };
       }),
       filter_mode: filterMode,
@@ -490,7 +532,7 @@ function ConfigureStep(p: ConfigureStepProps) {
                       </label>
                     </div>
 
-                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+                    <div className="grid grid-cols-1 gap-2">
                       <div>
                         <Label className="text-[10px] uppercase text-muted-foreground">
                           Selection rule
@@ -513,35 +555,105 @@ function ConfigureStep(p: ConfigureStepProps) {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="text-xs text-muted-foreground self-center">
-                        hit if
+
+                      <div className="flex items-end gap-2 flex-wrap">
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] uppercase text-muted-foreground">
+                            Hit if
+                          </Label>
+                          <Select
+                            value={c.hit_operator}
+                            onValueChange={(v) =>
+                              p.onChannelConfigChange(idx, { hit_operator: v })
+                            }
+                          >
+                            <SelectTrigger className="h-7 text-xs w-32">
+                              <SelectValue placeholder="(no threshold)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="lt">&lt; less than</SelectItem>
+                              <SelectItem value="lte">≤ at most</SelectItem>
+                              <SelectItem value="gt">&gt; greater than</SelectItem>
+                              <SelectItem value="gte">≥ at least</SelectItem>
+                              <SelectItem value="between">between (range)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {c.hit_operator === "between" ? (
+                          <div className="flex items-end gap-1 flex-1 min-w-0">
+                            <Input
+                              value={c.hit_value_low}
+                              onChange={(e) =>
+                                p.onChannelConfigChange(idx, {
+                                  hit_value_low: e.target.value,
+                                })
+                              }
+                              placeholder="low"
+                              className="h-7 text-xs"
+                              type="number"
+                            />
+                            <span className="text-muted-foreground text-xs pb-1.5">
+                              and
+                            </span>
+                            <Input
+                              value={c.hit_value_high}
+                              onChange={(e) =>
+                                p.onChannelConfigChange(idx, {
+                                  hit_value_high: e.target.value,
+                                })
+                              }
+                              placeholder="high"
+                              className="h-7 text-xs"
+                              type="number"
+                            />
+                          </div>
+                        ) : c.hit_operator ? (
+                          <Input
+                            value={c.hit_value}
+                            onChange={(e) =>
+                              p.onChannelConfigChange(idx, { hit_value: e.target.value })
+                            }
+                            placeholder="threshold"
+                            className="h-7 text-xs flex-1 min-w-0"
+                            type="number"
+                          />
+                        ) : null}
                       </div>
-                      <div className="grid grid-cols-[auto_1fr] gap-1">
-                        <Select
-                          value={c.hit_operator}
-                          onValueChange={(v) =>
-                            p.onChannelConfigChange(idx, { hit_operator: v })
-                          }
-                        >
-                          <SelectTrigger className="h-7 text-xs w-14">
-                            <SelectValue placeholder="op" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="lt">&lt;</SelectItem>
-                            <SelectItem value="lte">≤</SelectItem>
-                            <SelectItem value="gt">&gt;</SelectItem>
-                            <SelectItem value="gte">≥</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          value={c.hit_value}
-                          onChange={(e) =>
-                            p.onChannelConfigChange(idx, { hit_value: e.target.value })
-                          }
-                          placeholder="threshold"
-                          className="h-7 text-xs"
-                        />
-                      </div>
+
+                      {/* Curve-class chip filter — DR-curve channels only */}
+                      {c.source_kind === "dose_response_curve" && (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase text-muted-foreground">
+                            Curve class (leave empty for all)
+                          </Label>
+                          <div className="flex gap-1 flex-wrap">
+                            {ALL_CURVE_CLASSES.map((cls) => {
+                              const active = c.allowed_curve_classes.includes(cls);
+                              return (
+                                <button
+                                  type="button"
+                                  key={cls}
+                                  onClick={() =>
+                                    p.onChannelConfigChange(idx, {
+                                      allowed_curve_classes: active
+                                        ? c.allowed_curve_classes.filter((x) => x !== cls)
+                                        : [...c.allowed_curve_classes, cls],
+                                    })
+                                  }
+                                  className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                                    active
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "bg-background text-muted-foreground hover:bg-muted"
+                                  }`}
+                                >
+                                  {cls.replace("_", " ")}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ChannelImportConfigDTOHitThreshold } from './channelImportConfigDTOHitThreshold';
+import type { ChannelImportConfigDTOAllowedCurveClasses } from './channelImportConfigDTOAllowedCurveClasses';
 
 export interface ChannelImportConfigDTO {
   protocol_id: string;
@@ -14,4 +15,5 @@ export interface ChannelImportConfigDTO {
   selection_rule: string;
   hit_threshold?: ChannelImportConfigDTOHitThreshold;
   use_for_filter?: boolean;
+  allowed_curve_classes?: ChannelImportConfigDTOAllowedCurveClasses;
 }
