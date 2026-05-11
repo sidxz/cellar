@@ -183,27 +183,50 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
-### 2026-05-11 — Screen Campaign feature, mid-flight on `fe2`
+### 2026-05-11 — Screen Campaign feature, Phase 5 complete on `fe2`
 
 **Spec:** `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`
 **Plan:** `docs/superpowers/plans/2026-05-10-screen-campaign.md` (10 phases, 40 tasks)
 **Execution mode:** subagent-driven (one implementer + spec reviewer + quality reviewer per task)
 
-**Shipped (22 commits, `3552174f..0666340b`):**
-- Phase 1 ✅ — `Collection.is_frozen` + `derived_from_campaign_id`, freeze guard, migration 026, ORM round-trip
-- Phase 2 ✅ — Campaign domain (aggregate root, channel/result/measurement entities, CompoundSource VO, enums, events, lock guard, repo protocol)
-- Phase 3 ✅ — SQLAlchemy models, Alembic migration 027 (with PG defense-in-depth trigger blocking writes to closed campaigns + FK from collections.derived_from_campaign_id → campaign.id ON DELETE SET NULL), full SQLAlchemyCampaignRepository with cascade reconciliation
-- Phase 4 ✅ — ChannelResolver service + SQL ChannelResolutionQuery (joins curve/readout → run → protocol, extracts z_prime from qc_metrics jsonb)
-- Phase 5 🔄 — 1 of 8 done: `CreateCampaign` use case (`0666340b`)
+**Shipped this session (12 commits, `001a18de..c2dda618`):**
+- Refactor: extracted shared test fakes to `tests/unit/application/research_organization/_helpers.py` (`001a18de`) — `FakeUnitOfWork`, `fake_auth`, `make_campaign_repo`, `make_collection_repo`, `FakeResolver`. 11 campaign test files migrated, behaviour identical.
+- Task 5.2: ManageCampaignChannels — three commits (`3838dd91`, `405afd35`, `fe6034ea`) for add / update / remove.
+- Task 5.3: ReseedCampaign (`06ba68a2`).
+- Task 5.4: ManageCampaignResults (`bb1d6a17`) — single commit, 4 sub-use-cases (SetResultDecision, OverrideResultCell, AddResultRow, RemoveResultRow).
+- Task 5.5: RefreshFromSources + RecomputeChannel (`dc2fda68`).
+- Task 5.6: CloseCampaign (`1979090b` impl + `4931b721` fix). Stub e-sig design — caller supplies `signature_id`. Both unit tests (12) and integration test (1). Required four load-bearing deviations from the spec pseudocode — see "Close-campaign architecture notes" below.
+- Task 5.7: SupersedeCampaign (`99d0bc48`).
+- Task 5.8: GetPublishedCampaign query (`67fff714` impl + `c2dda618` cleanup).
 
-**Test state:** 1922 unit tests pass, 13 integration tests pass (incl. campaign repository + frozen membership). No regressions.
+**Test state:** 2027 unit tests pass (1922 baseline + 105 new), 13+ integration tests pass (incl. one new `test_close_campaign.py`). Zero regressions.
 
-**Next task: 5.2 `ManageCampaignChannels`** (add / update / remove channel) — see plan §5.2. Then 5.3 reseed, 5.4 manage results, 5.5 refresh, 5.6 close (largest — e-sig + recompute + emit frozen Collection), 5.7 supersede, 5.8 get-published. Then Phase 6 API (15 endpoints + DAIKON contract JSON-schema test), then Phases 7-9 frontend (orval regen → list page → builder UI with AG Grid pivot → closed view + supersede + Playwright), then Phase 10 docs.
+**Phase 5 complete. Next: Phase 6** — API routes in `interface/routes/campaigns.py` (15 endpoints) + DAIKON published-JSON-contract schema test. Then Phases 7–9 frontend (orval regen → list page → builder UI with AG Grid pivot → closed view + supersede + Playwright). Then Phase 10 docs.
 
-**Known gotchas (load-bearing for the rest):**
-- `CampaignMeasurement.__post_init__` rejects empty `unit`. The resolver currently uses `unit="-"` placeholder for ND cells; **close-campaign must pass the real unit from `ReadoutDefinition.unit` when seeding measurements** so the snapshot is meaningful.
-- `Collection.freeze(derived_from_campaign_id=...)` now requires a real campaign id (FK from migration 027). When close-campaign emits the frozen Collection, save the Campaign first so its id exists before freezing.
-- `SavedSearchSource` currently returns `Failure(ValidationError)` in `CreateCampaign` — wire SavedSearch execution into the resolver in a follow-up before exposing that source kind in the API.
+**Open follow-ups (surface before / during Phase 6):**
+
+1. **Latent unique-constraint bug in 3 use cases.** `RefreshFromSources`, `RecomputeChannel`, and `UpdateCampaignChannel` all do re-resolve via `result.remove_measurement_for_channel(...)` + `result.add_measurement(<fresh-id measurement>)`. Against a real DB the cascade reconciler does DELETE+INSERT in the same flush — the **non-deferrable** unique index `uq_campaign_measurement_result_channel` (migration 027) fires per-INSERT and would collide with the existing row. `CloseCampaign` fixed this by reusing the existing measurement's id (`new_m.id = old_m.id` → cascade does UPDATE not DELETE+INSERT). Apply the same pattern to the three other use cases before any integration test exercises them. Unit tests don't catch it because they don't touch SQL.
+
+2. **`get_published_campaign.py` TODOs** that block the DAIKON contract from being fully populated:
+   - `closed_by.name` — needs Sentinel user resolver (no User repo in this codebase).
+   - `signature.signed_at` — needs an `ElectronicSignatureRepository` lookup; the audit-compliance domain has the type but no application-layer query yet.
+   - `BatchRepository.find_by_ids` doesn't exist — currently loops `find_by_id`.
+   - Uses `require_editor`; should be `require_viewer` once that guard exists.
+
+3. **SavedSearch source kind** still returns `Failure(ValidationError("…not yet supported"))` in CreateCampaign and ReseedCampaign. Wire SavedSearch execution into the resolver before exposing this source kind in the Phase 6 API.
+
+4. **Signature service**. CloseCampaign takes `signature_id` directly in the command (caller-supplies stub). When the API layer lands in Phase 6, the route is responsible for capturing the signature (re-auth challenge → ElectronicSignature → pass the id). The `signature_meaning: str | None` field on `CloseCampaignCommand` is a placeholder for the future audit-log integration.
+
+**Close-campaign architecture notes (load-bearing for any future close-flow work):**
+- **Two-phase save** is required. The migration-027 PG trigger `reject_locked_campaign_write` fires `BEFORE INSERT/UPDATE/DELETE` on `campaign_measurement` and rejects any write when the parent campaign is not DRAFT. So close runs: save-as-DRAFT → flush → `campaign.close()` → save-as-CLOSED. (Spec said close-then-save; the trigger blocks that.)
+- **Measurement id preservation during re-resolve** (see follow-up #1) — close was the first use case to need this and got it right.
+- **Collection save-before-freeze.** `SQLAlchemyCollectionRepository.add_molecules` queries the persisted `is_frozen` flag (not the in-memory aggregate). Order in close: `Collection.create(...)` → save (still unfrozen) → `add_molecules(...)` → `coll.freeze(derived_from_campaign_id=campaign.id)` → save again. The aggregate is frozen in-memory after `add_molecules` so the membership operations succeed before the persisted row reflects the freeze.
+- **Inline pre-validation** of "no channels" / "no results" before the first DRAFT save — same error strings as `Campaign.close()` so the caller sees one consistent message.
+- **ND unit repair**: any non-override measurement whose `unit == "-"` (the resolver's ND placeholder) is rebuilt at close with the real `ReadoutDefinition.unit` (when non-empty), preserving id and all source-snapshot fields. The protocols already loaded for the source_protocols snapshot are reused — no double-fetch.
+
+**Carry-over gotchas from the previous handoff (still relevant):**
+- `CampaignMeasurement.__post_init__` rejects empty `unit`. (Close repairs ND placeholders; other use cases don't, by design.)
+- `Collection.freeze(derived_from_campaign_id=...)` requires a real campaign id (FK from migration 027). Save the Campaign before freezing the Collection.
 - `ProtocolModel.version` column is named `protocol_version` (not `version`).
 - `ReadoutData` uses split columns (`value_numeric`, `value_qualifier`, `value_text`, `is_outlier`) — not a single QualifiedValue JSONB. Resolver SQL handles this.
 - Test fixture pattern: use the existing `uow` fixture + `SQLAlchemyXRepository(uow)` instantiation per `tests/integration/test_database.py`; the plan referenced a non-existent `uow_factory` fixture.
