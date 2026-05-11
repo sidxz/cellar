@@ -148,7 +148,7 @@ class SQLAlchemyCollectionRepository(
         # against the persisted state.
         coll = await self.find_by_id_in_workspace(workspace_id, collection_id)
         if coll is None:
-            raise NotFoundError(f"Collection {collection_id} not found")
+            raise NotFoundError("Collection", str(collection_id))
         if coll.is_frozen:
             raise CollectionFrozenError(
                 f"Collection {collection_id} is frozen and cannot be modified"
@@ -170,7 +170,7 @@ class SQLAlchemyCollectionRepository(
         # are immutable.
         coll = await self.find_by_id_in_workspace(workspace_id, collection_id)
         if coll is None:
-            raise NotFoundError(f"Collection {collection_id} not found")
+            raise NotFoundError("Collection", str(collection_id))
         if coll.is_frozen:
             raise CollectionFrozenError(
                 f"Collection {collection_id} is frozen and cannot be modified"

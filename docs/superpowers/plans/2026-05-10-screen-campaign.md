@@ -263,9 +263,12 @@ git commit -m "feat(persistence): reject membership mutations on frozen Collecti
 
 ### Task 1.3: Alembic migration — add `is_frozen` + `derived_from_campaign_id` to `collection`
 
+> ⚠️ **Migration, ORM column additions, and `_to_domain`/`_update_model` mapping updates MUST land in a single commit — splitting them creates a window where frozen Collections can be mutated.**
+
 **Files:**
 - Create: `backend/alembic/versions/026_collection_frozen.py` (separate from the larger 027 to keep blast radius small)
 - Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py` — add the two columns to `CollectionModel`
+- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py` — round-trip the new fields in `_to_domain` and `_update_model`
 
 - [ ] **Step 1: Add the SA columns**
 
@@ -279,6 +282,31 @@ In `models.py`, on `CollectionModel`:
         Uuid(as_uuid=True), nullable=True, index=True
     )
 ```
+
+- [ ] **Step 1a: Update `_to_domain` in `SQLAlchemyCollectionRepository`**
+
+In `collection_repository.py`, extend the `_to_domain` mapper so the new persisted fields rehydrate onto the aggregate:
+
+```python
+    return Collection(
+        ...,
+        is_frozen=model.is_frozen,
+        derived_from_campaign_id=model.derived_from_campaign_id,
+    )
+```
+
+Without this, the frozen guards in `add_molecules`/`remove_molecules` will always see `is_frozen=False` regardless of DB state — silently bypassing the lock.
+
+- [ ] **Step 1b: Update `_update_model` in `SQLAlchemyCollectionRepository`**
+
+Also in `collection_repository.py`, extend `_update_model` so aggregate changes are persisted back:
+
+```python
+    model.is_frozen = aggregate.is_frozen
+    model.derived_from_campaign_id = aggregate.derived_from_campaign_id
+```
+
+Without this, calling `coll.freeze(...)` followed by `save()` will not persist the freeze.
 
 - [ ] **Step 2: Generate migration scaffold**
 
@@ -332,9 +360,13 @@ Expected: PASS — including the frozen-guard test from Task 1.2 now exercises r
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/alembic/versions/026_collection_frozen.py backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py
+git add backend/alembic/versions/026_collection_frozen.py \
+        backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py \
+        backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py
 git commit -m "feat(db): collection.is_frozen + derived_from_campaign_id"
 ```
+
+All three changes — migration, ORM column additions, and the `_to_domain`/`_update_model` mapping updates — MUST be in this single commit. Splitting creates a window where the frozen guards are silently bypassed.
 
 ---
 
@@ -2312,6 +2344,8 @@ Commit: `feat(application): refresh campaign from sources`.
 ---
 
 ### Task 5.6: `CloseCampaign`
+
+> **NOTE:** When calling `collection_repo.add_molecules` immediately after `collection_repo.save(new_collection)`, ensure the session has flushed (the existing `_session()` context manager already flushes on commit; if you're inside one UoW, no extra step needed — but verify). Otherwise the SELECT inside the frozen-guard may not see the just-saved row and will raise `NotFoundError`.
 
 **Files:**
 - Create: `backend/src/chem_vault/application/research_organization/close_campaign.py`
