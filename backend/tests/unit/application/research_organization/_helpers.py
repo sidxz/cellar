@@ -20,11 +20,23 @@ from chem_vault.domain.shared.events import DomainEvent
 # ---------------------------------------------------------------------------
 
 
+class _FakeSession:
+    """Minimal fake session that provides a no-op flush() for use cases that need it."""
+
+    async def flush(self) -> None:
+        pass
+
+
 class FakeUnitOfWork:
     """Minimal async-context-manager UoW that collects and clears domain events."""
 
     def __init__(self) -> None:
         self._tracked: list = []
+        self.session = _FakeSession()  # satisfies UnitOfWork.session protocol
+
+    @property
+    def is_active(self) -> bool:
+        return True
 
     def track(self, aggregate) -> None:
         if aggregate not in self._tracked:
