@@ -6,15 +6,26 @@ from dataclasses import dataclass
 
 from chem_vault.domain.shared.errors import ValidationError
 
-_VALID_OPERATORS = {"gt", "lt", "gte", "lte", "in"}
+_VALID_OPERATORS = {"gt", "lt", "gte", "lte", "in", "between"}
 _MAX_CRITERIA = 3
 
 
 @dataclass(frozen=True)
 class HitCriterion:
+    """Filter rule. Operators:
+
+    - ``gt``/``lt``/``gte``/``lte``: value is a single number; hit if
+      ``measurement <op> value``.
+    - ``in``: value is a non-empty list of strings; hit if measurement
+      string is in the list. (Not applicable to numeric channel cells; the
+      campaign hit-call evaluator skips it.)
+    - ``between``: value is a 2-element list of numbers ``[low, high]``;
+      hit if ``low <= measurement <= high`` (inclusive on both ends).
+    """
+
     readout_name: str
-    operator: str  # gt, lt, gte, lte, in
-    value: float | list[str]
+    operator: str  # gt, lt, gte, lte, in, between
+    value: float | list[str] | list[float]
 
     def __post_init__(self) -> None:
         if not self.readout_name or not self.readout_name.strip():
@@ -27,6 +38,21 @@ class HitCriterion:
             if not isinstance(self.value, list) or not self.value:
                 raise ValidationError(
                     "HitCriterion with 'in' operator requires a non-empty list value"
+                )
+        elif self.operator == "between":
+            if (
+                not isinstance(self.value, list)
+                or len(self.value) != 2
+                or not all(isinstance(v, (int, float)) for v in self.value)
+            ):
+                raise ValidationError(
+                    "HitCriterion with 'between' operator requires value=[low, high] "
+                    "(two numbers)"
+                )
+            low, high = self.value
+            if low > high:
+                raise ValidationError(
+                    f"HitCriterion 'between' requires low <= high; got [{low}, {high}]"
                 )
         else:
             if not isinstance(self.value, (int, float)):

@@ -591,6 +591,113 @@ class TestPreviewRunImport:
         assert cell["value"] == pytest.approx(12.0)  # mean of 10, 12, 14
 
     @pytest.mark.asyncio
+    async def test_between_operator_filters_to_range(self) -> None:
+        """HitCriterion operator='between' with [low, high] hits only values in range."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        proto = uuid.uuid4()
+        readout = uuid.uuid4()
+        run_id = uuid.uuid4()
+        mol_in = uuid.uuid4()      # 50 — in (10, 100)
+        mol_below = uuid.uuid4()   # 5  — below
+        mol_above = uuid.uuid4()   # 150 — above
+        candidates = {
+            (proto, readout): {
+                mol_in: [_candidate(value=50.0, run_id=run_id)],
+                mol_below: [_candidate(value=5.0, run_id=run_id)],
+                mol_above: [_candidate(value=150.0, run_id=run_id)],
+            }
+        }
+        uc = PreviewRunImport(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_make_run_repo([run_id]),
+            molecule_repo=_make_molecule_repo([_make_mol(mol_in), _make_mol(mol_below), _make_mol(mol_above)]),
+            channel_query=FakeChannelQuery(candidates),
+        )
+        q = PreviewRunImportQuery(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="IC50", operator="between", value=[10.0, 100.0]
+                    ),
+                    use_for_filter=True,
+                )
+            ],
+        )
+        out = await uc(q, auth=auth)
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+        assert doc["summary"]["hits"] == 1
+        assert doc["summary"]["non_hits"] == 2
+        hit_row = next(r for r in doc["rows"] if r["is_hit"])
+        assert hit_row["cells"][0]["value"] == 50.0
+
+    @pytest.mark.asyncio
+    async def test_allowed_curve_classes_filters_candidates(self) -> None:
+        """allowed_curve_classes restricts to curves whose curve_class is in the set."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        proto = uuid.uuid4()
+        readout = uuid.uuid4()
+        run_id = uuid.uuid4()
+        mol_full = uuid.uuid4()
+        mol_inactive = uuid.uuid4()
+
+        def _cand_with_class(value: float, cls: str) -> ResolvedCandidate:
+            c = _candidate(value=value, run_id=run_id)
+            return ResolvedCandidate(
+                value=c.value, qualifier=c.qualifier, unit=c.unit,
+                run_id=c.run_id, run_date=c.run_date, run_approved=c.run_approved,
+                z_prime=c.z_prime, protocol_name=c.protocol_name,
+                protocol_version=c.protocol_version, curve_id=c.curve_id,
+                readout_id=c.readout_id, curve_class=cls,
+            )
+
+        candidates = {
+            (proto, readout): {
+                mol_full: [_cand_with_class(50.0, "full")],
+                mol_inactive: [_cand_with_class(60.0, "inactive")],
+            }
+        }
+        uc = PreviewRunImport(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_make_run_repo([run_id]),
+            molecule_repo=_make_molecule_repo([_make_mol(mol_full), _make_mol(mol_inactive)]),
+            channel_query=FakeChannelQuery(candidates),
+        )
+        q = PreviewRunImportQuery(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    allowed_curve_classes=["full"],
+                )
+            ],
+        )
+        out = await uc(q, auth=auth)
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+        # Only the "full" curve molecule should appear; "inactive" is filtered out.
+        assert doc["summary"]["molecules_total"] == 1
+        assert doc["rows"][0]["molecule"]["id"] == str(mol_full)
+
+    @pytest.mark.asyncio
     async def test_qc_pass_false_for_unapproved_or_low_z_prime(self) -> None:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)

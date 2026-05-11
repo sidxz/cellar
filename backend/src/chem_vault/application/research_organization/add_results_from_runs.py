@@ -225,6 +225,14 @@ class AddResultsFromRuns:
                     source_kind=cfg.source_kind,
                 )
                 for mol_id, candidates in candidates_by_mol.items():
+                    if cfg.allowed_curve_classes:
+                        allowed = set(cfg.allowed_curve_classes)
+                        candidates = [
+                            c for c in candidates
+                            if c.curve_class is not None and c.curve_class in allowed
+                        ]
+                        if not candidates:
+                            continue
                     picked = _apply_selection_rule(candidates, cfg.selection_rule)
                     if picked is None:
                         continue  # Skip ND cells — don't add a measurement

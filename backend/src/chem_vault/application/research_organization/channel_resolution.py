@@ -54,6 +54,9 @@ class ResolvedCandidate:
     join across run + protocol + curve/readout_data). The resolver is
     indifferent to source kind — by the time it sees candidates, they
     look uniform.
+
+    ``curve_class`` is only meaningful for dose_response_curve-sourced
+    candidates (None for readout_data-sourced).
     """
 
     value: float
@@ -67,6 +70,7 @@ class ResolvedCandidate:
     protocol_version: int
     curve_id: uuid.UUID | None
     readout_id: uuid.UUID | None
+    curve_class: str | None = None
 
 
 @runtime_checkable
@@ -121,6 +125,13 @@ def _compute_hit_call(
         return None
     op = threshold.operator
     target = threshold.value
+    if op == "between":
+        if not (isinstance(target, list) and len(target) == 2):
+            return None
+        low, high = target
+        if not (isinstance(low, (int, float)) and isinstance(high, (int, float))):
+            return None
+        return HitCall.HIT if (low <= value <= high) else HitCall.MISS
     if isinstance(target, list):
         # 'in' operator targets a set of strings — not applicable to a
         # numeric measurement cell. Leave hit_call unset.

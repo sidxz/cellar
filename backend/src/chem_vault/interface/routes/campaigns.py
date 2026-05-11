@@ -117,7 +117,8 @@ router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 class HitCriterionDTO(BaseModel):
     readout_name: str
     operator: str
-    value: float | list[str]
+    # gt/lt/gte/lte → float; in → list[str]; between → list[float] (length 2).
+    value: float | list[float] | list[str]
 
     def to_domain(self) -> HitCriterion:
         return HitCriterion(
@@ -169,6 +170,7 @@ class ChannelImportConfigDTO(BaseModel):
     selection_rule: str
     hit_threshold: HitCriterionDTO | None = None
     use_for_filter: bool = True
+    allowed_curve_classes: list[str] | None = None
 
     def to_domain(self) -> ChannelImportConfig:
         return ChannelImportConfig(
@@ -179,6 +181,7 @@ class ChannelImportConfigDTO(BaseModel):
             selection_rule=SelectionRule(self.selection_rule),
             hit_threshold=self.hit_threshold.to_domain() if self.hit_threshold else None,
             use_for_filter=self.use_for_filter,
+            allowed_curve_classes=self.allowed_curve_classes,
         )
 
 

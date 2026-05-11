@@ -60,6 +60,10 @@ class ChannelImportConfig:
     Maps to a (protocol_id, readout_definition_id) tuple within the
     selected runs. If a campaign channel already exists for the same
     (protocol, readout), the preview marks it as `reused`.
+
+    ``allowed_curve_classes`` is only meaningful when source_kind is
+    ``DOSE_RESPONSE_CURVE`` — restricts candidates to curves whose
+    ``curve_class`` is in the supplied set (e.g. ``["full"]``).
     """
 
     protocol_id: uuid.UUID
@@ -69,6 +73,7 @@ class ChannelImportConfig:
     selection_rule: SelectionRule
     hit_threshold: HitCriterion | None = None
     use_for_filter: bool = True
+    allowed_curve_classes: list[str] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -253,6 +258,15 @@ class PreviewRunImport:
                 source_kind=cfg.source_kind,
             )
             for molecule_id, candidates in candidates_by_mol.items():
+                # B6: optional curve_class filter (DR-curve sources only).
+                if cfg.allowed_curve_classes:
+                    allowed = set(cfg.allowed_curve_classes)
+                    candidates = [
+                        c for c in candidates
+                        if c.curve_class is not None and c.curve_class in allowed
+                    ]
+                    if not candidates:
+                        continue
                 picked = _apply_selection_rule(candidates, cfg.selection_rule)
                 if picked is None:
                     cell = _nd_cell(key)
