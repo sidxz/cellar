@@ -40,7 +40,7 @@ import {
 import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
 
 import { useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
   CampaignResponse,
@@ -247,6 +247,21 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
     measurement?: CampaignMeasurementResponse;
   } | null>(null);
 
+  // Bulk-fetch molecule identifiers so we can show registration_number (CVT-XXXXXX)
+  // instead of a raw UUID in the compound column.
+  const moleculeIds = useMemo(
+    () => [...new Set(campaign.results.map((r) => r.molecule_id))],
+    [campaign.results],
+  );
+  const { data: moleculesPage } = useMoleculesByIds(moleculeIds);
+  const moleculeById = useMemo(
+    () =>
+      new Map(
+        (moleculesPage?.items ?? []).map((m) => [m.id, m]),
+      ),
+    [moleculesPage],
+  );
+
   const rowData = useMemo<ResultRow[]>(
     () =>
       campaign.results.map((r) => ({
@@ -313,9 +328,14 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
         cellRenderer: (params: ICellRendererParams<ResultRow>) => {
           if (!params.data) return null;
           const isSelected = params.data.result.id === selectedResultId;
+          const mol = moleculeById.get(params.data.molecule_id);
+          const label =
+            mol?.registration_number ??
+            mol?.name ??
+            `${params.data.molecule_id.slice(0, 8)}…`;
           return (
-            <span className={isSelected ? "font-semibold text-primary" : ""}>
-              {params.data.molecule_id.slice(0, 8)}…
+            <span className={`font-mono text-xs${isSelected ? " font-semibold text-primary" : ""}`}>
+              {label}
             </span>
           );
         },
@@ -332,9 +352,10 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
         },
       },
     ];
-  // selectedResultId intentional: re-highlights row when selection changes
+  // selectedResultId and moleculeById intentional: re-renders when row is selected
+  // or when molecule identifiers load.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaign.channels, selectedResultId]);
+  }, [campaign.channels, selectedResultId, moleculeById]);
 
   const handleRowClicked = useCallback(
     (event: { data?: ResultRow }) => {

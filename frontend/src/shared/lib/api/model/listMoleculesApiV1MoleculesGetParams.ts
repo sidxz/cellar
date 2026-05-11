@@ -12,4 +12,5 @@ structure_status?: string | null;
 q?: string | null;
 cursor?: string | null;
 limit?: number | null;
+ids?: string | null;
 };

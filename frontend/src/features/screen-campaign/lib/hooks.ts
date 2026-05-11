@@ -14,6 +14,7 @@ import {
   listCampaignsApiV1CampaignsGet,
   getCampaignApiV1CampaignsCampaignIdGet,
 } from "@/shared/lib/api/campaigns/campaigns";
+import { listMoleculesApiV1MoleculesGet } from "@/shared/lib/api/molecules/molecules";
 import type { CampaignResponse } from "@/shared/lib/api/model";
 
 // ─── Query key factory ───────────────────────────────────────────────────────
@@ -62,5 +63,21 @@ export function useCampaign(
     queryFn: () => getCampaignApiV1CampaignsCampaignIdGet(campaignId),
     enabled: !!campaignId,
     ...options,
+  });
+}
+
+// ─── Bulk molecule lookup hook ───────────────────────────────────────────────
+
+/**
+ * Bulk-fetches molecules by id list (workspace-scoped).
+ * Uses GET /api/v1/molecules?ids=<csv>.
+ * The query key is stable for the same sorted id set.
+ */
+export function useMoleculesByIds(ids: string[]) {
+  const sortedKey = [...ids].sort().join(",");
+  return useQuery({
+    queryKey: ["molecules", "by-ids", sortedKey],
+    queryFn: () => listMoleculesApiV1MoleculesGet({ ids: sortedKey }),
+    enabled: ids.length > 0,
   });
 }

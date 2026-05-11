@@ -40,6 +40,9 @@ from chem_vault.application.research_organization.manage_molecule_projects impor
 from chem_vault.application.research_organization.get_collections_for_molecule import (
     ListCollectionsForMoleculeQuery,
 )
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+    SQLAlchemyMoleculeRepository,
+)
 from chem_vault.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
@@ -59,6 +62,7 @@ from chem_vault.interface.dependencies import (
     SaltMatcherUoWDep,
     SearchMoleculesDep,
     UpdateMoleculeDep,
+    UoWDep,
 )
 from chem_vault.interface.error_handlers import result_to_response
 from chem_vault.interface.pagination import (
@@ -469,13 +473,25 @@ async def register_molecule(
 async def list_molecules(
     auth: AuthDep,
     use_case: ListMoleculesDep,
+    uow: UoWDep,
     molecule_type: str | None = None,
     lifecycle_stage: str | None = None,
     structure_status: str | None = None,
     q: str | None = None,
     cursor: str | None = None,
     limit: int | None = None,
+    ids: str | None = None,
 ) -> PaginatedResponse[MoleculeResponse]:
+    # Bulk-by-ids shortcut: when ?ids=<csv> is provided, skip normal pagination.
+    if ids is not None:
+        parsed_ids = [uuid.UUID(x.strip()) for x in ids.split(",") if x.strip()]
+        repo = SQLAlchemyMoleculeRepository(uow)
+        async with uow:
+            molecules = await repo.find_by_ids(auth.workspace_id, parsed_ids)
+        return PaginatedResponse(
+            items=[MoleculeResponse.from_domain(m) for m in molecules],
+            next_cursor=None,
+        )
     # When a search term is provided without an explicit limit, default to 20
     # (autocomplete scenario — avoids returning the entire table).
     effective_limit = clamp_limit(limit if limit is not None else (20 if q else None))
