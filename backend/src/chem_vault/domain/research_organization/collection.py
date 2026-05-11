@@ -33,6 +33,8 @@ class Collection(AggregateRoot):
         created_by: uuid.UUID,
         molecule_count: int = 0,
         visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
+        is_frozen: bool = False,
+        derived_from_campaign_id: uuid.UUID | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -48,6 +50,8 @@ class Collection(AggregateRoot):
         self.created_by = created_by
         self.molecule_count = molecule_count
         self.visibility = visibility
+        self.is_frozen = is_frozen
+        self.derived_from_campaign_id = derived_from_campaign_id
 
     @classmethod
     def create(
@@ -94,6 +98,8 @@ class Collection(AggregateRoot):
         Uses sentinel ``...`` for nullable fields so callers can
         explicitly pass ``None`` to clear them.
         """
+        if self.is_frozen:
+            raise ValidationError("Cannot update a frozen collection")
         if name is not None:
             if not name.strip():
                 raise ValidationError("Collection name must not be empty")
@@ -106,4 +112,20 @@ class Collection(AggregateRoot):
             self.owned_by_org_id = owned_by_org_id
         if visibility is not None:
             self.visibility = visibility
+        self.updated_at = datetime.now(UTC)
+
+    def freeze(self, *, derived_from_campaign_id: uuid.UUID) -> None:
+        """Mark the collection as frozen — origin campaign owns it forever.
+
+        Idempotent when called with the same origin. Raises if already
+        frozen with a different origin.
+        """
+        if self.is_frozen:
+            if self.derived_from_campaign_id != derived_from_campaign_id:
+                raise ValidationError(
+                    "Collection is already frozen with a different origin"
+                )
+            return
+        self.is_frozen = True
+        self.derived_from_campaign_id = derived_from_campaign_id
         self.updated_at = datetime.now(UTC)
