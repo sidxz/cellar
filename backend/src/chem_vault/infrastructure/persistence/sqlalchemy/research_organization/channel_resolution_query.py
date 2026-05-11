@@ -18,6 +18,7 @@ an empty-result smoke only.
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -107,6 +108,120 @@ class SQLAlchemyChannelResolutionQuery:
             )
             for row in rows
         ]
+
+    async def fetch_candidates_for_runs(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        protocol_id: uuid.UUID,
+        readout_definition_id: uuid.UUID,
+        source_kind: ChannelSourceKind,
+    ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+        """Per-molecule candidates restricted to a set of run_ids.
+
+        Used by PreviewRunImport / AddResultsFromRuns when the user selects a
+        subset of runs to import from — the SELECTION rule then operates over
+        only this candidate set, not all runs of the protocol.
+        """
+        if not run_ids:
+            return {}
+        if source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+            stmt = (
+                select(
+                    DoseResponseCurveModel.id,
+                    DoseResponseCurveModel.molecule_id,
+                    DoseResponseCurveModel.fitted_value,
+                    DoseResponseCurveModel.run_id,
+                    RunModel.run_date,
+                    RunModel.status,
+                    RunModel.qc_metrics,
+                    ProtocolModel.name,
+                    ProtocolModel.protocol_version,
+                    ProtocolModel.dose_unit,
+                )
+                .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+                .join(
+                    ProtocolModel,
+                    DoseResponseCurveModel.protocol_id == ProtocolModel.id,
+                )
+                .where(
+                    DoseResponseCurveModel.workspace_id == workspace_id,
+                    DoseResponseCurveModel.protocol_id == protocol_id,
+                    DoseResponseCurveModel.run_id.in_(run_ids),
+                )
+            )
+        else:
+            stmt = (
+                select(
+                    ReadoutDataModel.id,
+                    ReadoutDataModel.molecule_id,
+                    ReadoutDataModel.value_numeric,
+                    ReadoutDataModel.value_qualifier,
+                    RunModel.id.label("run_id"),
+                    RunModel.run_date,
+                    RunModel.status,
+                    RunModel.qc_metrics,
+                    ProtocolModel.name,
+                    ProtocolModel.protocol_version,
+                    ReadoutDefinitionModel.unit,
+                )
+                .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
+                .join(ProtocolModel, RunModel.protocol_id == ProtocolModel.id)
+                .join(
+                    ReadoutDefinitionModel,
+                    ReadoutDataModel.readout_definition_id
+                    == ReadoutDefinitionModel.id,
+                )
+                .where(
+                    ReadoutDataModel.workspace_id == workspace_id,
+                    ReadoutDataModel.readout_definition_id == readout_definition_id,
+                    ReadoutDataModel.run_id.in_(run_ids),
+                    ReadoutDataModel.value_numeric.is_not(None),
+                    ReadoutDataModel.is_outlier.is_(False),
+                )
+            )
+
+        async with self._sf() as session:
+            rows = (await session.execute(stmt)).all()
+
+        out: dict[uuid.UUID, list[ResolvedCandidate]] = defaultdict(list)
+        for row in rows:
+            if source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+                cand = ResolvedCandidate(
+                    value=row.fitted_value,
+                    qualifier=ValueQualifier.EQ,
+                    unit=row.dose_unit or "",
+                    run_id=row.run_id,
+                    run_date=row.run_date,
+                    run_approved=row.status == "approved",
+                    z_prime=(row.qc_metrics or {}).get("z_prime"),
+                    protocol_name=row.name,
+                    protocol_version=row.protocol_version,
+                    curve_id=row.id,
+                    readout_id=None,
+                )
+            else:
+                qualifier_str = row.value_qualifier or "="
+                try:
+                    qualifier = ValueQualifier(qualifier_str)
+                except ValueError:
+                    qualifier = ValueQualifier.EQ
+                cand = ResolvedCandidate(
+                    value=float(row.value_numeric),
+                    qualifier=qualifier,
+                    unit=row.unit or "",
+                    run_id=row.run_id,
+                    run_date=row.run_date,
+                    run_approved=row.status == "approved",
+                    z_prime=(row.qc_metrics or {}).get("z_prime"),
+                    protocol_name=row.name,
+                    protocol_version=row.protocol_version,
+                    curve_id=None,
+                    readout_id=row.id,
+                )
+            out[row.molecule_id].append(cand)
+        return dict(out)
 
     async def _fetch_readout_candidates(
         self,

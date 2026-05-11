@@ -32,6 +32,7 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.enums import (
+    ChannelSourceKind,
     HitCall,
     QualifierHandling,
     SelectionRule,
@@ -79,6 +80,23 @@ class ChannelResolutionQuery(Protocol):
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
     ) -> list[ResolvedCandidate]: ...
+
+    async def fetch_candidates_for_runs(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        protocol_id: uuid.UUID,
+        readout_definition_id: uuid.UUID,
+        source_kind: "ChannelSourceKind",
+    ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+        """Per-molecule candidates restricted to a specific set of runs.
+
+        Used by PreviewRunImport / AddResultsFromRuns to enumerate all molecules
+        tested in the selected runs for a given (protocol, readout) pair.
+        Returns ``dict[molecule_id, list[ResolvedCandidate]]``.
+        """
+        ...
 
 
 def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
