@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
+from chem_vault.domain.research_organization.campaign import Campaign
 from chem_vault.domain.research_organization.collection import Collection
 from chem_vault.domain.research_organization.project import Project
 from chem_vault.domain.research_organization.project_membership import (
@@ -160,3 +161,35 @@ class ProjectMemberRepository(Protocol):
     async def get_role(
         self, workspace_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID
     ) -> ProjectRole | None: ...
+
+
+@runtime_checkable
+class CampaignRepository(Protocol):
+    """Repository for Campaign aggregates.
+
+    Owns the loading/saving of channels, results, and measurements via
+    aggregate-cascade semantics. The is_locked method also satisfies the
+    CampaignLockChecker Protocol structurally.
+    """
+
+    async def find_by_id(self, id: uuid.UUID) -> Campaign | None: ...
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> Campaign | None: ...
+
+    async def save(self, aggregate: Campaign) -> None: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+    async def find_by_project(
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+    ) -> list[Campaign]: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[Campaign]: ...
+
+    async def is_locked(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> bool: ...
