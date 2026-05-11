@@ -59,8 +59,17 @@ const channelSchema = z.object({
   protocol_id: z.string().min(1, "Protocol is required"),
   readout_definition_id: z.string().min(1, "Readout is required"),
   source_kind: z.enum(["readout_data", "dose_response_curve"]),
-  selection_rule: z.enum(["best", "all", "most_recent"]),
-  qualifier_handling: z.enum(["numeric", "threshold", "exclude"]),
+  selection_rule: z.enum([
+    "latest_approved_run",
+    "mean_across_runs",
+    "geometric_mean",
+    "manual_pick",
+  ]),
+  qualifier_handling: z.enum([
+    "include_qualified",
+    "exclude_qualified",
+    "treat_as_limit",
+  ]),
   require_approved: z.boolean(),
   min_z_prime: z.number().min(0).max(1),
 });
@@ -125,8 +134,17 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
       source_kind:
         (existing?.source_kind as "readout_data" | "dose_response_curve") ??
         "readout_data",
-      selection_rule: (existing?.selection_rule as "best" | "all" | "most_recent") ?? "best",
-      qualifier_handling: (existing?.qualifier_handling as "numeric" | "threshold" | "exclude") ?? "numeric",
+      selection_rule:
+        (existing?.selection_rule as
+          | "latest_approved_run"
+          | "mean_across_runs"
+          | "geometric_mean"
+          | "manual_pick") ?? "latest_approved_run",
+      qualifier_handling:
+        (existing?.qualifier_handling as
+          | "include_qualified"
+          | "exclude_qualified"
+          | "treat_as_limit") ?? "include_qualified",
       require_approved: (existingQc?.require_approved as boolean | undefined) ?? false,
       min_z_prime: (existingQc?.min_z_prime as number | undefined) ?? 0,
     },
@@ -271,9 +289,16 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="best">Best</SelectItem>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="most_recent">Most recent</SelectItem>
+                  <SelectItem value="latest_approved_run">
+                    Latest approved run
+                  </SelectItem>
+                  <SelectItem value="mean_across_runs">
+                    Mean across runs
+                  </SelectItem>
+                  <SelectItem value="geometric_mean">
+                    Geometric mean
+                  </SelectItem>
+                  <SelectItem value="manual_pick">Manual pick</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -290,9 +315,13 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
             <Select value={field.value} onValueChange={field.onChange}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="numeric">Numeric</SelectItem>
-                <SelectItem value="threshold">Threshold</SelectItem>
-                <SelectItem value="exclude">Exclude</SelectItem>
+                <SelectItem value="include_qualified">
+                  Include qualified (&lt;, &gt;)
+                </SelectItem>
+                <SelectItem value="exclude_qualified">
+                  Exclude qualified
+                </SelectItem>
+                <SelectItem value="treat_as_limit">Treat as limit</SelectItem>
               </SelectContent>
             </Select>
           )}

@@ -169,8 +169,14 @@ function OverrideModal({
               <Select value={qualifier} onValueChange={setQualifier}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["=", "<", ">", "~"].map((q) => (
-                    <SelectItem key={q} value={q}>{q}</SelectItem>
+                  {[
+                    { v: "=", label: "= (exact)" },
+                    { v: "<", label: "< (less than)" },
+                    { v: ">", label: "> (greater than)" },
+                    { v: "nd", label: "nd (not determined)" },
+                    { v: "excluded", label: "excluded" },
+                  ].map((q) => (
+                    <SelectItem key={q.v} value={q.v}>{q.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -200,8 +206,8 @@ function OverrideModal({
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="">None</SelectItem>
-                {["hit", "confirmed_hit", "inactive", "inconclusive"].map((h) => (
-                  <SelectItem key={h} value={h}>{h.replace("_", " ")}</SelectItem>
+                {["hit", "miss", "inconclusive"].map((h) => (
+                  <SelectItem key={h} value={h}>{h}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -27,21 +27,30 @@ export type {
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────
-// The backend emits these as plain strings; we narrow the type here for safety.
+// Mirror of backend/src/chem_vault/domain/research_organization/enums.py.
+// Backend uses StrEnum; values match the wire format exactly. If you touch
+// any of these, change the corresponding StrEnum first and regenerate orval.
 
 export type CampaignStatus = "draft" | "closed" | "superseded";
 
-export type CampaignDecision = "selected" | "deferred" | "rejected" | "pending";
+export type CampaignDecision = "selected" | "deferred" | "rejected";
 
-export type HitCall = "hit" | "confirmed_hit" | "inactive" | "inconclusive";
+export type HitCall = "hit" | "miss" | "inconclusive";
 
-export type SelectionRule = "best" | "all" | "most_recent";
+export type SelectionRule =
+  | "latest_approved_run"
+  | "mean_across_runs"
+  | "geometric_mean"
+  | "manual_pick";
 
-export type ChannelSourceKind = "readout" | "curve";
+export type ChannelSourceKind = "readout_data" | "dose_response_curve";
 
-export type ValueQualifier = "<" | ">" | "~" | "=";
+export type ValueQualifier = "=" | "<" | ">" | "nd" | "excluded";
 
-export type QualifierHandling = "numeric" | "threshold" | "exclude";
+export type QualifierHandling =
+  | "include_qualified"
+  | "exclude_qualified"
+  | "treat_as_limit";
 
 // ─── View models ─────────────────────────────────────────────────────────────
 
@@ -65,6 +74,5 @@ export const CAMPAIGN_DECISION_LABELS: Record<CampaignDecision, string> = {
   selected: "Selected",
   deferred: "Deferred",
   rejected: "Rejected",
-  pending: "Pending",
 };
 
