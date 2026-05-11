@@ -25,7 +25,7 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import ExplicitListSource
+
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -184,7 +184,6 @@ async def test_close_campaign_integration(
         project_id=project_id,
         name="Integration Close Test",
         description=None,
-        compound_source=ExplicitListSource(molecule_ids=[mol_id]),
         publishes_collection=True,
         created_by=uuid.uuid4(),
     )

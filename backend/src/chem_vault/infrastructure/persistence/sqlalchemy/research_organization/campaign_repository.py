@@ -12,7 +12,6 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import CompoundSource
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -22,6 +21,7 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from chem_vault.domain.research_organization.source_ref import SourceRef
 from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -50,7 +50,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
     # ------------------------------------------------------------------
 
     def _to_domain(self, model: CampaignModel) -> Campaign:
-        compound_source = CompoundSource.from_dict(model.compound_source)
         channels = [self._channel_to_domain(cm) for cm in model.channels]
         results = [self._result_to_domain(rm) for rm in model.results]
         return Campaign(
@@ -60,7 +59,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=model.name,
             description=model.description,
             status=CampaignStatus(model.status),
-            compound_source=compound_source,
             publishes_collection=model.publishes_collection,
             source_protocols=list(model.source_protocols or []),
             closed_at=model.closed_at,
@@ -85,7 +83,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=aggregate.name,
             description=aggregate.description,
             status=aggregate.status.value,
-            compound_source=aggregate.compound_source.to_dict(),
             publishes_collection=aggregate.publishes_collection,
             source_protocols=list(aggregate.source_protocols),
             closed_at=aggregate.closed_at,
@@ -104,7 +101,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.name = aggregate.name
         model.description = aggregate.description
         model.status = aggregate.status.value
-        model.compound_source = aggregate.compound_source.to_dict()
         model.publishes_collection = aggregate.publishes_collection
         model.source_protocols = list(aggregate.source_protocols)
         model.closed_at = aggregate.closed_at
@@ -197,6 +193,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
     # ------------------------------------------------------------------
 
     def _result_to_domain(self, model: CampaignResultModel) -> CampaignResult:
+        added_from = (
+            SourceRef.from_dict(model.added_from)
+            if model.added_from is not None
+            else None
+        )
         return CampaignResult(
             id=model.id,
             campaign_id=model.campaign_id,
@@ -205,6 +206,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             decision=CampaignDecision(model.decision),
             decision_reason=model.decision_reason,
             notes=model.notes,
+            added_from=added_from,
             measurements=[
                 self._measurement_to_domain(mm) for mm in model.measurements
             ],
@@ -219,6 +221,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             decision=r.decision.value,
             decision_reason=r.decision_reason,
             notes=r.notes,
+            added_from=r.added_from.to_dict() if r.added_from is not None else None,
             measurements=[self._measurement_to_model(m) for m in r.measurements],
         )
 
@@ -230,6 +233,9 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.decision = r.decision.value
         model.decision_reason = r.decision_reason
         model.notes = r.notes
+        # added_from is immutable after first write — only set if not already persisted
+        if model.added_from is None and r.added_from is not None:
+            model.added_from = r.added_from.to_dict()
 
         # Reconcile measurements by id
         existing = {m.id: m for m in model.measurements}

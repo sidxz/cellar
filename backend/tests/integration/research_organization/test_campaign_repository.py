@@ -13,9 +13,7 @@ from chem_vault.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import (
-    ExplicitListSource,
-)
+from chem_vault.domain.research_organization.source_ref import CollectionRef
 from chem_vault.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
@@ -45,7 +43,6 @@ def _build_campaign(
         project_id=project_id,
         name="Test Campaign",
         description="x",
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=True,
         created_by=uuid.uuid4(),
     )

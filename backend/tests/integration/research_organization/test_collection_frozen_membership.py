@@ -29,7 +29,7 @@ import sqlalchemy as sa
 
 from chem_vault.domain.research_organization.campaign import Campaign
 from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.research_organization.compound_source import ExplicitListSource
+
 from chem_vault.domain.shared.errors import CollectionFrozenError
 from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
@@ -89,7 +89,6 @@ async def _create_dummy_campaign(
         project_id=uuid.uuid4(),
         name="Dummy origin campaign",
         description=None,
-        compound_source=ExplicitListSource(molecule_ids=[uuid.uuid4()]),
         publishes_collection=False,
         created_by=uuid.uuid4(),
     )

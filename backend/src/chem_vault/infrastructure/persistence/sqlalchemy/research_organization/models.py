@@ -192,7 +192,6 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="draft"
     )
-    compound_source: Mapped[dict] = mapped_column(JSONB, nullable=False)
     publishes_collection: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
@@ -289,6 +288,7 @@ class CampaignResultModel(Base, EntityModelMixin):
     )
     decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    added_from: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     measurements: Mapped[list[CampaignMeasurementModel]] = relationship(
         "CampaignMeasurementModel",
