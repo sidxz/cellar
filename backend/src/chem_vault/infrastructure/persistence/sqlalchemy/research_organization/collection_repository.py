@@ -7,8 +7,10 @@ import uuid
 import sqlalchemy as sa
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import aliased
 
 from chem_vault.domain.research_organization.collection import Collection, CollectionVisibility
+from chem_vault.domain.shared.errors import CollectionFrozenError, NotFoundError
 from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -141,14 +143,16 @@ class SQLAlchemyCollectionRepository(
     ) -> int:
         if not molecule_ids:
             return 0
-        # Defense-in-depth: verify collection belongs to workspace before inserting
-        ownership_stmt = select(CollectionModel.id).where(
-            CollectionModel.id == collection_id,
-            CollectionModel.workspace_id == workspace_id,
-        )
-        ownership_result = await self._session.execute(ownership_stmt)
-        if ownership_result.scalar_one_or_none() is None:
-            return 0
+        # Reject membership mutation on frozen Collections — closed campaigns
+        # are immutable. Load the aggregate so the freeze flag is evaluated
+        # against the persisted state.
+        coll = await self.find_by_id_in_workspace(workspace_id, collection_id)
+        if coll is None:
+            raise NotFoundError(f"Collection {collection_id} not found")
+        if coll.is_frozen:
+            raise CollectionFrozenError(
+                f"Collection {collection_id} is frozen and cannot be modified"
+            )
         values = [
             {"collection_id": collection_id, "molecule_id": mid}
             for mid in molecule_ids
@@ -162,6 +166,15 @@ class SQLAlchemyCollectionRepository(
     ) -> int:
         if not molecule_ids:
             return 0
+        # Reject membership mutation on frozen Collections — closed campaigns
+        # are immutable.
+        coll = await self.find_by_id_in_workspace(workspace_id, collection_id)
+        if coll is None:
+            raise NotFoundError(f"Collection {collection_id} not found")
+        if coll.is_frozen:
+            raise CollectionFrozenError(
+                f"Collection {collection_id} is frozen and cannot be modified"
+            )
         # Defense-in-depth: only delete if collection belongs to workspace
         stmt = delete(CollectionMoleculeModel).where(
             CollectionMoleculeModel.collection_id == collection_id,
@@ -314,47 +327,54 @@ class SQLAlchemyCollectionRepository(
     ) -> int:
         """Replace source molecule with target in workspace collections.
 
+        Frozen Collections are silently skipped — closed campaigns are
+        historical artifacts and must not be retroactively rewired by
+        molecule merge operations.
+
         Two-step process to avoid unique constraint violations:
         1. DELETE rows where both source and target exist in the same collection.
         2. UPDATE remaining source rows to point to target.
 
         Returns the number of rows updated in step 2.
         """
-        params = {
-            "source": source_molecule_id,
-            "target": target_molecule_id,
-            "ws": workspace_id,
-        }
+        # Identify candidate (workspace-scoped, non-frozen) collections that
+        # contain the source molecule. We post-filter in Python so the freeze
+        # check works regardless of whether the SQL column has shipped yet.
+        candidates = await self.find_collections_containing(
+            workspace_id, source_molecule_id
+        )
+        target_collection_ids = [c.id for c in candidates if not c.is_frozen]
+        if not target_collection_ids:
+            return 0
 
         # Step 1: Remove duplicate entries — collections that already have
         # the target molecule; the source entry would cause a PK conflict.
-        # Scoped to workspace via JOIN to collections table.
-        # Postgres doesn't allow JOIN inside DELETE ... USING; list the
-        # workspace-scope table as a comma-separated USING source instead.
-        await self._session.execute(
-            sa.text(
-                "DELETE FROM collection_molecules cm1 "
-                "USING collection_molecules cm2, collections c "
-                "WHERE cm1.molecule_id = :source "
-                "AND cm2.molecule_id = :target "
-                "AND cm1.collection_id = cm2.collection_id "
-                "AND c.id = cm1.collection_id "
-                "AND c.workspace_id = :ws"
-            ),
-            params,
+        cm2 = aliased(CollectionMoleculeModel)
+        dedup_stmt = (
+            delete(CollectionMoleculeModel)
+            .where(
+                CollectionMoleculeModel.molecule_id == source_molecule_id,
+                CollectionMoleculeModel.collection_id.in_(target_collection_ids),
+                sa.exists()
+                .where(
+                    cm2.collection_id == CollectionMoleculeModel.collection_id,
+                    cm2.molecule_id == target_molecule_id,
+                )
+                .correlate(CollectionMoleculeModel),
+            )
+            .execution_options(synchronize_session=False)
         )
+        await self._session.execute(dedup_stmt)
 
-        # Step 2: Re-point remaining source references to target,
-        # scoped to workspace via JOIN to collections table.
-        result = await self._session.execute(
-            sa.text(
-                "UPDATE collection_molecules cm "
-                "SET molecule_id = :target "
-                "FROM collections c "
-                "WHERE cm.molecule_id = :source "
-                "AND cm.collection_id = c.id "
-                "AND c.workspace_id = :ws"
-            ),
-            params,
+        # Step 2: Re-point remaining source references to target.
+        update_stmt = (
+            sa.update(CollectionMoleculeModel)
+            .where(
+                CollectionMoleculeModel.molecule_id == source_molecule_id,
+                CollectionMoleculeModel.collection_id.in_(target_collection_ids),
+            )
+            .values(molecule_id=target_molecule_id)
+            .execution_options(synchronize_session=False)
         )
+        result = await self._session.execute(update_stmt)
         return result.rowcount  # type: ignore[return-value]
