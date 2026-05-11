@@ -183,6 +183,42 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-11 PM — Screen-Campaign B-gap UX shipped on `fe2`
+
+**Spec:** `docs/superpowers/specs/2026-05-11-screen-campaign-b-gaps-design.md`
+**Plan:** `docs/superpowers/plans/2026-05-11-screen-campaign-b-gaps.md`
+**Branch:** `fe2`, 13 commits this session (`7aef73ce..cd0d7cc3`)
+
+**Shipped (B1 + B5 + B6 + B7 + B8 + Preview-as-published bonus):**
+
+- **Migration 029** — `campaign_measurement` gets 6 new nullable columns: `override_reason`, `test_concentration_{value,unit}`, `replicate_count`, `qc_pass`, `contributing_run_ids`. Backwards-compat (closed campaigns emit `null`).
+- **B7** — `CampaignMeasurement.__post_init__` relaxed: empty unit allowed when `qualifier ∈ {nd, excluded}` (force `value=None`). `mark_manual_override(reason=...)` accepts the audit reason.
+- **B8** — `OverrideResultCellCommand.reason` + `CampaignMeasurement.override_reason` flow through to DAIKON JSON; override modal requires reason when value differs from auto-resolved; OVR badge gets a `title` tooltip showing the reason.
+- **B6 backend** — new `PreviewRunImport` (read-only) + `AddResultsFromRuns` (mutator, replaces single-run `AddResultsFromRun`). Both reuse `_compute_hit_call` + a new `ChannelResolutionQuery.fetch_candidates_for_runs` port method (SQL filters by `run_id IN (...)`). Selection-rule helper `_apply_selection_rule` currently lives in `preview_run_import.py` and is reused by `AddResultsFromRuns`; `ChannelResolver.resolve` in `channel_resolution.py` still uses its own inline copy — TODO: extract to a shared public function.
+- **B6 API** — `POST /preview-run-import` + `POST /add-from-runs` + `GET /preview-published` (with `bypass_status_check=True` on `GetPublishedCampaignQuery`). Old `/add-from-run` route + UC deleted.
+- **DAIKON contract** — `_serialize_measurement` emits all 5 new audit/snapshot fields (null when absent). `daikon_contract.schema.json` updated to allow them.
+- **B1** — new `<MoleculeThumbnail>` shared component wraps the existing `<StructureRenderer>`. Wired into results-grid compound column (56×40) + decision-panel header (200×150).
+- **B5** — new `<CampaignFilterBar>` above the grid: chip groups for Decision / Hit-status / Overridden-only with live counts. AG Grid `isExternalFilterPresent` + `doesExternalFilterPass` wired.
+- **B6 FE** — new `<AddFromRunsDialog>` (2-step: configure → preview). Wired into the "Add compounds → Protocol run(s)…" dropdown. Step 1: protocol picker, multi-select runs, approved-only switch, channel cards auto-derived from protocol readouts with hit-criterion defaults from `recommended_hit_criteria`, global toggles (AND/ANY, hits_only/all, default decision, refresh_existing). Step 2: debounced (300ms) preview via the new endpoint, chip header + scrollable molecule table with thumbnails + per-cell value/hit/N/QC. Commit fires `/add-from-runs`.
+- **Bonus: Preview-as-published** — `<PreviewAsPublishedDialog>` + button in builder header next to Refresh/Close. Renders DRAFT through DAIKON serializer; download-JSON action included.
+
+**Tests:** 2378 backend tests green (+316 from baseline). FE `pnpm tsc --noEmit` clean across all 7 FE commits. No Playwright run (V1 in backlog still).
+
+**Backlog updated:** `docs/backlog/screen-campaign-followups.md` got a "Deeper gap analysis (2026-05-11 PM)" section with the A/B/C/D/E reframing. B1/B5/B6/B7/B8 now resolved.
+
+**Open follow-ups for next session:**
+
+1. **Browser smoke pass.** Per the project's CLAUDE.md rule, FE work owes a real-browser walkthrough — none was done this session. The 9-step checklist is in the spec §9.
+2. **DRY refactor — share `_apply_selection_rule`.** Move from `preview_run_import.py` to `channel_resolution.py` as a public function; update `ChannelResolver.resolve` to call it (currently has its own inline copy).
+3. **Playwright stub** — `frontend/tests/e2e/screen-campaign.spec.ts.TODO` still exists; wire it up before more FE changes pile on.
+4. **Remaining B items** — B2 (DR curve inline preview), B3 (bulk decision), B4 (bulk remove), B9 (CSV export), B10 (staleness signal), B11 (sources card on drafts), B12 (workspace-wide list), B13 (per-row audit history). All independent.
+5. **A-section blockers still owed** — real e-signature (A1/M6), Sentinel name resolution + audit signed_at (A2/L1/L2), DAIKON transport/discovery (A3 — *NEW* gap), real PATCH-after-close 423 test (A4/H3), SavedSearch wiring (A5/H1).
+6. **C-section integrity proofs** — closed-campaign rewire-on-merge (C1), Run delete cascade (C2), latent unique-constraint fix verification (C3), supersede source_protocols snapshot (C4).
+
+**To merge:** branch is 111+ commits ahead of `main`. Manual smoke + push + PR. No remote push made.
+
+---
+
 ### 2026-05-11 — Pending follow-ups punch list
 
 Full backlog: **`docs/backlog/screen-campaign-followups.md`** (force-add — `docs/` is gitignored). Covers 5 high-priority items (SavedSearch wiring, Run-import → campaign, real 423 test, orval-zod plugin, notes-display verify), 6 medium, 8 low-priority engineering items, and a verification checklist (Playwright, browser smoke, backend lint).
