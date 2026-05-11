@@ -46,6 +46,7 @@ class OverrideResultCellCommand(Command):
     value_qualifier: ValueQualifier
     unit: str
     hit_call: HitCall | None = None
+    reason: str | None = None  # B8 audit defensibility — captured at override time
 
 
 class OverrideResultCell:
@@ -115,7 +116,8 @@ class OverrideResultCell:
                     NotFoundError("CampaignMeasurement", str(input.channel_id))
                 )
 
-            # Build the override measurement, preserving audit trail from existing
+            # Build the override measurement, preserving audit trail from existing.
+            # Snapshot fields from migration 029 are also carried forward unchanged.
             try:
                 new_m = CampaignMeasurement(
                     id=existing.id,
@@ -132,6 +134,12 @@ class OverrideResultCell:
                     source_curve_id=existing.source_curve_id,
                     source_readout_id=existing.source_readout_id,
                     run_date_snapshot=existing.run_date_snapshot,
+                    override_reason=input.reason,
+                    test_concentration_value=existing.test_concentration_value,
+                    test_concentration_unit=existing.test_concentration_unit,
+                    replicate_count=existing.replicate_count,
+                    qc_pass=existing.qc_pass,
+                    contributing_run_ids=existing.contributing_run_ids,
                 )
             except ValidationError as e:
                 return Failure(e)
