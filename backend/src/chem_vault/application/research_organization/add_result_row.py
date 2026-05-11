@@ -24,6 +24,7 @@ from chem_vault.domain.research_organization.campaign import Campaign
 from chem_vault.domain.research_organization.campaign_result import CampaignResult
 from chem_vault.domain.research_organization.enums import CampaignStatus
 from chem_vault.domain.research_organization.repository import CampaignRepository
+from chem_vault.domain.research_organization.source_ref import ManualRef
 from chem_vault.domain.shared.errors import (
     AuthorizationError,
     DomainError,
@@ -95,7 +96,9 @@ class AddResultRow:
                 )
 
             result = CampaignResult(
-                campaign_id=campaign.id, molecule_id=input.molecule_id
+                campaign_id=campaign.id,
+                molecule_id=input.molecule_id,
+                added_from=ManualRef(),
             )
             try:
                 campaign.add_result(result)

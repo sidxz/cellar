@@ -25,6 +25,7 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from chem_vault.domain.research_organization.source_ref import ManualRef
 from chem_vault.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -261,3 +262,29 @@ class TestAddResultRow:
         assert isinstance(out, Failure)
         assert isinstance(out.failure(), AuthorizationError)
         campaign_repo.save.assert_not_awaited()
+
+
+    @pytest.mark.asyncio
+    async def test_added_row_has_manual_ref_attribution(self) -> None:
+        """AddResultRow attributes new results as ManualRef."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        mol_id = uuid.uuid4()
+
+        uc = AddResultRow(
+            uow=FakeUnitOfWork(),
+            campaign_repo=campaign_repo,
+            resolver=FakeResolver(factory=_add_result_measurement_factory),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultRowCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            molecule_id=mol_id,
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        result = out.unwrap().results[0]
+        assert isinstance(result.added_from, ManualRef)
