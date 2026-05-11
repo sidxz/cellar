@@ -7,7 +7,7 @@
  * and "Re-seed from source" toolbar action.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, RefreshCcw, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -43,7 +43,7 @@ import {
   useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete,
   useReseedCampaignApiV1CampaignsCampaignIdReseedPost,
 } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
 import { CompoundSourcePicker, type CompoundSourceValue } from "./compound-source-picker";
 import type { CampaignResponse, CampaignResultResponse } from "../types";
 
@@ -224,10 +224,27 @@ export function CompoundListPane({
     },
   });
 
-  const filtered = campaign.results.filter((r) =>
-    search.length === 0 ||
-    r.molecule_id.toLowerCase().includes(search.toLowerCase()),
+  const moleculeIds = useMemo(
+    () => [...new Set(campaign.results.map((r) => r.molecule_id))],
+    [campaign.results],
   );
+  const { data: molLookup } = useMoleculesByIds(moleculeIds);
+  const moleculeById = useMemo(
+    () =>
+      new Map((molLookup?.items ?? []).map((m) => [m.id, m] as const)),
+    [molLookup],
+  );
+
+  const filtered = campaign.results.filter((r) => {
+    if (search.length === 0) return true;
+    const term = search.toLowerCase();
+    if (r.molecule_id.toLowerCase().includes(term)) return true;
+    const m = moleculeById.get(r.molecule_id);
+    return (
+      (m?.registration_number?.toLowerCase().includes(term) ?? false) ||
+      (m?.name?.toLowerCase().includes(term) ?? false)
+    );
+  });
 
   return (
     <div className="flex flex-col h-full">
@@ -285,7 +302,9 @@ export function CompoundListPane({
             }
           >
             <span className="font-mono text-muted-foreground truncate flex-1 min-w-0">
-              {r.molecule_id.slice(0, 12)}…
+              {moleculeById.get(r.molecule_id)?.registration_number ??
+                moleculeById.get(r.molecule_id)?.name ??
+                `${r.molecule_id.slice(0, 8)}…`}
             </span>
             <span
               className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
