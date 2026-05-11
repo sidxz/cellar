@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -15,6 +15,7 @@ import {
 
 import { useCampaignsByProject } from "../lib/hooks";
 import { CampaignStatusChip } from "./campaign-status-chip";
+import { CreateCampaignDialog } from "./create-campaign-dialog";
 
 interface CampaignListProps {
   projectId: string;
@@ -53,13 +54,32 @@ export function CampaignList({ projectId }: CampaignListProps) {
         className="flex flex-col items-center justify-center py-12 text-center"
       >
         <p className="mb-4 text-muted-foreground">No campaigns yet.</p>
-        {/* Wire to <CreateCampaignDialog /> in Phase 8 */}
-        <Button>Create campaign</Button>
+        <CreateCampaignDialog
+          projectId={projectId}
+          trigger={
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Create campaign
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   return (
+    <>
+      <div className="mb-4 flex justify-end">
+        <CreateCampaignDialog
+          projectId={projectId}
+          trigger={
+            <Button size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              New Campaign
+            </Button>
+          }
+        />
+      </div>
     <Table data-testid="campaign-list">
       <TableHeader>
         <TableRow>
@@ -95,5 +115,6 @@ export function CampaignList({ projectId }: CampaignListProps) {
         ))}
       </TableBody>
     </Table>
+    </>
   );
 }
