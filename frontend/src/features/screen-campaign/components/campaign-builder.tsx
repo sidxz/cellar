@@ -27,6 +27,11 @@ import { CompoundListPane } from "./compound-list-pane";
 import { CloseSignDialog } from "./close-sign-dialog";
 import { CampaignView } from "./campaign-view";
 import { SourcesSummaryCard } from "./sources-summary-card";
+import {
+  CampaignFilterBar,
+  emptyFilters,
+  type CampaignFilters,
+} from "./campaign-filter-bar";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import type { CampaignResultResponse } from "../types";
 
@@ -42,6 +47,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
   const { data: campaign, isLoading, error } = useCampaign(campaignId);
   const [selectedResult, setSelectedResult] = useState<CampaignResultResponse | null>(null);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
@@ -125,14 +131,20 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
           />
         </aside>
 
-        {/* Center — channel strip + results grid */}
+        {/* Center — channel strip + filter bar + results grid */}
         <main className="flex flex-col overflow-hidden">
           <ChannelStrip campaign={campaign} />
+          <CampaignFilterBar
+            campaign={campaign}
+            filters={filters}
+            onChange={setFilters}
+          />
           <div className="flex-1 overflow-auto p-2">
             <ResultsGrid
               campaign={campaign}
               selectedResultId={selectedResult?.id ?? null}
               onRowSelect={setSelectedResult}
+              filters={filters}
             />
           </div>
         </main>

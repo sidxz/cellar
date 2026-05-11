@@ -42,6 +42,11 @@ import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 
 import { useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
+import {
+  type CampaignFilters,
+  filtersActive,
+  rowPassesFilters,
+} from "./campaign-filter-bar";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
   CampaignResponse,
@@ -245,9 +250,17 @@ interface ResultsGridProps {
   onRowSelect: (result: CampaignResultResponse | null) => void;
   /** When true, disables cell overrides and row selection (closed/superseded view). */
   readOnly?: boolean;
+  /** External chip-driven filters from <CampaignFilterBar>; omit for closed view. */
+  filters?: CampaignFilters;
 }
 
-export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly = false }: ResultsGridProps) {
+export function ResultsGrid({
+  campaign,
+  selectedResultId,
+  onRowSelect,
+  readOnly = false,
+  filters,
+}: ResultsGridProps) {
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
     channel: CampaignChannelResponse;
@@ -394,6 +407,18 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
     );
   }
 
+  const isExternalFilterPresent = useCallback(
+    () => (filters ? filtersActive(filters) : false),
+    [filters],
+  );
+  const doesExternalFilterPass = useCallback(
+    (node: { data?: ResultRow }) => {
+      if (!filters || !node.data) return true;
+      return rowPassesFilters(node.data.result, filters);
+    },
+    [filters],
+  );
+
   return (
     <>
       <div style={{ height: "100%", width: "100%" }} className="group">
@@ -407,6 +432,8 @@ export function ResultsGrid({ campaign, selectedResultId, onRowSelect, readOnly 
           getRowId={(p) => p.data.result.id}
           animateRows={false}
           suppressCellFocus
+          isExternalFilterPresent={isExternalFilterPresent}
+          doesExternalFilterPass={doesExternalFilterPass}
         />
       </div>
 
