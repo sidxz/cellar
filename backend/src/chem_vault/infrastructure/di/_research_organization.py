@@ -81,6 +81,39 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.readout_da
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from chem_vault.application.admin.admin_delete_registry import register_admin_delete
+from chem_vault.application.research_organization.add_campaign_channel import AddCampaignChannel
+from chem_vault.application.research_organization.add_result_row import AddResultRow
+from chem_vault.application.research_organization.channel_resolution import ChannelResolver
+from chem_vault.application.research_organization.close_campaign import CloseCampaign
+from chem_vault.application.research_organization.create_campaign import CreateCampaign as CreateCampaignUC
+from chem_vault.application.research_organization.get_published_campaign import GetPublishedCampaign
+from chem_vault.application.research_organization.override_result_cell import OverrideResultCell
+from chem_vault.application.research_organization.refresh_campaign_from_sources import RefreshFromSources
+from chem_vault.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
+from chem_vault.application.research_organization.remove_result_row import RemoveResultRow
+from chem_vault.application.research_organization.reseed_campaign import ReseedCampaign as ReseedCampaignUC
+from chem_vault.application.research_organization.set_result_decision import SetResultDecision
+from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
+from chem_vault.application.research_organization.update_campaign_channel import UpdateCampaignChannel
+from chem_vault.domain.chemical_registration.repository import MoleculeRepository
+from chem_vault.domain.inventory.repository import BatchRepository
+from chem_vault.domain.research_organization.repository import CampaignRepository
+from chem_vault.domain.screening_assay.repository import ProtocolRepository
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
+    SQLAlchemyCampaignRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
+    SQLAlchemyChannelResolutionQuery,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+    SQLAlchemyMoleculeRepository,
+)
+from chem_vault.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
+    SQLAlchemyBatchRepository,
+)
 
 
 def register_research_organization(container: Container) -> None:
@@ -257,6 +290,161 @@ def register_research_organization(container: Container) -> None:
         )
 
     container.define(CountSearch, _count_search)
+
+    # --- Campaigns ---
+    def _channel_resolution_query(c: Container) -> SQLAlchemyChannelResolutionQuery:
+        return SQLAlchemyChannelResolutionQuery(c[async_sessionmaker])
+
+    def _channel_resolver(c: Container) -> ChannelResolver:
+        return ChannelResolver(query=c[SQLAlchemyChannelResolutionQuery])
+
+    container.define(SQLAlchemyChannelResolutionQuery, _channel_resolution_query)
+    container.define(ChannelResolver, _channel_resolver)
+
+    def _campaign_repo(c: Container) -> SQLAlchemyCampaignRepository:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SQLAlchemyCampaignRepository(uow)
+
+    container.define(SQLAlchemyCampaignRepository, _campaign_repo)
+
+    def _campaign_repo_protocol(c: Container) -> CampaignRepository:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SQLAlchemyCampaignRepository(uow)  # type: ignore[return-value]
+
+    container.define(CampaignRepository, _campaign_repo_protocol)
+
+    def _create_campaign(c: Container) -> CreateCampaignUC:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateCampaignUC(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            collection_repo=SQLAlchemyCollectionRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _reseed_campaign(c: Container) -> ReseedCampaignUC:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ReseedCampaignUC(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            collection_repo=SQLAlchemyCollectionRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _add_channel(c: Container) -> AddCampaignChannel:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddCampaignChannel(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _update_channel(c: Container) -> UpdateCampaignChannel:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateCampaignChannel(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _remove_channel(c: Container) -> RemoveCampaignChannel:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveCampaignChannel(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _set_decision(c: Container) -> SetResultDecision:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetResultDecision(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _override_cell(c: Container) -> OverrideResultCell:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return OverrideResultCell(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _add_result_row(c: Container) -> AddResultRow:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddResultRow(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _remove_result_row(c: Container) -> RemoveResultRow:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveResultRow(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _refresh(c: Container) -> RefreshFromSources:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RefreshFromSources(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _close_campaign(c: Container) -> CloseCampaign:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CloseCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            collection_repo=SQLAlchemyCollectionRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _supersede(c: Container) -> SupersedeCampaignUC:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SupersedeCampaignUC(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _get_published(c: Container) -> GetPublishedCampaign:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetPublishedCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            project_repo=SQLAlchemyProjectRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            collection_repo=SQLAlchemyCollectionRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+        )
+
+    container.define(CreateCampaignUC, _create_campaign)
+    container.define(ReseedCampaignUC, _reseed_campaign)
+    container.define(AddCampaignChannel, _add_channel)
+    container.define(UpdateCampaignChannel, _update_channel)
+    container.define(RemoveCampaignChannel, _remove_channel)
+    container.define(SetResultDecision, _set_decision)
+    container.define(OverrideResultCell, _override_cell)
+    container.define(AddResultRow, _add_result_row)
+    container.define(RemoveResultRow, _remove_result_row)
+    container.define(RefreshFromSources, _refresh)
+    container.define(CloseCampaign, _close_campaign)
+    container.define(SupersedeCampaignUC, _supersede)
+    container.define(GetPublishedCampaign, _get_published)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

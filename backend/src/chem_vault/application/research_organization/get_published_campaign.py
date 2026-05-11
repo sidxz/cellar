@@ -5,7 +5,7 @@ consumed by DAIKON: one self-contained document per campaign that includes the
 campaign header, compound source, source-protocol snapshot, channel definitions,
 per-compound result rows (with measurements), and the published Collection.
 
-No UoW — read-only queries issue their own short transactions per repository call.
+Uses a single UoW to wrap all repository calls in one read-only transaction.
 No event registration.
 """
 
@@ -19,6 +19,7 @@ from returns.result import Failure, Result, Success
 
 from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.shared.command import Command
+from chem_vault.application.shared.unit_of_work import UnitOfWork
 from chem_vault.domain.chemical_registration.repository import (
     MoleculeRepository,
 )
@@ -89,6 +90,7 @@ class GetPublishedCampaign:
     def __init__(
         self,
         *,
+        uow: UnitOfWork,
         campaign_repo: CampaignRepository,
         project_repo: ProjectRepository,
         protocol_repo: ProtocolRepository,
@@ -96,6 +98,7 @@ class GetPublishedCampaign:
         molecule_repo: MoleculeRepository,
         batch_repo: BatchRepository,
     ) -> None:
+        self._uow = uow
         self._campaign_repo = campaign_repo
         self._project_repo = project_repo
         self._protocol_repo = protocol_repo
@@ -115,6 +118,10 @@ class GetPublishedCampaign:
         except AuthorizationError as e:
             return Failure(e)
 
+        async with self._uow:
+            return await self._execute(input)
+
+    async def _execute(self, input: GetPublishedCampaignQuery) -> Result[dict[str, Any], DomainError]:
         # Step 2 — load campaign.
         campaign = await self._campaign_repo.find_by_id_in_workspace(
             input.workspace_id, input.campaign_id

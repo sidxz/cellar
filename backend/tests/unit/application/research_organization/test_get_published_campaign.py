@@ -231,7 +231,13 @@ def _build_use_case(
     else:
         batch_repo.find_by_id = AsyncMock(return_value=None)
 
+    # Mock UoW — acts as a no-op async context manager for unit tests.
+    uow = AsyncMock()
+    uow.__aenter__ = AsyncMock(return_value=uow)
+    uow.__aexit__ = AsyncMock(return_value=False)
+
     uc = GetPublishedCampaign(
+        uow=uow,
         campaign_repo=campaign_repo,
         project_repo=project_repo,
         protocol_repo=protocol_repo,
