@@ -235,6 +235,14 @@ class CampaignMeasurementResponse(BaseModel):
     protocol_name_snapshot: str
     protocol_version_snapshot: int
     run_date_snapshot: str | None = None
+    # Migration 029 — snapshot + audit fields (B6 + B8). Nullable for backwards
+    # compat — existing closed campaigns serialize these as null.
+    override_reason: str | None = None
+    test_concentration_value: float | None = None
+    test_concentration_unit: str | None = None
+    replicate_count: int | None = None
+    qc_pass: bool | None = None
+    contributing_run_ids: list[uuid.UUID] | None = None
 
     @classmethod
     def from_domain(cls, m: CampaignMeasurement) -> CampaignMeasurementResponse:
@@ -252,6 +260,12 @@ class CampaignMeasurementResponse(BaseModel):
             protocol_name_snapshot=m.protocol_name_snapshot,
             protocol_version_snapshot=m.protocol_version_snapshot,
             run_date_snapshot=m.run_date_snapshot.isoformat() if m.run_date_snapshot is not None else None,
+            override_reason=m.override_reason,
+            test_concentration_value=m.test_concentration_value,
+            test_concentration_unit=m.test_concentration_unit,
+            replicate_count=m.replicate_count,
+            qc_pass=m.qc_pass,
+            contributing_run_ids=m.contributing_run_ids,
         )
 
 

@@ -200,6 +200,32 @@
                 "unit":              { "type": "string" },
                 "hit_call":          { "type": ["string", "null"] },
                 "is_manual_override":{ "type": "boolean" },
+                "override_reason":   { "type": ["string", "null"] },
+                "test_concentration": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["value"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "value": { "type": ["number", "integer", "null"] },
+                        "unit":  { "type": ["string", "null"] }
+                      }
+                    },
+                    { "type": "null" }
+                  ]
+                },
+                "replicate_count":   { "type": ["integer", "null"] },
+                "qc_pass":           { "type": ["boolean", "null"] },
+                "contributing_run_ids": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": { "type": "string", "format": "uuid" }
+                    },
+                    { "type": "null" }
+                  ]
+                },
                 "source": {
                   "oneOf": [
                     {

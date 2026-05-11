@@ -426,6 +426,15 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
             "protocol_version": m.protocol_version_snapshot,
         }
 
+    # Migration 029 — snapshot + audit fields. Flat schema: emit nulls when absent
+    # so DAIKON consumers can rely on key presence.
+    test_concentration: dict[str, Any] | None = None
+    if m.test_concentration_value is not None:
+        test_concentration = {
+            "value": m.test_concentration_value,
+            "unit": m.test_concentration_unit,
+        }
+
     return {
         "channel_id": str(m.channel_id),
         "value": m.value,
@@ -433,6 +442,15 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
         "unit": m.unit,
         "hit_call": m.hit_call.value if m.hit_call is not None else None,
         "is_manual_override": m.is_manual_override,
+        "override_reason": m.override_reason,
+        "test_concentration": test_concentration,
+        "replicate_count": m.replicate_count,
+        "qc_pass": m.qc_pass,
         "source": source,
+        "contributing_run_ids": (
+            [str(rid) for rid in m.contributing_run_ids]
+            if m.contributing_run_ids
+            else None
+        ),
     }
 
