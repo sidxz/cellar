@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * CompoundListPane — Task 8.6
+ * CompoundListPane — Task 8.6 (updated for per-result attribution model)
  *
- * Left pane. Searchable list, "Add compound" button, per-row "Remove",
- * and "Re-seed from source" toolbar action.
+ * Left pane. Searchable list, "Add compounds" dropdown, per-row "Remove".
+ * The Re-seed toolbar button is removed — wipe-and-replace no longer fits
+ * the curated-workspace model. Compounds are added incrementally via:
+ *   - Manual (single compound search)
+ *   - From a Collection
+ *   - From another Campaign
  */
 
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Search } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { Trash2, Search, ChevronDown } from "lucide-react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -35,7 +36,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/shared/components/ui/alert-dialog";
-import { Label } from "@/shared/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import {
@@ -43,12 +49,11 @@ import {
   useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete,
 } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
-// TODO: rewrite per add-from model (commit 3/4) — CompoundSourcePicker deleted, ReseedDialog replaced
+import { AddFromCollectionDialog } from "./add-from-collection-dialog";
+import { AddFromCampaignDialog } from "./add-from-campaign-dialog";
 import type { CampaignResponse, CampaignResultResponse } from "../types";
 
-// ── Add compound dialog ───────────────────────────────────────────────────────
-
-const addSchema = z.object({ q: z.string().min(2) });
+// ── Add compound dialog (single / manual) ────────────────────────────────────
 
 interface AddCompoundDialogProps {
   campaignId: string;
@@ -132,7 +137,6 @@ function AddCompoundDialog({ campaignId, open, onClose }: AddCompoundDialogProps
 }
 
 // ── Main pane ─────────────────────────────────────────────────────────────────
-// TODO: rewrite per add-from model (commit 4) — AddFromCollectionDialog and AddFromCampaignDialog added here
 
 interface CompoundListPaneProps {
   campaign: CampaignResponse;
@@ -147,8 +151,9 @@ export function CompoundListPane({
 }: CompoundListPaneProps) {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  // TODO: rewrite per add-from model (commit 4) — add-from state goes here
+  const [manualOpen, setManualOpen] = useState(false);
+  const [fromCollectionOpen, setFromCollectionOpen] = useState(false);
+  const [fromCampaignOpen, setFromCampaignOpen] = useState(false);
 
   const removeMutation = useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete({
     mutation: {
@@ -183,17 +188,33 @@ export function CompoundListPane({
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      {/* TODO: rewrite per add-from model (commit 4) — replace with Add compounds dropdown */}
       <div className="px-3 py-2 border-b flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          title="Add compound"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" className="shrink-0">
+              + Add compounds
+              <ChevronDown className="ml-1 h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => setManualOpen(true)}>
+              Manual (single compound)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFromCollectionOpen(true)}>
+              From a collection…
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFromCampaignOpen(true)}>
+              From another campaign…
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled>
+              From a saved search (coming soon)
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled>
+              From a protocol run (use run-import flow)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -213,7 +234,7 @@ export function CompoundListPane({
         {filtered.length === 0 && (
           <p className="text-xs text-muted-foreground p-3 text-center">
             {campaign.results.length === 0
-              ? "No compounds yet. Click + to add."
+              ? "No compounds yet. Click Add compounds to start."
               : "No matches."}
           </p>
         )}
@@ -282,12 +303,22 @@ export function CompoundListPane({
         ))}
       </div>
 
+      {/* Dialogs */}
       <AddCompoundDialog
         campaignId={campaign.id}
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
       />
-      {/* TODO: rewrite per add-from model (commit 4) — AddFromCollectionDialog and AddFromCampaignDialog go here */}
+      <AddFromCollectionDialog
+        campaignId={campaign.id}
+        open={fromCollectionOpen}
+        onClose={() => setFromCollectionOpen(false)}
+      />
+      <AddFromCampaignDialog
+        campaignId={campaign.id}
+        open={fromCampaignOpen}
+        onClose={() => setFromCampaignOpen(false)}
+      />
     </div>
   );
 }
