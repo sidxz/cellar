@@ -31,9 +31,8 @@ import {
 } from "@/shared/components/ui/select";
 import {
   useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost,
-  useListCampaignsApiV1CampaignsGet,
 } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys, useCampaignsByProject } from "../lib/hooks";
 import { showSuccess, showError } from "@/shared/lib/toast";
 
 const DECISION_OPTIONS = [
@@ -44,7 +43,6 @@ const DECISION_OPTIONS = [
 
 interface AddFromCampaignDialogProps {
   campaignId: string;
-  /** Phase 5: project-scoped campaign filter. Accepted here; wired in Phase 5. */
   projectId: string;
   open: boolean;
   onClose: () => void;
@@ -52,7 +50,7 @@ interface AddFromCampaignDialogProps {
 
 export function AddFromCampaignDialog({
   campaignId,
-  projectId: _projectId,
+  projectId,
   open,
   onClose,
 }: AddFromCampaignDialogProps) {
@@ -62,9 +60,7 @@ export function AddFromCampaignDialog({
   const [description, setDescription] = useState("");
 
   const { data: allCampaigns, isLoading: campaignsLoading } =
-    useListCampaignsApiV1CampaignsGet(undefined, {
-      query: { enabled: open },
-    });
+    useCampaignsByProject(projectId, { enabled: open });
 
   // Exclude current campaign from picker
   const sourceCampaigns = allCampaigns?.filter((c) => c.id !== campaignId) ?? [];
