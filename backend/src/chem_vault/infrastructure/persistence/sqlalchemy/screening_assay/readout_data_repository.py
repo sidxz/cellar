@@ -19,6 +19,31 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
+def _normalization_unit(normalization_applied: str | None, raw_unit: str | None) -> str | None:
+    """Resolve the display unit for an aggregated value.
+
+    Normalization formulas have well-defined output units that override the
+    raw readout's unit (a "Raw Data" readout in nM still produces "%" after
+    PERCENT_INHIBITION). Unknown / future formulas fall back to the raw unit
+    so display stays reasonable without code changes.
+    """
+    if normalization_applied is None:
+        return raw_unit
+    try:
+        formula = ReadoutNormalization(normalization_applied)
+    except ValueError:
+        return raw_unit
+    if formula in (
+        ReadoutNormalization.PERCENT_INHIBITION,
+        ReadoutNormalization.PERCENT_ACTIVATION,
+        ReadoutNormalization.PERCENT_CONTROL,
+    ):
+        return "%"
+    if formula == ReadoutNormalization.Z_SCORE:
+        return None  # unitless
+    return raw_unit
+
+
 class SQLAlchemyReadoutDataRepository:
     """Persists ReadoutData entities to PostgreSQL."""
 
@@ -80,24 +105,36 @@ class SQLAlchemyReadoutDataRepository:
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
-        readout_definition_ids: list[uuid.UUID],
-    ) -> dict[uuid.UUID, dict[uuid.UUID, "AggregatedReadout"]]:
-        """Batch query: molecule_id -> readout_def_id -> aggregated value.
+        specs: list[tuple[uuid.UUID, str | None]],
+    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], "AggregatedReadout"]]:
+        """Batch query: molecule_id -> (readout_def_id, normalization) -> aggregated value.
 
-        Aggregation method comes from readout_definition.aggregation setting.
+        ``specs`` selects which (readout_definition, normalization_applied) pairs
+        to aggregate independently. ``None`` in the second slot means the raw
+        layer (``normalization_applied IS NULL``); any string selects the
+        matching computed normalization (e.g. ``"percent_inhibition"``,
+        ``"z_score"``). Filtering by ``normalization_applied`` is required —
+        without it raw and computed rows would be averaged together since both
+        share the same ``readout_definition_id``.
+
+        Aggregation method comes from ``readout_definition.aggregation``.
         """
         from chem_vault.domain.screening_assay.activity_types import AggregatedReadout
         from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
             ReadoutDefinitionModel,
         )
 
-        if not molecule_ids or not readout_definition_ids:
+        if not molecule_ids or not specs:
             return {}
+
+        rd_def_ids = list({rd_id for rd_id, _ in specs})
+        wanted = {(rd_id, norm) for rd_id, norm in specs}
 
         stmt = (
             select(
                 ReadoutDataModel.molecule_id,
                 ReadoutDataModel.readout_definition_id,
+                ReadoutDataModel.normalization_applied,
                 ReadoutDefinitionModel.name.label("readout_name"),
                 ReadoutDefinitionModel.aggregation,
                 ReadoutDefinitionModel.unit,
@@ -113,12 +150,13 @@ class SQLAlchemyReadoutDataRepository:
             .where(
                 ReadoutDataModel.workspace_id == workspace_id,
                 ReadoutDataModel.molecule_id.in_(molecule_ids),
-                ReadoutDataModel.readout_definition_id.in_(readout_definition_ids),
+                ReadoutDataModel.readout_definition_id.in_(rd_def_ids),
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
             )
             .group_by(
                 ReadoutDataModel.molecule_id,
                 ReadoutDataModel.readout_definition_id,
+                ReadoutDataModel.normalization_applied,
                 ReadoutDefinitionModel.name,
                 ReadoutDefinitionModel.aggregation,
                 ReadoutDefinitionModel.unit,
@@ -128,8 +166,12 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         rows = result.all()
 
-        out: dict[uuid.UUID, dict[uuid.UUID, AggregatedReadout]] = {}
+        out: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
         for row in rows:
+            key = (row.readout_definition_id, row.normalization_applied)
+            if key not in wanted:
+                continue
+
             agg = row.aggregation or "mean"
             if agg == "min":
                 val = row.min_val
@@ -138,16 +180,21 @@ class SQLAlchemyReadoutDataRepository:
             else:  # mean, none, median (approx as mean)
                 val = row.avg_val
 
+            # Normalized rows (% inh / % act / % control) carry the formula's
+            # output unit, not the raw readout's unit. The raw readout's unit
+            # is meaningful only for the raw layer.
+            unit = _normalization_unit(row.normalization_applied, row.unit)
+
             entry = AggregatedReadout(
                 readout_definition_id=row.readout_definition_id,
                 readout_name=row.readout_name,
                 value=val,
                 qualifier=None,
-                unit=row.unit,
+                unit=unit,
                 aggregation=agg,
                 data_point_count=row.count_val,
             )
-            out.setdefault(row.molecule_id, {})[row.readout_definition_id] = entry
+            out.setdefault(row.molecule_id, {})[key] = entry
 
         return out
 

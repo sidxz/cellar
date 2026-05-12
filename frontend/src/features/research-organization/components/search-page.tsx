@@ -289,6 +289,7 @@ function SearchPageInner() {
           onProjectsChange={setProjectIds}
           onSearch={handleSearch}
           isLoading={searchMutation.isPending}
+          protocols={protocols ?? []}
         />
 
         {/* Results area */}

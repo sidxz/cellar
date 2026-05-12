@@ -127,8 +127,8 @@ class ReadoutDataRepository(Protocol):
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
-        readout_definition_ids: list[uuid.UUID],
-    ) -> dict[uuid.UUID, dict[uuid.UUID, AggregatedReadout]]: ...
+        specs: list[tuple[uuid.UUID, str | None]],
+    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]: ...
     async def find_by_molecule_and_definition(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, readout_definition_id: uuid.UUID
     ) -> list: ...

@@ -4,6 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Separator } from "@/shared/components/ui/separator";
 import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Protocol } from "@/features/screening-assay/types";
 import { useSearchCount } from "../../hooks/use-search-count";
 import type {
   ActivityCriterion,
@@ -39,6 +40,9 @@ interface SearchFormProps {
   onProjectsChange: (ids: string[]) => void;
   onSearch: (query: SearchQuery, protocolColumns: string[]) => void;
   isLoading?: boolean;
+  /** Full protocol records (with readout_definitions) — used to pick sensible
+   *  default columns when a criterion filters by protocol only. */
+  protocols: Protocol[];
 }
 
 // ─── Helpers: decompose SearchQuery into section states ─────────────────────
@@ -137,11 +141,15 @@ function decomposeQuery(query: SearchQuery | undefined) {
 /**
  * Derive protocol column IDs from activity criteria for cross-protocol display.
  *
- * Always includes a drc: column for each protocol so the DR plot renders.
- * If the user also filtered by a readout definition, adds an rd: column
- * so the readout value appears alongside the curve.
+ * Explicit filters (curve_type or readout_definition_id) project directly to a
+ * `drc:` / `rd:` column. When a criterion filters by protocol alone, we fall
+ * back to "show what the protocol actually emits" instead of always defaulting
+ * to IC50 — see `defaultProtocolColumns` for the rules.
  */
-function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] {
+function deriveProtocolColumns(
+  activityCriteria: ActivityCriterion[],
+  protocols: Protocol[],
+): string[] {
   const columns: string[] = [];
   function add(col: string) {
     if (!columns.includes(col)) columns.push(col);
@@ -154,20 +162,76 @@ function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] 
       Array.isArray(c.where) && c.where.length > 0
         ? c.where
         : [{ curve_type: c.curve_type, readout_definition_id: c.readout_definition_id }];
-    let addedCurve = false;
+    let addedAny = false;
     for (const cond of conds) {
       if (cond.curve_type) {
         add(`drc:${c.protocol_id}:${cond.curve_type}`);
-        addedCurve = true;
+        addedAny = true;
       }
       if (cond.readout_definition_id) {
         add(`rd:${c.protocol_id}:${cond.readout_definition_id}`);
+        addedAny = true;
       }
     }
-    // Fallback: protocol-only / presence filter still gets a default IC50 column.
-    if (!addedCurve) add(`drc:${c.protocol_id}:ic50`);
+    // Protocol-only filter (no curve / no readout): pick defaults from the
+    // protocol's actual readout definitions so e.g. a single-dose %inhibition
+    // protocol doesn't show empty IC50 / IC50 Plot columns.
+    if (!addedAny) {
+      for (const col of defaultProtocolColumns(c.protocol_id, protocols)) {
+        add(col);
+      }
+    }
   }
   return columns;
+}
+
+/**
+ * Default grid columns for a protocol-only filter.
+ *
+ * Rules (in priority order):
+ *   1. Dose-response readouts (`data_type === "dose_response"`) emit a `drc:`
+ *      column per fit, keyed by whatever curve type the readout's
+ *      `dose_response_config` declares (ic50 / ec50 / ki / …). The grid
+ *      renders each `drc:` as a separate (value, plot) pair.
+ *   2. If the protocol has no DR readouts, every numeric readout (raw or
+ *      calculated) emits an `rd:` column in `display_order`. For readouts
+ *      with `normalizations` configured (e.g. percent_inhibition, z_score)
+ *      we surface the first normalization as the default view — chemists
+ *      want "% Inhibition" in the grid, not the underlying raw signal.
+ *      Readouts without normalizations stay on the raw layer.
+ *   3. As a defensive last resort (protocol record missing or only
+ *      text/pick-list/file/date readouts), keep the legacy IC50 fallback
+ *      so a column still renders.
+ */
+function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): string[] {
+  const proto = protocols.find((p) => p.id === protocolId);
+  if (!proto) return [`drc:${protocolId}:ic50`];
+
+  const ordered = [...proto.readout_definitions].sort(
+    (a, b) => a.display_order - b.display_order,
+  );
+
+  const drcCols: string[] = [];
+  for (const rd of ordered) {
+    if (rd.data_type === "dose_response" && rd.dose_response_config?.curve_type) {
+      drcCols.push(`drc:${protocolId}:${rd.dose_response_config.curve_type}`);
+    }
+  }
+  if (drcCols.length > 0) return drcCols;
+
+  const rdCols: string[] = [];
+  for (const rd of ordered) {
+    if (rd.data_type !== "numeric") continue;
+    const primaryNorm = rd.normalizations?.find((n) => n !== "none");
+    if (primaryNorm) {
+      rdCols.push(`rd:${protocolId}:${rd.id}:${primaryNorm}`);
+    } else {
+      rdCols.push(`rd:${protocolId}:${rd.id}`);
+    }
+  }
+  if (rdCols.length > 0) return rdCols;
+
+  return [`drc:${protocolId}:ic50`];
 }
 
 // Walks the composed criteria tree looking for any similarity structure clause.
@@ -193,6 +257,7 @@ export function SearchForm({
   onProjectsChange,
   onSearch,
   isLoading,
+  protocols,
 }: SearchFormProps) {
   // Parse initial query into section states
   const initial = decomposeQuery(initialQuery);
@@ -383,7 +448,7 @@ export function SearchForm({
   function handleSearch() {
     const criteria = composeCriteria();
     const query: SearchQuery = { criteria, logic: "and" };
-    const protocolColumns = deriveProtocolColumns(activityCriteria);
+    const protocolColumns = deriveProtocolColumns(activityCriteria, protocols);
     onSearch(query, protocolColumns);
   }
 

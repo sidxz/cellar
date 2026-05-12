@@ -14,6 +14,7 @@ from chem_vault.application.screening import _condense_raw_data
 from chem_vault.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
+    AggregatedReadout,
     CurveParams,
     ProtocolActivitySummary,
 )
@@ -117,7 +118,11 @@ class MoleculeActivityService:
         """Batch enrichment for search results.
 
         protocol_columns format:
-          - "rd:{readout_definition_id}" -- aggregated readout value
+          - "rd:{readout_definition_id}" -- aggregated raw readout value
+          - "rd:{protocol_id}:{readout_definition_id}" -- same, with protocol scope
+          - "rd:{protocol_id}:{readout_definition_id}:{normalization}" -- the
+            named normalization layer of the readout (e.g. ``percent_inhibition``,
+            ``z_score``). Without the suffix the raw layer is returned.
           - "drc:{protocol_id}:{curve_type}" -- best dose-response curve
         """
         if not molecule_ids or not protocol_columns:
@@ -135,25 +140,39 @@ class MoleculeActivityService:
         protocol_columns: list[str],
     ) -> dict[uuid.UUID, dict[str, ActivityValue]]:
         # Parse column specs
-        # Formats: "drc:{proto_id}:{curve_type}", "rd:{rd_def_id}" or "rd:{proto_id}:{rd_def_id}"
-        rd_def_ids: list[uuid.UUID] = []
-        rd_col_map: dict[uuid.UUID, str] = {}  # rd_def_id -> original col key
+        # Formats:
+        #   "rd:{rd_def_id}"                          -- raw, legacy/unscoped
+        #   "rd:{proto_id}:{rd_def_id}"               -- raw, protocol-scoped
+        #   "rd:{proto_id}:{rd_def_id}:{normalization}" -- normalized layer
+        #   "drc:{proto_id}:{curve_type}"             -- best dose-response curve
+        rd_specs: list[tuple[uuid.UUID, str | None]] = []
+        rd_col_map: dict[tuple[uuid.UUID, str | None], str] = {}
         drc_specs: list[tuple[uuid.UUID, str]] = []  # (protocol_id, curve_type)
         for col in protocol_columns:
             if col.startswith("rd:"):
-                # Support both "rd:{id}" and "rd:{proto}:{id}" — last segment is always the def ID
-                rd_id = uuid.UUID(col.split(":")[-1])
-                rd_def_ids.append(rd_id)
-                rd_col_map[rd_id] = col  # preserve original key for response
+                parts = col.split(":")
+                # Identify the rd_def_id and optional normalization. Last UUID
+                # segment is the readout def; anything after it is a formula.
+                if len(parts) == 4:
+                    rd_id = uuid.UUID(parts[2])
+                    normalization: str | None = parts[3] or None
+                else:
+                    rd_id = uuid.UUID(parts[-1])
+                    normalization = None
+                spec = (rd_id, normalization)
+                rd_specs.append(spec)
+                rd_col_map[spec] = col
             elif col.startswith("drc:"):
                 parts = col.split(":")
                 drc_specs.append((uuid.UUID(parts[1]), parts[2]))
 
         # Fetch aggregated readouts
-        rd_data: dict[uuid.UUID, dict[uuid.UUID, object]] = {}
-        if rd_def_ids:
+        rd_data: dict[
+            uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]
+        ] = {}
+        if rd_specs:
             rd_data = await self._readout_repo.find_aggregated_by_molecules(
-                workspace_id, molecule_ids, rd_def_ids
+                workspace_id, molecule_ids, rd_specs
             )
 
         # Fetch best curves
@@ -176,9 +195,9 @@ class MoleculeActivityService:
 
             # Readout columns
             mol_rds = rd_data.get(mol_id, {})
-            for rd_def_id in rd_def_ids:
-                col_key = rd_col_map.get(rd_def_id, f"rd:{rd_def_id}")
-                agg = mol_rds.get(rd_def_id)
+            for spec in rd_specs:
+                col_key = rd_col_map[spec]
+                agg = mol_rds.get(spec)
                 if agg:
                     mol_activity[col_key] = ActivityValue(
                         value=agg.value,

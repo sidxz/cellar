@@ -20,7 +20,7 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
-import type { Protocol } from "@/features/screening-assay/types";
+import { READOUT_NORMALIZATION_LABELS, type Protocol } from "@/features/screening-assay/types";
 import type { ActivityValue, ReportConfig } from "../../types";
 import { DoseResponseCell } from "./dose-response-cell";
 
@@ -251,14 +251,27 @@ function buildProtocolColumnGroups(
       const prefix = parts[0];
 
       if (prefix === "rd") {
-        // Readout value column — resolve name from protocol's readout definitions
+        // Readout value column — resolve name from protocol's readout definitions.
+        // 4-segment IDs (`rd:<p>:<id>:<norm>`) view a specific normalization
+        // of the readout (e.g. percent_inhibition). The backend hands us the
+        // formula-appropriate unit in `av.unit`, so the header decorates with
+        // the formula label and the cell renderer trusts `av.unit`.
         const rdId = parts[2];
+        const normalization = parts[3] ?? null;
         const rd = proto?.readout_definitions?.find((r) => r.id === rdId);
         const rdName = rd?.name ?? "Readout";
-        const rdUnit = rd?.unit ? ` (${rd.unit})` : "";
+        const normLabel = normalization
+          ? READOUT_NORMALIZATION_LABELS[normalization as keyof typeof READOUT_NORMALIZATION_LABELS] ??
+            normalization
+          : null;
+        const headerSuffix = normLabel
+          ? ` (${normLabel})`
+          : rd?.unit
+            ? ` (${rd.unit})`
+            : "";
 
         children.push({
-          headerName: `${rdName}${rdUnit}`,
+          headerName: `${rdName}${headerSuffix}`,
           width: 130,
           valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
           cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
