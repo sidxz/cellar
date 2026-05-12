@@ -1,48 +1,56 @@
 "use client";
 
 /**
- * ResultsGridV2 — V2 redesign (Phase 3, Task 3.8).
+ * ResultsGridV2 — mirrors the layout of the protocol Activity tab.
  *
- * AG Grid view with:
- *   - pinned-left chevron + molecule columns
- *   - one column-group per channel: { MeasurementCell, CampaignDoseResponseCell }
- *   - pinned-right decision chip column
- *   - row expansion via isFullWidthRow + RowDetailRenderer
- *   - external chip filters wired through CampaignFilterBar helpers
- *   - OverrideModal mounted controlled by local state
+ * Columns:
+ *   - Compound (pinned-left, flex, min 230) — reg# + molecule name
+ *   - Structure (130) — <StructureThumbnail size={104}>
+ *   - per channel:
+ *       - Value (120) — formatMeasurementValue + n=replicate_count + inline hit chip + OVR badge
+ *       - Class (90, DR only) — curve-class badge
+ *       - Curve (150, DR only) — <DoseResponseSparkline>
+ *   - Decision (pinned-right, 160) — <DecisionChipCell>
  *
- * OverrideModal is shared — imported from ../override-modal.tsx.
+ * Override editing survives inline in the value cell: an OVR badge + a
+ * hover pencil-edit affordance launch the shared OverrideModal.
+ *
+ * External chip filters wire through CampaignFilterBar helpers. Row expansion
+ * and the per-row detail renderer are removed.
  */
 
-import { useMemo, useState, useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type {
   ColDef,
-  ColGroupDef,
   ICellRendererParams,
   IRowNode,
-  IsFullWidthRowParams,
-  RowClassParams,
-  RowHeightParams,
 } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { Pencil } from "lucide-react";
+
+import { Badge } from "@/shared/components/ui/badge";
 import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
-import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
+import { StructureThumbnail } from "@/shared/components/chemistry";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
+
+import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
+import {
+  CURVE_CLASS_LABELS,
+  type CurveClass,
+  type CurveParams,
+} from "@/features/screening-assay/types";
 
 import { useMoleculesByIds } from "../../lib/hooks";
-import { OverrideModal } from "../override-modal";
 import { useCampaignCurves } from "../../lib/use-campaign-curves";
+import { OverrideModal } from "../override-modal";
 import {
   type CampaignFilters,
   filtersActive,
   rowPassesFilters,
 } from "../campaign-filter-bar";
 
-import { CampaignDoseResponseCell } from "./dose-response-cell";
-import { MeasurementCell } from "./measurement-cell";
 import { DecisionChipCell } from "./decision-chip-cell";
-import { RowDetailRenderer } from "./row-detail-renderer";
 
 import type {
   CampaignResponse,
@@ -56,16 +64,110 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 // ── Row shape ─────────────────────────────────────────────────────────────────
 
 interface RowData {
-  /** Stable per-row id (`<resultId>` for main, `<resultId>:detail` for expansion). */
-  id: string;
   result: CampaignResultResponse;
-  campaign: CampaignResponse;
-  /** True for the full-width expansion row immediately following a main row. */
-  isDetail: boolean;
 }
 
-const EXPANDED_HEIGHT = 260;
-const COLLAPSED_HEIGHT = 60;
+// ── Curve-class badge (inline; protocol activity-tab uses the same recipe) ───
+
+function curveClassBadge(cc: CurveClass | string | null | undefined) {
+  if (cc == null) {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        --
+      </Badge>
+    );
+  }
+  const styles: Record<string, string> = {
+    full: "border-success/40 bg-success/10 text-success",
+    partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
+    bell_shaped: "border-primary/40 bg-primary/10 text-primary",
+    inactive: "border-muted text-muted-foreground",
+  };
+  const label = (CURVE_CLASS_LABELS as Record<string, string>)[cc] ?? cc;
+  const cls = styles[cc] ?? "border-muted text-muted-foreground";
+  return <Badge className={cls}>{label}</Badge>;
+}
+
+// ── Inline hit chip + value cell ─────────────────────────────────────────────
+
+function HitChip({ call }: { call: string | null | undefined }) {
+  if (!call) return null;
+  const cls =
+    call === "hit"
+      ? "border-success/40 bg-success/10 text-success"
+      : call === "miss"
+      ? "border-muted text-muted-foreground"
+      : "border-warning/40 bg-warning/10 text-warning";
+  return (
+    <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>
+      {call}
+    </span>
+  );
+}
+
+interface CompoundValueCellProps {
+  prefix: string;
+  value: number | null;
+  unit: string | null | undefined;
+  replicates: number | null;
+  hitCall: string | null | undefined;
+  overridden: boolean | undefined;
+  overrideReason: string | null | undefined;
+  readOnly: boolean;
+  onEdit: () => void;
+}
+
+function CompoundValueCell({
+  prefix,
+  value,
+  unit,
+  replicates,
+  hitCall,
+  overridden,
+  overrideReason,
+  readOnly,
+  onEdit,
+}: CompoundValueCellProps) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      className="flex items-center gap-1 py-2"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div className="leading-tight">
+        <span className="text-sm">
+          {prefix}
+          {formatMeasurementValue(value)}
+          {unit ? ` ${unit}` : ""}
+        </span>
+        <HitChip call={hitCall} />
+        {overridden && (
+          <Badge
+            variant="outline"
+            className="ml-1 text-[10px]"
+            title={overrideReason ?? "Manually overridden"}
+          >
+            OVR
+          </Badge>
+        )}
+        {replicates != null && replicates > 1 && (
+          <div className="text-[10px] text-muted-foreground">n={replicates}</div>
+        )}
+      </div>
+      {!readOnly && hover && (
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label="Edit measurement"
+          className="ml-1 text-muted-foreground hover:text-foreground"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -75,26 +177,18 @@ interface ResultsGridV2Props {
   readOnly: boolean;
 }
 
+const ROW_HEIGHT = 130;
+
 export function ResultsGridV2({
   campaign,
   filters,
   readOnly,
 }: ResultsGridV2Props) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
     channel: CampaignChannelResponse;
     measurement?: CampaignMeasurementResponse;
   } | null>(null);
-
-  const toggleExpand = useCallback((id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   // ── Bulk fetches ────────────────────────────────────────────────────────────
 
@@ -103,7 +197,7 @@ export function ResultsGridV2({
     [campaign.results],
   );
   const { data: moleculesPage } = useMoleculesByIds(moleculeIds);
-  const moleculeById = useMemo(
+  const moleculesById = useMemo(
     () => new Map((moleculesPage?.items ?? []).map((m) => [m.id, m] as const)),
     [moleculesPage],
   );
@@ -111,170 +205,208 @@ export function ResultsGridV2({
   const curvesQuery = useCampaignCurves(campaign);
   const curveMap = curvesQuery.data ?? new Map();
 
-  // ── Row data (main rows + detail rows) ──────────────────────────────────────
+  // ── Row data ────────────────────────────────────────────────────────────────
 
-  const rowData = useMemo<RowData[]>(() => {
-    const rows: RowData[] = [];
-    for (const r of campaign.results ?? []) {
-      rows.push({ id: r.id, result: r, campaign, isDetail: false });
-      if (expanded.has(r.id)) {
-        rows.push({
-          id: `${r.id}:detail`,
-          result: r,
-          campaign,
-          isDetail: true,
-        });
-      }
-    }
-    return rows;
-  }, [campaign, expanded]);
+  const rowData = useMemo<RowData[]>(
+    () => (campaign.results ?? []).map((r) => ({ result: r })),
+    [campaign.results],
+  );
 
   // ── Column defs ─────────────────────────────────────────────────────────────
 
-  const columnDefs = useMemo<(ColDef<RowData> | ColGroupDef<RowData>)[]>(() => {
+  const columnDefs = useMemo<ColDef<RowData>[]>(() => {
     const sortedChannels = [...(campaign.channels ?? [])].sort(
       (a, b) => a.display_order - b.display_order,
     );
 
-    const channelGroups: ColGroupDef<RowData>[] = sortedChannels.map((ch) => ({
-      headerName: ch.label,
-      children: [
-        {
-          colId: `${ch.id}:value`,
-          headerName: "Value",
-          width: 160,
-          cellRenderer: (params: ICellRendererParams<RowData>) => {
-            const r = params.data?.result;
-            if (!r) return null;
-            const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
-            return (
-              <MeasurementCell
-                measurement={m}
-                readOnly={readOnly}
-                onEdit={() =>
-                  setOverrideTarget({ result: r, channel: ch, measurement: m })
-                }
-              />
-            );
-          },
-        },
-        {
-          colId: `${ch.id}:plot`,
-          headerName: "Curve",
-          width: 240,
-          cellRenderer: (params: ICellRendererParams<RowData>) => {
-            const r = params.data?.result;
-            if (!r) return null;
-            const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
-            return (
-              <CampaignDoseResponseCell measurement={m} curveMap={curveMap} />
-            );
-          },
-        },
-      ],
-    }));
+    const cols: ColDef<RowData>[] = [];
 
-    const defs: (ColDef<RowData> | ColGroupDef<RowData>)[] = [
-      // 1. Chevron (pinned left)
-      {
-        colId: "__expand__",
-        headerName: "",
-        width: 36,
-        minWidth: 36,
-        pinned: "left",
-        sortable: false,
-        resizable: false,
-        cellRenderer: (params: ICellRendererParams<RowData>) => {
-          const r = params.data?.result;
-          if (!r) return null;
-          const isOpen = expanded.has(r.id);
-          return (
-            <button
-              type="button"
-              className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
-              onClick={() => toggleExpand(r.id)}
-              aria-label={isOpen ? "Collapse row" : "Expand row"}
-            >
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
+    // 1. Compound (pinned left, flex)
+    cols.push({
+      headerName: "Compound",
+      field: "result.molecule_id",
+      pinned: "left",
+      flex: 1,
+      minWidth: 230,
+      sortable: false,
+      cellRenderer: (params: ICellRendererParams<RowData>) => {
+        const r = params.data?.result;
+        if (!r) return null;
+        const m = moleculesById.get(r.molecule_id);
+        const label =
+          m?.registration_number ?? r.molecule_id.slice(0, 8);
+        return (
+          <div className="flex items-start gap-2 leading-tight py-2">
+            <div className="min-w-0">
+              <span className="font-medium">{label}</span>
+              {m?.name && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {m.name}
+                </span>
               )}
-            </button>
-          );
-        },
-      },
-      // 2. Molecule (pinned left)
-      {
-        colId: "__molecule__",
-        headerName: "Compound",
-        pinned: "left",
-        width: 220,
-        cellRenderer: (params: ICellRendererParams<RowData>) => {
-          const r = params.data?.result;
-          if (!r) return null;
-          const mol = moleculeById.get(r.molecule_id);
-          // Reg number → name → ellipsis. NEVER show a UUID.
-          const label = mol?.registration_number ?? mol?.name ?? "…";
-          const smiles = mol?.structure?.smiles ?? null;
-          return (
-            <div className="flex items-center gap-2 py-1">
-              <MoleculeThumbnail smiles={smiles} size="sm" fallback={label} />
-              <span className="font-mono text-xs">{label}</span>
             </div>
-          );
-        },
+          </div>
+        );
       },
-      // 3. Channel groups
-      ...channelGroups,
-      // 4. Decision (pinned right)
-      {
-        colId: "__decision__",
-        headerName: "Decision",
-        pinned: "right",
-        width: 160,
+    });
+
+    // 2. Structure
+    cols.push({
+      headerName: "Structure",
+      colId: "structure",
+      width: 130,
+      sortable: false,
+      cellRenderer: (params: ICellRendererParams<RowData>) => {
+        const r = params.data?.result;
+        if (!r) return null;
+        const m = moleculesById.get(r.molecule_id);
+        const smiles = m?.structure?.smiles ?? null;
+        if (!smiles) {
+          return <span className="text-muted-foreground">--</span>;
+        }
+        return (
+          <div className="flex h-full items-center justify-center py-1">
+            <StructureThumbnail smiles={smiles} size={104} />
+          </div>
+        );
+      },
+    });
+
+    // 3. Per-channel: Value [+ Class + Curve if DR]
+    for (const ch of sortedChannels) {
+      const isDR = ch.source_kind === "dose_response_curve";
+      // Derive a representative unit for the header from the first non-empty
+      // measurement on this channel (CampaignChannelResponse has no `unit`
+      // field; the unit lives on each measurement).
+      const sampleUnit =
+        (campaign.results ?? [])
+          .map((r) =>
+            r.measurements?.find((mm) => mm.channel_id === ch.id)?.unit ?? "",
+          )
+          .find((u) => u && u !== "-") ?? "";
+      const unitSuffix = sampleUnit ? ` (${sampleUnit})` : "";
+
+      // Value column
+      cols.push({
+        headerName: `${ch.label}${unitSuffix}`,
+        colId: `${ch.id}_value`,
+        width: 120,
+        valueGetter: (p) => {
+          const r = p.data?.result;
+          const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
+          return m?.value ?? null;
+        },
         cellRenderer: (params: ICellRendererParams<RowData>) => {
           const r = params.data?.result;
           if (!r) return null;
+          const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
+          if (!m) {
+            return <span className="text-muted-foreground">--</span>;
+          }
+          const q = m.value_qualifier;
+          if (q === "nd" || q === "excluded") {
+            return <span className="text-muted-foreground italic">{q}</span>;
+          }
+          const prefix = q === "<" || q === ">" ? `${q} ` : "";
           return (
-            <DecisionChipCell
-              campaignId={campaign.id}
-              result={r}
+            <CompoundValueCell
+              prefix={prefix}
+              value={m.value ?? null}
+              unit={m.unit}
+              replicates={m.replicate_count ?? null}
+              hitCall={m.hit_call}
+              overridden={m.is_manual_override}
+              overrideReason={m.override_reason}
               readOnly={readOnly}
+              onEdit={() =>
+                setOverrideTarget({ result: r, channel: ch, measurement: m })
+              }
             />
           );
         },
-      },
-    ];
+      });
 
-    return defs;
+      if (isDR) {
+        cols.push({
+          headerName: "Class",
+          colId: `${ch.id}_class`,
+          width: 90,
+          sortable: false,
+          cellRenderer: (params: ICellRendererParams<RowData>) => {
+            const r = params.data?.result;
+            const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
+            const curve = m?.source_curve_id
+              ? curveMap.get(m.source_curve_id)
+              : null;
+            return curveClassBadge(curve?.curve_class ?? null);
+          },
+        });
+
+        cols.push({
+          headerName: "Curve",
+          colId: `${ch.id}_curve`,
+          width: 150,
+          sortable: false,
+          cellRenderer: (params: ICellRendererParams<RowData>) => {
+            const r = params.data?.result;
+            const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
+            const curve = m?.source_curve_id
+              ? curveMap.get(m.source_curve_id)
+              : null;
+            if (!curve) {
+              return <span className="text-muted-foreground">--</span>;
+            }
+            const curveParams: CurveParams = {
+              top: curve.top,
+              bottom: curve.bottom,
+              hill_slope: curve.hill_slope,
+              fitted_value: curve.fitted_value,
+              r_squared: curve.r_squared,
+            };
+            const dataPoints =
+              (curve.raw_data as Array<{ x: number; y: number }> | null) ??
+              null;
+            return (
+              <DoseResponseSparkline
+                params={curveParams}
+                dataPoints={dataPoints}
+                curveClass={(curve.curve_class as CurveClass | null) ?? null}
+              />
+            );
+          },
+        });
+      }
+    }
+
+    // 4. Decision (pinned right)
+    cols.push({
+      headerName: "Decision",
+      colId: "decision",
+      pinned: "right",
+      width: 160,
+      sortable: false,
+      cellRenderer: (params: ICellRendererParams<RowData>) => {
+        const r = params.data?.result;
+        if (!r) return null;
+        return (
+          <DecisionChipCell
+            campaignId={campaign.id}
+            result={r}
+            readOnly={readOnly}
+          />
+        );
+      },
+    });
+
+    return cols;
   }, [
     campaign.channels,
     campaign.id,
+    campaign.results,
     curveMap,
-    expanded,
-    moleculeById,
+    moleculesById,
     readOnly,
-    toggleExpand,
   ]);
-
-  // ── Row height + full-width row wiring ──────────────────────────────────────
-
-  const getRowHeight = useCallback(
-    (params: RowHeightParams<RowData>): number | undefined => {
-      return params.data?.isDetail ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
-    },
-    [],
-  );
-
-  const isFullWidthRow = useCallback(
-    (params: IsFullWidthRowParams<RowData>) => !!params.rowNode.data?.isDetail,
-    [],
-  );
-
-  const getRowClass = useCallback((params: RowClassParams<RowData>) => {
-    return params.data?.isDetail ? "ag-row-detail" : "";
-  }, []);
 
   // ── External (chip) filters ─────────────────────────────────────────────────
 
@@ -285,11 +417,8 @@ export function ResultsGridV2({
 
   const doesExternalFilterPass = useCallback(
     (node: IRowNode<RowData>) => {
-      const data = node.data;
-      if (!data) return true;
-      // Detail rows always pass — they follow their parent.
-      if (data.isDetail) return true;
-      return rowPassesFilters(data.result, filters);
+      const r = node.data?.result;
+      return r ? rowPassesFilters(r, filters) : true;
     },
     [filters],
   );
@@ -314,11 +443,8 @@ export function ResultsGridV2({
           rowData={rowData}
           columnDefs={columnDefs}
           defaultColDef={{ sortable: true, resizable: true, minWidth: 80 }}
-          getRowHeight={getRowHeight}
-          isFullWidthRow={isFullWidthRow}
-          fullWidthCellRenderer={RowDetailRenderer}
-          getRowClass={getRowClass}
-          getRowId={(p) => p.data.id}
+          rowHeight={ROW_HEIGHT}
+          getRowId={(p) => p.data.result.id}
           isExternalFilterPresent={isExternalFilterPresent}
           doesExternalFilterPass={doesExternalFilterPass}
           suppressCellFocus
@@ -339,5 +465,3 @@ export function ResultsGridV2({
     </>
   );
 }
-
-
