@@ -183,6 +183,20 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-12 — Campaign UI search-style redesign through Phase 4 on `fe2`
+
+**Spec:** `docs/superpowers/specs/2026-05-12-campaign-search-style-redesign.md`
+**Plan:** `docs/superpowers/plans/2026-05-12-campaign-search-style-redesign.md`
+
+**Shipped:**
+- Phase 1: `POST /api/v1/dose-response/curves:batch` (+ `find_by_ids` repo method)
+- Phases 2-4: V2 single-column layout replaces the legacy 3-pane shell — `HeaderStrip` + `SourcesSection` + `ChannelsSection` + `CampaignFilterBar` + `CampaignToolbar` + `ResultsGridV2` (inline DR plots + row expansion + decision popover from chip)
+- Deleted: `CompoundListPane`, `SourcesSummaryCard`, `DecisionPanel`, `ChannelStrip`, legacy `ResultsGrid`
+- Extracted: `OverrideModal`, `ChannelPopoverForm`, `ManualAddDialog` as shared components
+- Closed/superseded campaigns use the same layout with `readOnly={true}` (source-protocols + published-collection cards surfaced as a small details row; supersede + download wired through `HeaderStrip`)
+
+**Next:** Phase 5 — customize-report sheet + project-scoped pickers; then Phase 6 — Playwright smoke. Browser smoke pending.
+
 ### 2026-05-11 PM — Screen-Campaign B-gap UX shipped on `fe2`
 
 **Spec:** `docs/superpowers/specs/2026-05-11-screen-campaign-b-gaps-design.md`
