@@ -12,6 +12,7 @@
  */
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { FileJson, Loader2, RefreshCw, Lock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -36,7 +37,7 @@ import {
 } from "./campaign-filter-bar";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
-import type { CampaignResultResponse } from "../types";
+import type { CampaignResponse, CampaignResultResponse } from "../types";
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,8 @@ interface CampaignBuilderProps {
 export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps) {
   const qc = useQueryClient();
   const { data: campaign, isLoading, error } = useCampaign(campaignId);
+  const searchParams = useSearchParams();
+  const useV2 = searchParams.get("v2") === "1";
   const { data: project } = useProject(projectId);
   const [selectedResult, setSelectedResult] = useState<CampaignResultResponse | null>(null);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
@@ -88,6 +91,10 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
 
   if (campaign.status !== "draft") {
     return <CampaignView campaign={campaign} />;
+  }
+
+  if (useV2) {
+    return <CampaignBuilderV2 campaign={campaign} projectId={projectId} />;
   }
 
   return (
@@ -206,5 +213,19 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
         onClose={() => setPreviewPublishedOpen(false)}
       />
     </div>
+  );
+}
+
+// ── V2 shell (placeholder — populated by later tasks) ─────────────────────────
+
+function CampaignBuilderV2({
+  campaign,
+  projectId,
+}: {
+  campaign: CampaignResponse;
+  projectId: string;
+}) {
+  return (
+    <div className="p-8 text-muted-foreground">v2 layout — under construction</div>
   );
 }
