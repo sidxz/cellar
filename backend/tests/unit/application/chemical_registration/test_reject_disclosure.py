@@ -9,14 +9,14 @@ from typing import Self
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.reject_disclosure import (
+from cellar.application.chemical_registration.reject_disclosure import (
     RejectDisclosure,
     RejectDisclosureCommand,
 )
-from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
-from chem_vault.domain.chemical_registration.enums import DisclosureStatus
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
+from cellar.domain.chemical_registration.enums import DisclosureStatus
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------

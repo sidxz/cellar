@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.research_organization.create_saved_search import (
+    from cellar.application.research_organization.create_saved_search import (
         CreateSavedSearch,
         CreateSavedSearchCommand,
     )

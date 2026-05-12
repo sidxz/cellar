@@ -15,7 +15,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chem_vault.infrastructure.cascade.inbound_refs import find_inbound_references
+from cellar.infrastructure.cascade.inbound_refs import find_inbound_references
 
 
 # ---------------------------------------------------------------------------

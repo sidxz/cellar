@@ -17,26 +17,26 @@ if not database_url:
     raise RuntimeError("DATABASE_URL environment variable is required")
 config.set_main_option("sqlalchemy.url", database_url)
 
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+from cellar.infrastructure.persistence.sqlalchemy.base import Base
 
 # Import all SA models so Base.metadata includes their tables
-import chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_model  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_request_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.shipment_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.attachment.attachment_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.audit.audit_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_model  # noqa: F401
 
 target_metadata = Base.metadata
 

@@ -6,14 +6,14 @@ import uuid
 
 import pytest
 
-from chem_vault.application.auth import (
+from cellar.application.auth import (
     AuthContext,
     require_admin,
     require_editor,
     require_same_workspace,
     require_workspace_role,
 )
-from chem_vault.domain.shared.errors import AuthorizationError, NotFoundError
+from cellar.domain.shared.errors import AuthorizationError, NotFoundError
 from tests.fakes.fake_auth import FakeAuth
 
 

@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Success
 
-from chem_vault.application.workspace_config.update_data_source import (
+from cellar.application.workspace_config.update_data_source import (
     UpdateDataSource,
     UpdateDataSourceCommand,
 )
-from chem_vault.domain.workspace_config.data_source import DataSource
+from cellar.domain.workspace_config.data_source import DataSource
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------

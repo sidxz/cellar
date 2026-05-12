@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.events import ProjectArchived, ProjectCreated
-from chem_vault.domain.research_organization.project import Project, ProjectStatus
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.events import ProjectArchived, ProjectCreated
+from cellar.domain.research_organization.project import Project, ProjectStatus
+from cellar.domain.shared.errors import ValidationError
 
 
 @pytest.fixture

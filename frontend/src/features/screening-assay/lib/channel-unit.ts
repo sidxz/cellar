@@ -1,7 +1,7 @@
 /**
  * Resolve the display unit for a channel value.
  *
- * Mirrors `chem_vault.domain.screening_assay.enums.unit_for_normalization`
+ * Mirrors `cellar.domain.screening_assay.enums.unit_for_normalization`
  * on the backend so the FE can show the same suffix the channel resolver
  * stamps onto each CampaignMeasurement.unit at import time. Used to make
  * hit-threshold inputs explicit ("> 4 %") and to caption the comparison

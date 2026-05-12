@@ -1,6 +1,6 @@
 """Tests for shared enums."""
 
-from chem_vault.domain.shared.enums import (
+from cellar.domain.shared.enums import (
     AmountUnit,
     AssignmentType,
     ConcentrationUnit,

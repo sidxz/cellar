@@ -11,23 +11,23 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.add_results_from_runs import (
+from cellar.application.research_organization.add_results_from_runs import (
     AddResultsFromRuns,
     AddResultsFromRunsCommand,
 )
-from chem_vault.application.research_organization.channel_resolution import (
+from cellar.application.research_organization.channel_resolution import (
     ResolvedCandidate,
 )
-from chem_vault.application.research_organization.preview_run_import import (
+from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
@@ -35,8 +35,8 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
-from chem_vault.domain.shared.errors import AuthorizationError, ValidationError
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.errors import AuthorizationError, ValidationError
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,

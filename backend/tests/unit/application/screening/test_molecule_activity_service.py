@@ -8,11 +8,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from chem_vault.application.screening.molecule_activity_service import (
+from cellar.application.screening.molecule_activity_service import (
     MoleculeActivityService,
 )
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveClass, CurveType
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import CurveClass, CurveType
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

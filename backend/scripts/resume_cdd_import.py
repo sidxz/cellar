@@ -26,7 +26,7 @@ STORAGE_PATH = "./data/storage/cdd-exports/71884649"
 TOTAL_COUNT = 214043
 
 TEMPORAL_ADDRESS = "localhost:7233"
-TASK_QUEUE = "chem-vault-main"
+TASK_QUEUE = "cellar-main"
 
 
 async def main():
@@ -34,7 +34,7 @@ async def main():
     import sqlalchemy as sa
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    engine = create_async_engine("postgresql+asyncpg://chemvault:chemvault@localhost:5432/chemvault")
+    engine = create_async_engine("postgresql+asyncpg://cellar:cellar@localhost:5432/cellar")
 
     import_id = uuid.uuid4()
     workflow_id = f"cdd-mol-import-{WORKSPACE_ID}-{uuid.uuid4()}"
@@ -76,8 +76,8 @@ async def main():
     print(f"Workflow ID: {workflow_id}")
 
     # 2. Start Temporal workflow with resume fields
-    from chem_vault.domain.workspace_config.data_source import get_default_template
-    from chem_vault.infrastructure.temporal.workflows.cdd_vault_import import (
+    from cellar.domain.workspace_config.data_source import get_default_template
+    from cellar.infrastructure.temporal.workflows.cdd_vault_import import (
         CddVaultImportWorkflow,
         CddVaultImportWorkflowInput,
     )

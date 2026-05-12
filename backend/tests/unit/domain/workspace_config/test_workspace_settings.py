@@ -2,8 +2,8 @@
 
 import uuid
 
-from chem_vault.domain.workspace_config.events import WorkspaceSettingsUpdated
-from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
+from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
+from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 
 
 class TestWorkspaceSettingsCreate:

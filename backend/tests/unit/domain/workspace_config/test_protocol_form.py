@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.protocol_form import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.protocol_form import (
     ProtocolForm,
     ProtocolFormCondition,
     ProtocolFormCreated,

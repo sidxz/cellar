@@ -12,7 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 # Force screening_assay models so protocol_projects / runs join targets resolve.
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 
 
 class TestListProjects:

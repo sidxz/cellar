@@ -10,15 +10,15 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Success
 
-from chem_vault.application.screening.get_molecule_activity_detail import (
+from cellar.application.screening.get_molecule_activity_detail import (
     GetMoleculeActivityDetail,
     MoleculeActivityDetail,
     GetMoleculeActivityDetailQuery,
 )
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveClass, CurveType, ProtocolType
-from chem_vault.domain.shared.enums import ConcentrationUnit
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import CurveClass, CurveType, ProtocolType
+from cellar.domain.shared.enums import ConcentrationUnit
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------

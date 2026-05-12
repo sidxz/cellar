@@ -1,11 +1,11 @@
 import pytest
 
-from chem_vault.domain.sar_analysis.search_modes import (
+from cellar.domain.sar_analysis.search_modes import (
     MODE_DEFAULTS,
     ModeConfig,
     SearchMode,
 )
-from chem_vault.domain.sar_analysis.similarity_metric import Tanimoto, Tversky
+from cellar.domain.sar_analysis.similarity_metric import Tanimoto, Tversky
 
 
 def test_three_modes_exist() -> None:

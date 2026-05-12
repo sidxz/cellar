@@ -12,7 +12,7 @@ from returns.result import Failure, Success
 
 from tests.fakes.fake_auth import FakeAuth
 
-from chem_vault.application.inventory.shipments import (
+from cellar.application.inventory.shipments import (
     AddShipmentItemCommand,
     CreateShipment,
     CreateShipmentCommand,
@@ -31,12 +31,12 @@ from chem_vault.application.inventory.shipments import (
     ShipmentItemInput,
     AddShipmentItem,
 )
-from chem_vault.domain.inventory.enums import ShipmentStatus
-from chem_vault.domain.inventory.shipment import Shipment, ShipmentItem
-from chem_vault.domain.shared.enums import AmountUnit
-from chem_vault.domain.shared.errors import NotFoundError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import Amount
+from cellar.domain.inventory.enums import ShipmentStatus
+from cellar.domain.inventory.shipment import Shipment, ShipmentItem
+from cellar.domain.shared.enums import AmountUnit
+from cellar.domain.shared.errors import NotFoundError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import Amount
 
 # ---------------------------------------------------------------------------
 # Constants

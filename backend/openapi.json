@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Chem-Vault",
+    "title": "Cellar",
     "version": "0.1.0"
   },
   "paths": {
@@ -6628,7 +6628,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/chem_vault__interface__routes__sample_requests__FulfillRequest"
+                "$ref": "#/components/schemas/cellar__interface__routes__sample_requests__FulfillRequest"
               }
             }
           }
@@ -6816,7 +6816,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/chem_vault__interface__routes__shipments__ImportPreviewResponse"
+                  "$ref": "#/components/schemas/cellar__interface__routes__shipments__ImportPreviewResponse"
                 }
               }
             }
@@ -7819,7 +7819,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/chem_vault__interface__routes__synthesis_requests__FulfillRequest"
+                "$ref": "#/components/schemas/cellar__interface__routes__synthesis_requests__FulfillRequest"
               }
             }
           }
@@ -11313,7 +11313,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/chem_vault__interface__routes__plate_import__ImportPreviewResponse"
+                  "$ref": "#/components/schemas/cellar__interface__routes__plate_import__ImportPreviewResponse"
                 }
               }
             }
@@ -32138,7 +32138,7 @@
         ],
         "title": "_ModeInfo"
       },
-      "chem_vault__interface__routes__plate_import__ImportPreviewResponse": {
+      "cellar__interface__routes__plate_import__ImportPreviewResponse": {
         "properties": {
           "file_id": {
             "type": "string",
@@ -32202,7 +32202,7 @@
         ],
         "title": "ImportPreviewResponse"
       },
-      "chem_vault__interface__routes__sample_requests__FulfillRequest": {
+      "cellar__interface__routes__sample_requests__FulfillRequest": {
         "properties": {
           "sample_id": {
             "type": "string",
@@ -32216,7 +32216,7 @@
         ],
         "title": "FulfillRequest"
       },
-      "chem_vault__interface__routes__shipments__ImportPreviewResponse": {
+      "cellar__interface__routes__shipments__ImportPreviewResponse": {
         "properties": {
           "rows": {
             "items": {
@@ -32252,7 +32252,7 @@
         ],
         "title": "ImportPreviewResponse"
       },
-      "chem_vault__interface__routes__synthesis_requests__FulfillRequest": {
+      "cellar__interface__routes__synthesis_requests__FulfillRequest": {
         "properties": {
           "batch_id": {
             "type": "string",

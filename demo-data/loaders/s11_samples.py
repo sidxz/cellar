@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.inventory.create_sample import (
+    from cellar.application.inventory.create_sample import (
         CreateSample,
         CreateSampleCommand,
     )
@@ -49,7 +49,7 @@ async def load(ctx: DemoContext) -> int:
     if created < len(data):
         from sqlalchemy import select
         from sqlalchemy.ext.asyncio import async_sessionmaker
-        from chem_vault.infrastructure.persistence.sqlalchemy.inventory.models import SampleModel
+        from cellar.infrastructure.persistence.sqlalchemy.inventory.models import SampleModel
 
         session_factory = ctx.container[async_sessionmaker]
         barcode_to_key = {rec["barcode"]: key for key, rec in data.items()}

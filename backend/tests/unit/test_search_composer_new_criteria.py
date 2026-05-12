@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     compose_criteria,
 )
 

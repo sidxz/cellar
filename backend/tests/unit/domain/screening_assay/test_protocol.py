@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     ProtocolStatus,
     ProtocolType,
@@ -12,21 +12,21 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
-from chem_vault.domain.screening_assay.events import (
+from cellar.domain.screening_assay.events import (
     ProtocolCreated,
     ProtocolPublished,
     ProtocolRetired,
     ProtocolVersionCreated,
 )
-from chem_vault.domain.screening_assay.protocol import (
+from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
     ReadoutDefinition,
 )
-from chem_vault.domain.screening_assay.protocol_versioning_service import (
+from cellar.domain.screening_assay.protocol_versioning_service import (
     ProtocolVersioningService,
 )
-from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -749,7 +749,7 @@ class TestProtocolLocking:
         with pytest.raises(ConflictError, match="locked"):
             protocol.add_condition_definition(_make_condition(protocol.id))
         with pytest.raises(ConflictError, match="locked"):
-            from chem_vault.domain.screening_assay.enums import (
+            from cellar.domain.screening_assay.enums import (
                 PosControlSignal,
             )
             protocol.set_pos_control_signal(PosControlSignal.LOW)

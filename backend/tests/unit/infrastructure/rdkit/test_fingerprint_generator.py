@@ -1,6 +1,6 @@
 from rdkit import Chem
 
-from chem_vault.infrastructure.rdkit.fingerprint_generator import (
+from cellar.infrastructure.rdkit.fingerprint_generator import (
     FingerprintGenerator,
     Fingerprints,
 )

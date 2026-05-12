@@ -17,14 +17,14 @@
 ### Task 1: Extend `_StoredPreview` with raw bytes
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/screening/import_run_file.py` (around line 87-95)
+- Modify: `backend/src/cellar/application/screening/import_run_file.py` (around line 87-95)
 
 - [ ] Add `raw_bytes: bytes`, `filename: str`, `content_type: str` to `_StoredPreview`. Update `PreviewRunFile._execute` to populate them from the upload (filename comes through; content_type can be inferred from extension or defaulted to `application/octet-stream`).
 
 ### Task 2: Add conflict types + helpers
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/screening/import_run_file.py`
+- Modify: `backend/src/cellar/application/screening/import_run_file.py`
 
 - [ ] Add `WellConflict`, `ReadoutConflict`, `CreatePlan`, `SkipPlan` dataclasses near the existing DTOs.
 - [ ] Add `_scan_conflicts(normalized: NormalizedTable, existing_plates: list[Plate], existing_readouts: dict[(well_id, rd_id)] -> ReadoutData, templates_by_format) -> tuple[CreatePlan, SkipPlan, list[str]]`. Pure function. Returns the writes to perform and the conflicts to report.
@@ -32,7 +32,7 @@
 ### Task 3: Update `PreviewRunFileResult` with conflict counters
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/screening/import_run_file.py`
+- Modify: `backend/src/cellar/application/screening/import_run_file.py`
 
 - [ ] Extend `PreviewRunFileResult` with `will_create_plates: int`, `will_create_wells: int`, `will_create_readouts: int`, `will_skip_wells: tuple[WellConflict, ...]`, `will_skip_readouts: tuple[ReadoutConflict, ...]`.
 - [ ] In `PreviewRunFile._execute`, after normalize, also load existing plates/wells/readouts and run `_scan_conflicts`. Populate the counters.
@@ -40,7 +40,7 @@
 ### Task 4: Refactor `ImportRunFile` to skip-and-report
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/screening/import_run_file.py`
+- Modify: `backend/src/cellar/application/screening/import_run_file.py`
 
 - [ ] Drop the `run.wells` rejection block (current lines ~388–399). Drop `replace_existing` from `ImportRunFileCommand`.
 - [ ] Load existing plates+readouts; run `_scan_conflicts`; build new plates/wells/readouts only from `CreatePlan`. Reuse existing plate id when plate name already exists; create new wells; write only readouts not already present.
@@ -49,19 +49,19 @@
 ### Task 5: Attach raw file on import success
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/screening/import_run_file.py`
-- Modify: `backend/src/chem_vault/infrastructure/di/_screening.py` (DI binding for `ImportRunFile`)
+- Modify: `backend/src/cellar/application/screening/import_run_file.py`
+- Modify: `backend/src/cellar/infrastructure/di/_screening.py` (DI binding for `ImportRunFile`)
 
 - [ ] Inject `UploadAttachment` use case into `ImportRunFile`. After `_uow.commit()` and calc engine, call it with the cached `(raw_bytes, filename, content_type)` and `attachable_type=RUN`. Failures become a non-fatal warning on result.
 
 ### Task 6: Add `ResetRunData` use case
 
 **Files:**
-- Create: `backend/src/chem_vault/application/screening/reset_run_data.py`
-- Modify: `backend/src/chem_vault/domain/screening_assay/events.py` (add `RunDataReset` event)
-- Modify: `backend/src/chem_vault/infrastructure/di/_screening.py` (bind it)
-- Modify: `backend/src/chem_vault/interface/dependencies.py` (add `ResetRunDataDep`)
-- Modify: `backend/src/chem_vault/interface/routes/runs.py` (add `POST /runs/{run_id}/reset-data`)
+- Create: `backend/src/cellar/application/screening/reset_run_data.py`
+- Modify: `backend/src/cellar/domain/screening_assay/events.py` (add `RunDataReset` event)
+- Modify: `backend/src/cellar/infrastructure/di/_screening.py` (bind it)
+- Modify: `backend/src/cellar/interface/dependencies.py` (add `ResetRunDataDep`)
+- Modify: `backend/src/cellar/interface/routes/runs.py` (add `POST /runs/{run_id}/reset-data`)
 
 - [ ] Pattern after `DeleteRun`: only DRAFT/IN_PROGRESS, not locked. Cleanup order: curves → readout_data → plates (cascade wells) → clear `run.qc_metrics` → save run. Returns counts; emits `RunDataReset` event with counts on the run aggregate.
 - [ ] Plates: add `RunRepository.delete_plates_for_run(workspace_id, run_id)` if not present, OR clear `run.plates` and rely on save; check what's idiomatic.
@@ -69,7 +69,7 @@
 ### Task 7: Update routes — preview + import response shapes
 
 **Files:**
-- Modify: `backend/src/chem_vault/interface/routes/run_import.py`
+- Modify: `backend/src/cellar/interface/routes/run_import.py`
 
 - [ ] Add `WellConflictModel`, `ReadoutConflictModel`. Extend `PreviewRunFileResponse` with `will_create_plates/wells/readouts`, `will_skip_wells`, `will_skip_readouts`. Drop `replace_existing` from `ImportRunFileRequest`. Extend `ImportRunFileResponse` with conflict arrays + `attachment_id`.
 

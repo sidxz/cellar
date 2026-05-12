@@ -14,7 +14,7 @@ import {
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import { Search } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { chemVaultTheme } from "./ag-grid-theme";
+import { cellarTheme } from "./ag-grid-theme";
 import { type ExcelEnhancer, ExportToolbar } from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -223,7 +223,7 @@ export function DataGrid<TData = unknown>({
       <div style={{ height, width: "100%" }}>
         <AgGridReact<TData>
           ref={gridRef}
-          theme={chemVaultTheme}
+          theme={cellarTheme}
           rowData={rowData ?? []}
           columnDefs={finalColumnDefs}
           defaultColDef={defaultColDef}

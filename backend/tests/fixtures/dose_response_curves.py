@@ -11,12 +11,12 @@ from datetime import date
 
 import sqlalchemy as sa
 
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveType
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import CurveType
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 _USER_ID = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
 

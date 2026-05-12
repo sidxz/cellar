@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import pytest
 
-from chem_vault.application.screening._dose_response_config_serde import (
+from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
     serialize_dose_response_config,
 )
-from chem_vault.domain.screening_assay.dose_response_config import (
+from cellar.domain.screening_assay.dose_response_config import (
     DEFAULT_FULL_R2_MIN,
     DEFAULT_INACTIVE_THRESHOLD,
     DEFAULT_OUTLIER_SIGMA,
     DoseResponseConfig,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
     NormalizationScope,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 def _full_dict() -> dict:

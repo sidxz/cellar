@@ -6,10 +6,10 @@ import random
 
 from returns.result import Success
 
-from chem_vault.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-from chem_vault.domain.screening_assay.enums import CurveType
-from chem_vault.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+from cellar.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.enums import CurveType
+from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
 
 
 def _make_config() -> DoseResponseConfig:

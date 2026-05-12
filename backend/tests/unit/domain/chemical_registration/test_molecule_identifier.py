@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import IdentifierType
-from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.chemical_registration.enums import IdentifierType
+from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from cellar.domain.shared.errors import ValidationError
 
 
 class TestMoleculeIdentifier:

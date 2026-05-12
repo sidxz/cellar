@@ -8,19 +8,19 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from chem_vault.domain.audit_compliance.enums import (
+from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
     AuditStatus,
     AuthMethod,
     OperationType,
 )
-from chem_vault.domain.audit_compliance.models import (
+from cellar.domain.audit_compliance.models import (
     AuditEntry,
     AuditOperation,
     ElectronicSignature,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
     SQLAlchemyAuditRepository,
 )
 

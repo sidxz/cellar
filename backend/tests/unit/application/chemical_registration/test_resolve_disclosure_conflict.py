@@ -10,23 +10,24 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.chemical_registration.protocols import (
+from cellar.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
     QCResultDTO,
 )
-from chem_vault.application.chemical_registration.resolve_disclosure_conflict import (
+from cellar.application.chemical_registration.resolve_disclosure_conflict import (
     ResolveConflictCommand,
     ResolveDisclosureConflict,
 )
-from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
+from cellar.domain.chemical_registration.enums import (
     DisclosureStatus,
     MoleculeType,
+    Stereochemistry,
 )
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import (
     ChemicalStructure,
     ComputedDescriptors,
     RegistrationNumber,
@@ -167,6 +168,7 @@ class FakeStructureProcessor:
                 descriptors=_DESCRIPTORS,
                 fingerprints={},
                 qc_result=QCResultDTO(total_penalty=0, issues=[]),
+                stereochemistry=Stereochemistry.ACHIRAL,
             )
         )
 

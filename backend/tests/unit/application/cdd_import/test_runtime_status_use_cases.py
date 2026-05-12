@@ -11,24 +11,24 @@ import uuid
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.cdd_import.cancel_cdd_molecule_import import (
+from cellar.application.cdd_import.cancel_cdd_molecule_import import (
     CancelCddMoleculeImport,
     CancelCddMoleculeImportCommand,
 )
-from chem_vault.application.cdd_import.cdd_molecule_import_orchestrator import (
+from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     CddMoleculeImportProgress,
 )
-from chem_vault.application.cdd_import.get_cdd_molecule_import_runtime_status import (
+from cellar.application.cdd_import.get_cdd_molecule_import_runtime_status import (
     GetCddMoleculeImportRuntimeStatus,
     GetCddMoleculeImportRuntimeStatusQuery,
 )
-from chem_vault.application.cdd_import.get_cdd_molecule_import_status import (
+from cellar.application.cdd_import.get_cdd_molecule_import_status import (
     CddMoleculeImportStatusResult,
 )
-from chem_vault.application.orchestration.workflow_status import (
+from cellar.application.orchestration.workflow_status import (
     WorkflowOrchestratorUnavailable,
 )
-from chem_vault.domain.shared.errors import NotFoundError
+from cellar.domain.shared.errors import NotFoundError
 
 from tests.fakes.fake_auth import FakeAuth
 

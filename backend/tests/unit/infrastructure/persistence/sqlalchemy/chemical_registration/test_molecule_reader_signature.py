@@ -10,7 +10,7 @@ import inspect
 
 import pytest
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
     SQLAlchemyMoleculeReader,
 )
 
@@ -27,7 +27,7 @@ def test_search_similarity_signature_is_mode_driven():
 
 
 def test_search_similarity_default_mode_is_similar():
-    from chem_vault.domain.sar_analysis.search_modes import SearchMode
+    from cellar.domain.sar_analysis.search_modes import SearchMode
 
     sig = inspect.signature(SQLAlchemyMoleculeReader.search_similarity)
     assert sig.parameters["mode"].default == SearchMode.SIMILAR

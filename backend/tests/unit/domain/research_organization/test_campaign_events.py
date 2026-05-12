@@ -1,6 +1,6 @@
 import uuid
 
-from chem_vault.domain.research_organization.events import (
+from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
     CampaignPublishedCollectionCreated,

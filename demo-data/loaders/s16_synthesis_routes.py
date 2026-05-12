@@ -12,7 +12,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.chemical_registration.synthesis_routes import (
+    from cellar.application.chemical_registration.synthesis_routes import (
         AddReactionStep,
         AddReactionStepCommand,
         CreateSynthesisRoute,

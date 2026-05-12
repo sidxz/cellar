@@ -10,13 +10,13 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.count_search import (
+from cellar.application.research_organization.count_search import (
     CountSearch,
     CountSearchQuery,
 )
-from chem_vault.domain.research_organization.saved_search import SavedSearch
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.research_organization.saved_search import SavedSearch
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 

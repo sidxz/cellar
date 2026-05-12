@@ -1,4 +1,4 @@
-from chem_vault.domain.sar_analysis.fingerprint_algorithm import (
+from cellar.domain.sar_analysis.fingerprint_algorithm import (
     FingerprintAlgorithm,
 )
 

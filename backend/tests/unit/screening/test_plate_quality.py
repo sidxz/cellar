@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chem_vault.domain.screening_assay.plate_quality import (
+from cellar.domain.screening_assay.plate_quality import (
     PlateQualityCalculator,
     PlateQualityResult,
 )

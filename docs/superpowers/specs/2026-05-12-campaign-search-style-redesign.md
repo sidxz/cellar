@@ -290,7 +290,7 @@ The DRC inline cells render identically; closed campaigns cite the same `source_
 
 ### 6.1. New route — batch DRC fetch
 
-File: `backend/src/chem_vault/interface/routes/dose_response_curves.py` (new)
+File: `backend/src/cellar/interface/routes/dose_response_curves.py` (new)
 
 ```python
 @router.post("/curves:batch", response_model=BatchCurvesResponse, status_code=200)

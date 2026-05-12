@@ -8,8 +8,8 @@ to keep the tests fast and DB-free.
 
 def test_batches_cascade_under_molecule():
     """rules_inventory.py must register a CASCADE rule for batches → molecules."""
-    import chem_vault.infrastructure.cascade.rules_inventory  # noqa: F401
-    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
+    import cellar.infrastructure.cascade.rules_inventory  # noqa: F401
+    from cellar.infrastructure.cascade.registry import get_rules_for_parent
 
     rules = get_rules_for_parent("molecules")
     assert any(
@@ -24,8 +24,8 @@ def test_saved_searches_set_null_under_project():
 
     Note: the spec originally referenced protocols; the actual FK is to projects.
     """
-    import chem_vault.infrastructure.cascade.rules_research_organization  # noqa: F401
-    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
+    import cellar.infrastructure.cascade.rules_research_organization  # noqa: F401
+    from cellar.infrastructure.cascade.registry import get_rules_for_parent
 
     rules = get_rules_for_parent("projects")
     assert any(

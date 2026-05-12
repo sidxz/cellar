@@ -11,19 +11,19 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.research_organization.collection_membership import (
+    from cellar.application.research_organization.collection_membership import (
         AddMoleculesToCollection,
         AddMoleculesToCollectionCommand,
     )
-    from chem_vault.application.research_organization.create_collection import (
+    from cellar.application.research_organization.create_collection import (
         CreateCollection,
         CreateCollectionCommand,
     )
-    from chem_vault.application.research_organization.get_collection import (
+    from cellar.application.research_organization.get_collection import (
         ListCollections,
         ListCollectionsQuery,
     )
-    from chem_vault.application.shared.molecule_resolver import MoleculeReference
+    from cellar.application.shared.molecule_resolver import MoleculeReference
 
     data: dict = ctx.data("collections.json")
     create_uc = ctx.container[CreateCollection]

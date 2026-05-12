@@ -3,11 +3,11 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.enums import HitCall, ValueQualifier
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.enums import HitCall, ValueQualifier
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_minimum_measurement():

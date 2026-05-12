@@ -11,15 +11,15 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.inventory.get_batch import (
+    from cellar.application.inventory.get_batch import (
         ListBatchesByMolecule,
         ListBatchesByMoleculeQuery,
     )
-    from chem_vault.application.inventory.get_sample import (
+    from cellar.application.inventory.get_sample import (
         ListSamplesByBatch,
         ListSamplesByBatchQuery,
     )
-    from chem_vault.application.inventory.sample_requests import (
+    from cellar.application.inventory.sample_requests import (
         ApproveSampleRequest,
         ApproveSampleRequestCommand,
         CreateSampleRequest,
@@ -117,8 +117,8 @@ async def _find_sample_for_molecule(
     molecule_id, list_batches_uc, list_samples_uc, auth
 ):
     """Walk molecule -> first batch -> first sample to find a fulfillment sample."""
-    from chem_vault.application.inventory.get_batch import ListBatchesByMoleculeQuery
-    from chem_vault.application.inventory.get_sample import ListSamplesByBatchQuery
+    from cellar.application.inventory.get_batch import ListBatchesByMoleculeQuery
+    from cellar.application.inventory.get_sample import ListSamplesByBatchQuery
 
     batches_result = await list_batches_uc(
         ListBatchesByMoleculeQuery(

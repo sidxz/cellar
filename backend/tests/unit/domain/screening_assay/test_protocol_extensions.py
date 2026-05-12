@@ -4,19 +4,19 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.enums import (
     CurveType,
     PlateFormat,
     ProtocolType,
     ReadoutDataType,
 )
-from chem_vault.domain.screening_assay.protocol import (
+from cellar.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
-from chem_vault.domain.shared.errors import ConflictError, ValidationError
-from chem_vault.domain.shared.ontology import OntologyTerm
+from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.ontology import OntologyTerm
 
 
 _PLACEHOLDER_ID = uuid.UUID(int=0)
@@ -55,7 +55,7 @@ class TestReadoutDefinitionPickList:
     def test_pick_list_with_values(self):
         # Constructor accepts legacy list[str] shape; lifts to PickListValue
         # objects (color = None when not specified).
-        from chem_vault.domain.screening_assay.protocol import PickListValue
+        from cellar.domain.screening_assay.protocol import PickListValue
 
         rd = ReadoutDefinition(
             protocol_id=_PLACEHOLDER_ID,
@@ -69,7 +69,7 @@ class TestReadoutDefinitionPickList:
         ]
 
     def test_pick_list_with_color(self):
-        from chem_vault.domain.screening_assay.protocol import PickListValue
+        from cellar.domain.screening_assay.protocol import PickListValue
 
         rd = ReadoutDefinition(
             protocol_id=_PLACEHOLDER_ID,
@@ -87,8 +87,8 @@ class TestReadoutDefinitionPickList:
         assert rd.pick_list_values[2] == PickListValue(label="Partial", color=None)
 
     def test_pick_list_invalid_color_raises(self):
-        from chem_vault.domain.screening_assay.protocol import PickListValue
-        from chem_vault.domain.shared.errors import ValidationError as VE
+        from cellar.domain.screening_assay.protocol import PickListValue
+        from cellar.domain.shared.errors import ValidationError as VE
 
         with pytest.raises(VE, match="7-char hex"):
             PickListValue(label="X", color="green")
@@ -353,11 +353,11 @@ class TestProtocolControlLayouts:
 
 class TestProtocolVersioningNewFields:
     def test_versioning_clones_pick_list_values(self):
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
 
-        from chem_vault.domain.screening_assay.protocol import PickListValue
+        from cellar.domain.screening_assay.protocol import PickListValue
 
         protocol = _make_protocol(
             readout_definitions=[
@@ -380,7 +380,7 @@ class TestProtocolVersioningNewFields:
         assert new_protocol.readout_definitions[0].pick_list_values is not protocol.readout_definitions[0].pick_list_values
 
     def test_versioning_clones_dose_response_config(self):
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
 
@@ -409,7 +409,7 @@ class TestProtocolVersioningNewFields:
         assert ic50_def.dose_response_config.curve_type == CurveType.IC50
 
     def test_versioning_clones_control_layouts(self):
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
 
@@ -427,11 +427,11 @@ class TestProtocolVersioningNewFields:
         """The dose unit + POS control direction are protocol-wide
         conventions; new versions inherit them so runs of the new draft
         speak the same vocabulary as the parent."""
-        from chem_vault.domain.screening_assay.enums import PosControlSignal
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.enums import PosControlSignal
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
-        from chem_vault.domain.shared.enums import ConcentrationUnit
+        from cellar.domain.shared.enums import ConcentrationUnit
 
         protocol = _make_protocol()
         protocol.dose_unit = ConcentrationUnit.NM
@@ -443,10 +443,10 @@ class TestProtocolVersioningNewFields:
         assert new_protocol.pos_control_signal == PosControlSignal.LOW
 
     def test_versioning_clones_ontology_annotations(self):
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
-        from chem_vault.domain.shared.ontology import OntologyTerm
+        from cellar.domain.shared.ontology import OntologyTerm
 
         protocol = _make_protocol()
         protocol.ontology_annotations = {
@@ -472,8 +472,8 @@ class TestProtocolVersioningNewFields:
         """Hit criteria are tuned QC gates; new versions inherit them so
         the screener doesn't have to re-tune from scratch on every
         version."""
-        from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.hit_criterion import HitCriterion
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
 
@@ -584,7 +584,7 @@ class TestProtocolOntologyAnnotations:
 
 class TestProtocolVersioningOntologyAnnotations:
     def test_versioning_clones_ontology_annotations(self):
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
 
@@ -603,7 +603,7 @@ class TestProtocolVersioningOntologyAnnotations:
         assert new_protocol.ontology_annotations["bioassay_type"] is not protocol.ontology_annotations["bioassay_type"]
 
     def test_versioning_empty_annotations(self):
-        from chem_vault.domain.screening_assay.protocol_versioning_service import (
+        from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )
 

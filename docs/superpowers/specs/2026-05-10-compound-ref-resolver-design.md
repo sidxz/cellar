@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-10
 **Status:** Approved (auto-mode implementation)
-**Related code:** `backend/src/chem_vault/application/screening/`, `frontend/src/features/screening-assay/components/run-import-wizard.tsx`
+**Related code:** `backend/src/cellar/application/screening/`, `frontend/src/features/screening-assay/components/run-import-wizard.tsx`
 
 ## Problem
 
@@ -25,7 +25,7 @@ Introduce a second role, **Compound Ref**, that resolves identifier-based refere
 
 ### Layer placement
 
-- New module: `backend/src/chem_vault/application/screening/compound_ref_resolver.py` — pure functions, no I/O. Mirrors how `import_plan.py` was extracted from `import_run_file.py`.
+- New module: `backend/src/cellar/application/screening/compound_ref_resolver.py` — pure functions, no I/O. Mirrors how `import_plan.py` was extracted from `import_run_file.py`.
 - Async loaders that touch repositories (`_build_compound_index`, `_build_batch_lookup`) stay in `import_run_file.py` next to existing `_resolve_batches`.
 - `_scan_conflicts` in `import_plan.py` accepts a pre-computed `Resolutions` object instead of re-resolving from `row.batch_ref`.
 

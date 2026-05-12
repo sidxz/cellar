@@ -21,7 +21,7 @@ A logical grouping of related research work within a workspace — e.g., "EGFR I
 
 **References (by ID):** Workspace (workspace_id)
 
-**Access control:** Project access is managed via Sentinel's entity ACLs, not in Chem-Vault2. Each Project is registered as a resource in Sentinel (`service: "chem-vault", resource_type: "project"`). Chem-Vault2 calls `auth.can("project", project_id, "view")` at query time.
+**Access control:** Project access is managed via Sentinel's entity ACLs, not in Cellar. Each Project is registered as a resource in Sentinel (`service: "cellar", resource_type: "project"`). Cellar calls `auth.can("project", project_id, "view")` at query time.
 
 | Property | Type | Description |
 |----------|------|-------------|

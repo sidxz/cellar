@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import TargetType
-from chem_vault.domain.screening_assay.target import Target
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.enums import TargetType
+from cellar.domain.screening_assay.target import Target
+from cellar.domain.shared.errors import ValidationError
 
 
 @pytest.fixture

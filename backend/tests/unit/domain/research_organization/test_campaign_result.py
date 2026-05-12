@@ -2,15 +2,15 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import (
     CampaignDecision,
     ValueQualifier,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 def _make_measurement(result_id: uuid.UUID, channel_id: uuid.UUID | None = None) -> CampaignMeasurement:

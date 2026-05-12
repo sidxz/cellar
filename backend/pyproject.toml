@@ -1,5 +1,5 @@
 [project]
-name = "chem-vault"
+name = "cellar"
 version = "0.1.0"
 description = "Chemical compound management & screening platform"
 requires-python = ">=3.13"
@@ -63,7 +63,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/chem_vault"]
+packages = ["src/cellar"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]
@@ -80,7 +80,7 @@ markers = [
 # Run: uv run lint-imports
 # ---------------------------------------------------------------------------
 [tool.importlinter]
-root_packages = ["chem_vault"]
+root_packages = ["cellar"]
 include_external_packages = true
 
 # Rule 1: Layer dependency direction (domain → app → infra → interface)
@@ -88,21 +88,21 @@ include_external_packages = true
 name = "Clean Architecture layers"
 type = "layers"
 layers = [
-    "chem_vault.interface",
-    "chem_vault.infrastructure",
-    "chem_vault.application",
-    "chem_vault.domain",
+    "cellar.interface",
+    "cellar.infrastructure",
+    "cellar.application",
+    "cellar.domain",
 ]
 
 # Rule 2: Domain layer can only import stdlib, pydantic, returns, and itself
 [[tool.importlinter.contracts]]
 name = "Domain purity"
 type = "forbidden"
-source_modules = ["chem_vault.domain"]
+source_modules = ["cellar.domain"]
 forbidden_modules = [
-    "chem_vault.application",
-    "chem_vault.infrastructure",
-    "chem_vault.interface",
+    "cellar.application",
+    "cellar.infrastructure",
+    "cellar.interface",
     "fastapi",
     "sqlalchemy",
     "asyncpg",
@@ -125,12 +125,12 @@ forbidden_modules = [
 name = "Bounded context independence — chemical_registration"
 type = "independence"
 modules = [
-    "chem_vault.domain.chemical_registration",
-    "chem_vault.domain.screening_assay",
-    "chem_vault.domain.inventory",
-    "chem_vault.domain.formulation",
-    "chem_vault.domain.sar_analysis",
-    "chem_vault.domain.research_organization",
-    "chem_vault.domain.audit_compliance",
-    "chem_vault.domain.workspace_config",
+    "cellar.domain.chemical_registration",
+    "cellar.domain.screening_assay",
+    "cellar.domain.inventory",
+    "cellar.domain.formulation",
+    "cellar.domain.sar_analysis",
+    "cellar.domain.research_organization",
+    "cellar.domain.audit_compliance",
+    "cellar.domain.workspace_config",
 ]

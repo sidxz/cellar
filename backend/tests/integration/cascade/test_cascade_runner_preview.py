@@ -19,12 +19,12 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Force cascade rules into the registry
-import chem_vault.infrastructure.cascade.rules_screening_assay  # noqa: F401
+import cellar.infrastructure.cascade.rules_screening_assay  # noqa: F401
 # Force models into Base.metadata (screening assay models cover runs/plates)
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 
-from chem_vault.domain.shared.cascade.actions import CascadeAction
-from chem_vault.infrastructure.cascade.cascade_runner import CascadeRunner
+from cellar.domain.shared.cascade.actions import CascadeAction
+from cellar.infrastructure.cascade.cascade_runner import CascadeRunner
 
 
 # ---------------------------------------------------------------------------

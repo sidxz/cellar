@@ -7,25 +7,25 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.source_ref import CollectionRef
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.source_ref import CollectionRef
+from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.shared.errors import ConcurrencyConflictError
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
+from cellar.domain.shared.errors import ConcurrencyConflictError
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 def _build_campaign(

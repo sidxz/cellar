@@ -2,7 +2,7 @@
 
 import uuid
 
-from chem_vault.domain.workspace_config.data_source import DataSource
+from cellar.domain.workspace_config.data_source import DataSource
 
 
 class TestCreateBatchOnDuplicate:

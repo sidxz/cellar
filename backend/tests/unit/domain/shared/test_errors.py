@@ -2,7 +2,7 @@
 
 import pytest
 
-from chem_vault.domain.shared.errors import (
+from cellar.domain.shared.errors import (
     AuthorizationError,
     ConcurrencyConflictError,
     ConflictError,

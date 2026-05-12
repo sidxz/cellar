@@ -27,17 +27,17 @@ import uuid
 import pytest
 import sqlalchemy as sa
 
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.collection import Collection
 
-from chem_vault.domain.shared.errors import CollectionFrozenError
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
+from cellar.domain.shared.errors import CollectionFrozenError
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
     SQLAlchemyCollectionRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 # ---------------------------------------------------------------------------

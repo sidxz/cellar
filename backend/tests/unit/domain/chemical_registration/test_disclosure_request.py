@@ -4,18 +4,18 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
+from cellar.domain.chemical_registration.enums import (
     DisclosureResolutionType,
     DisclosureStatus,
 )
-from chem_vault.domain.chemical_registration.events import (
+from cellar.domain.chemical_registration.events import (
     DisclosureConflict,
     DisclosurePendingConfirmation,
     DisclosureRequested,
     DisclosureResolved,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------

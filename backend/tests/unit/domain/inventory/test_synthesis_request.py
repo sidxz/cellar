@@ -5,12 +5,12 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.inventory.enums import (
+from cellar.domain.inventory.enums import (
     FeasibilityStatus,
     RequestPriority,
     SynthesisRequestStatus,
 )
-from chem_vault.domain.inventory.events import (
+from cellar.domain.inventory.events import (
     SynthesisCompleted,
     SynthesisFailed,
     SynthesisFeasibilityFlagged,
@@ -22,10 +22,10 @@ from chem_vault.domain.inventory.events import (
     SynthesisRequested,
     SynthesisStarted,
 )
-from chem_vault.domain.inventory.synthesis_request import SynthesisRequest
-from chem_vault.domain.shared.enums import AmountUnit, AssignmentType
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Amount, SynthesisAssignment
+from cellar.domain.inventory.synthesis_request import SynthesisRequest
+from cellar.domain.shared.enums import AmountUnit, AssignmentType
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Amount, SynthesisAssignment
 
 
 @pytest.fixture

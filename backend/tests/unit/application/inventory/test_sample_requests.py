@@ -9,7 +9,7 @@ from typing import Self
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.inventory.sample_requests import (
+from cellar.application.inventory.sample_requests import (
     ApproveSampleRequestCommand,
     ApproveSampleRequest,
     CancelSampleRequestCommand,
@@ -27,12 +27,12 @@ from chem_vault.application.inventory.sample_requests import (
     StartPreparingSampleRequestCommand,
     StartPreparingSampleRequest,
 )
-from chem_vault.domain.inventory.enums import SampleRequestStatus
-from chem_vault.domain.inventory.sample_request import SampleRequest
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import Amount
-from chem_vault.domain.shared.enums import AmountUnit
+from cellar.domain.inventory.enums import SampleRequestStatus
+from cellar.domain.inventory.sample_request import SampleRequest
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import Amount
+from cellar.domain.shared.enums import AmountUnit
 from tests.fakes.fake_auth import FakeAuth
 
 

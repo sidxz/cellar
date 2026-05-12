@@ -25,7 +25,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <UserMenu />
         <div className="flex items-center justify-between border-t border-sidebar-border px-3 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <span className="text-[11px] font-medium tracking-wide text-sidebar-foreground/40 group-data-[collapsible=icon]:hidden">
-            openchemvault.com
+            chemcellar.com
           </span>
           <SidebarTrigger className="size-7 text-sidebar-foreground/40 hover:text-sidebar-foreground" />
         </div>

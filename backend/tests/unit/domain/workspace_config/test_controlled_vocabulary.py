@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.shared.errors import ConflictError, ValidationError
-from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
-from chem_vault.domain.workspace_config.events import VocabularyCreated, VocabularyUpdated
+from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
+from cellar.domain.workspace_config.events import VocabularyCreated, VocabularyUpdated
 
 
 @pytest.fixture

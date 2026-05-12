@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
 )
 from tests.fixtures.dose_response_curves import seed_curve

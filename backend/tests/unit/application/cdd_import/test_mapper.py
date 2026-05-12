@@ -2,7 +2,7 @@
 
 import pytest
 
-from chem_vault.application.cdd_import.mapper import (
+from cellar.application.cdd_import.mapper import (
     CddProtocolMappingResult,
     CddProtocolSummary,
     MappedReadout,
@@ -10,7 +10,7 @@ from chem_vault.application.cdd_import.mapper import (
     map_cdd_protocol,
     map_cdd_protocol_list,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     ReadoutAggregation,
     ReadoutDataType,
@@ -86,7 +86,7 @@ class TestMapCddProtocol:
         assert result.readouts[0].dose_response_config is not None
 
     def test_batch_link_dropped_with_warning(self):
-        # CDD "Batch Link" doesn't fit chem-vault's model — well.batch_id
+        # CDD "Batch Link" doesn't fit cellar's model — well.batch_id
         # is canonical. Mapper drops it + emits an informative warning.
         proto = _protocol_json(readouts=[_readout("Reference Batch", "Batch Link")])
         result = map_cdd_protocol(proto)
@@ -109,7 +109,7 @@ class TestMapCddProtocol:
         )
 
     def test_date_dropped_with_warning(self):
-        # Date duplicates run.run_date in chem-vault's model. Drop.
+        # Date duplicates run.run_date in cellar's model. Drop.
         proto = _protocol_json(readouts=[_readout("Exp Date", "Date")])
         result = map_cdd_protocol(proto)
         assert result.readouts == []
@@ -216,7 +216,7 @@ class TestMapCddProtocol:
         assert dr.data_type == ReadoutDataType.DOSE_RESPONSE
         assert dr.unit == "uM"
         assert dr.dose_response_config is not None
-        # X axis is None — chem-vault sources X from well.dose, not from a
+        # X axis is None — cellar sources X from well.dose, not from a
         # separate readout column.
         assert dr.dose_response_config.x_readout_name is None
         assert dr.dose_response_config.y_readout_name == "% Inhibition"
@@ -224,7 +224,7 @@ class TestMapCddProtocol:
     def test_reserved_name_readout_is_skipped(self):
         """A CDD readout literally named "Concentration"/"Dose"/etc. is
         well metadata, not a measurement. The mapper drops it with a
-        warning so it never becomes a chem-vault ReadoutDefinition."""
+        warning so it never becomes a cellar ReadoutDefinition."""
         proto = _protocol_json(
             readouts=[
                 _readout("Concentration", "Number", "uM"),
@@ -358,7 +358,7 @@ class TestMapCddProtocol:
         )
 
     def test_unmapped_calc_class_does_not_lift_normalization(self):
-        """A calculation class chem-vault doesn't recognize must not
+        """A calculation class cellar doesn't recognize must not
         produce a phantom normalization. Output readout is still skipped
         via the calculated_ids path, but the input stays bare-raw."""
         proto = {

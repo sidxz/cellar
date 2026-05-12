@@ -17,16 +17,16 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.domain.shared.errors import AuthorizationError
+from cellar.domain.shared.errors import AuthorizationError
 
-from chem_vault.application.screening.fit_dose_response import FitDoseResponseCurves
-from chem_vault.domain.screening_assay.curve_fitting import (
+from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
+from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     CurveFittingService,
     FittedCurveResult,
 )
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.enums import (
     CurveClass,
     CurveType,
     PlateFormat,
@@ -35,10 +35,10 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutNormalization,
     WellType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.value_objects import QualifiedValue
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.value_objects import QualifiedValue
 
 
 WS = uuid.uuid4()
@@ -493,7 +493,7 @@ class _FailingFitter:
 
     def fit(self, points, config):
         self.calls += 1
-        from chem_vault.domain.shared.errors import ValidationError
+        from cellar.domain.shared.errors import ValidationError
         # Trigger failure when the points contain the sentinel response.
         if any(p.response == self._fail_for for p in points):
             return Failure(ValidationError("synthetic fit failure"))
@@ -570,11 +570,11 @@ def test_fit_overrides_preserves_y_normalization_and_intercepts():
     silently drop the protocol's `y_normalization` selection or `intercepts`
     list. Otherwise IC50+IC90 protocols collapse to IC50-only after a
     refit and the y-layer selection reverts to the default."""
-    from chem_vault.application.screening.fit_dose_response import FitOverrides
-    from chem_vault.domain.screening_assay.dose_response_config import (
+    from cellar.application.screening.fit_dose_response import FitOverrides
+    from cellar.domain.screening_assay.dose_response_config import (
         InterceptSpec,
     )
-    from chem_vault.domain.screening_assay.enums import InterceptKind
+    from cellar.domain.screening_assay.enums import InterceptKind
 
     base = DoseResponseConfig(
         curve_type=CurveType.IC50,

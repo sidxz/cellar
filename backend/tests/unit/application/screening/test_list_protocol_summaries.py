@@ -11,12 +11,12 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Success
 
-from chem_vault.application.screening.list_protocol_summaries import (
+from cellar.application.screening.list_protocol_summaries import (
     ListProtocolSummaries,
     ListProtocolSummariesQuery,
     ProtocolSummary,
 )
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 

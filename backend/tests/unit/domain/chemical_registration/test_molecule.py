@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.enums import (
     ComponentRole,
     IdentifierType,
     LifecycleStage,
@@ -15,18 +15,18 @@ from chem_vault.domain.chemical_registration.enums import (
     StructureStatus,
     SynthesisStatus,
 )
-from chem_vault.domain.chemical_registration.events import (
+from cellar.domain.chemical_registration.events import (
     MoleculeDisclosed,
     MoleculeLifecycleChanged,
     MoleculeMerged,
     MoleculeRegistered,
     MoleculeTagsUpdated,
 )
-from chem_vault.domain.chemical_registration.mixture_component import MixtureComponent
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.chemical_registration.mixture_component import MixtureComponent
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import (
     ChemicalStructure,
     ComputedDescriptors,
     PredictedProperties,
@@ -540,6 +540,24 @@ class TestDisclose:
                 descriptors=aspirin_descriptors,
                 disclosed_by=user_id,
             )
+
+    def test_disclose_records_stereochemistry(
+        self,
+        ws_id: uuid.UUID,
+        org_id: uuid.UUID,
+        user_id: uuid.UUID,
+        aspirin_structure: ChemicalStructure,
+        aspirin_descriptors: ComputedDescriptors,
+    ) -> None:
+        mol = _make_undisclosed(ws_id, org_id)
+        mol.clear_events()
+        mol.disclose(
+            structure=aspirin_structure,
+            descriptors=aspirin_descriptors,
+            disclosed_by=user_id,
+            stereochemistry=Stereochemistry.ACHIRAL,
+        )
+        assert mol.stereochemistry == Stereochemistry.ACHIRAL
 
 
 # ---------------------------------------------------------------------------

@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 from tests.helpers.assertions import (
     assert_event_emitted,
     assert_result_err,

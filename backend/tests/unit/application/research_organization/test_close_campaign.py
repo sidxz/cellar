@@ -9,18 +9,18 @@ from unittest.mock import AsyncMock, call
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.close_campaign import (
+from cellar.application.research_organization.close_campaign import (
     CloseCampaign,
     CloseCampaignCommand,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
@@ -29,11 +29,11 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.research_organization.events import (
+from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignPublishedCollectionCreated,
 )
-from chem_vault.domain.shared.errors import (
+from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,

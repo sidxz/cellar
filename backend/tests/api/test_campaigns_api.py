@@ -24,8 +24,8 @@ import pytest
 from httpx import AsyncClient
 
 # Force ORM model registration so FK resolution works in test DB.
-import chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

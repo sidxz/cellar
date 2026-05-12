@@ -1,4 +1,4 @@
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     CampaignDecision,

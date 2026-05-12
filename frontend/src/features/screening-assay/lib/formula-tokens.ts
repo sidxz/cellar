@@ -4,12 +4,12 @@
  * The backend's asteval-based evaluator accepts standard Python identifier
  * syntax for variable names + a small math whitelist + numeric literals
  * + standard operators. Cross-protocol references (`@ProtocolName.ReadoutName`
- * or `@{Protocol Name}.Readout`) are a chem-vault extension that
+ * or `@{Protocol Name}.Readout`) are a cellar extension that
  * `_CROSS_PROTOCOL_RE` catches before evaluation; the calc engine skips
  * those at compute time and the resolver handles them on read.
  *
  * Keep the math whitelist in sync with
- * `backend/src/chem_vault/infrastructure/computation/asteval_evaluator.py:_MATH_SYMBOLS`.
+ * `backend/src/cellar/infrastructure/computation/asteval_evaluator.py:_MATH_SYMBOLS`.
  */
 
 /** Math symbols and constants the asteval evaluator exposes. */
@@ -29,12 +29,12 @@ export const FORMULA_MATH_SYMBOLS: readonly string[] = [
 ] as const;
 
 /** Cross-protocol reference: `@Protocol.Readout` or `@{Protocol Name}.Readout`.
- *  Mirrored from `backend/src/chem_vault/application/screening/readout_calculation_engine.py:_CROSS_PROTOCOL_RE`. */
+ *  Mirrored from `backend/src/cellar/application/screening/readout_calculation_engine.py:_CROSS_PROTOCOL_RE`. */
 const CROSS_PROTOCOL_RE = /@\{?[\w\s]+\}?\.[\w\s]+/g;
 
 /** Bracket-wrapped reference: `[Name With Spaces]`. Lets formulas reference
  *  readouts whose names aren't valid Python identifiers. Mirrored from
- *  `backend/src/chem_vault/infrastructure/computation/asteval_evaluator.py:_BRACKET_REF_RE`. */
+ *  `backend/src/cellar/infrastructure/computation/asteval_evaluator.py:_BRACKET_REF_RE`. */
 const BRACKET_REF_RE = /\[([^\[\]]+?)\]/g;
 
 /** A standalone identifier outside of cross-protocol references. */

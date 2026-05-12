@@ -1,6 +1,6 @@
 import pytest
 
-from chem_vault.domain.sar_analysis.similarity_metric import (
+from cellar.domain.sar_analysis.similarity_metric import (
     Tanimoto,
     Tversky,
     serialize_metric,

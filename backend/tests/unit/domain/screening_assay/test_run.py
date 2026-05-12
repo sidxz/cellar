@@ -5,13 +5,13 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     PlateFormat,
     RunRelationshipType,
     RunStatus,
     WellType,
 )
-from chem_vault.domain.screening_assay.events import (
+from cellar.domain.screening_assay.events import (
     RunApproved,
     RunCompleted,
     RunCreated,
@@ -19,10 +19,10 @@ from chem_vault.domain.screening_assay.events import (
     RunRejected,
     RunUnlocked,
 )
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.enums import ConcentrationUnit
-from chem_vault.domain.shared.errors import ConflictError, ValidationError
-from chem_vault.domain.shared.value_objects import Barcode, Concentration
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.enums import ConcentrationUnit
+from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.value_objects import Barcode, Concentration
 
 
 # ---------------------------------------------------------------------------

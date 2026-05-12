@@ -391,7 +391,7 @@ frontend/src/app/(dashboard)/compounds/register/
 
 **Backend new files:**
 ```
-backend/src/chem_vault/
+backend/src/cellar/
   infrastructure/temporal/
     workflows/bulk_registration_workflow.py
     activities/registration_activity.py

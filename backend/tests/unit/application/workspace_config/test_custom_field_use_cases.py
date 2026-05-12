@@ -11,29 +11,29 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.shared.sentinel import UNSET
-from chem_vault.application.workspace_config.create_custom_field import (
+from cellar.application.shared.sentinel import UNSET
+from cellar.application.workspace_config.create_custom_field import (
     CreateCustomField,
     CreateCustomFieldCommand,
 )
-from chem_vault.application.workspace_config.custom_field_validator import (
+from cellar.application.workspace_config.custom_field_validator import (
     CustomFieldValidator,
 )
-from chem_vault.application.workspace_config.delete_custom_field import (
+from cellar.application.workspace_config.delete_custom_field import (
     DeleteCustomField,
     DeleteCustomFieldCommand,
 )
-from chem_vault.application.workspace_config.list_custom_fields import (
+from cellar.application.workspace_config.list_custom_fields import (
     ListCustomFields,
     ListCustomFieldsQuery,
 )
-from chem_vault.application.workspace_config.update_custom_field import (
+from cellar.application.workspace_config.update_custom_field import (
     UpdateCustomField,
     UpdateCustomFieldCommand,
 )
-from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
-from chem_vault.domain.workspace_config.custom_field_definition import CustomFieldDefinition
-from chem_vault.domain.workspace_config.enums import FieldDataType, FieldTarget
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.workspace_config.custom_field_definition import CustomFieldDefinition
+from cellar.domain.workspace_config.enums import FieldDataType, FieldTarget
 
 
 # ---------------------------------------------------------------------------

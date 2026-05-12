@@ -10,13 +10,13 @@ from unittest.mock import MagicMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.preview_bulk_registration_file import (
+from cellar.application.chemical_registration.preview_bulk_registration_file import (
     ParsedItemDTO,
     PreviewBulkRegistrationFile,
     PreviewBulkRegistrationFileQuery,
 )
-from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from cellar.domain.shared.errors import ValidationError
 
 
 class StubParser:

@@ -18,28 +18,28 @@
 
 | Path | Responsibility |
 |---|---|
-| `backend/src/chem_vault/domain/sar_analysis/fingerprint_algorithm.py` | `FingerprintAlgorithm` Protocol — name, `bfp` column to query, cartridge query function |
-| `backend/src/chem_vault/domain/sar_analysis/similarity_metric.py` | `Tanimoto`, `Tversky` value objects + `SimilarityMetric` union |
-| `backend/src/chem_vault/domain/sar_analysis/search_modes.py` | `SearchMode` enum + `MODE_DEFAULTS` mapping table |
-| `backend/src/chem_vault/infrastructure/rdkit/fingerprints/__init__.py` | Package init |
-| `backend/src/chem_vault/infrastructure/rdkit/fingerprints/registry.py` | `FingerprintRegistry` — DI-injected dict[str, FingerprintAlgorithm] |
-| `backend/src/chem_vault/infrastructure/rdkit/fingerprints/morgan.py` | `MorganAlgorithm` — stereo-aware Python compute, ECFP4-equivalent |
-| `backend/src/chem_vault/infrastructure/rdkit/fingerprints/fcfp.py` | `FCFPAlgorithm` — pharmacophore-flavored, cartridge-managed (no Python compute) |
-| `backend/src/chem_vault/interface/routes/search_algorithms.py` | New `GET /api/v1/search/algorithms` endpoint |
+| `backend/src/cellar/domain/sar_analysis/fingerprint_algorithm.py` | `FingerprintAlgorithm` Protocol — name, `bfp` column to query, cartridge query function |
+| `backend/src/cellar/domain/sar_analysis/similarity_metric.py` | `Tanimoto`, `Tversky` value objects + `SimilarityMetric` union |
+| `backend/src/cellar/domain/sar_analysis/search_modes.py` | `SearchMode` enum + `MODE_DEFAULTS` mapping table |
+| `backend/src/cellar/infrastructure/rdkit/fingerprints/__init__.py` | Package init |
+| `backend/src/cellar/infrastructure/rdkit/fingerprints/registry.py` | `FingerprintRegistry` — DI-injected dict[str, FingerprintAlgorithm] |
+| `backend/src/cellar/infrastructure/rdkit/fingerprints/morgan.py` | `MorganAlgorithm` — stereo-aware Python compute, ECFP4-equivalent |
+| `backend/src/cellar/infrastructure/rdkit/fingerprints/fcfp.py` | `FCFPAlgorithm` — pharmacophore-flavored, cartridge-managed (no Python compute) |
+| `backend/src/cellar/interface/routes/search_algorithms.py` | New `GET /api/v1/search/algorithms` endpoint |
 | `backend/alembic/versions/020_search_algorithms_overhaul.py` | Migration: drop unused fp columns, drop achiral Morgan trigger, add fcfp_bfp + GiST + new triggers |
 
 **Modified files (backend):**
 
 | Path | Change |
 |---|---|
-| `backend/src/chem_vault/infrastructure/rdkit/fingerprint_generator.py` | Strip to Morgan-only; `useChirality=True`; expose registry |
-| `backend/src/chem_vault/application/chemical_registration/protocols.py` | Replace `fingerprints: dict` with `fp_morgan_chiral: bytes` on `ProcessedStructureDTO` |
-| `backend/src/chem_vault/infrastructure/rdkit/structure_processor.py` | Use new typed Fingerprints field |
-| `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/models.py` | Drop `fp_rdkit`, `fp_maccs`, `fp_topological_torsion`, `fp_atom_pair` |
-| `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py` | Re-route `_structure_clause` for new query shape; SMARTS hygiene; `@>>` |
-| `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py` | Drop `LIMIT 100` from `search_similarity`; algorithm/metric parameters; Tversky GUC handling |
-| `backend/src/chem_vault/interface/routes/search.py` | Discriminated-union request; per-row similarity score with algorithm + metric |
-| `backend/src/chem_vault/infrastructure/di/` (existing module) | Register `FingerprintRegistry` |
+| `backend/src/cellar/infrastructure/rdkit/fingerprint_generator.py` | Strip to Morgan-only; `useChirality=True`; expose registry |
+| `backend/src/cellar/application/chemical_registration/protocols.py` | Replace `fingerprints: dict` with `fp_morgan_chiral: bytes` on `ProcessedStructureDTO` |
+| `backend/src/cellar/infrastructure/rdkit/structure_processor.py` | Use new typed Fingerprints field |
+| `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/models.py` | Drop `fp_rdkit`, `fp_maccs`, `fp_topological_torsion`, `fp_atom_pair` |
+| `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py` | Re-route `_structure_clause` for new query shape; SMARTS hygiene; `@>>` |
+| `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py` | Drop `LIMIT 100` from `search_similarity`; algorithm/metric parameters; Tversky GUC handling |
+| `backend/src/cellar/interface/routes/search.py` | Discriminated-union request; per-row similarity score with algorithm + metric |
+| `backend/src/cellar/infrastructure/di/` (existing module) | Register `FingerprintRegistry` |
 
 **Modified files (frontend):**
 
@@ -62,7 +62,7 @@
 ### Task 1: SimilarityMetric value objects
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/sar_analysis/similarity_metric.py`
+- Create: `backend/src/cellar/domain/sar_analysis/similarity_metric.py`
 - Test: `backend/tests/unit/domain/sar_analysis/test_similarity_metric.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -71,7 +71,7 @@
 # backend/tests/unit/domain/sar_analysis/test_similarity_metric.py
 import pytest
 
-from chem_vault.domain.sar_analysis.similarity_metric import (
+from cellar.domain.sar_analysis.similarity_metric import (
     Tanimoto,
     Tversky,
     serialize_metric,
@@ -100,12 +100,12 @@ def test_tversky_rejects_negative_beta() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest backend/tests/unit/domain/sar_analysis/test_similarity_metric.py -v`
-Expected: `ModuleNotFoundError: No module named 'chem_vault.domain.sar_analysis.similarity_metric'`
+Expected: `ModuleNotFoundError: No module named 'cellar.domain.sar_analysis.similarity_metric'`
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# backend/src/chem_vault/domain/sar_analysis/similarity_metric.py
+# backend/src/cellar/domain/sar_analysis/similarity_metric.py
 """Similarity metric value objects."""
 
 from __future__ import annotations
@@ -149,7 +149,7 @@ def serialize_metric(metric: SimilarityMetric) -> str:
     raise TypeError(f"Unknown metric: {metric!r}")
 ```
 
-Also create `backend/tests/unit/domain/sar_analysis/__init__.py` (empty) and `backend/src/chem_vault/domain/sar_analysis/__init__.py` if not present.
+Also create `backend/tests/unit/domain/sar_analysis/__init__.py` (empty) and `backend/src/cellar/domain/sar_analysis/__init__.py` if not present.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -159,9 +159,9 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/sar_analysis/similarity_metric.py \
+git add backend/src/cellar/domain/sar_analysis/similarity_metric.py \
         backend/tests/unit/domain/sar_analysis/test_similarity_metric.py \
-        backend/src/chem_vault/domain/sar_analysis/__init__.py \
+        backend/src/cellar/domain/sar_analysis/__init__.py \
         backend/tests/unit/domain/sar_analysis/__init__.py
 git commit -m "feat(domain): add Tanimoto + Tversky similarity metric VOs"
 ```
@@ -171,14 +171,14 @@ git commit -m "feat(domain): add Tanimoto + Tversky similarity metric VOs"
 ### Task 2: FingerprintAlgorithm Protocol
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/sar_analysis/fingerprint_algorithm.py`
+- Create: `backend/src/cellar/domain/sar_analysis/fingerprint_algorithm.py`
 - Test: `backend/tests/unit/domain/sar_analysis/test_fingerprint_algorithm.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # backend/tests/unit/domain/sar_analysis/test_fingerprint_algorithm.py
-from chem_vault.domain.sar_analysis.fingerprint_algorithm import (
+from cellar.domain.sar_analysis.fingerprint_algorithm import (
     FingerprintAlgorithm,
 )
 
@@ -204,7 +204,7 @@ Expected: `ModuleNotFoundError`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# backend/src/chem_vault/domain/sar_analysis/fingerprint_algorithm.py
+# backend/src/cellar/domain/sar_analysis/fingerprint_algorithm.py
 """FingerprintAlgorithm Protocol -- domain-level abstraction for similarity FPs.
 
 Implementations live in infrastructure/rdkit/fingerprints/*. Domain code
@@ -252,7 +252,7 @@ Expected: 1 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/sar_analysis/fingerprint_algorithm.py \
+git add backend/src/cellar/domain/sar_analysis/fingerprint_algorithm.py \
         backend/tests/unit/domain/sar_analysis/test_fingerprint_algorithm.py
 git commit -m "feat(domain): add FingerprintAlgorithm Protocol"
 ```
@@ -262,7 +262,7 @@ git commit -m "feat(domain): add FingerprintAlgorithm Protocol"
 ### Task 3: SearchMode enum + MODE_DEFAULTS table
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/sar_analysis/search_modes.py`
+- Create: `backend/src/cellar/domain/sar_analysis/search_modes.py`
 - Test: `backend/tests/unit/domain/sar_analysis/test_search_modes.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -271,12 +271,12 @@ git commit -m "feat(domain): add FingerprintAlgorithm Protocol"
 # backend/tests/unit/domain/sar_analysis/test_search_modes.py
 import pytest
 
-from chem_vault.domain.sar_analysis.search_modes import (
+from cellar.domain.sar_analysis.search_modes import (
     MODE_DEFAULTS,
     ModeConfig,
     SearchMode,
 )
-from chem_vault.domain.sar_analysis.similarity_metric import Tanimoto, Tversky
+from cellar.domain.sar_analysis.similarity_metric import Tanimoto, Tversky
 
 
 def test_three_modes_exist() -> None:
@@ -315,7 +315,7 @@ Expected: `ModuleNotFoundError`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# backend/src/chem_vault/domain/sar_analysis/search_modes.py
+# backend/src/cellar/domain/sar_analysis/search_modes.py
 """User-facing search modes and their (algorithm, metric, threshold) defaults.
 
 This is the ONLY place mode-to-algorithm mappings live. Adding a 4th mode
@@ -327,7 +327,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from chem_vault.domain.sar_analysis.similarity_metric import (
+from cellar.domain.sar_analysis.similarity_metric import (
     SimilarityMetric,
     Tanimoto,
     Tversky,
@@ -384,7 +384,7 @@ Expected: 5 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/sar_analysis/search_modes.py \
+git add backend/src/cellar/domain/sar_analysis/search_modes.py \
         backend/tests/unit/domain/sar_analysis/test_search_modes.py
 git commit -m "feat(domain): add SearchMode enum + MODE_DEFAULTS table"
 ```
@@ -396,8 +396,8 @@ git commit -m "feat(domain): add SearchMode enum + MODE_DEFAULTS table"
 ### Task 4: MorganAlgorithm (stereo-aware, Python-side compute)
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/rdkit/fingerprints/__init__.py` (empty)
-- Create: `backend/src/chem_vault/infrastructure/rdkit/fingerprints/morgan.py`
+- Create: `backend/src/cellar/infrastructure/rdkit/fingerprints/__init__.py` (empty)
+- Create: `backend/src/cellar/infrastructure/rdkit/fingerprints/morgan.py`
 - Test: `backend/tests/unit/infrastructure/rdkit/fingerprints/test_morgan.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -406,7 +406,7 @@ git commit -m "feat(domain): add SearchMode enum + MODE_DEFAULTS table"
 # backend/tests/unit/infrastructure/rdkit/fingerprints/test_morgan.py
 from rdkit import Chem
 
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 
 def test_metadata() -> None:
@@ -448,11 +448,11 @@ Expected: `ModuleNotFoundError`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# backend/src/chem_vault/infrastructure/rdkit/fingerprints/__init__.py
+# backend/src/cellar/infrastructure/rdkit/fingerprints/__init__.py
 ```
 
 ```python
-# backend/src/chem_vault/infrastructure/rdkit/fingerprints/morgan.py
+# backend/src/cellar/infrastructure/rdkit/fingerprints/morgan.py
 """Morgan / ECFP4-equivalent fingerprint, computed in Python with stereo awareness.
 
 The cartridge ``morganbv_fp`` does not expose ``useChirality``. To get
@@ -500,8 +500,8 @@ and re-run. The DB trigger choice in Task 10 must match this byte format.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/rdkit/fingerprints/__init__.py \
-        backend/src/chem_vault/infrastructure/rdkit/fingerprints/morgan.py \
+git add backend/src/cellar/infrastructure/rdkit/fingerprints/__init__.py \
+        backend/src/cellar/infrastructure/rdkit/fingerprints/morgan.py \
         backend/tests/unit/infrastructure/rdkit/fingerprints/__init__.py \
         backend/tests/unit/infrastructure/rdkit/fingerprints/test_morgan.py
 git commit -m "feat(infra): MorganAlgorithm with stereo-aware Python compute"
@@ -512,7 +512,7 @@ git commit -m "feat(infra): MorganAlgorithm with stereo-aware Python compute"
 ### Task 5: FCFPAlgorithm (cartridge-managed, no Python compute)
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/rdkit/fingerprints/fcfp.py`
+- Create: `backend/src/cellar/infrastructure/rdkit/fingerprints/fcfp.py`
 - Test: `backend/tests/unit/infrastructure/rdkit/fingerprints/test_fcfp.py`
 
 FCFP doesn't need Python-side compute (its pharmacophore abstraction is intrinsically achiral-flavored). Only metadata is shipped here; the DB trigger will compute it from `smiles` via cartridge `featmorganbv_fp`.
@@ -521,7 +521,7 @@ FCFP doesn't need Python-side compute (its pharmacophore abstraction is intrinsi
 
 ```python
 # backend/tests/unit/infrastructure/rdkit/fingerprints/test_fcfp.py
-from chem_vault.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
 
 
 def test_metadata() -> None:
@@ -539,7 +539,7 @@ Expected: `ModuleNotFoundError`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# backend/src/chem_vault/infrastructure/rdkit/fingerprints/fcfp.py
+# backend/src/cellar/infrastructure/rdkit/fingerprints/fcfp.py
 """FCFP -- pharmacophore-flavored circular fingerprint.
 
 Fully cartridge-managed (no Python compute). The DB trigger writes
@@ -564,7 +564,7 @@ Expected: 1 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/rdkit/fingerprints/fcfp.py \
+git add backend/src/cellar/infrastructure/rdkit/fingerprints/fcfp.py \
         backend/tests/unit/infrastructure/rdkit/fingerprints/test_fcfp.py
 git commit -m "feat(infra): FCFPAlgorithm metadata (cartridge-managed)"
 ```
@@ -574,7 +574,7 @@ git commit -m "feat(infra): FCFPAlgorithm metadata (cartridge-managed)"
 ### Task 6: FingerprintRegistry
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/rdkit/fingerprints/registry.py`
+- Create: `backend/src/cellar/infrastructure/rdkit/fingerprints/registry.py`
 - Test: `backend/tests/unit/infrastructure/rdkit/fingerprints/test_registry.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -583,9 +583,9 @@ git commit -m "feat(infra): FCFPAlgorithm metadata (cartridge-managed)"
 # backend/tests/unit/infrastructure/rdkit/fingerprints/test_registry.py
 import pytest
 
-from chem_vault.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
-from chem_vault.infrastructure.rdkit.fingerprints.registry import (
+from cellar.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.registry import (
     FingerprintRegistry,
     UnknownAlgorithmError,
 )
@@ -624,14 +624,14 @@ Expected: `ModuleNotFoundError`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# backend/src/chem_vault/infrastructure/rdkit/fingerprints/registry.py
+# backend/src/cellar/infrastructure/rdkit/fingerprints/registry.py
 """FingerprintRegistry -- runtime lookup from algorithm name to impl."""
 
 from __future__ import annotations
 
-from chem_vault.domain.sar_analysis.fingerprint_algorithm import FingerprintAlgorithm
-from chem_vault.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.domain.sar_analysis.fingerprint_algorithm import FingerprintAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 
 class UnknownAlgorithmError(KeyError):
@@ -676,7 +676,7 @@ Expected: 3 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/rdkit/fingerprints/registry.py \
+git add backend/src/cellar/infrastructure/rdkit/fingerprints/registry.py \
         backend/tests/unit/infrastructure/rdkit/fingerprints/test_registry.py
 git commit -m "feat(infra): FingerprintRegistry with default Morgan + FCFP"
 ```
@@ -686,18 +686,18 @@ git commit -m "feat(infra): FingerprintRegistry with default Morgan + FCFP"
 ### Task 7: Wire registry into Lagom DI
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/di/__init__.py` (or wherever the container is built — search for `FingerprintGenerator` registration as a hint)
+- Modify: `backend/src/cellar/infrastructure/di/__init__.py` (or wherever the container is built — search for `FingerprintGenerator` registration as a hint)
 
 - [ ] **Step 1: Locate the existing DI container build site**
 
-Run: `rg -n 'FingerprintGenerator' backend/src/chem_vault/infrastructure/di/`
+Run: `rg -n 'FingerprintGenerator' backend/src/cellar/infrastructure/di/`
 Expected: a single registration line. If the file lacks a dedicated DI module for fingerprints, register `FingerprintRegistry.default()` next to where `FingerprintGenerator` is currently bound.
 
 - [ ] **Step 2: Add the registration**
 
 ```python
 # pseudo-diff in the DI container builder
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 # ... existing code ...
 container[FingerprintRegistry] = FingerprintRegistry.default()
@@ -705,15 +705,15 @@ container[FingerprintRegistry] = FingerprintRegistry.default()
 
 - [ ] **Step 3: Verify the container builds**
 
-Run: `uv run python -c "from chem_vault.infrastructure.di import build_container; c = build_container(); from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry; print(sorted(c[FingerprintRegistry].names()))"`
+Run: `uv run python -c "from cellar.infrastructure.di import build_container; c = build_container(); from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry; print(sorted(c[FingerprintRegistry].names()))"`
 Expected: `['fcfp', 'morgan']`
 
-(If `build_container` is named differently, adjust. Look in `backend/src/chem_vault/infrastructure/di/` for the entry point.)
+(If `build_container` is named differently, adjust. Look in `backend/src/cellar/infrastructure/di/` for the entry point.)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/di/
+git add backend/src/cellar/infrastructure/di/
 git commit -m "feat(di): register FingerprintRegistry with Morgan + FCFP"
 ```
 
@@ -724,7 +724,7 @@ git commit -m "feat(di): register FingerprintRegistry with Morgan + FCFP"
 ### Task 8: Strip FingerprintGenerator to Morgan-only with chirality
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/rdkit/fingerprint_generator.py`
+- Modify: `backend/src/cellar/infrastructure/rdkit/fingerprint_generator.py`
 - Modify: `backend/tests/unit/infrastructure/rdkit/test_fingerprint_generator.py` (find and update; if absent, create)
 
 - [ ] **Step 1: Find the existing tests**
@@ -738,7 +738,7 @@ Note any tests that assert dict keys like `"rdkit"`, `"maccs"`, etc. — those n
 # backend/tests/unit/infrastructure/rdkit/test_fingerprint_generator.py
 from rdkit import Chem
 
-from chem_vault.infrastructure.rdkit.fingerprint_generator import FingerprintGenerator
+from cellar.infrastructure.rdkit.fingerprint_generator import FingerprintGenerator
 
 
 def test_generates_only_morgan_chiral() -> None:
@@ -765,14 +765,14 @@ Expected: `AttributeError` or test failure (the new structure doesn't exist yet)
 - [ ] **Step 4: Replace the implementation**
 
 ```python
-# backend/src/chem_vault/infrastructure/rdkit/fingerprint_generator.py
+# backend/src/cellar/infrastructure/rdkit/fingerprint_generator.py
 """Stereo-aware Morgan fingerprint generation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 
 @dataclass(frozen=True)
@@ -804,7 +804,7 @@ Expected: 2 passed.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/rdkit/fingerprint_generator.py \
+git add backend/src/cellar/infrastructure/rdkit/fingerprint_generator.py \
         backend/tests/unit/infrastructure/rdkit/test_fingerprint_generator.py
 git commit -m "refactor(infra): strip FingerprintGenerator to stereo-aware Morgan only"
 ```
@@ -814,8 +814,8 @@ git commit -m "refactor(infra): strip FingerprintGenerator to stereo-aware Morga
 ### Task 9: Update ProcessedStructureDTO + StructureProcessor for new Fingerprints VO
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/chemical_registration/protocols.py`
-- Modify: `backend/src/chem_vault/infrastructure/rdkit/structure_processor.py`
+- Modify: `backend/src/cellar/application/chemical_registration/protocols.py`
+- Modify: `backend/src/cellar/infrastructure/rdkit/structure_processor.py`
 - Find/update tests for both.
 
 - [ ] **Step 1: Find existing references**
@@ -825,14 +825,14 @@ Note every site that reads `.fingerprints["morgan"]`, `.fingerprints["maccs"]`, 
 
 - [ ] **Step 2: Update the DTO**
 
-In `backend/src/chem_vault/application/chemical_registration/protocols.py`, replace the `fingerprints: dict[str, bytes]` field on `ProcessedStructureDTO`:
+In `backend/src/cellar/application/chemical_registration/protocols.py`, replace the `fingerprints: dict[str, bytes]` field on `ProcessedStructureDTO`:
 
 ```python
 # Old:
 # fingerprints: dict[str, bytes]
 
 # New:
-from chem_vault.infrastructure.rdkit.fingerprint_generator import Fingerprints
+from cellar.infrastructure.rdkit.fingerprint_generator import Fingerprints
 # (Note: this introduces an application -> infrastructure import; if the
 # project's lint blocks this, move Fingerprints into application/ as a
 # domain-shaped DTO. The simplest path is to define a local
@@ -857,7 +857,7 @@ and update `FingerprintGenerator.compute` to return that DTO (or have `Structure
 
 - [ ] **Step 3: Update StructureProcessor**
 
-In `backend/src/chem_vault/infrastructure/rdkit/structure_processor.py:79`, replace:
+In `backend/src/cellar/infrastructure/rdkit/structure_processor.py:79`, replace:
 
 ```python
 fingerprints = self._fp_gen.generate_all(std_mol.mol)
@@ -883,9 +883,9 @@ Expected: all tests pass (or the only failures are in the consumers you missed �
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/chem_vault/application/chemical_registration/protocols.py \
-        backend/src/chem_vault/infrastructure/rdkit/structure_processor.py \
-        backend/src/chem_vault/  # any consumer files updated
+git add backend/src/cellar/application/chemical_registration/protocols.py \
+        backend/src/cellar/infrastructure/rdkit/structure_processor.py \
+        backend/src/cellar/  # any consumer files updated
 git commit -m "refactor(app): use Fingerprints VO instead of dict on ProcessedStructureDTO"
 ```
 
@@ -1050,7 +1050,7 @@ Expected: both succeed; spot-check above still holds after the second upgrade.
 
 - [ ] **Step 5: Update the SQLAlchemy model**
 
-In `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/models.py:70-74`, delete the dead column declarations:
+In `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/models.py:70-74`, delete the dead column declarations:
 
 ```python
 # Delete:
@@ -1071,7 +1071,7 @@ Expected: all green. Any code that referenced the dropped columns must already h
 
 ```bash
 git add backend/alembic/versions/020_search_algorithms_overhaul.py \
-        backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/models.py
+        backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/models.py
 git commit -m "feat(db): migration 020 — stereo-aware Morgan + FCFP, drop unused fp columns"
 ```
 
@@ -1082,7 +1082,7 @@ git commit -m "feat(db): migration 020 — stereo-aware Morgan + FCFP, drop unus
 ### Task 11: New similarity SQL composer with algorithm + metric routing
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py`
 - Test: `backend/tests/unit/infrastructure/persistence/sqlalchemy/chemical_registration/test_search_query_composer.py`
 
 - [ ] **Step 1: Write a failing test for the new shape**
@@ -1094,7 +1094,7 @@ import uuid
 
 import pytest
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     compose_criteria,
 )
 
@@ -1180,16 +1180,16 @@ Expected: 5 failures (the new query shape isn't routed yet).
 Replace lines 169-187 of `search_query_composer.py`:
 
 ```python
-# backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py
+# backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py
 # (replace _structure_clause; keep all other code unchanged)
 
-from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
-from chem_vault.domain.sar_analysis.similarity_metric import (
+from cellar.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
+from cellar.domain.sar_analysis.similarity_metric import (
     Tanimoto,
     Tversky,
     serialize_metric,
 )
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 # Module-level singleton; DI override is fine for tests.
 _default_registry = FingerprintRegistry.default()
@@ -1309,7 +1309,7 @@ Expected: all green (existing + new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py \
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py \
         backend/tests/unit/infrastructure/persistence/sqlalchemy/chemical_registration/test_search_query_composer.py
 git commit -m "feat(persistence): route similarity/substructure via algorithm registry + SMARTS hygiene"
 ```
@@ -1319,7 +1319,7 @@ git commit -m "feat(persistence): route similarity/substructure via algorithm re
 ### Task 12: Tanimoto threshold GUC — extend for both columns
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py:202-216`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py:202-216`
 
 The `_set_similarity_threshold` helper currently sets `rdkit.tanimoto_threshold` once. For Tversky, no GUC is needed (the `>=` filter is in WHERE). The existing helper stays mostly the same but should walk into nested groups too.
 
@@ -1328,7 +1328,7 @@ The `_set_similarity_threshold` helper currently sets `rdkit.tanimoto_threshold`
 ```python
 # In an existing or new molecule_reader integration test file:
 async def test_set_similarity_threshold_walks_into_groups(session) -> None:
-    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+    from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
         _set_similarity_threshold,
     )
 
@@ -1356,7 +1356,7 @@ Run: `uv run pytest backend/tests/integration/persistence/test_molecule_reader_t
 - [ ] **Step 3: Update `_set_similarity_threshold` to recurse and to handle Tanimoto-only**
 
 ```python
-# backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py
+# backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py
 
 async def _set_similarity_threshold(session: AsyncSession, query: dict[str, Any]) -> None:
     """Set rdkit.tanimoto_threshold once, based on the first Tanimoto similarity
@@ -1385,7 +1385,7 @@ def _find_first_tanimoto_threshold(criteria: list[dict[str, Any]]) -> float | No
                 continue  # mode default is Tversky
             t = criterion.get("threshold")
             if t is None and mode is not None:
-                from chem_vault.domain.sar_analysis.search_modes import (
+                from cellar.domain.sar_analysis.search_modes import (
                     MODE_DEFAULTS,
                     SearchMode,
                 )
@@ -1408,7 +1408,7 @@ Expected: all green.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py \
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py \
         backend/tests/  # the new test file
 git commit -m "feat(persistence): recurse into groups when setting tanimoto threshold; skip for Tversky"
 ```
@@ -1418,7 +1418,7 @@ git commit -m "feat(persistence): recurse into groups when setting tanimoto thre
 ### Task 13: Drop LIMIT 100 from `search_similarity`; pass algorithm/metric
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py:43-95`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py:43-95`
 
 The direct path (`search_substructure` and `search_similarity` on `SQLAlchemyMoleculeReader`) is used by the `SearchMolecules` use case. The advanced path goes through `search_by_query` + the composer. Both must be updated.
 
@@ -1438,7 +1438,7 @@ async def test_similarity_returns_more_than_100_when_threshold_is_low(
     # Register 150 molecules that all match a permissive query.
     await register_n_molecules(150, base_smiles="CCCCO")
 
-    from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+    from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
         SQLAlchemyMoleculeReader,
     )
     reader = SQLAlchemyMoleculeReader(session_factory)
@@ -1453,15 +1453,15 @@ async def test_similarity_returns_more_than_100_when_threshold_is_low(
 - [ ] **Step 3: Update `search_similarity` signature**
 
 ```python
-# backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py
+# backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py
 
-from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
-from chem_vault.domain.sar_analysis.similarity_metric import (
+from cellar.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
+from cellar.domain.sar_analysis.similarity_metric import (
     SimilarityMetric,
     Tanimoto,
     Tversky,
 )
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 # Replace the existing search_similarity:
 
@@ -1533,7 +1533,7 @@ async def search_similarity(
 
 - [ ] **Step 4: Update the use case caller**
 
-In `backend/src/chem_vault/application/chemical_registration/search_molecules.py`, update the call site to pass the new kwargs (defaulting to mode-driven behavior). Search for `.search_similarity(` and update.
+In `backend/src/cellar/application/chemical_registration/search_molecules.py`, update the call site to pass the new kwargs (defaulting to mode-driven behavior). Search for `.search_similarity(` and update.
 
 - [ ] **Step 5: Run tests**
 
@@ -1543,8 +1543,8 @@ Expected: all green.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py \
-        backend/src/chem_vault/application/chemical_registration/search_molecules.py \
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py \
+        backend/src/cellar/application/chemical_registration/search_molecules.py \
         backend/tests/integration/persistence/test_search_similarity_pagination.py
 git commit -m "feat(persistence): mode-driven similarity, drop LIMIT 100, support Tversky"
 ```
@@ -1568,8 +1568,8 @@ These run against a real Postgres + RDKit cartridge. The codebase already has `b
 
 import pytest
 
-from chem_vault.domain.sar_analysis.search_modes import SearchMode
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+from cellar.domain.sar_analysis.search_modes import SearchMode
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
     SQLAlchemyMoleculeReader,
 )
 
@@ -1636,7 +1636,7 @@ git commit -m "test(integration): pin stereo-aware Morgan similarity ranking"
 
 import pytest
 
-from chem_vault.application.research_organization.execute_search import (
+from cellar.application.research_organization.execute_search import (
     ExecuteSearchQuery,
 )
 
@@ -1688,7 +1688,7 @@ git commit -m "test(integration): SMARTS aromaticity hygiene via mol_adjust_quer
 
 import pytest
 
-from chem_vault.application.research_organization.execute_search import (
+from cellar.application.research_organization.execute_search import (
     ExecuteSearchQuery,
 )
 
@@ -1754,8 +1754,8 @@ git commit -m "test(integration): generalized substructure finds tautomer matche
 
 import pytest
 
-from chem_vault.domain.sar_analysis.search_modes import SearchMode
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+from cellar.domain.sar_analysis.search_modes import SearchMode
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
     SQLAlchemyMoleculeReader,
 )
 
@@ -1805,7 +1805,7 @@ git commit -m "test(integration): all three SearchModes round-trip through cartr
 ### Task 18: Pydantic discriminated-union request types
 
 **Files:**
-- Modify: `backend/src/chem_vault/interface/routes/search.py`
+- Modify: `backend/src/cellar/interface/routes/search.py`
 - Test: `backend/tests/api/test_search_request_validation.py`
 
 - [ ] **Step 1: Write request-validation tests**
@@ -1858,14 +1858,14 @@ def test_invalid_smiles_returns_422(client, auth_headers):
 - [ ] **Step 3: Add the discriminated-union schema**
 
 ```python
-# backend/src/chem_vault/interface/routes/search.py — add near the top, before ExecuteSearchBody
+# backend/src/cellar/interface/routes/search.py — add near the top, before ExecuteSearchBody
 
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 from rdkit import Chem
 
-from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from cellar.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
+from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 _registry = FingerprintRegistry.default()
 
@@ -1977,7 +1977,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/interface/routes/search.py \
+git add backend/src/cellar/interface/routes/search.py \
         backend/tests/api/test_search_request_validation.py
 git commit -m "feat(api): discriminated-union validation for structure search clauses"
 ```
@@ -1987,8 +1987,8 @@ git commit -m "feat(api): discriminated-union validation for structure search cl
 ### Task 19: New `GET /api/v1/search/algorithms` endpoint
 
 **Files:**
-- Create: `backend/src/chem_vault/interface/routes/search_algorithms.py`
-- Modify: `backend/src/chem_vault/interface/main.py` (or wherever routers register — find by `include_router`)
+- Create: `backend/src/cellar/interface/routes/search_algorithms.py`
+- Modify: `backend/src/cellar/interface/main.py` (or wherever routers register — find by `include_router`)
 - Test: `backend/tests/api/test_search_algorithms.py`
 
 - [ ] **Step 1: Write the test**
@@ -2019,7 +2019,7 @@ def test_algorithms_endpoint_returns_modes_and_algorithms(client, auth_headers):
 - [ ] **Step 3: Implement the endpoint**
 
 ```python
-# backend/src/chem_vault/interface/routes/search_algorithms.py
+# backend/src/cellar/interface/routes/search_algorithms.py
 """GET /api/v1/search/algorithms -- frontend renders mode radios from this."""
 
 from __future__ import annotations
@@ -2027,9 +2027,9 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from chem_vault.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
-from chem_vault.domain.sar_analysis.similarity_metric import serialize_metric
-from chem_vault.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from cellar.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
+from cellar.domain.sar_analysis.similarity_metric import serialize_metric
+from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
 _registry = FingerprintRegistry.default()
@@ -2084,10 +2084,10 @@ async def list_algorithms() -> _AlgorithmsResponse:
 
 - [ ] **Step 4: Register the router**
 
-In `backend/src/chem_vault/interface/main.py` (find by `include_router`), add:
+In `backend/src/cellar/interface/main.py` (find by `include_router`), add:
 
 ```python
-from chem_vault.interface.routes import search_algorithms
+from cellar.interface.routes import search_algorithms
 app.include_router(search_algorithms.router)
 ```
 
@@ -2099,8 +2099,8 @@ Expected: 1 passed.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/chem_vault/interface/routes/search_algorithms.py \
-        backend/src/chem_vault/interface/main.py \
+git add backend/src/cellar/interface/routes/search_algorithms.py \
+        backend/src/cellar/interface/main.py \
         backend/tests/api/test_search_algorithms.py
 git commit -m "feat(api): GET /search/algorithms exposes registry contents"
 ```
@@ -2116,7 +2116,7 @@ git commit -m "feat(api): GET /search/algorithms exposes registry contents"
 
 - [ ] **Step 1: Start the backend so the OpenAPI spec is fresh**
 
-Run: `cd backend && uv run uvicorn chem_vault.interface.main:app --reload &` (or use the dev compose if that's the project pattern).
+Run: `cd backend && uv run uvicorn cellar.interface.main:app --reload &` (or use the dev compose if that's the project pattern).
 
 - [ ] **Step 2: Regenerate types**
 
@@ -2297,7 +2297,7 @@ git commit -m "feat(frontend): quick-search similarity defaults to SearchMode.SI
 ### Task 24: Manual perf smoke + dev-mode debug log
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py`
 
 - [ ] **Step 1: Add a debug log line**
 
@@ -2322,7 +2322,7 @@ Use `time.perf_counter()` to measure. If `candidates_screened` is expensive, jus
 
 - [ ] **Step 2: Run a manual smoke**
 
-Load demo data: `cd backend && uv run python -m chem_vault.demo_data.load` (or the project's loader entry point — check `demo-data/loaders/`).
+Load demo data: `cd backend && uv run python -m cellar.demo_data.load` (or the project's loader entry point — check `demo-data/loaders/`).
 
 With `LOG_LEVEL=DEBUG`, run each mode against a known SMILES via curl:
 
@@ -2352,7 +2352,7 @@ If FRAGMENT_IN_TARGET p95 is more than 5× slower than SIMILAR (the Tversky GiST
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py \
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py \
         docs/superpowers/specs/2026-05-08-similarity-substructure-search-design.md
 git commit -m "feat(observability): debug log + smoke results for new search modes"
 ```

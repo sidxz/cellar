@@ -13,13 +13,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from returns.result import Success
 
-import chem_vault.infrastructure.temporal.activities.registration as registration_module
-from chem_vault.domain.chemical_registration.enums import RegistrationAction
-from chem_vault.infrastructure.temporal.activities.dtos import (
+import cellar.infrastructure.temporal.activities.registration as registration_module
+from cellar.domain.chemical_registration.enums import RegistrationAction
+from cellar.infrastructure.temporal.activities.dtos import (
     ChunkInput,
     ChunkItem,
 )
-from chem_vault.infrastructure.temporal.activities.registration import RegistrationActivities
+from cellar.infrastructure.temporal.activities.registration import RegistrationActivities
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -265,39 +265,39 @@ async def _run_process_chunk_simple(
 
     with (
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.AsyncUnitOfWork",
+            "cellar.infrastructure.temporal.activities.registration.AsyncUnitOfWork",
             return_value=mock_uow,
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.RegisterMolecule",
+            "cellar.infrastructure.temporal.activities.registration.RegisterMolecule",
             mock_register_cls,
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.DisclosureService",
+            "cellar.infrastructure.temporal.activities.registration.DisclosureService",
             MagicMock(),
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.MergeService",
+            "cellar.infrastructure.temporal.activities.registration.MergeService",
             MagicMock(),
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.SQLAlchemyMoleculeRepository",
+            "cellar.infrastructure.temporal.activities.registration.SQLAlchemyMoleculeRepository",
             MagicMock(),
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.SQLAlchemyMergeEventRepository",
+            "cellar.infrastructure.temporal.activities.registration.SQLAlchemyMergeEventRepository",
             MagicMock(),
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.SQLAlchemyDisclosureRequestRepository",
+            "cellar.infrastructure.temporal.activities.registration.SQLAlchemyDisclosureRequestRepository",
             MagicMock(),
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.SQLAlchemyBatchRepository",
+            "cellar.infrastructure.temporal.activities.registration.SQLAlchemyBatchRepository",
             MagicMock(),
         ),
         patch(
-            "chem_vault.infrastructure.temporal.activities.registration.SQLAlchemySaltEntryRepository",
+            "cellar.infrastructure.temporal.activities.registration.SQLAlchemySaltEntryRepository",
             MagicMock(),
         ),
         patch(

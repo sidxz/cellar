@@ -5,14 +5,14 @@ from uuid import uuid4
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.registration_form import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.registration_form import (
     FieldOverride,
     RegistrationForm,
     RegistrationFormCreated,
     RegistrationFormUpdated,
 )
-from chem_vault.domain.workspace_config.enums import FieldTarget
+from cellar.domain.workspace_config.enums import FieldTarget
 
 
 @pytest.fixture

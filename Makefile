@@ -1,5 +1,5 @@
 # ============================================================================
-# Chem-Vault2 Development Makefile
+# Cellar Development Makefile
 # ============================================================================
 # Quick reference:
 #   make up        — start Postgres + Valkey, run migrations
@@ -33,7 +33,7 @@ help: ## Show this help
 up: ## Start Postgres + Valkey + Infisical + Temporal, run migrations, bootstrap secrets
 	docker compose up -d postgres valkey infisical-db infisical temporal-db temporal temporal-ui
 	@echo "Waiting for Postgres to be healthy..."
-	@until docker compose exec postgres pg_isready -U chemvault -q 2>/dev/null; do sleep 1; done
+	@until docker compose exec postgres pg_isready -U cellar -q 2>/dev/null; do sleep 1; done
 	@echo "Postgres ready"
 	$(BACKEND) && uv run alembic upgrade head
 	@echo "Migrations applied"
@@ -58,15 +58,15 @@ install: ## Install all dependencies (backend + frontend)
 
 dev: install stop migrate ## Install deps, stop old instances, run migrations, start backend + worker + frontend
 	@mkdir -p $(LOGDIR)
-	@pkill -f "chem_vault.infrastructure.temporal.worker" 2>/dev/null || true
+	@pkill -f "cellar.infrastructure.temporal.worker" 2>/dev/null || true
 	@lsof -ti:8000 | xargs kill 2>/dev/null || true
 	@lsof -ti:3000 | xargs kill 2>/dev/null || true
 	@sleep 1
 	@echo "Starting backend on :8000..."
-	@nohup sh -c '$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000' \
+	@nohup sh -c '$(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
 	@echo "Starting Temporal worker..."
-	@nohup sh -c '$(BACKEND) && uv run python -m chem_vault.infrastructure.temporal.worker' \
+	@nohup sh -c '$(BACKEND) && uv run python -m cellar.infrastructure.temporal.worker' \
 		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
 	@echo "Starting frontend on :3000..."
 	@nohup sh -c '$(FRONTEND) && pnpm dev' \
@@ -82,7 +82,7 @@ dev: install stop migrate ## Install deps, stop old instances, run migrations, s
 
 dev-be: ## Start backend only
 	@mkdir -p $(LOGDIR)
-	@nohup sh -c '$(BACKEND) && uv run uvicorn chem_vault.interface.app:app --reload --port 8000' \
+	@nohup sh -c '$(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
 	@echo "Backend started on :8000 (PID $$(cat $(LOGDIR)/backend.pid))"
 
@@ -93,10 +93,10 @@ dev-fe: ## Start frontend only
 	@echo "Frontend started on :3000 (PID $$(cat $(LOGDIR)/frontend.pid))"
 
 dev-worker: ## Start Temporal worker only (kills existing first)
-	@pkill -f "chem_vault.infrastructure.temporal.worker" 2>/dev/null || true
+	@pkill -f "cellar.infrastructure.temporal.worker" 2>/dev/null || true
 	@sleep 1
 	@mkdir -p $(LOGDIR)
-	@nohup sh -c '$(BACKEND) && uv run python -m chem_vault.infrastructure.temporal.worker' \
+	@nohup sh -c '$(BACKEND) && uv run python -m cellar.infrastructure.temporal.worker' \
 		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
 	@echo "Temporal worker started (PID $$(cat $(LOGDIR)/worker.pid))"
 

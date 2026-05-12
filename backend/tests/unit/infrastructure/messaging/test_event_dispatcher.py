@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 
 
 @dataclass(frozen=True, kw_only=True)

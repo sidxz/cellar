@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.attachment.delete_attachment import (
+from cellar.application.attachment.delete_attachment import (
     DeleteAttachment,
     DeleteAttachmentCommand,
 )
-from chem_vault.domain.attachment.attachment import Attachment
-from chem_vault.domain.attachment.enums import AttachableType
-from chem_vault.domain.shared.errors import NotFoundError
+from cellar.domain.attachment.attachment import Attachment
+from cellar.domain.attachment.enums import AttachableType
+from cellar.domain.shared.errors import NotFoundError
 
 
 WS = uuid.uuid4()

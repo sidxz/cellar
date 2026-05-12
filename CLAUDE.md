@@ -1,8 +1,8 @@
-# Chem-Vault2
+# Cellar
 
 Chemical compound management & screening platform (enterprise-grade). 8 bounded contexts, 17+ aggregates, 136 use cases.
 
-**Repo:** `git@github.com:sidxz/chem-vault.git`
+**Repo:** `git@github.com:sidxz/cellar.git`
 **Board:** https://github.com/users/sidxz/projects/4/views/1
 
 ---
@@ -58,11 +58,11 @@ Auth delegated to Sentinel (external, `~/workspace/identity-service/`).
 ## Project Layout
 
 ```
-chem-vault2/
+cellar2/
   backend/
     pyproject.toml
     alembic/
-    src/chem_vault/
+    src/cellar/
       domain/
         shared/
         chemical_registration/

@@ -11,11 +11,11 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.screening.create_target import (
+    from cellar.application.screening.create_target import (
         CreateTarget,
         CreateTargetCommand,
     )
-    from chem_vault.application.screening.get_target import (
+    from cellar.application.screening.get_target import (
         ListTargets,
         ListTargetsQuery,
     )

@@ -4,8 +4,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.enums import CampaignDecision
-from chem_vault.domain.research_organization.source_ref import (
+from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.research_organization.source_ref import (
     CampaignRef,
     CollectionRef,
     ManualRef,
@@ -13,7 +13,7 @@ from chem_vault.domain.research_organization.source_ref import (
     SavedSearchRef,
     SourceRef,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------- ManualRef ----------

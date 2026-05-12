@@ -73,7 +73,7 @@ A second pass against the stated intent ("snapshot for DAIKON publication; scree
 
 ### H1. SavedSearch wiring into AddResultsFromSavedSearch
 - **What:** Backend `AddResultsFromSavedSearch` use case currently throws `NotImplementedError`. The "From a saved search" dropdown item in the campaign builder's Add-compounds menu is disabled with a "coming soon" tooltip.
-- **Where:** `backend/src/chem_vault/application/research_organization/add_results_from_saved_search.py`; `frontend/src/features/screen-campaign/components/compound-list-pane.tsx` (dropdown item); needs a new `<AddFromSavedSearchDialog>`.
+- **Where:** `backend/src/cellar/application/research_organization/add_results_from_saved_search.py`; `frontend/src/features/screen-campaign/components/compound-list-pane.tsx` (dropdown item); needs a new `<AddFromSavedSearchDialog>`.
 - **Work:** Wire the existing `ExecuteSavedSearch` use case into the seeder. Build the dialog (SavedSearchPicker → submit → toast). About half a day.
 
 ### H2. Run import → "also add to campaign" UX
@@ -124,7 +124,7 @@ A second pass against the stated intent ("snapshot for DAIKON publication; scree
 
 ### M5. Alembic-on-startup migration drift warning
 - **What:** The "null value in column compound_source" 500 today happened because the dev DB was at revision 027 but code expected 028. Surface this as a startup warning so it doesn't manifest as a confusing NotNull violation.
-- **Where:** `backend/src/chem_vault/interface/app.py` startup hook.
+- **Where:** `backend/src/cellar/interface/app.py` startup hook.
 - **Work:** Compare `alembic current` vs `alembic heads` at FastAPI startup; log a structured warning when behind. ~30 minutes.
 
 ### M6. Real e-signature integration (replace `crypto.randomUUID()` stub)
@@ -138,7 +138,7 @@ A second pass against the stated intent ("snapshot for DAIKON publication; scree
 
 ### L1. Sentinel-resolved `closed_by.name` in published JSON
 - **What:** Currently emits `{"id": uuid, "name": null}` for closed_by. Need Sentinel user-resolver hook.
-- **Where:** `backend/src/chem_vault/application/research_organization/get_published_campaign.py`. TODO comment exists.
+- **Where:** `backend/src/cellar/application/research_organization/get_published_campaign.py`. TODO comment exists.
 
 ### L2. Audit `signature.signed_at` in published JSON
 - **What:** Currently emits `{"id": uuid, "signed_at": null}`. Need an audit signature lookup query.
@@ -146,19 +146,19 @@ A second pass against the stated intent ("snapshot for DAIKON publication; scree
 
 ### L3. `BatchRepository.find_by_ids` bulk endpoint
 - **What:** GetPublishedCampaign currently loops `find_by_id` for batches per result. Add a bulk method.
-- **Where:** `backend/src/chem_vault/domain/inventory/repository.py` + SA impl.
+- **Where:** `backend/src/cellar/domain/inventory/repository.py` + SA impl.
 
 ### L4. `require_viewer` auth guard
 - **What:** GetPublishedCampaign currently uses `require_editor`. A lower-privilege `require_viewer` guard should exist for read-only endpoints.
-- **Where:** `backend/src/chem_vault/application/auth.py`. Wire it into `GetPublishedCampaign`.
+- **Where:** `backend/src/cellar/application/auth.py`. Wire it into `GetPublishedCampaign`.
 
 ### L5. `update_campaign_channel.py` — push label validation into the entity
 - **What:** Partial in-memory mutation on label validation failure. Benign in current code path (campaign discarded on Failure) but cleaner to add a `set_label()` method on `CampaignChannel` that validates first.
-- **Where:** `backend/src/chem_vault/domain/research_organization/campaign_channel.py`.
+- **Where:** `backend/src/cellar/domain/research_organization/campaign_channel.py`.
 
 ### L6. RecomputeChannel API route
 - **What:** `RecomputeChannel` use case is wired in DI but no API endpoint exposes it. Reachable via `UpdateCampaignChannel` re-resolve in practice, but a dedicated `POST /campaigns/{id}/channels/{channel_id}/recompute` endpoint would be cleaner.
-- **Where:** `backend/src/chem_vault/interface/routes/campaigns.py`.
+- **Where:** `backend/src/cellar/interface/routes/campaigns.py`.
 
 ### L7. Per-result provenance log (vs single `added_from`)
 - **What:** Currently each result has ONE `added_from` (first-add wins). If multi-source-per-row history matters later, add an append-only `CampaignResultProvenance` log on top — additive, no data migration.

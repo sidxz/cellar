@@ -5,7 +5,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from chem_vault.application.admin.admin_delete_registry import _REGISTRY
+from cellar.application.admin.admin_delete_registry import _REGISTRY
 
 
 @pytest.fixture(autouse=True)

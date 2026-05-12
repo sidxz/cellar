@@ -1,4 +1,4 @@
-from chem_vault.application.admin.admin_delete_registry import (
+from cellar.application.admin.admin_delete_registry import (
     AdminDeleteEntry,
     all_entity_types,
     get_entry,

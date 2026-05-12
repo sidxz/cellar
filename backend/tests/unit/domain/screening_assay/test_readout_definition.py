@@ -6,12 +6,12 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
-from chem_vault.domain.screening_assay.protocol import ReadoutDefinition
-from chem_vault.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.screening_assay.protocol import ReadoutDefinition
+from cellar.domain.screening_assay.readout_data import ReadoutData
 
 
 class TestReadoutDefinitionNormalizations:

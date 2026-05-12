@@ -8,16 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.bulk_registration_service import (
+from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationItem,
     BulkRegistrationService,
     StartBulkRegistrationCommand,
 )
-from chem_vault.application.chemical_registration.protocols import DetectedSaltDTO
-from chem_vault.application.chemical_registration.register_molecule import RegistrationOutcome
-from chem_vault.domain.chemical_registration.enums import BulkRegistrationStatus
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import BatchNumber
+from cellar.application.chemical_registration.protocols import DetectedSaltDTO
+from cellar.application.chemical_registration.register_molecule import RegistrationOutcome
+from cellar.domain.chemical_registration.enums import BulkRegistrationStatus
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import BatchNumber
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +159,10 @@ class TestBulkRegistrationService:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
@@ -205,10 +205,10 @@ class TestBulkRegistrationService:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
@@ -249,10 +249,10 @@ class TestBulkRegistrationService:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
@@ -277,7 +277,7 @@ class TestBulkRegistrationService:
             originating_org_id=org_id,
         )
 
-        from chem_vault.domain.shared.errors import AuthorizationError
+        from cellar.domain.shared.errors import AuthorizationError
 
         viewer_auth = MagicMock()
         viewer_auth.workspace_id = workspace_id
@@ -332,10 +332,10 @@ class TestBulkRegistrationBatchCreation:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
@@ -410,10 +410,10 @@ class TestBulkRegistrationBatchCreation:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
@@ -485,10 +485,10 @@ class TestBulkRegistrationBatchCreation:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
@@ -536,10 +536,10 @@ class TestBulkRegistrationBatchCreation:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
@@ -617,10 +617,10 @@ class TestBulkRegistrationBatchPolicy:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_reg_side_effect)
@@ -677,10 +677,10 @@ class TestBulkRegistrationBatchPolicy:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_reg_side_effect)
@@ -734,10 +734,10 @@ class TestBulkRegistrationBatchPolicy:
 
         with (
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.RegisterMolecule"
+                "cellar.application.chemical_registration.bulk_registration_service.RegisterMolecule"
             ) as MockRegClass,
             patch(
-                "chem_vault.application.chemical_registration.bulk_registration_service.CreateBatch"
+                "cellar.application.chemical_registration.bulk_registration_service.CreateBatch"
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_reg_side_effect)

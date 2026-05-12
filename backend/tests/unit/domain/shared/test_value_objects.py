@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from chem_vault.domain.shared.enums import (
+from cellar.domain.shared.enums import (
     AmountUnit,
     AssignmentType,
     ConcentrationUnit,
@@ -14,7 +14,7 @@ from chem_vault.domain.shared.enums import (
     LinkedEntityType,
     Qualifier,
 )
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.shared.value_objects import (
     Amount,
     Barcode,
     BatchNumber,

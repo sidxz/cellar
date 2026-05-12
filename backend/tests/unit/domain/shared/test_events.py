@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.events import DomainEvent
 
 
 class TestDomainEvent:

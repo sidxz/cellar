@@ -5,16 +5,16 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.inventory.enums import ShipmentStatus
-from chem_vault.domain.inventory.events import (
+from cellar.domain.inventory.enums import ShipmentStatus
+from cellar.domain.inventory.events import (
     ShipmentCreated,
     ShipmentDelivered,
     ShipmentShipped,
 )
-from chem_vault.domain.inventory.shipment import Shipment, ShipmentItem
-from chem_vault.domain.shared.enums import AmountUnit
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Amount
+from cellar.domain.inventory.shipment import Shipment, ShipmentItem
+from cellar.domain.shared.enums import AmountUnit
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Amount
 
 
 @pytest.fixture

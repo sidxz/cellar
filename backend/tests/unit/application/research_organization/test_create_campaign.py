@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.create_campaign import (
+from cellar.application.research_organization.create_campaign import (
     CreateCampaign,
     CreateCampaignCommand,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.shared.errors import AuthorizationError
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.shared.errors import AuthorizationError
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,

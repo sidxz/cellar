@@ -28,10 +28,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     compose_criteria,
 )
 

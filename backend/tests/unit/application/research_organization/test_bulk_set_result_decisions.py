@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.bulk_set_result_decisions import (
+from cellar.application.research_organization.bulk_set_result_decisions import (
     BulkSetResultDecisions,
     BulkSetResultDecisionsCommand,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import CampaignDecision
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.shared.errors import NotFoundError, ValidationError
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,

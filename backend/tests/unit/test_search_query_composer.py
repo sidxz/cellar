@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import compose_criteria
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import compose_criteria
 
 _WS = uuid.UUID("00000000-0000-0000-0000-ffffffffffff")
 

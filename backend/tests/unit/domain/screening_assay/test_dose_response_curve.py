@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveClass, CurveType
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import CurveClass, CurveType
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------

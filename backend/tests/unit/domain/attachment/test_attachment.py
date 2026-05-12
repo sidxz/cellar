@@ -4,10 +4,10 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.attachment.attachment import Attachment
-from chem_vault.domain.attachment.enums import AttachableType
-from chem_vault.domain.attachment.events import AttachmentDeleted, AttachmentUploaded
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.attachment.attachment import Attachment
+from cellar.domain.attachment.enums import AttachableType
+from cellar.domain.attachment.events import AttachmentDeleted, AttachmentUploaded
+from cellar.domain.shared.errors import ValidationError
 
 
 WS = uuid.uuid4()

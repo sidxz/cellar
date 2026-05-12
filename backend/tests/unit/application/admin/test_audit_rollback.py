@@ -24,12 +24,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from chem_vault.application.admin.admin_delete_registry import register_admin_delete
-from chem_vault.application.admin.admin_hard_delete import (
+from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.application.admin.admin_hard_delete import (
     AdminHardDelete,
     AdminHardDeleteCommand,
 )
-from chem_vault.application.admin.cascade_delete import (
+from cellar.application.admin.cascade_delete import (
     CascadeDelete,
     CascadeDeleteCommand,
 )
@@ -180,7 +180,7 @@ async def test_cascade_delete_audit_failure_prevents_commit(
 
     with (
         patch(
-            "chem_vault.application.admin.cascade_delete.TIER2_ENTITY_TYPES",
+            "cellar.application.admin.cascade_delete.TIER2_ENTITY_TYPES",
             new={"protocol"},
         ),
         pytest.raises(RuntimeError, match="audit DB is down"),

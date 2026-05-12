@@ -2,14 +2,14 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_channel_minimum_construction():

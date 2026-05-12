@@ -10,23 +10,23 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Success
 
-from chem_vault.application.screening.refit_dose_response import (
+from cellar.application.screening.refit_dose_response import (
     RefitDoseResponseCurve,
     RefitDoseResponseCurveCommand,
 )
-from chem_vault.domain.screening_assay.curve_fitting import (
+from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     FittedCurveResult,
 )
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import (
     CurveClass,
     CurveType,
     ProtocolType,
     ReadoutDataType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 
 
 WS = uuid.uuid4()

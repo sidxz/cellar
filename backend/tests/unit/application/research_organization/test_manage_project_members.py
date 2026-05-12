@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.manage_project_members import (
+from cellar.application.research_organization.manage_project_members import (
     AddProjectMember,
     AddProjectMemberCommand,
     ListProjectMembers,
@@ -20,13 +20,13 @@ from chem_vault.application.research_organization.manage_project_members import 
     UpdateProjectMemberRole,
     UpdateProjectMemberRoleCommand,
 )
-from chem_vault.domain.research_organization.project import Project
-from chem_vault.domain.research_organization.project_membership import (
+from cellar.domain.research_organization.project import Project
+from cellar.domain.research_organization.project_membership import (
     ProjectMember,
     ProjectRole,
 )
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 
 
 # ---------------------------------------------------------------------------

@@ -8,24 +8,24 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.recompute_channel import (
+from cellar.application.research_organization.recompute_channel import (
     RecomputeChannel,
     RecomputeChannelCommand,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.shared.errors import (
+from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,

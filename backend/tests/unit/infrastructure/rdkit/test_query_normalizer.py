@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chem_vault.infrastructure.rdkit.query_normalizer import (
+from cellar.infrastructure.rdkit.query_normalizer import (
     aromatize_substructure_query,
 )
 

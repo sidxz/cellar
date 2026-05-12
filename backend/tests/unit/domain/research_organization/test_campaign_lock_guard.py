@@ -2,11 +2,11 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_lock_guard import (
+from cellar.domain.research_organization.campaign_lock_guard import (
     CampaignLockChecker,
     CampaignLockGuard,
 )
-from chem_vault.domain.shared.errors import DataLockedError
+from cellar.domain.shared.errors import DataLockedError
 
 
 class _FakeChecker:

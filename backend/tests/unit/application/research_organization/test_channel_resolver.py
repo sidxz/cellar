@@ -7,19 +7,19 @@ from datetime import date
 
 import pytest
 
-from chem_vault.application.research_organization.channel_resolution import (
+from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
     ResolvedCandidate,
 )
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
 
 
 class _FakeQuery:

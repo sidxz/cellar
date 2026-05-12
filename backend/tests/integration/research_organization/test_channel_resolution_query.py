@@ -16,15 +16,15 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_empty_candidates_for_unknown_molecule(session_factory):
-    from chem_vault.domain.research_organization.campaign_channel import (
+    from cellar.domain.research_organization.campaign_channel import (
         CampaignChannel,
     )
-    from chem_vault.domain.research_organization.enums import (
+    from cellar.domain.research_organization.enums import (
         ChannelSourceKind,
         QualifierHandling,
         SelectionRule,
     )
-    from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
         SQLAlchemyChannelResolutionQuery,
     )
 
@@ -50,15 +50,15 @@ async def test_empty_candidates_for_unknown_molecule(session_factory):
 @pytest.mark.asyncio
 async def test_empty_candidates_for_readout_source(session_factory):
     """Same smoke for the READOUT_DATA branch of the query."""
-    from chem_vault.domain.research_organization.campaign_channel import (
+    from cellar.domain.research_organization.campaign_channel import (
         CampaignChannel,
     )
-    from chem_vault.domain.research_organization.enums import (
+    from cellar.domain.research_organization.enums import (
         ChannelSourceKind,
         QualifierHandling,
         SelectionRule,
     )
-    from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
         SQLAlchemyChannelResolutionQuery,
     )
 

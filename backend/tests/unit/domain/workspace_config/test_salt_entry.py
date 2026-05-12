@@ -4,8 +4,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.salt_entry import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.salt_entry import (
     SaltEntry,
     SaltEntryCreated,
     SaltEntryUpdated,

@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.add_results_from_collection import (
+from cellar.application.research_organization.add_results_from_collection import (
     AddResultsFromCollection,
     AddResultsFromCollectionCommand,
     AddResultsOutcome,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.source_ref import CollectionRef
-from chem_vault.domain.shared.errors import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.source_ref import CollectionRef
+from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
@@ -28,11 +28,11 @@ from tests.unit.application.research_organization._helpers import (
     make_campaign_repo,
     make_collection_repo,
 )
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,

@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from chem_vault.application.screening.readout_calculation_engine import (
+from cellar.application.screening.readout_calculation_engine import (
     ReadoutCalculationEngine,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     PlateFormat,
     ProtocolType,
     ReadoutAggregation,
@@ -19,14 +19,14 @@ from chem_vault.domain.screening_assay.enums import (
     ReadoutNormalization,
     WellType,
 )
-from chem_vault.domain.screening_assay.plate_normalizer import PlateNormalizer
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.screening_assay.replicate_aggregator import ReplicateAggregator
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.enums import Qualifier
-from chem_vault.domain.shared.value_objects import QualifiedValue
-from chem_vault.infrastructure.computation.asteval_evaluator import (
+from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.enums import Qualifier
+from cellar.domain.shared.value_objects import QualifiedValue
+from cellar.infrastructure.computation.asteval_evaluator import (
     AstevalFormulaEvaluator,
 )
 from returns.result import Failure, Success

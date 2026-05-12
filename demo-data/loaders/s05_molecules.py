@@ -10,7 +10,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.chemical_registration.register_molecule import (
+    from cellar.application.chemical_registration.register_molecule import (
         RegisterMolecule,
         RegisterMoleculeCommand,
     )

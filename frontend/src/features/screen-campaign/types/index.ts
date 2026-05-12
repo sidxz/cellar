@@ -27,7 +27,7 @@ export type {
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────
-// Mirror of backend/src/chem_vault/domain/research_organization/enums.py.
+// Mirror of backend/src/cellar/domain/research_organization/enums.py.
 // Backend uses StrEnum; values match the wire format exactly. If you touch
 // any of these, change the corresponding StrEnum first and regenerate orval.
 

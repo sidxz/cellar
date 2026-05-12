@@ -17,7 +17,7 @@
 ### New files (backend)
 
 ```
-backend/src/chem_vault/
+backend/src/cellar/
   domain/shared/cascade/
     __init__.py                  # Public exports
     rules.py                     # CascadeRule, CascadeAction enum
@@ -50,7 +50,7 @@ backend/src/chem_vault/
 ### Modified files (backend)
 
 ```
-backend/src/chem_vault/
+backend/src/cellar/
   domain/audit_compliance/enums.py         # +ADMIN_HARD_DELETE
   interface/dependencies.py                # +AdminHardDeleteDep, +CascadePreviewDep, +CascadeDeleteDep
   infrastructure/di/_audit.py              # Wire admin use cases
@@ -82,7 +82,7 @@ Per-entity menu locations (Protocol detail, Run detail, Molecule detail, vocab l
 ## Task 1: Add ADMIN_HARD_DELETE to OperationType enum
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/audit_compliance/enums.py`
+- Modify: `backend/src/cellar/domain/audit_compliance/enums.py`
 - Test: `backend/tests/unit/audit_compliance/test_enums.py`
 
 **No DB migration needed** — the column is `String(64)`, not a SQL enum. Verified at `alembic/versions/001_001_initial_schema.py:47`.
@@ -101,7 +101,7 @@ class OperationType(StrEnum):
 
 ```python
 # tests/unit/audit_compliance/test_enums.py
-from chem_vault.domain.audit_compliance.enums import OperationType
+from cellar.domain.audit_compliance.enums import OperationType
 
 def test_admin_hard_delete_value():
     assert OperationType.ADMIN_HARD_DELETE.value == "admin_hard_delete"
@@ -119,7 +119,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/audit_compliance/enums.py backend/tests/unit/audit_compliance/test_enums.py
+git add backend/src/cellar/domain/audit_compliance/enums.py backend/tests/unit/audit_compliance/test_enums.py
 git commit -m "feat(audit): add ADMIN_HARD_DELETE operation type"
 ```
 
@@ -128,9 +128,9 @@ git commit -m "feat(audit): add ADMIN_HARD_DELETE operation type"
 ## Task 2: Inbound FK introspection utility
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/cascade/__init__.py` (empty)
-- Create: `backend/src/chem_vault/infrastructure/cascade/inbound_refs.py`
-- Create: `backend/src/chem_vault/infrastructure/cascade/label_fields.py`
+- Create: `backend/src/cellar/infrastructure/cascade/__init__.py` (empty)
+- Create: `backend/src/cellar/infrastructure/cascade/inbound_refs.py`
+- Create: `backend/src/cellar/infrastructure/cascade/label_fields.py`
 - Create: `backend/tests/integration/cascade/__init__.py` (empty)
 - Test: `backend/tests/integration/cascade/test_inbound_refs.py`
 
@@ -219,8 +219,8 @@ from typing import Sequence
 from sqlalchemy import Table, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
-from chem_vault.infrastructure.cascade.label_fields import label_for_table
+from cellar.infrastructure.persistence.sqlalchemy.base import Base
+from cellar.infrastructure.cascade.label_fields import label_for_table
 
 
 @dataclass(frozen=True)
@@ -323,7 +323,7 @@ async def _fetch_samples(
 import pytest
 import uuid
 
-from chem_vault.infrastructure.cascade.inbound_refs import find_inbound_references
+from cellar.infrastructure.cascade.inbound_refs import find_inbound_references
 
 
 @pytest.mark.asyncio
@@ -381,7 +381,7 @@ Expected: 3 PASS. (If the test fixtures `protocol_factory` / `run_factory` don't
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/cascade/ backend/tests/integration/cascade/
+git add backend/src/cellar/infrastructure/cascade/ backend/tests/integration/cascade/
 git commit -m "feat(cascade): inbound FK introspection utility for Tier-1 RESTRICT"
 ```
 
@@ -390,8 +390,8 @@ git commit -m "feat(cascade): inbound FK introspection utility for Tier-1 RESTRI
 ## Task 3: Tier-1 admin delete entity registry
 
 **Files:**
-- Create: `backend/src/chem_vault/application/admin/__init__.py` (empty)
-- Create: `backend/src/chem_vault/application/admin/admin_delete_registry.py`
+- Create: `backend/src/cellar/application/admin/__init__.py` (empty)
+- Create: `backend/src/cellar/application/admin/admin_delete_registry.py`
 - Test: `backend/tests/unit/admin/test_admin_delete_registry.py`
 
 The Tier-1 endpoint dispatches by `entity_type`. The registry maps each entity_type to: (a) its repository and (b) a `delete_by_id` callable. Each entry is a small Lagom-resolvable factory.
@@ -464,7 +464,7 @@ def all_entity_types() -> list[str]:
 ```python
 # tests/unit/admin/test_admin_delete_registry.py
 import pytest
-from chem_vault.application.admin.admin_delete_registry import (
+from cellar.application.admin.admin_delete_registry import (
     AdminDeleteEntry,
     register_admin_delete,
     get_entry,
@@ -522,7 +522,7 @@ Expected: 3 PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/application/admin/ backend/tests/unit/admin/
+git add backend/src/cellar/application/admin/ backend/tests/unit/admin/
 git commit -m "feat(admin): Tier-1 admin-delete entity registry"
 ```
 
@@ -531,7 +531,7 @@ git commit -m "feat(admin): Tier-1 admin-delete entity registry"
 ## Task 4: AdminHardDelete generic use case (Tier 1)
 
 **Files:**
-- Create: `backend/src/chem_vault/application/admin/admin_hard_delete.py`
+- Create: `backend/src/cellar/application/admin/admin_hard_delete.py`
 - Test: `backend/tests/unit/admin/test_admin_hard_delete.py`
 
 This is the single use case used for every Tier-1 entity. Caller-provided `entity_type` is dispatched via the registry; on success, snapshots the row and writes one `AuditOperation` with one `AuditEntry`.
@@ -564,20 +564,20 @@ from typing import Sequence
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.admin.admin_delete_registry import get_entry
-from chem_vault.application.audit.audit_recording_service import AuditRecordingService
-from chem_vault.application.auth import AuthContext, require_admin
-from chem_vault.application.shared.command import Command
-from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.audit_compliance.enums import AuditAction, OperationType
-from chem_vault.domain.audit_compliance.models import AuditEntry
-from chem_vault.domain.shared.errors import (
+from cellar.application.admin.admin_delete_registry import get_entry
+from cellar.application.audit.audit_recording_service import AuditRecordingService
+from cellar.application.auth import AuthContext, require_admin
+from cellar.application.shared.command import Command
+from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.audit_compliance.enums import AuditAction, OperationType
+from cellar.domain.audit_compliance.models import AuditEntry
+from cellar.domain.shared.errors import (
     AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-from chem_vault.infrastructure.cascade.inbound_refs import (
+from cellar.infrastructure.cascade.inbound_refs import (
     InboundReference,
     find_inbound_references,
 )
@@ -699,16 +699,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.admin.admin_delete_registry import (
+from cellar.application.admin.admin_delete_registry import (
     register_admin_delete, _REGISTRY,
 )
-from chem_vault.application.admin.admin_hard_delete import (
+from cellar.application.admin.admin_hard_delete import (
     AdminHardDelete, AdminHardDeleteCommand, BlockedByDependenciesError,
 )
-from chem_vault.domain.shared.errors import (
+from cellar.domain.shared.errors import (
     AuthorizationError, NotFoundError, ValidationError,
 )
-from chem_vault.infrastructure.cascade.inbound_refs import InboundReference
+from cellar.infrastructure.cascade.inbound_refs import InboundReference
 
 
 @pytest.fixture(autouse=True)
@@ -787,7 +787,7 @@ Expected: 3 PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/application/admin/admin_hard_delete.py backend/tests/unit/admin/test_admin_hard_delete.py
+git add backend/src/cellar/application/admin/admin_hard_delete.py backend/tests/unit/admin/test_admin_hard_delete.py
 git commit -m "feat(admin): generic Tier-1 hard-delete use case"
 ```
 
@@ -796,9 +796,9 @@ git commit -m "feat(admin): generic Tier-1 hard-delete use case"
 ## Task 5: Tier-1 admin delete route
 
 **Files:**
-- Create: `backend/src/chem_vault/interface/routes/admin_delete.py`
-- Modify: `backend/src/chem_vault/interface/dependencies.py` (+AdminHardDeleteDep)
-- Modify: `backend/src/chem_vault/infrastructure/di/_audit.py` (or `_workspace_config.py` — wire AdminHardDelete)
+- Create: `backend/src/cellar/interface/routes/admin_delete.py`
+- Modify: `backend/src/cellar/interface/dependencies.py` (+AdminHardDeleteDep)
+- Modify: `backend/src/cellar/infrastructure/di/_audit.py` (or `_workspace_config.py` — wire AdminHardDelete)
 - Modify: wherever the FastAPI app registers routers (search for `app.include_router` or similar)
 
 Pattern follows the existing `vocabularies.py` route file.
@@ -811,9 +811,9 @@ Add to the appropriate `_<context>.py` registration module (e.g., create new `in
 # infrastructure/di/_admin.py
 from lagom import Container
 
-from chem_vault.application.admin.admin_hard_delete import AdminHardDelete
-from chem_vault.application.audit.audit_recording_service import AuditRecordingService
-from chem_vault.application.shared.unit_of_work import UnitOfWork
+from cellar.application.admin.admin_hard_delete import AdminHardDelete
+from cellar.application.audit.audit_recording_service import AuditRecordingService
+from cellar.application.shared.unit_of_work import UnitOfWork
 
 
 def register_admin(container: Container) -> None:
@@ -828,7 +828,7 @@ Then register it in `container.py`:
 
 ```python
 # infrastructure/di/container.py — add import + call
-from chem_vault.infrastructure.di._admin import register_admin
+from cellar.infrastructure.di._admin import register_admin
 # ... in create_container() ...
     register_admin(container)
 ```
@@ -837,7 +837,7 @@ from chem_vault.infrastructure.di._admin import register_admin
 
 ```python
 # interface/dependencies.py — add near other Delete deps
-from chem_vault.application.admin.admin_hard_delete import AdminHardDelete
+from cellar.application.admin.admin_hard_delete import AdminHardDelete
 # ...
 AdminHardDeleteDep = Annotated[AdminHardDelete, Depends(_get_use_case(AdminHardDelete))]
 ```
@@ -861,13 +861,13 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from returns.result import Failure, Success
 
-from chem_vault.application.admin.admin_hard_delete import (
+from cellar.application.admin.admin_hard_delete import (
     AdminHardDeleteCommand, BlockedByDependenciesError,
 )
-from chem_vault.domain.shared.errors import (
+from cellar.domain.shared.errors import (
     AuthorizationError, NotFoundError, ValidationError,
 )
-from chem_vault.interface.dependencies import AuthDep, AdminHardDeleteDep
+from cellar.interface.dependencies import AuthDep, AdminHardDeleteDep
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -950,7 +950,7 @@ async def admin_hard_delete(
 Find the FastAPI `include_router` calls (likely `interface/__init__.py` or `interface/main.py`) and add:
 
 ```python
-from chem_vault.interface.routes import admin_delete
+from cellar.interface.routes import admin_delete
 app.include_router(admin_delete.router)
 ```
 
@@ -967,7 +967,7 @@ Expected: existing tests still pass. (No admin route tests yet — those land in
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/chem_vault/interface/routes/admin_delete.py backend/src/chem_vault/interface/dependencies.py backend/src/chem_vault/infrastructure/di/_admin.py backend/src/chem_vault/infrastructure/di/container.py
+git add backend/src/cellar/interface/routes/admin_delete.py backend/src/cellar/interface/dependencies.py backend/src/cellar/infrastructure/di/_admin.py backend/src/cellar/infrastructure/di/container.py
 git commit -m "feat(admin): Tier-1 admin hard-delete route + DI wiring"
 ```
 
@@ -976,7 +976,7 @@ git commit -m "feat(admin): Tier-1 admin hard-delete route + DI wiring"
 ## Task 6: Wire Vocabulary into Tier 1 (pilot)
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/di/_workspace_config.py`
+- Modify: `backend/src/cellar/infrastructure/di/_workspace_config.py`
 
 Vocabulary already has a repo (`SQLAlchemyControlledVocabularyRepository`) with `find_by_id_in_workspace()` and `delete()`. We need a tiny adapter so its method names match the registry's `_DeletableRepo` protocol (`find_by_id` not `find_by_id_in_workspace`).
 
@@ -986,8 +986,8 @@ In `infrastructure/di/_workspace_config.py`, at the bottom:
 
 ```python
 # At the bottom, after existing registrations:
-from chem_vault.application.admin.admin_delete_registry import register_admin_delete
-from chem_vault.domain.workspace_config.repository import ControlledVocabularyRepository
+from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.domain.workspace_config.repository import ControlledVocabularyRepository
 
 
 class _VocabularyAdapter:
@@ -1018,9 +1018,9 @@ Add a quick smoke test:
 ```python
 # tests/unit/admin/test_registry_population.py
 def test_vocabulary_registered_after_di_init():
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
     create_container()  # triggers all register_*() calls
-    from chem_vault.application.admin.admin_delete_registry import all_entity_types
+    from cellar.application.admin.admin_delete_registry import all_entity_types
     assert "vocabulary" in all_entity_types()
 ```
 
@@ -1035,7 +1035,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/di/_workspace_config.py backend/tests/unit/admin/test_registry_population.py
+git add backend/src/cellar/infrastructure/di/_workspace_config.py backend/tests/unit/admin/test_registry_population.py
 git commit -m "feat(admin): wire vocabulary into Tier-1 admin delete"
 ```
 
@@ -1146,11 +1146,11 @@ git commit -m "test(admin): Tier-1 admin delete end-to-end (vocabulary)"
 ## Task 8: Tier-1 broad rollout — register remaining entities
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/di/_workspace_config.py` (add: registration_form, protocol_form, salt_entry, ontology_slot, custom_field, data_source, external_api_key)
-- Modify: `backend/src/chem_vault/infrastructure/di/_chemical_registration.py` (add: compound_flag, molecule_relationship, synthesis_route)
-- Modify: `backend/src/chem_vault/infrastructure/di/_screening.py` (add: protocol, run, plate_template, run_import_template)
-- Modify: `backend/src/chem_vault/infrastructure/di/_inventory.py` (add: batch, sample, shipment, synthesis_request)
-- Modify: `backend/src/chem_vault/infrastructure/di/_research_organization.py` (add: project, collection, saved_search)
+- Modify: `backend/src/cellar/infrastructure/di/_workspace_config.py` (add: registration_form, protocol_form, salt_entry, ontology_slot, custom_field, data_source, external_api_key)
+- Modify: `backend/src/cellar/infrastructure/di/_chemical_registration.py` (add: compound_flag, molecule_relationship, synthesis_route)
+- Modify: `backend/src/cellar/infrastructure/di/_screening.py` (add: protocol, run, plate_template, run_import_template)
+- Modify: `backend/src/cellar/infrastructure/di/_inventory.py` (add: batch, sample, shipment, synthesis_request)
+- Modify: `backend/src/cellar/infrastructure/di/_research_organization.py` (add: project, collection, saved_search)
 
 For each entity, follow the same adapter pattern as Vocabulary in Task 6.
 
@@ -1181,9 +1181,9 @@ class RepoAdapter:
 Per entity, add a block like:
 
 ```python
-from chem_vault.application.admin.admin_delete_registry import register_admin_delete
-from chem_vault.application.admin._adapter import RepoAdapter
-from chem_vault.domain.workspace_config.repository import RegistrationFormRepository
+from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.application.admin._adapter import RepoAdapter
+from cellar.domain.workspace_config.repository import RegistrationFormRepository
 
 def _resolve_reg_form(container):
     return RepoAdapter(container[RegistrationFormRepository], find="find_by_id_in_workspace")
@@ -1214,9 +1214,9 @@ Entities to register (table → entity_type, plus the canonical context file):
 
 ```python
 def test_all_expected_entities_registered():
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
     create_container()
-    from chem_vault.application.admin.admin_delete_registry import all_entity_types
+    from cellar.application.admin.admin_delete_registry import all_entity_types
 
     expected = {
         "vocabulary", "registration_form", "protocol_form", "salt_entry",
@@ -1241,7 +1241,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/application/admin/_adapter.py backend/src/chem_vault/infrastructure/di/ backend/tests/unit/admin/test_registry_population.py
+git add backend/src/cellar/application/admin/_adapter.py backend/src/cellar/infrastructure/di/ backend/tests/unit/admin/test_registry_population.py
 git commit -m "feat(admin): wire Tier-1 admin delete for all 23 entities"
 ```
 
@@ -1250,10 +1250,10 @@ git commit -m "feat(admin): wire Tier-1 admin delete for all 23 entities"
 ## Task 9: Cascade primitives — CascadeRule, registry, CascadeNode
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/shared/cascade/__init__.py`
-- Create: `backend/src/chem_vault/domain/shared/cascade/rules.py`
-- Create: `backend/src/chem_vault/domain/shared/cascade/registry.py`
-- Create: `backend/src/chem_vault/domain/shared/cascade/nodes.py`
+- Create: `backend/src/cellar/domain/shared/cascade/__init__.py`
+- Create: `backend/src/cellar/domain/shared/cascade/rules.py`
+- Create: `backend/src/cellar/domain/shared/cascade/registry.py`
+- Create: `backend/src/cellar/domain/shared/cascade/nodes.py`
 - Test: `backend/tests/unit/cascade/test_registry.py`
 
 - [ ] **Step 1: rules.py — CascadeRule dataclass**
@@ -1305,7 +1305,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Iterable
 
-from chem_vault.domain.shared.cascade.rules import CascadeRule
+from cellar.domain.shared.cascade.rules import CascadeRule
 
 
 _BY_PARENT: dict[str, list[CascadeRule]] = defaultdict(list)
@@ -1338,7 +1338,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from chem_vault.domain.shared.cascade.rules import CascadeAction
+from cellar.domain.shared.cascade.rules import CascadeAction
 
 
 @dataclass
@@ -1357,11 +1357,11 @@ class CascadeNode:
 
 ```python
 # domain/shared/cascade/__init__.py
-from chem_vault.domain.shared.cascade.rules import CascadeAction, CascadeRule
-from chem_vault.domain.shared.cascade.registry import (
+from cellar.domain.shared.cascade.rules import CascadeAction, CascadeRule
+from cellar.domain.shared.cascade.registry import (
     register_rules, get_rules_for_parent, all_rules,
 )
-from chem_vault.domain.shared.cascade.nodes import CascadeNode
+from cellar.domain.shared.cascade.nodes import CascadeNode
 
 __all__ = [
     "CascadeAction", "CascadeRule", "CascadeNode",
@@ -1374,10 +1374,10 @@ __all__ = [
 ```python
 # tests/unit/cascade/test_registry.py
 import pytest
-from chem_vault.domain.shared.cascade import (
+from cellar.domain.shared.cascade import (
     CascadeAction, CascadeRule, register_rules, get_rules_for_parent,
 )
-from chem_vault.domain.shared.cascade.registry import _clear_for_test
+from cellar.domain.shared.cascade.registry import _clear_for_test
 
 
 @pytest.fixture(autouse=True)
@@ -1409,7 +1409,7 @@ def test_multiple_rules_same_parent():
 
 ```bash
 cd backend && uv run pytest tests/unit/cascade/test_registry.py -v
-git add backend/src/chem_vault/domain/shared/cascade/ backend/tests/unit/cascade/
+git add backend/src/cellar/domain/shared/cascade/ backend/tests/unit/cascade/
 git commit -m "feat(cascade): CascadeRule, registry, CascadeNode primitives"
 ```
 
@@ -1418,10 +1418,10 @@ git commit -m "feat(cascade): CascadeRule, registry, CascadeNode primitives"
 ## Task 10: Cascade rules — screening_assay (Protocol & Run subtrees)
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/screening_assay/cascade.py`
-- Modify: `backend/src/chem_vault/infrastructure/di/_screening.py` (add `import chem_vault.domain.screening_assay.cascade  # noqa` to ensure registration runs)
+- Create: `backend/src/cellar/domain/screening_assay/cascade.py`
+- Modify: `backend/src/cellar/infrastructure/di/_screening.py` (add `import cellar.domain.screening_assay.cascade  # noqa` to ensure registration runs)
 
-Read the actual schema first: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/models.py`. Translate every inbound FK into a CascadeRule.
+Read the actual schema first: `backend/src/cellar/infrastructure/persistence/sqlalchemy/screening_assay/models.py`. Translate every inbound FK into a CascadeRule.
 
 - [ ] **Step 1: Write the cascade declarations**
 
@@ -1432,7 +1432,7 @@ Read the actual schema first: `backend/src/chem_vault/infrastructure/persistence
 Declares what happens to children of Protocol, Run, Plate, etc., when those
 parents are deleted via Tier-2 admin force-cascade.
 """
-from chem_vault.domain.shared.cascade import (
+from cellar.domain.shared.cascade import (
     CascadeAction as A, CascadeRule, register_rules,
 )
 
@@ -1510,11 +1510,11 @@ register_rules(
 
 - [ ] **Step 2: Wire registration on import**
 
-Append to `backend/src/chem_vault/infrastructure/di/_screening.py`:
+Append to `backend/src/cellar/infrastructure/di/_screening.py`:
 
 ```python
 # Force cascade rules to register at DI bootstrap.
-import chem_vault.domain.screening_assay.cascade  # noqa: F401
+import cellar.domain.screening_assay.cascade  # noqa: F401
 ```
 
 - [ ] **Step 3: Test the registrations**
@@ -1522,8 +1522,8 @@ import chem_vault.domain.screening_assay.cascade  # noqa: F401
 ```python
 # tests/unit/cascade/test_screening_rules.py
 def test_protocol_runs_rule_exists():
-    import chem_vault.domain.screening_assay.cascade  # noqa
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    import cellar.domain.screening_assay.cascade  # noqa
+    from cellar.domain.shared.cascade import get_rules_for_parent
     rules = get_rules_for_parent("protocols")
     assert any(
         r.child_table == "runs" and r.action.value == "cascade"
@@ -1532,8 +1532,8 @@ def test_protocol_runs_rule_exists():
 
 
 def test_well_to_readout_data_recurses():
-    import chem_vault.domain.screening_assay.cascade  # noqa
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    import cellar.domain.screening_assay.cascade  # noqa
+    from cellar.domain.shared.cascade import get_rules_for_parent
     rules = get_rules_for_parent("wells")
     rd = next(r for r in rules if r.child_table == "readout_data")
     assert rd.action.value == "cascade"
@@ -1543,7 +1543,7 @@ def test_well_to_readout_data_recurses():
 
 ```bash
 cd backend && uv run pytest tests/unit/cascade/test_screening_rules.py -v
-git add backend/src/chem_vault/domain/screening_assay/cascade.py backend/src/chem_vault/infrastructure/di/_screening.py backend/tests/unit/cascade/test_screening_rules.py
+git add backend/src/cellar/domain/screening_assay/cascade.py backend/src/cellar/infrastructure/di/_screening.py backend/tests/unit/cascade/test_screening_rules.py
 git commit -m "feat(cascade): Tier-2 cascade rules for Protocol/Run/Plate subtrees"
 ```
 
@@ -1552,10 +1552,10 @@ git commit -m "feat(cascade): Tier-2 cascade rules for Protocol/Run/Plate subtre
 ## Task 11: Cascade rules — chemical_registration & inventory & research_organization
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/chemical_registration/cascade.py`
-- Create: `backend/src/chem_vault/domain/inventory/cascade.py`
-- Create: `backend/src/chem_vault/domain/research_organization/cascade.py`
-- Create: `backend/src/chem_vault/domain/audit_compliance/cascade.py`
+- Create: `backend/src/cellar/domain/chemical_registration/cascade.py`
+- Create: `backend/src/cellar/domain/inventory/cascade.py`
+- Create: `backend/src/cellar/domain/research_organization/cascade.py`
+- Create: `backend/src/cellar/domain/audit_compliance/cascade.py`
 - Modify: corresponding `infrastructure/di/_*.py` to import the cascade modules
 
 Same pattern as Task 10. Each declares its module-owned outbound rules.
@@ -1564,7 +1564,7 @@ Same pattern as Task 10. Each declares its module-owned outbound rules.
 
 ```python
 # domain/chemical_registration/cascade.py
-from chem_vault.domain.shared.cascade import CascadeAction as A, CascadeRule, register_rules
+from cellar.domain.shared.cascade import CascadeAction as A, CascadeRule, register_rules
 
 
 register_rules(
@@ -1603,7 +1603,7 @@ register_rules(
 
 ```python
 # domain/inventory/cascade.py
-from chem_vault.domain.shared.cascade import CascadeAction as A, CascadeRule, register_rules
+from cellar.domain.shared.cascade import CascadeAction as A, CascadeRule, register_rules
 
 
 register_rules(
@@ -1628,7 +1628,7 @@ register_rules(
 
 ```python
 # domain/research_organization/cascade.py
-from chem_vault.domain.shared.cascade import CascadeAction as A, CascadeRule, register_rules
+from cellar.domain.shared.cascade import CascadeAction as A, CascadeRule, register_rules
 
 
 register_rules(
@@ -1656,7 +1656,7 @@ This file exists to document that decision. If the schema ever adds an FK
 from audit_entries to a domain table, add a WARN rule here so the cascade
 preview surfaces the orphan-by-design behavior to the admin.
 """
-from chem_vault.domain.shared.cascade import register_rules  # noqa: F401
+from cellar.domain.shared.cascade import register_rules  # noqa: F401
 # No rules registered.
 ```
 
@@ -1665,13 +1665,13 @@ from chem_vault.domain.shared.cascade import register_rules  # noqa: F401
 In each `infrastructure/di/_<context>.py`, add the import alongside the existing pattern:
 
 ```python
-import chem_vault.domain.chemical_registration.cascade  # noqa: F401
+import cellar.domain.chemical_registration.cascade  # noqa: F401
 # ...
-import chem_vault.domain.inventory.cascade  # noqa: F401
+import cellar.domain.inventory.cascade  # noqa: F401
 # ...
-import chem_vault.domain.research_organization.cascade  # noqa: F401
+import cellar.domain.research_organization.cascade  # noqa: F401
 # ...
-import chem_vault.domain.audit_compliance.cascade  # noqa: F401
+import cellar.domain.audit_compliance.cascade  # noqa: F401
 ```
 
 - [ ] **Step 6: Test rule presence**
@@ -1679,17 +1679,17 @@ import chem_vault.domain.audit_compliance.cascade  # noqa: F401
 ```python
 # tests/unit/cascade/test_cross_context_rules.py
 def test_batches_cascade_under_molecule():
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
     create_container()
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    from cellar.domain.shared.cascade import get_rules_for_parent
     rules = get_rules_for_parent("molecules")
     assert any(r.child_table == "batches" and r.action.value == "cascade" for r in rules)
 
 
 def test_saved_searches_set_null_under_protocol():
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
     create_container()
-    from chem_vault.domain.shared.cascade import get_rules_for_parent
+    from cellar.domain.shared.cascade import get_rules_for_parent
     rules = get_rules_for_parent("protocols")
     assert any(r.child_table == "saved_searches" and r.action.value == "set_null" for r in rules)
 ```
@@ -1698,7 +1698,7 @@ def test_saved_searches_set_null_under_protocol():
 
 ```bash
 cd backend && uv run pytest tests/unit/cascade/ -v
-git add backend/src/chem_vault/domain/chemical_registration/cascade.py backend/src/chem_vault/domain/inventory/cascade.py backend/src/chem_vault/domain/research_organization/cascade.py backend/src/chem_vault/domain/audit_compliance/cascade.py backend/src/chem_vault/infrastructure/di/_chemical_registration.py backend/src/chem_vault/infrastructure/di/_inventory.py backend/src/chem_vault/infrastructure/di/_research_organization.py backend/tests/unit/cascade/test_cross_context_rules.py
+git add backend/src/cellar/domain/chemical_registration/cascade.py backend/src/cellar/domain/inventory/cascade.py backend/src/cellar/domain/research_organization/cascade.py backend/src/cellar/domain/audit_compliance/cascade.py backend/src/cellar/infrastructure/di/_chemical_registration.py backend/src/cellar/infrastructure/di/_inventory.py backend/src/cellar/infrastructure/di/_research_organization.py backend/tests/unit/cascade/test_cross_context_rules.py
 git commit -m "feat(cascade): Tier-2 rules for chemical_registration, inventory, research_org"
 ```
 
@@ -1707,7 +1707,7 @@ git commit -m "feat(cascade): Tier-2 rules for chemical_registration, inventory,
 ## Task 12: CascadeRunner — preview engine
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/cascade/cascade_runner.py`
+- Create: `backend/src/cellar/infrastructure/cascade/cascade_runner.py`
 - Test: `backend/tests/integration/cascade/test_cascade_runner_preview.py`
 
 - [ ] **Step 1: Implement preview**
@@ -1726,11 +1726,11 @@ from typing import Iterable
 from sqlalchemy import Table, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chem_vault.domain.shared.cascade import (
+from cellar.domain.shared.cascade import (
     CascadeAction, CascadeNode, get_rules_for_parent,
 )
-from chem_vault.infrastructure.cascade.label_fields import label_for_table
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+from cellar.infrastructure.cascade.label_fields import label_for_table
+from cellar.infrastructure.persistence.sqlalchemy.base import Base
 
 
 SAMPLE_LIMIT = 5
@@ -1840,8 +1840,8 @@ class CascadeRunner:
 ```python
 # tests/integration/cascade/test_cascade_runner_preview.py
 import pytest
-from chem_vault.infrastructure.cascade.cascade_runner import CascadeRunner
-from chem_vault.domain.shared.cascade import CascadeAction
+from cellar.infrastructure.cascade.cascade_runner import CascadeRunner
+from cellar.domain.shared.cascade import CascadeAction
 
 
 @pytest.mark.asyncio
@@ -1869,7 +1869,7 @@ async def test_preview_protocol_with_one_run_one_plate(
 
 ```bash
 cd backend && uv run pytest tests/integration/cascade/test_cascade_runner_preview.py -v
-git add backend/src/chem_vault/infrastructure/cascade/cascade_runner.py backend/tests/integration/cascade/test_cascade_runner_preview.py
+git add backend/src/cellar/infrastructure/cascade/cascade_runner.py backend/tests/integration/cascade/test_cascade_runner_preview.py
 git commit -m "feat(cascade): Tier-2 preview engine"
 ```
 
@@ -1878,7 +1878,7 @@ git commit -m "feat(cascade): Tier-2 preview engine"
 ## Task 13: CascadeRunner — execute engine
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/cascade/cascade_runner.py`
+- Modify: `backend/src/cellar/infrastructure/cascade/cascade_runner.py`
 
 The execute path: collects all rows that will be deleted/nulled across the cascade, snapshots each, then performs deletes in topological order (children before parents). Returns the list of `AuditEntry` records to attach to the AuditOperation.
 
@@ -1890,8 +1890,8 @@ import json
 from datetime import UTC, datetime
 
 from sqlalchemy import update, delete
-from chem_vault.domain.audit_compliance.enums import AuditAction
-from chem_vault.domain.audit_compliance.models import AuditEntry
+from cellar.domain.audit_compliance.enums import AuditAction
+from cellar.domain.audit_compliance.models import AuditEntry
 
 
 class CascadeExecutionError(Exception):
@@ -2030,8 +2030,8 @@ async def _collect(
 import pytest
 from sqlalchemy import select, func
 
-from chem_vault.infrastructure.cascade.cascade_runner import CascadeRunner
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+from cellar.infrastructure.cascade.cascade_runner import CascadeRunner
+from cellar.infrastructure.persistence.sqlalchemy.base import Base
 
 
 @pytest.mark.asyncio
@@ -2079,7 +2079,7 @@ async def test_execute_sets_null_on_saved_searches(
 
 ```bash
 cd backend && uv run pytest tests/integration/cascade/test_cascade_runner_execute.py -v
-git add backend/src/chem_vault/infrastructure/cascade/cascade_runner.py backend/tests/integration/cascade/test_cascade_runner_execute.py
+git add backend/src/cellar/infrastructure/cascade/cascade_runner.py backend/tests/integration/cascade/test_cascade_runner_execute.py
 git commit -m "feat(cascade): Tier-2 execute engine with set-null + cascade + block"
 ```
 
@@ -2088,11 +2088,11 @@ git commit -m "feat(cascade): Tier-2 execute engine with set-null + cascade + bl
 ## Task 14: Tier-2 endpoints — preview + cascade-delete
 
 **Files:**
-- Modify: `backend/src/chem_vault/interface/routes/admin_delete.py`
-- Create: `backend/src/chem_vault/application/admin/cascade_preview.py`
-- Create: `backend/src/chem_vault/application/admin/cascade_delete.py`
-- Modify: `backend/src/chem_vault/interface/dependencies.py`
-- Modify: `backend/src/chem_vault/infrastructure/di/_admin.py`
+- Modify: `backend/src/cellar/interface/routes/admin_delete.py`
+- Create: `backend/src/cellar/application/admin/cascade_preview.py`
+- Create: `backend/src/cellar/application/admin/cascade_delete.py`
+- Modify: `backend/src/cellar/interface/dependencies.py`
+- Modify: `backend/src/cellar/infrastructure/di/_admin.py`
 
 - [ ] **Step 1: cascade_preview.py use case**
 
@@ -2104,15 +2104,15 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.admin.admin_delete_registry import get_entry
-from chem_vault.application.auth import AuthContext, require_admin
-from chem_vault.application.shared.command import Command
-from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.shared.cascade import CascadeNode
-from chem_vault.domain.shared.errors import (
+from cellar.application.admin.admin_delete_registry import get_entry
+from cellar.application.auth import AuthContext, require_admin
+from cellar.application.shared.command import Command
+from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.shared.cascade import CascadeNode
+from cellar.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError,
 )
-from chem_vault.infrastructure.cascade.cascade_runner import CascadeRunner
+from cellar.infrastructure.cascade.cascade_runner import CascadeRunner
 
 # Tier-2 is gated to these entity types only.
 TIER2_ENTITY_TYPES = frozenset({"protocol", "run", "molecule"})
@@ -2161,20 +2161,20 @@ from datetime import UTC, datetime
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.admin.admin_delete_registry import get_entry
-from chem_vault.application.admin.cascade_preview import TIER2_ENTITY_TYPES
-from chem_vault.application.audit.audit_recording_service import AuditRecordingService
-from chem_vault.application.auth import AuthContext, require_admin
-from chem_vault.application.shared.command import Command
-from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.domain.audit_compliance.enums import OperationType
-from chem_vault.domain.shared.errors import (
+from cellar.application.admin.admin_delete_registry import get_entry
+from cellar.application.admin.cascade_preview import TIER2_ENTITY_TYPES
+from cellar.application.audit.audit_recording_service import AuditRecordingService
+from cellar.application.auth import AuthContext, require_admin
+from cellar.application.shared.command import Command
+from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.audit_compliance.enums import OperationType
+from cellar.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError, ValidationError,
 )
-from chem_vault.infrastructure.cascade.cascade_runner import (
+from cellar.infrastructure.cascade.cascade_runner import (
     CascadeExecutionError, CascadeRunner,
 )
-from chem_vault.infrastructure.cascade.label_fields import label_for_table
+from cellar.infrastructure.cascade.label_fields import label_for_table
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2243,7 +2243,7 @@ class CascadeDelete:
 
 async def _fetch_label(session, table_name: str, id_: uuid.UUID):
     from sqlalchemy import select
-    from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
+    from cellar.infrastructure.persistence.sqlalchemy.base import Base
     _et, label_col = label_for_table(table_name)
     if not label_col:
         return None
@@ -2257,8 +2257,8 @@ async def _fetch_label(session, table_name: str, id_: uuid.UUID):
 
 ```python
 # infrastructure/di/_admin.py — extend register_admin
-from chem_vault.application.admin.cascade_preview import CascadePreview
-from chem_vault.application.admin.cascade_delete import CascadeDelete
+from cellar.application.admin.cascade_preview import CascadePreview
+from cellar.application.admin.cascade_delete import CascadeDelete
 
 def register_admin(container: Container) -> None:
     container[AdminHardDelete] = lambda c: AdminHardDelete(...)  # existing
@@ -2279,9 +2279,9 @@ CascadeDeleteDep  = Annotated[CascadeDelete,  Depends(_get_use_case(CascadeDelet
 ```python
 # Append to interface/routes/admin_delete.py
 
-from chem_vault.application.admin.cascade_preview import CascadePreviewQuery
-from chem_vault.application.admin.cascade_delete import CascadeDeleteCommand
-from chem_vault.domain.shared.cascade import CascadeNode
+from cellar.application.admin.cascade_preview import CascadePreviewQuery
+from cellar.application.admin.cascade_delete import CascadeDeleteCommand
+from cellar.domain.shared.cascade import CascadeNode
 
 class CascadeNodeResponse(BaseModel):
     entity_type: str
@@ -2430,7 +2430,7 @@ async def test_tier2_only_for_pilot_entities(client, admin_auth, vocabulary_fact
 
 ```bash
 cd backend && uv run pytest tests/api/test_admin_delete.py tests/unit/admin tests/integration/cascade -v
-git add backend/src/chem_vault/application/admin/cascade_preview.py backend/src/chem_vault/application/admin/cascade_delete.py backend/src/chem_vault/interface/routes/admin_delete.py backend/src/chem_vault/interface/dependencies.py backend/src/chem_vault/infrastructure/di/_admin.py backend/tests/api/test_admin_delete.py
+git add backend/src/cellar/application/admin/cascade_preview.py backend/src/cellar/application/admin/cascade_delete.py backend/src/cellar/interface/routes/admin_delete.py backend/src/cellar/interface/dependencies.py backend/src/cellar/infrastructure/di/_admin.py backend/tests/api/test_admin_delete.py
 git commit -m "feat(admin): Tier-2 cascade preview + force delete endpoints"
 ```
 
@@ -2460,9 +2460,9 @@ either (a) accept the default Tier-1 RESTRICT behavior (no action needed),
 or (b) declare a Tier-2 cascade rule, or (c) explicitly add it to IGNORED_FKS
 with a justifying comment.
 """
-from chem_vault.infrastructure.di.container import create_container  # noqa
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
-from chem_vault.domain.shared.cascade import all_rules
+from cellar.infrastructure.di.container import create_container  # noqa
+from cellar.infrastructure.persistence.sqlalchemy.base import Base
+from cellar.domain.shared.cascade import all_rules
 
 
 # (child_table, fk_column, parent_table) — explicitly ignored.

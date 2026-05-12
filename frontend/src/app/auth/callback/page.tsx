@@ -24,14 +24,14 @@ export default function CallbackPage() {
           className="flex flex-col items-end px-8 pt-8"
           style={{ animation: "auth-enter 0.7s ease-out 0.1s both" }}
         >
-          <h1 className="text-lg font-semibold tracking-tight">Open Chem Vault</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Cellar</h1>
           <a
-            href="https://www.openchemvault.com"
+            href="https://www.chemcellar.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            www.openchemvault.com
+            www.chemcellar.com
           </a>
         </div>
 

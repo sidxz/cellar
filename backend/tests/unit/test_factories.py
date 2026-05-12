@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chem_vault.domain.audit_compliance.enums import (
+from cellar.domain.audit_compliance.enums import (
     AuditAction,
     AuditStatus,
     AuthMethod,

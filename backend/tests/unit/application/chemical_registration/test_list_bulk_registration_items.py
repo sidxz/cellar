@@ -8,17 +8,17 @@ from dataclasses import dataclass
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.bulk_registration_item_reader import (
+from cellar.application.chemical_registration.bulk_registration_item_reader import (
     BulkRegistrationItemPage,
     BulkRegistrationItemRow,
 )
-from chem_vault.application.chemical_registration.list_bulk_registration_items import (
+from cellar.application.chemical_registration.list_bulk_registration_items import (
     ListBulkRegistrationItems,
     ListBulkRegistrationItemsQuery,
 )
-from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
-from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.chemical_registration.bulk_registration import BulkRegistration
+from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from cellar.domain.shared.errors import NotFoundError, ValidationError
 
 
 @dataclass

@@ -10,25 +10,25 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.merge_service import (
+from cellar.application.chemical_registration.merge_service import (
     MergeCommand,
     MergeService,
     _build_snapshot,
 )
-from chem_vault.application.chemical_registration.merge_side_effect_registry import (
+from cellar.application.chemical_registration.merge_side_effect_registry import (
     MergeSideEffectRegistry,
 )
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.enums import (
     IdentifierType,
     MergeReason,
     MoleculeType,
 )
-from chem_vault.domain.chemical_registration.merge_event import MergeEvent
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
-from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.chemical_registration.merge_event import MergeEvent
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import (
     ChemicalStructure,
     ComputedDescriptors,
     RegistrationNumber,

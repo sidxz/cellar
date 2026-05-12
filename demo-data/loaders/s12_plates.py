@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.inventory.registered_plates import (
+    from cellar.application.inventory.registered_plates import (
         RegisterPlate,
         RegisterPlateCommand,
     )

@@ -9,14 +9,14 @@ from typing import Self
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.delete_relationship import (
+from cellar.application.chemical_registration.delete_relationship import (
     DeleteRelationship,
     DeleteRelationshipCommand,
 )
-from chem_vault.domain.chemical_registration.enums import RelationshipType
-from chem_vault.domain.chemical_registration.molecule_relationship import MoleculeRelationship
-from chem_vault.domain.shared.errors import NotFoundError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.chemical_registration.enums import RelationshipType
+from cellar.domain.chemical_registration.molecule_relationship import MoleculeRelationship
+from cellar.domain.shared.errors import NotFoundError
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------

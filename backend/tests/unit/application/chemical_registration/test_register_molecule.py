@@ -10,31 +10,32 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.disclosure_service import (
+from cellar.application.chemical_registration.disclosure_service import (
     DisclosureOutcome,
     SubmitDisclosureCommand,
 )
-from chem_vault.application.chemical_registration.protocols import (
+from cellar.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
     QCResultDTO,
 )
-from chem_vault.infrastructure.rdkit.fingerprint_generator import Fingerprints
-from chem_vault.application.chemical_registration.register_molecule import (
+from cellar.infrastructure.rdkit.fingerprint_generator import Fingerprints
+from cellar.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMolecule,
     RegisterMoleculeCommand,
     RegistrationOutcome,
 )
-from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
+from cellar.domain.chemical_registration.enums import (
     MoleculeType,
     RegistrationAction,
+    Stereochemistry,
     StructureStatus,
 )
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import (
     ChemicalStructure,
     ComputedDescriptors,
     RegistrationNumber,
@@ -78,6 +79,7 @@ _PROCESSED = ProcessedStructureDTO(
     descriptors=_DESCRIPTORS,
     fingerprints=Fingerprints(morgan=b"\x00" * 256),
     qc_result=QCResultDTO(total_penalty=0, issues=[]),
+    stereochemistry=Stereochemistry.ACHIRAL,
 )
 
 
@@ -454,3 +456,20 @@ class TestDisclosureDetection:
         assert isinstance(result, Success)
         outcome = result.unwrap()
         assert outcome.action == RegistrationAction.DISCLOSED
+
+
+class TestStereochemistryWiring:
+    """Stereochemistry classification from StructureProcessor must land on the
+    saved Molecule. The field was previously declared but never populated."""
+
+    async def test_classification_flows_to_saved_molecule(self) -> None:
+        repo = _make_repo()
+        uc = _make_use_case(repo=repo)
+        cmd = _make_command()
+
+        result = await uc(cmd, auth=FakeAuth())
+
+        assert isinstance(result, Success)
+        assert repo.save.await_count == 1
+        saved_mol = repo.save.await_args.args[0]
+        assert saved_mol.stereochemistry == Stereochemistry.ACHIRAL

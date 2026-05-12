@@ -10,20 +10,20 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.chemical_registration.protocols import (
+from cellar.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
     QCResultDTO,
 )
-from chem_vault.application.chemical_registration.search_molecules import (
+from cellar.application.chemical_registration.search_molecules import (
     SearchMolecules,
     SearchMoleculesQuery,
     SimilarityResult,
 )
-from chem_vault.domain.chemical_registration.enums import MoleculeType
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.shared.errors import DomainError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.chemical_registration.enums import MoleculeType, Stereochemistry
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.shared.errors import DomainError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import (
     ChemicalStructure,
     ComputedDescriptors,
     RegistrationNumber,
@@ -176,6 +176,7 @@ class FakeStructureProcessor:
                 descriptors=_DESCRIPTORS,
                 fingerprints={},
                 qc_result=QCResultDTO(total_penalty=0, issues=[]),
+                stereochemistry=Stereochemistry.ACHIRAL,
             )
         )
 

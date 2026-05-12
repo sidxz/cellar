@@ -7,10 +7,10 @@ import uuid
 import pytest
 import sqlalchemy as sa
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 # ---------------------------------------------------------------------------

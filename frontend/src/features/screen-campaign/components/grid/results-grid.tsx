@@ -31,7 +31,7 @@ import { AgGridReact } from "ag-grid-react";
 import { Pencil } from "lucide-react";
 
 import { Badge } from "@/shared/components/ui/badge";
-import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
+import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
@@ -550,7 +550,7 @@ export function ResultsGridV2({
     <>
       <div style={{ height: 600, width: "100%" }}>
         <AgGridReact<RowData>
-          theme={chemVaultTheme}
+          theme={cellarTheme}
           rowData={rowData}
           columnDefs={columnDefs}
           defaultColDef={{ sortable: true, resizable: true, minWidth: 80 }}

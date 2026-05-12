@@ -19,8 +19,8 @@ Single PR. Adds one repo method, one route, one router include. Re-runs orval.
 ### Task 1.1: Add `find_by_ids` to the DRC repository
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/screening_assay/repository.py` (Protocol)
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py`
+- Modify: `backend/src/cellar/domain/screening_assay/repository.py` (Protocol)
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py`
 - Test: `backend/tests/integration/test_dose_response_curve_repository_find_by_ids.py` (NEW)
 
 - [ ] **Step 1: Write the failing integration test**
@@ -31,7 +31,7 @@ Create `backend/tests/integration/test_dose_response_curve_repository_find_by_id
 """Integration test: DoseResponseCurveRepository.find_by_ids."""
 import uuid
 import pytest
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
 )
 from tests.fixtures.dose_response_curves import seed_curve  # see step 2 if it doesn't exist
@@ -88,7 +88,7 @@ Expected: FAIL — `AttributeError: ... no attribute 'find_by_ids'` (or import e
 
 - [ ] **Step 4: Add `find_by_ids` to the Protocol**
 
-In `backend/src/chem_vault/domain/screening_assay/repository.py`, add to `DoseResponseCurveRepository` (after `find_by_molecule`, before `find_best_curves_for_molecules`):
+In `backend/src/cellar/domain/screening_assay/repository.py`, add to `DoseResponseCurveRepository` (after `find_by_molecule`, before `find_best_curves_for_molecules`):
 
 ```python
     async def find_by_ids(
@@ -100,7 +100,7 @@ In `backend/src/chem_vault/domain/screening_assay/repository.py`, add to `DoseRe
 
 - [ ] **Step 5: Implement `find_by_ids` in the SQLAlchemy repo**
 
-In `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py`, add after `find_by_molecule` (around line 153):
+In `backend/src/cellar/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py`, add after `find_by_molecule` (around line 153):
 
 ```python
     async def find_by_ids(
@@ -128,11 +128,11 @@ Expected: 4 tests PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add backend/src/chem_vault/domain/screening_assay/repository.py \
-  backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py \
+git -C /Users/sidx/workspace/cellar2 add backend/src/cellar/domain/screening_assay/repository.py \
+  backend/src/cellar/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py \
   backend/tests/integration/test_dose_response_curve_repository_find_by_ids.py \
   backend/tests/fixtures/dose_response_curves.py
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(be/screening): DoseResponseCurveRepository.find_by_ids"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(be/screening): DoseResponseCurveRepository.find_by_ids"
 ```
 
 ---
@@ -140,7 +140,7 @@ git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(be/screening): DoseResp
 ### Task 1.2: Add `POST /api/v1/dose-response/curves:batch` route
 
 **Files:**
-- Create: `backend/src/chem_vault/interface/routes/dose_response_curves.py`
+- Create: `backend/src/cellar/interface/routes/dose_response_curves.py`
 - Test: `backend/tests/api/test_dose_response_curves_batch.py` (NEW)
 
 - [ ] **Step 1: Write the failing API test**
@@ -196,7 +196,7 @@ Expected: FAIL — `404 Not Found` (route doesn't exist).
 
 - [ ] **Step 3: Create the route file**
 
-Create `backend/src/chem_vault/interface/routes/dose_response_curves.py`:
+Create `backend/src/cellar/interface/routes/dose_response_curves.py`:
 
 ```python
 """Batch read endpoints for DoseResponseCurves.
@@ -213,11 +213,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
 )
-from chem_vault.interface.dependencies import AuthDep, UoWDep
-from chem_vault.interface.routes.readout_data import DoseResponseCurveResponse
+from cellar.interface.dependencies import AuthDep, UoWDep
+from cellar.interface.routes.readout_data import DoseResponseCurveResponse
 
 router = APIRouter(prefix="/api/v1/dose-response", tags=["dose-response"])
 
@@ -253,10 +253,10 @@ async def get_curves_batch(
 
 - [ ] **Step 4: Register the router**
 
-In `backend/src/chem_vault/interface/app.py`, find the block where domain routers are included (around line 185 — `protocol_router`, `run_router`). Add:
+In `backend/src/cellar/interface/app.py`, find the block where domain routers are included (around line 185 — `protocol_router`, `run_router`). Add:
 
 ```python
-    from chem_vault.interface.routes.dose_response_curves import router as drc_batch_router
+    from cellar.interface.routes.dose_response_curves import router as drc_batch_router
     app.include_router(drc_batch_router)
 ```
 
@@ -275,11 +275,11 @@ Expected: existing tests unchanged (no regression).
 - [ ] **Step 7: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add backend/src/chem_vault/interface/routes/dose_response_curves.py \
-  backend/src/chem_vault/interface/app.py \
+git -C /Users/sidx/workspace/cellar2 add backend/src/cellar/interface/routes/dose_response_curves.py \
+  backend/src/cellar/interface/app.py \
   backend/tests/api/test_dose_response_curves_batch.py \
   backend/tests/api/conftest.py
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(be/dose-response): POST /api/v1/dose-response/curves:batch"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(be/dose-response): POST /api/v1/dose-response/curves:batch"
 ```
 
 ---
@@ -295,16 +295,16 @@ git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(be/dose-response): POST
 The project uses orval with a generated OpenAPI export. Run the existing export script (check `frontend/orval.config.ts` or `package.json` scripts for the exact command). Typically:
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/backend
-uv run python -m chem_vault.interface.export_openapi > ../frontend/openapi.json
+cd /Users/sidx/workspace/cellar2/backend
+uv run python -m cellar.interface.export_openapi > ../frontend/openapi.json
 ```
 
-If the export entry point has a different name, run `grep -rn "openapi.*export\|export_openapi" backend/src/chem_vault/interface/` to find it.
+If the export entry point has a different name, run `grep -rn "openapi.*export\|export_openapi" backend/src/cellar/interface/` to find it.
 
 - [ ] **Step 2: Run orval**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm orval
 ```
 
@@ -313,7 +313,7 @@ This should generate / update files under `frontend/src/shared/lib/api/dose-resp
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 
@@ -322,8 +322,8 @@ Expected: PASS. (Generated code uses existing patterns.)
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/shared/lib/api/dose-response/ frontend/openapi.json
-git -C /Users/sidx/workspace/chem-vault2 commit -m "chore(fe): regen orval for dose-response curves:batch"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/shared/lib/api/dose-response/ frontend/openapi.json
+git -C /Users/sidx/workspace/cellar2 commit -m "chore(fe): regen orval for dose-response curves:batch"
 ```
 
 ---
@@ -373,7 +373,7 @@ function CampaignBuilderV2({ campaign, projectId }: { campaign: CampaignResponse
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS.
@@ -381,8 +381,8 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/campaign-builder.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): ?v2=1 toggle scaffolding"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/campaign-builder.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): ?v2=1 toggle scaffolding"
 ```
 
 ---
@@ -465,7 +465,7 @@ export function HeaderStrip({
 - [ ] **Step 2: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS. (If a lucide icon name is wrong, fix to the project-consistent name; check `frontend/src/features/screen-campaign/components/campaign-builder.tsx` for what's already imported.)
@@ -473,8 +473,8 @@ Expected: PASS. (If a lucide icon name is wrong, fix to the project-consistent n
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/sections/header-strip.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): HeaderStrip section component"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/sections/header-strip.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): HeaderStrip section component"
 ```
 
 ---
@@ -581,7 +581,7 @@ interface AddFromRunsDialogProps {
 - [ ] **Step 4: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS.
@@ -589,12 +589,12 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/add/ \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/add/ \
   frontend/src/features/screen-campaign/components/add-from-runs-dialog.tsx \
   frontend/src/features/screen-campaign/components/add-from-collection-dialog.tsx \
   frontend/src/features/screen-campaign/components/add-from-campaign-dialog.tsx \
   frontend/src/features/screen-campaign/components/compound-list-pane.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): AddCompoundsPills + projectId plumbing"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): AddCompoundsPills + projectId plumbing"
 ```
 
 ---
@@ -701,7 +701,7 @@ function describeSource(
 - [ ] **Step 2: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS. If `compound_sources` shape differs from the assumed `{kind, ref, count}` shape, adjust the `describeSource` accessor. Verify against the orval-generated type.
@@ -709,8 +709,8 @@ Expected: PASS. If `compound_sources` shape differs from the assumed `{kind, ref
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/sections/sources-section.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): SourcesSection with readable source rows"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/sections/sources-section.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): SourcesSection with readable source rows"
 ```
 
 ---
@@ -846,7 +846,7 @@ function ChannelRow({
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS. (Adjust the `channel.unit` reference if the type uses a different attribute; check `CampaignChannelResponse` from orval.)
@@ -854,10 +854,10 @@ Expected: PASS. (Adjust the `channel.unit` reference if the type uses a differen
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/channel-popover.tsx \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/channel-popover.tsx \
   frontend/src/features/screen-campaign/components/channel-strip.tsx \
   frontend/src/features/screen-campaign/components/sections/channels-section.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): ChannelsSection + extracted ChannelPopoverForm"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): ChannelsSection + extracted ChannelPopoverForm"
 ```
 
 ---
@@ -911,10 +911,10 @@ export function CampaignToolbar({
 - [ ] **Step 2: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/sections/campaign-toolbar.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): CampaignToolbar component"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/sections/campaign-toolbar.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): CampaignToolbar component"
 ```
 
 ---
@@ -985,7 +985,7 @@ Copy the wiring details (mutations, dialog imports, filter state shape) from the
 - [ ] **Step 2: Browser smoke**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm dev
 ```
 
@@ -1004,7 +1004,7 @@ If anything renders broken, fix before committing.
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS.
@@ -1012,8 +1012,8 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/campaign-builder.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): wire v2 sections behind ?v2=1"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/campaign-builder.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): wire v2 sections behind ?v2=1"
 ```
 
 ---
@@ -1094,7 +1094,7 @@ describe("measurementToActivity", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm vitest run src/features/screen-campaign/lib/measurement-to-activity.test.ts
 ```
 Expected: FAIL (import error).
@@ -1161,7 +1161,7 @@ If `ActivityValue["curve_params"]` is more strict than what we construct (e.g. r
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm vitest run src/features/screen-campaign/lib/measurement-to-activity.test.ts
 ```
 Expected: 5 tests PASS.
@@ -1169,9 +1169,9 @@ Expected: 5 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/lib/measurement-to-activity.ts \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/lib/measurement-to-activity.ts \
   frontend/src/features/screen-campaign/lib/measurement-to-activity.test.ts
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): measurementToActivity pure mapper + tests"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): measurementToActivity pure mapper + tests"
 ```
 
 ---
@@ -1233,10 +1233,10 @@ function collectCurveIds(campaign: CampaignResponse | undefined): string[] {
 - [ ] **Step 2: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/lib/use-campaign-curves.ts
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): useCampaignCurves hook"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/lib/use-campaign-curves.ts
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): useCampaignCurves hook"
 ```
 
 ---
@@ -1277,10 +1277,10 @@ export const CampaignDoseResponseCell = memo(CampaignDoseResponseCellInner);
 - [ ] **Step 2: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/grid/dose-response-cell.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): CampaignDoseResponseCell wrapping search renderer"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/grid/dose-response-cell.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): CampaignDoseResponseCell wrapping search renderer"
 ```
 
 ---
@@ -1364,10 +1364,10 @@ export function MeasurementCell({ measurement, readOnly, onEdit }: MeasurementCe
 - [ ] **Step 3: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/grid/measurement-cell.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): MeasurementCell with hover-edit + OVR badge"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/grid/measurement-cell.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): MeasurementCell with hover-edit + OVR badge"
 ```
 
 ---
@@ -1502,11 +1502,11 @@ Match the exact pattern the existing `DecisionPanel` uses.
 - [ ] **Step 4: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/popovers/ \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/popovers/ \
   frontend/src/features/screen-campaign/lib/hooks.ts
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): DecisionPopover with debounce + autosave-on-close"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): DecisionPopover with debounce + autosave-on-close"
 ```
 
 ---
@@ -1569,10 +1569,10 @@ export function DecisionChipCell({ campaignId, result, readOnly }: DecisionChipC
 - [ ] **Step 2: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/grid/decision-chip-cell.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): DecisionChipCell pinned-right cell"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/grid/decision-chip-cell.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): DecisionChipCell pinned-right cell"
 ```
 
 ---
@@ -1662,10 +1662,10 @@ export function RowDetailRenderer({ data }: RowDetailRendererProps) {
 - [ ] **Step 2: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/grid/row-detail-renderer.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): RowDetailRenderer for inline row expansion"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/grid/row-detail-renderer.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): RowDetailRenderer for inline row expansion"
 ```
 
 ---
@@ -1905,7 +1905,7 @@ Replace the "Results grid — Phase 3" placeholder in `campaign-builder.tsx` wit
 - [ ] **Step 4: Browser smoke**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm dev
 ```
 
@@ -1920,12 +1920,12 @@ Navigate to a draft campaign with `?v2=1`. Verify:
 - [ ] **Step 5: TypeScript check + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/grid/results-grid.tsx \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/grid/results-grid.tsx \
   frontend/src/features/screen-campaign/components/campaign-builder.tsx \
   frontend/src/features/screen-campaign/components/campaign-filter-bar.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): v2 ResultsGrid with inline DR + row expansion"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): v2 ResultsGrid with inline DR + row expansion"
 ```
 
 ---
@@ -1946,10 +1946,10 @@ Remove the `useSearchParams` + `useV2` branch added in Task 2.1. `CampaignBuilde
 - [ ] **Step 2: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/campaign-builder.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): v2 layout is default"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/campaign-builder.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): v2 layout is default"
 ```
 
 ---
@@ -1992,11 +1992,11 @@ Preserve the existing supersede-dialog wiring and the closed-campaign signature/
 - [ ] **Step 2: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/campaign-view/index.tsx \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/campaign-view/index.tsx \
   frontend/src/features/screen-campaign/components/sections/header-strip.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): closed view uses same layout, read-only"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): closed view uses same layout, read-only"
 ```
 
 ---
@@ -2013,7 +2013,7 @@ git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): closed vi
 - [ ] **Step 1: Confirm no remaining imports**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 grep -rn "compound-list-pane\|sources-summary-card\|decision-panel\|channel-strip\|features/screen-campaign/components/results-grid" src/ 2>/dev/null
 ```
 Expected: empty (no callers).
@@ -2021,7 +2021,7 @@ Expected: empty (no callers).
 - [ ] **Step 2: Delete the files**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2
+cd /Users/sidx/workspace/cellar2
 rm frontend/src/features/screen-campaign/components/compound-list-pane.tsx \
    frontend/src/features/screen-campaign/components/sources-summary-card.tsx \
    frontend/src/features/screen-campaign/components/decision-panel.tsx \
@@ -2032,20 +2032,20 @@ rm frontend/src/features/screen-campaign/components/compound-list-pane.tsx \
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
 ```
 Expected: PASS. If any test file imports a deleted module, update or delete the test as appropriate. Run `pnpm vitest run` if unit tests exist for this feature.
 
 - [ ] **Step 4: Update CLAUDE.md handoff**
 
-Read `/Users/sidx/workspace/chem-vault2/CLAUDE.md` (the "Current Session Notes" section). Add a new dated block at the top describing the redesign work shipped on `fe2`. Force-add and stage.
+Read `/Users/sidx/workspace/cellar2/CLAUDE.md` (the "Current Session Notes" section). Add a new dated block at the top describing the redesign work shipped on `fe2`. Force-add and stage.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add -A frontend/src/features/screen-campaign/ CLAUDE.md
-git -C /Users/sidx/workspace/chem-vault2 commit -m "refactor(fe/campaign): delete legacy 3-pane shell"
+git -C /Users/sidx/workspace/cellar2 add -A frontend/src/features/screen-campaign/ CLAUDE.md
+git -C /Users/sidx/workspace/cellar2 commit -m "refactor(fe/campaign): delete legacy 3-pane shell"
 ```
 
 ---
@@ -2119,10 +2119,10 @@ export const useReportConfig = create<Store>()(
 - [ ] **Step 2: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/lib/report-config.ts
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): per-campaign useReportConfig Zustand store"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/lib/report-config.ts
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): per-campaign useReportConfig Zustand store"
 ```
 
 ---
@@ -2235,12 +2235,12 @@ const [reportOpen, setReportOpen] = useState(false);
 - [ ] **Step 3: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/sections/campaign-report-sheet.tsx \
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/sections/campaign-report-sheet.tsx \
   frontend/src/features/screen-campaign/components/campaign-builder.tsx \
   frontend/src/features/screen-campaign/components/campaign-view/index.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): CampaignReportSheet wired to the toolbar"
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): CampaignReportSheet wired to the toolbar"
 ```
 
 ---
@@ -2278,10 +2278,10 @@ In dev, open the sheet, toggle MW + LogP + Decision Reason + image size. Verify 
 - [ ] **Step 3: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/grid/results-grid.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): apply report config (properties + columns + image size)"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/grid/results-grid.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): apply report config (properties + columns + image size)"
 ```
 
 ---
@@ -2310,10 +2310,10 @@ const { data: collections, isLoading: collectionsLoading } = useCollections([pro
 - [ ] **Step 2: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/add-from-collection-dialog.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): project-scope AddFromCollectionDialog picker"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/add-from-collection-dialog.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): project-scope AddFromCollectionDialog picker"
 ```
 
 ---
@@ -2338,10 +2338,10 @@ const pickable = campaigns.filter((c) => c.id !== currentCampaignId);
 - [ ] **Step 2: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/add-from-campaign-dialog.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): project-scope AddFromCampaignDialog picker"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/add-from-campaign-dialog.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): project-scope AddFromCampaignDialog picker"
 ```
 
 ---
@@ -2375,10 +2375,10 @@ If `useProtocolSummaries` returns a different shape than the inline render expec
 - [ ] **Step 2: TypeScript + commit**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm tsc --noEmit
-git -C /Users/sidx/workspace/chem-vault2 add frontend/src/features/screen-campaign/components/add-from-runs-dialog.tsx
-git -C /Users/sidx/workspace/chem-vault2 commit -m "feat(fe/campaign): project-scope AddFromRunsDialog protocol picker"
+git -C /Users/sidx/workspace/cellar2 add frontend/src/features/screen-campaign/components/add-from-runs-dialog.tsx
+git -C /Users/sidx/workspace/cellar2 commit -m "feat(fe/campaign): project-scope AddFromRunsDialog protocol picker"
 ```
 
 ---
@@ -2422,7 +2422,7 @@ Single PR. Configure Playwright and land the end-to-end test.
 - [ ] **Step 1: Install**
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm add -D @playwright/test
 pnpm exec playwright install --with-deps chromium
 ```
@@ -2471,8 +2471,8 @@ In `frontend/package.json`, add:
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/package.json frontend/pnpm-lock.yaml frontend/playwright.config.ts
-git -C /Users/sidx/workspace/chem-vault2 commit -m "chore(fe): install + configure Playwright"
+git -C /Users/sidx/workspace/cellar2 add frontend/package.json frontend/pnpm-lock.yaml frontend/playwright.config.ts
+git -C /Users/sidx/workspace/cellar2 commit -m "chore(fe): install + configure Playwright"
 ```
 
 ---
@@ -2524,8 +2524,8 @@ The exact payloads must match the backend integration-test fixtures. Cross-refer
 - [ ] **Step 2: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/tests/e2e/setup/seed.ts
-git -C /Users/sidx/workspace/chem-vault2 commit -m "test(fe/e2e): seed helper for campaign fixtures"
+git -C /Users/sidx/workspace/cellar2 add frontend/tests/e2e/setup/seed.ts
+git -C /Users/sidx/workspace/cellar2 commit -m "test(fe/e2e): seed helper for campaign fixtures"
 ```
 
 ---
@@ -2586,7 +2586,7 @@ The selectors above are illustrative; tighten them against the actual rendered D
 Start the backend + frontend (or point `PLAYWRIGHT_BASE_URL` at a running dev server), then:
 
 ```bash
-cd /Users/sidx/workspace/chem-vault2/frontend
+cd /Users/sidx/workspace/cellar2/frontend
 pnpm test:e2e
 ```
 
@@ -2595,9 +2595,9 @@ Iterate on selectors until it passes. Expected: 1 test PASS.
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add frontend/tests/e2e/screen-campaign.spec.ts
-git -C /Users/sidx/workspace/chem-vault2 rm frontend/tests/e2e/screen-campaign.spec.ts.TODO
-git -C /Users/sidx/workspace/chem-vault2 commit -m "test(fe/e2e): screen campaign happy-path Playwright spec"
+git -C /Users/sidx/workspace/cellar2 add frontend/tests/e2e/screen-campaign.spec.ts
+git -C /Users/sidx/workspace/cellar2 rm frontend/tests/e2e/screen-campaign.spec.ts.TODO
+git -C /Users/sidx/workspace/cellar2 commit -m "test(fe/e2e): screen campaign happy-path Playwright spec"
 ```
 
 ---
@@ -2610,7 +2610,7 @@ git -C /Users/sidx/workspace/chem-vault2 commit -m "test(fe/e2e): screen campaig
 - [ ] **Step 1: Find the existing FE workflow**
 
 ```bash
-ls /Users/sidx/workspace/chem-vault2/.github/workflows/
+ls /Users/sidx/workspace/cellar2/.github/workflows/
 ```
 
 - [ ] **Step 2: Add a Playwright job**
@@ -2625,8 +2625,8 @@ Follow the patterns already in use in the existing FE/BE workflows. If no FE wor
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/sidx/workspace/chem-vault2 add .github/workflows/
-git -C /Users/sidx/workspace/chem-vault2 commit -m "ci: run Playwright E2E on PRs"
+git -C /Users/sidx/workspace/cellar2 add .github/workflows/
+git -C /Users/sidx/workspace/cellar2 commit -m "ci: run Playwright E2E on PRs"
 ```
 
 ---

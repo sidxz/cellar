@@ -1,5 +1,5 @@
 import uuid
-from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
+from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 
 
 def test_create_default_has_no_cdd_vault_id():

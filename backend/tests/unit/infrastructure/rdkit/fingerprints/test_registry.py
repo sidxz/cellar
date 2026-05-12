@@ -1,8 +1,8 @@
 import pytest
 
-from chem_vault.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
-from chem_vault.infrastructure.rdkit.fingerprints.registry import (
+from cellar.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.registry import (
     FingerprintRegistry,
     UnknownAlgorithmError,
 )

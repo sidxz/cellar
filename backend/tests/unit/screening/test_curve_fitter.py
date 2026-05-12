@@ -8,14 +8,14 @@ import random
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.enums import (
     CurveClass,
     CurveType,
     HillSlopeConstraint,
 )
-from chem_vault.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
 
 
 def _generate_hill_data(
@@ -389,10 +389,10 @@ class TestRangeConstraints:
         value — not at_bound — because Top=110 means a 90% level (=99) is
         reachable on the asymptote.
         """
-        from chem_vault.domain.screening_assay.dose_response_config import (
+        from cellar.domain.screening_assay.dose_response_config import (
             InterceptSpec,
         )
-        from chem_vault.domain.screening_assay.enums import InterceptKind
+        from cellar.domain.screening_assay.enums import InterceptKind
 
         points = _generate_inhibition_data(
             ic50=70.0,
@@ -440,13 +440,13 @@ class TestRangeConstraints:
 
     def test_lock_and_range_mutually_exclusive_at_construction(self):
         """Domain-layer ValidationError, not a runtime fitter error."""
-        from chem_vault.domain.shared.errors import ValidationError as VE
+        from cellar.domain.shared.errors import ValidationError as VE
 
         with pytest.raises(VE, match="top_constraint"):
             _config_with_ranges(top_constraint=100.0, top_constraint_min=85.0)
 
     def test_range_min_greater_than_max_rejected_at_construction(self):
-        from chem_vault.domain.shared.errors import ValidationError as VE
+        from cellar.domain.shared.errors import ValidationError as VE
 
         with pytest.raises(VE, match="top_constraint_min"):
             _config_with_ranges(top_constraint_min=110.0, top_constraint_max=85.0)
@@ -489,7 +489,7 @@ class TestRangeConstraints:
 
     def test_hill_range_contradicting_enum_rejected_at_construction(self):
         """POSITIVE_ONLY + Hill range straddling 0 → ValidationError."""
-        from chem_vault.domain.shared.errors import ValidationError as VE
+        from cellar.domain.shared.errors import ValidationError as VE
 
         with pytest.raises(VE, match="hill_slope"):
             DoseResponseConfig(
@@ -567,7 +567,7 @@ class TestOutlierSigmaConfig:
         )
 
     def test_outlier_sigma_must_be_positive(self):
-        from chem_vault.domain.shared.errors import ValidationError as VE
+        from cellar.domain.shared.errors import ValidationError as VE
 
         with pytest.raises(VE, match="outlier_sigma"):
             DoseResponseConfig(
@@ -735,11 +735,11 @@ class TestMultiIntercept:
 
     def test_ic50_and_ic90_from_one_fit(self):
         """Hill=1 + perfect 0..100 plateau curve: IC90/IC50 = 9 (analytic)."""
-        from chem_vault.domain.screening_assay.dose_response_config import (
+        from cellar.domain.screening_assay.dose_response_config import (
             DoseResponseConfig,
             InterceptSpec,
         )
-        from chem_vault.domain.screening_assay.enums import InterceptKind
+        from cellar.domain.screening_assay.enums import InterceptKind
         points = _generate_inhibition_data(
             ic50=1.0, hill=1.0, top=100.0, bottom=0.0,
             n_points=15, noise_pct=0.001,
@@ -766,11 +766,11 @@ class TestMultiIntercept:
 
     def test_intercept_outside_curve_window_returns_at_bound(self):
         """IC90 on a curve that plateaus at 50% inhibition can never reach 90%."""
-        from chem_vault.domain.screening_assay.dose_response_config import (
+        from cellar.domain.screening_assay.dose_response_config import (
             DoseResponseConfig,
             InterceptSpec,
         )
-        from chem_vault.domain.screening_assay.enums import InterceptKind
+        from cellar.domain.screening_assay.enums import InterceptKind
         # Synthetic data hard-capped at 50%: bottom=0, top=50.
         points = _generate_inhibition_data(
             ic50=1.0, hill=1.0, top=50.0, bottom=0.0,
@@ -790,7 +790,7 @@ class TestMultiIntercept:
         # 0..50 window. That's reachable.
         assert not result.intercept_values[0].at_bound
         # Now ask for IC@y=80 absolute → outside the curve, must be at_bound.
-        from chem_vault.domain.screening_assay.enums import InterceptBasis
+        from cellar.domain.screening_assay.enums import InterceptBasis
         cfg2 = DoseResponseConfig(
             curve_type=CurveType.IC50,
             x_readout_name="Concentration",

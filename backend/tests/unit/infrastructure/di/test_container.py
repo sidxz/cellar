@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
-from chem_vault.application.audit.audit_recording_service import AuditRecordingService
-from chem_vault.infrastructure.di.container import create_container
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
-from chem_vault.infrastructure.persistence.settings import DatabaseSettings
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.application.audit.audit_recording_service import AuditRecordingService
+from cellar.infrastructure.di.container import create_container
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.infrastructure.persistence.settings import DatabaseSettings
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 @pytest.fixture

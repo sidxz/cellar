@@ -12,11 +12,11 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.delete_run import DeleteRun, DeleteRunCommand
-from chem_vault.domain.screening_assay.enums import RunStatus
-from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.errors import ConflictError, NotFoundError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.application.screening.delete_run import DeleteRun, DeleteRunCommand
+from cellar.domain.screening_assay.enums import RunStatus
+from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.errors import ConflictError, NotFoundError
+from cellar.domain.shared.events import DomainEvent
 
 
 # ---------------------------------------------------------------------------

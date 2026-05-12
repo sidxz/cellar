@@ -20,7 +20,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chem Vault",
+  title: "Cellar",
   description: "Chemical compound management & screening platform",
 };
 

@@ -6,21 +6,21 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 
-# Set sentinel env before any chem_vault imports — allows module-level get_sentinel() to succeed.
+# Set sentinel env before any cellar imports — allows module-level get_sentinel() to succeed.
 # Must NOT use .env files (cross-contamination between DatabaseSettings and SentinelSettings).
 os.environ["SENTINEL_SERVICE_KEY"] = "test-key-for-api-tests"
 os.environ["SENTINEL_URL"] = "https://sentinel.example.com"
-os.environ["SENTINEL_SERVICE_NAME"] = "chem-vault"
+os.environ["SENTINEL_SERVICE_NAME"] = "cellar"
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from chem_vault.infrastructure.di.container import create_container
-from chem_vault.infrastructure.persistence.settings import DatabaseSettings
-from chem_vault.interface.error_handlers import register_error_handlers
-from chem_vault.interface.dependencies import get_auth
+from cellar.infrastructure.di.container import create_container
+from cellar.infrastructure.persistence.settings import DatabaseSettings
+from cellar.interface.error_handlers import register_error_handlers
+from cellar.interface.dependencies import get_auth
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -37,22 +37,22 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     register_error_handlers(app)
 
     # Import routes
-    from chem_vault.interface.routes.user import router as user_router
-    from chem_vault.interface.routes.organizations import router as org_router
-    from chem_vault.interface.routes.settings import router as settings_router
-    from chem_vault.interface.routes.vocabularies import router as vocab_router
-    from chem_vault.interface.routes.molecules import router as mol_router
-    from chem_vault.interface.routes.export import router as export_router
-    from chem_vault.interface.routes.plate_templates import router as plate_template_router
-    from chem_vault.interface.routes.projects import router as project_router
-    from chem_vault.interface.routes.collections import router as collection_router
-    from chem_vault.interface.routes.saved_searches import router as saved_search_router
-    from chem_vault.interface.routes.search import router as search_router
-    from chem_vault.interface.routes.search_algorithms import router as search_algorithms_router
-    from chem_vault.interface.routes.audit import router as audit_router
-    from chem_vault.interface.routes.admin_delete import router as admin_delete_router
-    from chem_vault.interface.routes.campaigns import router as campaign_router
-    from chem_vault.interface.routes.dose_response_curves import router as drc_batch_router
+    from cellar.interface.routes.user import router as user_router
+    from cellar.interface.routes.organizations import router as org_router
+    from cellar.interface.routes.settings import router as settings_router
+    from cellar.interface.routes.vocabularies import router as vocab_router
+    from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.export import router as export_router
+    from cellar.interface.routes.plate_templates import router as plate_template_router
+    from cellar.interface.routes.projects import router as project_router
+    from cellar.interface.routes.collections import router as collection_router
+    from cellar.interface.routes.saved_searches import router as saved_search_router
+    from cellar.interface.routes.search import router as search_router
+    from cellar.interface.routes.search_algorithms import router as search_algorithms_router
+    from cellar.interface.routes.audit import router as audit_router
+    from cellar.interface.routes.admin_delete import router as admin_delete_router
+    from cellar.interface.routes.campaigns import router as campaign_router
+    from cellar.interface.routes.dose_response_curves import router as drc_batch_router
 
     app.include_router(user_router)
     app.include_router(org_router)

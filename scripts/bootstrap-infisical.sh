@@ -48,9 +48,9 @@ info "Bootstrapping Infisical instance..."
 BOOTSTRAP=$(curl -sf -X POST \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "admin@chemvault.local",
-    "password": "ChemVault2024!Dev",
-    "organization": "ChemVault"
+    "email": "admin@cellar.local",
+    "password": "Cellar2024!Dev",
+    "organization": "Cellar"
   }' \
   "${INFISICAL_URL}/api/v1/admin/bootstrap" 2>&1) || {
     # Already bootstrapped by someone else (manual UI signup)
@@ -63,25 +63,25 @@ BOOTSTRAP=$(curl -sf -X POST \
 
 ADMIN_TOKEN=$(echo "$BOOTSTRAP" | python3 -c "import sys,json; print(json.load(sys.stdin)['identity']['credentials']['token'])")
 ORG_ID=$(echo "$BOOTSTRAP" | python3 -c "import sys,json; print(json.load(sys.stdin)['organization']['id'])")
-info "Admin account created (admin@chemvault.local)"
+info "Admin account created (admin@cellar.local)"
 
 # --- Step 2: Create project ---
-info "Creating project 'chem-vault'..."
+info "Creating project 'cellar'..."
 PROJECT=$(curl -sf -X POST \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"projectName":"chem-vault","slug":"chem-vault","type":"secret-manager"}' \
+  -d '{"projectName":"cellar","slug":"cellar","type":"secret-manager"}' \
   "${INFISICAL_URL}/api/v1/projects")
 
 PROJECT_ID=$(echo "$PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['project']['id'])")
 info "Project created: ${PROJECT_ID}"
 
 # --- Step 3: Create service identity ---
-info "Creating machine identity 'chem-vault-backend'..."
+info "Creating machine identity 'cellar-backend'..."
 IDENTITY=$(curl -sf -X POST \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"chem-vault-backend\",\"organizationId\":\"${ORG_ID}\",\"role\":\"admin\"}" \
+  -d "{\"name\":\"cellar-backend\",\"organizationId\":\"${ORG_ID}\",\"role\":\"admin\"}" \
   "${INFISICAL_URL}/api/v1/identities")
 
 IDENTITY_ID=$(echo "$IDENTITY" | python3 -c "import sys,json; print(json.load(sys.stdin)['identity']['id'])")
@@ -149,6 +149,6 @@ echo "${PROJECT_ID}" > "$SENTINEL_FILE"
 
 info "Bootstrap complete!"
 info "  Infisical UI:  ${INFISICAL_URL}"
-info "  Admin login:   admin@chemvault.local / ChemVault2024!Dev"
+info "  Admin login:   admin@cellar.local / Cellar2024!Dev"
 info "  Project ID:    ${PROJECT_ID}"
 info "  Credentials written to .env"

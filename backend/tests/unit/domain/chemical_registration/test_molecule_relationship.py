@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import RelationshipType
-from chem_vault.domain.chemical_registration.molecule_relationship import MoleculeRelationship
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.chemical_registration.enums import RelationshipType
+from cellar.domain.chemical_registration.molecule_relationship import MoleculeRelationship
+from cellar.domain.shared.errors import ValidationError
 
 
 class TestMoleculeRelationship:

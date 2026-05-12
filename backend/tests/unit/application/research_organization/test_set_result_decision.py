@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.research_organization.set_result_decision import (
+from cellar.application.research_organization.set_result_decision import (
     UNSET,
     SetResultDecision,
     SetResultDecisionCommand,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import CampaignDecision, CampaignStatus
-from chem_vault.domain.shared.errors import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import CampaignDecision, CampaignStatus
+from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,

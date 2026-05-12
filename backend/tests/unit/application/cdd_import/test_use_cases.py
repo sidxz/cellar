@@ -8,32 +8,32 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.cdd_import.import_cdd_protocol import (
+from cellar.application.cdd_import.import_cdd_protocol import (
     ImportCddProtocol,
     ImportCddProtocolCommand,
 )
-from chem_vault.application.cdd_import.list_cdd_protocols import (
+from cellar.application.cdd_import.list_cdd_protocols import (
     ListCddProtocols,
     ListCddProtocolsQuery,
 )
-from chem_vault.application.cdd_import.preview_cdd_protocol_import import (
+from cellar.application.cdd_import.preview_cdd_protocol_import import (
     PreviewCddProtocolImport,
     PreviewCddProtocolImportQuery,
 )
-from chem_vault.application.cdd_import.start_cdd_molecule_import import (
+from cellar.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImport,
     StartCddMoleculeImportCommand,
 )
-from chem_vault.application.workspace_config.get_data_source_for_import import (
+from cellar.application.workspace_config.get_data_source_for_import import (
     DataSourceImportConfig,
 )
-from chem_vault.domain.screening_assay.enums import ReadoutDataType
-from chem_vault.domain.shared.errors import (
+from cellar.domain.screening_assay.enums import ReadoutDataType
+from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
-from chem_vault.application.cdd_import.errors import CddAuthError
+from cellar.application.cdd_import.errors import CddAuthError
 
 from tests.fakes.fake_auth import FakeAuth
 

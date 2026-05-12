@@ -5,12 +5,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from chem_vault.application.screening.compound_ref_resolver import (
+from cellar.application.screening.compound_ref_resolver import (
     BatchSummary,
     CompoundCandidate,
     resolve_rows,
 )
-from chem_vault.application.screening.long_format_normalizer import (
+from cellar.application.screening.long_format_normalizer import (
     LongFormatRow,
     WellPosition,
 )

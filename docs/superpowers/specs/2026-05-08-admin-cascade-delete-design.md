@@ -90,7 +90,7 @@ Modules declare their cascade rules at import time:
 
 ```python
 # domain/screening_assay/cascade.py
-from chem_vault.domain.shared.cascade import CascadeRule, register_rules
+from cellar.domain.shared.cascade import CascadeRule, register_rules
 
 register_rules(
     CascadeRule(table="runs", fk_column="protocol_id",

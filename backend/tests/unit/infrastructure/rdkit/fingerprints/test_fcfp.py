@@ -1,4 +1,4 @@
-from chem_vault.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.fcfp import FCFPAlgorithm
 
 
 def test_metadata() -> None:

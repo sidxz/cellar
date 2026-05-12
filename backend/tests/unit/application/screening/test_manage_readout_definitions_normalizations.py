@@ -13,18 +13,18 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Success
 
-from chem_vault.application.screening.manage_readout_definitions import (
+from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     AddReadoutDefinitionCommand,
     UpdateReadoutDefinition,
     UpdateReadoutDefinitionCommand,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolType,
     ReadoutDataType,
     ReadoutNormalization,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 
 WS = uuid.uuid4()
 USER = uuid.uuid4()

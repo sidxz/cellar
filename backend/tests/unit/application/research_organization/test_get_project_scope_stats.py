@@ -9,11 +9,11 @@ from typing import Self
 import pytest
 from returns.result import Success
 
-from chem_vault.application.research_organization.get_project_scope_stats import (
+from cellar.application.research_organization.get_project_scope_stats import (
     GetProjectScopeStats,
     GetProjectScopeStatsQuery,
 )
-from chem_vault.domain.research_organization.project_scope_stats import ProjectScopeStats
+from cellar.domain.research_organization.project_scope_stats import ProjectScopeStats
 
 
 class FakeUnitOfWork:

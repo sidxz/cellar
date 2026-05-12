@@ -28,7 +28,7 @@ B2 (DR curve preview), B3 (bulk decision), B4 (bulk remove), B9 (CSV export), B1
 
 ## 2. Architecture overview
 
-Three layers, all DRY against existing chem-vault machinery:
+Three layers, all DRY against existing cellar machinery:
 
 **Backend:**
 - New use case: `preview_run_import.py` (read-only query, no mutation).

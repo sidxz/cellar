@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.plate_setup import (
+from cellar.application.screening.plate_setup import (
     CompoundAssignment,
     ParsePlateMapFile,
     ParsedPlateMap,
@@ -20,23 +20,23 @@ from chem_vault.application.screening.plate_setup import (
     SetUpRunPlateCommand,
     _DEFAULT_DOSE_SERIES,
 )
-from chem_vault.application.shared.molecule_resolver import (
+from cellar.application.shared.molecule_resolver import (
     MoleculeReference,
     MoleculeResolver,
     RefType,
     ResolvedMolecule,
     UnresolvedMolecule,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
     WellType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 
 
 # ---------------------------------------------------------------------------

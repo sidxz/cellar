@@ -2,13 +2,13 @@
 
 import pytest
 
-from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
     NormalizationScope,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 class TestDoseResponseConfig:
@@ -265,8 +265,8 @@ class TestDoseResponseConfigIntercepts:
     from the curve type for back-compat."""
 
     def test_default_single_intercept_from_curve_type_ic50(self):
-        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-        from chem_vault.domain.screening_assay.enums import InterceptKind, InterceptBasis
+        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from cellar.domain.screening_assay.enums import InterceptKind, InterceptBasis
         cfg = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="raw")
         assert len(cfg.intercepts) == 1
         only = cfg.intercepts[0]
@@ -275,18 +275,18 @@ class TestDoseResponseConfigIntercepts:
         assert only.basis == InterceptBasis.RELATIVE_PERCENT
 
     def test_default_single_intercept_from_curve_type_ec50(self):
-        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-        from chem_vault.domain.screening_assay.enums import InterceptKind
+        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from cellar.domain.screening_assay.enums import InterceptKind
         cfg = DoseResponseConfig(curve_type=CurveType.EC50, y_readout_name="raw")
         assert cfg.intercepts[0].kind == InterceptKind.EC
         assert cfg.intercepts[0].level == 50.0
 
     def test_explicit_multi_intercepts_preserved(self):
-        from chem_vault.domain.screening_assay.dose_response_config import (
+        from cellar.domain.screening_assay.dose_response_config import (
             DoseResponseConfig,
             InterceptSpec,
         )
-        from chem_vault.domain.screening_assay.enums import InterceptKind
+        from cellar.domain.screening_assay.enums import InterceptKind
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
             y_readout_name="raw",
@@ -299,19 +299,19 @@ class TestDoseResponseConfigIntercepts:
         assert cfg.intercepts[1].level == 90.0
 
     def test_relative_percent_out_of_range_rejected(self):
-        from chem_vault.domain.screening_assay.dose_response_config import InterceptSpec
-        from chem_vault.domain.screening_assay.enums import InterceptKind, InterceptBasis
+        from cellar.domain.screening_assay.dose_response_config import InterceptSpec
+        from cellar.domain.screening_assay.enums import InterceptKind, InterceptBasis
         with pytest.raises(ValidationError):
             InterceptSpec(InterceptKind.IC, 150, basis=InterceptBasis.RELATIVE_PERCENT)
         with pytest.raises(ValidationError):
             InterceptSpec(InterceptKind.IC, 0, basis=InterceptBasis.RELATIVE_PERCENT)
 
     def test_duplicate_intercepts_rejected(self):
-        from chem_vault.domain.screening_assay.dose_response_config import (
+        from cellar.domain.screening_assay.dose_response_config import (
             DoseResponseConfig,
             InterceptSpec,
         )
-        from chem_vault.domain.screening_assay.enums import InterceptKind
+        from cellar.domain.screening_assay.enums import InterceptKind
         with pytest.raises(ValidationError):
             DoseResponseConfig(
                 curve_type=CurveType.IC50,
@@ -328,13 +328,13 @@ class TestDoseResponseConfigYNormalization:
     when the Y readout def emits multiple normalized columns at once."""
 
     def test_default_is_none_meaning_raw_layer(self):
-        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
         cfg = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="raw")
         assert cfg.y_normalization is None
 
     def test_y_normalization_can_be_set(self):
-        from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-        from chem_vault.domain.screening_assay.enums import ReadoutNormalization
+        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from cellar.domain.screening_assay.enums import ReadoutNormalization
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
             y_readout_name="raw AU",

@@ -11,8 +11,8 @@ from types import TracebackType
 from typing import Callable, Self
 from unittest.mock import AsyncMock
 
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.shared.events import DomainEvent
 
 
 # ---------------------------------------------------------------------------

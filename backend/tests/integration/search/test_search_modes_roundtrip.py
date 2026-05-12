@@ -21,7 +21,7 @@ from rdkit import Chem
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 from .conftest import _make_molecule_model
 

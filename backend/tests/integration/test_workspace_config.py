@@ -7,20 +7,20 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from chem_vault.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
-from chem_vault.domain.workspace_config.enums import OrganizationType
-from chem_vault.domain.workspace_config.organization import Organization
-from chem_vault.domain.workspace_config.workspace_settings import WorkspaceSettings
-from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (
+from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
+from cellar.domain.workspace_config.enums import OrganizationType
+from cellar.domain.workspace_config.organization import Organization
+from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (
     SQLAlchemyControlledVocabularyRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
     SQLAlchemyOrganizationRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
     SQLAlchemyWorkspaceSettingsRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 # ---------------------------------------------------------------------------

@@ -6,8 +6,8 @@ the registered rules must be present for the assertions to hold.
 
 
 def test_protocol_runs_rule_exists():
-    import chem_vault.infrastructure.cascade.rules_screening_assay  # noqa: F401
-    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
+    import cellar.infrastructure.cascade.rules_screening_assay  # noqa: F401
+    from cellar.infrastructure.cascade.registry import get_rules_for_parent
 
     rules = get_rules_for_parent("protocols")
     assert any(
@@ -19,8 +19,8 @@ def test_protocol_runs_rule_exists():
 def test_run_to_readout_data_cascades():
     """readout_data.well_id carries no FK constraint; the declared FK is
     readout_data.run_id → runs.  This is the correct owned-by relationship."""
-    import chem_vault.infrastructure.cascade.rules_screening_assay  # noqa: F401
-    from chem_vault.infrastructure.cascade.registry import get_rules_for_parent
+    import cellar.infrastructure.cascade.rules_screening_assay  # noqa: F401
+    from cellar.infrastructure.cascade.registry import get_rules_for_parent
 
     rules = get_rules_for_parent("runs")
     rd = next(r for r in rules if r.child_table == "readout_data")

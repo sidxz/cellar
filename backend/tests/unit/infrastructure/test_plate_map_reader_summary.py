@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from chem_vault.application.screening.plate_map_reader import WellMapEntry
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.plate_map_reader import (
+from cellar.application.screening.plate_map_reader import WellMapEntry
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_map_reader import (
     _summarize,
 )
 

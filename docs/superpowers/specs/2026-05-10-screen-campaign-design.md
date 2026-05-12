@@ -122,7 +122,7 @@ closed ──[supersede + e-sig]──> superseded
 **Close pre-conditions:**
 - ≥ 1 `CampaignResult` row
 - every Channel passes validation
-- caller holds `chem-vault:campaign:close` capability (Sentinel)
+- caller holds `cellar:campaign:close` capability (Sentinel)
 - e-signature captured
 
 **Cascade integrity is human-driven.** Superseding Campaign A does **not** auto-rewire downstream campaigns that seeded from A's derived Collection. DAIKON shows the supersession; re-running downstream is an explicit human decision.
@@ -355,15 +355,15 @@ Mirror existing test layout (`backend/tests/{unit,integration,api}`).
 
 ## 10. Layered structure
 
-Follows the chem-vault DDD layering exactly (`docs/patterns-and-conventions.md`).
+Follows the cellar DDD layering exactly (`docs/patterns-and-conventions.md`).
 
-- **Domain** (`backend/src/chem_vault/domain/research_organization/`):
+- **Domain** (`backend/src/cellar/domain/research_organization/`):
   `campaign.py`, `campaign_channel.py`, `campaign_result.py`, `campaign_measurement.py`, `compound_source.py` (VO), `selection_rule.py` (enum), `campaign_lock_guard.py`, `events.py` (extended), `repository.py` (extended).
-- **Application** (`backend/src/chem_vault/application/research_organization/`):
+- **Application** (`backend/src/cellar/application/research_organization/`):
   `create_campaign.py`, `update_campaign_channel.py`, `reseed_campaign.py`, `recompute_channel.py`, `set_campaign_decision.py`, `close_campaign.py`, `supersede_campaign.py`, `get_published_campaign.py`.
-- **Infrastructure** (`backend/src/chem_vault/infrastructure/persistence/sqlalchemy/`):
+- **Infrastructure** (`backend/src/cellar/infrastructure/persistence/sqlalchemy/`):
   ORM mappings, repository implementations, channel resolution query layer.
-- **Interface** (`backend/src/chem_vault/interface/routes/`):
+- **Interface** (`backend/src/cellar/interface/routes/`):
   `campaigns.py` — CRUD on drafts, close, supersede, publish endpoint.
 - **Frontend** (`frontend/src/features/screen-campaign/`):
   list page, builder, view page; orval-generated types from the new OpenAPI surface.

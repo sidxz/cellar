@@ -17,7 +17,7 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Badge } from "@/shared/components/ui/badge";
 import { StructureThumbnail } from "@/shared/components/chemistry";
-import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
+import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { READOUT_NORMALIZATION_LABELS, type Protocol } from "@/features/screening-assay/types";
@@ -436,7 +436,7 @@ export function ResultsGrid({
       `}</style>
       <AgGridReact<EnrichedMolecule>
         ref={gridRef}
-        theme={chemVaultTheme}
+        theme={cellarTheme}
         rowData={results}
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}

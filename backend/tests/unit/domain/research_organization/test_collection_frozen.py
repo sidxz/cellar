@@ -2,8 +2,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.shared.errors import CollectionFrozenError
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.shared.errors import CollectionFrozenError
 
 
 def test_collection_defaults_to_not_frozen():

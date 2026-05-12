@@ -4,16 +4,16 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.bulk_registration import BulkRegistration
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.bulk_registration import BulkRegistration
+from cellar.domain.chemical_registration.enums import (
     BulkRegistrationFileFormat,
     BulkRegistrationStatus,
 )
-from chem_vault.domain.chemical_registration.events import (
+from cellar.domain.chemical_registration.events import (
     BulkRegistrationCompleted,
     BulkRegistrationStarted,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ class TestRecordItem:
     def test_record_item_increments_correct_counter_and_appends_pending(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
-        from chem_vault.domain.chemical_registration.enums import (
+        from cellar.domain.chemical_registration.enums import (
             BulkRegistrationItemAction,
         )
 
@@ -389,7 +389,7 @@ class TestRecordItem:
     def test_record_item_rejects_when_not_processing(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
-        from chem_vault.domain.chemical_registration.enums import (
+        from cellar.domain.chemical_registration.enums import (
             BulkRegistrationItemAction,
         )
 
@@ -412,10 +412,10 @@ class TestRecordItem:
     def test_record_item_validates_action_error_pairing(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
-        from chem_vault.domain.chemical_registration.bulk_registration import (
+        from cellar.domain.chemical_registration.bulk_registration import (
             BulkRegistrationItem,
         )
-        from chem_vault.domain.chemical_registration.enums import (
+        from cellar.domain.chemical_registration.enums import (
             BulkRegistrationItemAction,
         )
 

@@ -4,11 +4,11 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.custom_field_definition import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.custom_field_definition import (
     CustomFieldDefinition,
 )
-from chem_vault.domain.workspace_config.enums import FieldDataType, FieldTarget
+from cellar.domain.workspace_config.enums import FieldDataType, FieldTarget
 
 
 @pytest.fixture

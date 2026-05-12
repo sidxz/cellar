@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, call
 
 import pytest
 
-from chem_vault.infrastructure.messaging.merge_handlers import (
+from cellar.infrastructure.messaging.merge_handlers import (
     BatchMergeSideEffect,
     DoseResponseCurveMergeSideEffect,
     MoleculeRelationshipMergeSideEffect,
@@ -177,7 +177,7 @@ class TestRegistryIntegration:
     async def test_all_handlers_callable(
         self, session: AsyncMock, uow: FakeUoW, source_id: uuid.UUID, target_id: uuid.UUID
     ) -> None:
-        from chem_vault.application.chemical_registration.merge_side_effect_registry import (
+        from cellar.application.chemical_registration.merge_side_effect_registry import (
             MergeSideEffectRegistry,
         )
 

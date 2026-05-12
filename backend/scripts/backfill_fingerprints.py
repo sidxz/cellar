@@ -34,8 +34,8 @@ from rdkit import Chem
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from chem_vault.infrastructure.persistence.settings import DatabaseSettings
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.persistence.settings import DatabaseSettings
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 _morgan = MorganAlgorithm()
 

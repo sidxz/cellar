@@ -20,13 +20,13 @@
 ### Task 1: RegistrationAction Enum + RegistrationOutcome Enhancement
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/chemical_registration/enums.py`
-- Modify: `backend/src/chem_vault/application/chemical_registration/register_molecule.py`
+- Modify: `backend/src/cellar/domain/chemical_registration/enums.py`
+- Modify: `backend/src/cellar/application/chemical_registration/register_molecule.py`
 - Test: `backend/tests/unit/chemical_registration/test_register_molecule.py`
 
 - [ ] **Step 1: Add RegistrationAction enum**
 
-In `backend/src/chem_vault/domain/chemical_registration/enums.py`, add after `BulkRegistrationFileFormat`:
+In `backend/src/cellar/domain/chemical_registration/enums.py`, add after `BulkRegistrationFileFormat`:
 
 ```python
 class RegistrationAction(str, Enum):
@@ -41,10 +41,10 @@ class RegistrationAction(str, Enum):
 
 - [ ] **Step 2: Enhance RegistrationOutcome**
 
-In `backend/src/chem_vault/application/chemical_registration/register_molecule.py`, replace the `RegistrationOutcome` dataclass (lines 33-40):
+In `backend/src/cellar/application/chemical_registration/register_molecule.py`, replace the `RegistrationOutcome` dataclass (lines 33-40):
 
 ```python
-from chem_vault.domain.chemical_registration.enums import MoleculeType, RegistrationAction
+from cellar.domain.chemical_registration.enums import MoleculeType, RegistrationAction
 
 @dataclass(frozen=True)
 class RegistrationOutcome:
@@ -118,7 +118,7 @@ Expected: All existing tests PASS (the new `action` field has a default value, s
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/chemical_registration/enums.py backend/src/chem_vault/application/chemical_registration/register_molecule.py
+git add backend/src/cellar/domain/chemical_registration/enums.py backend/src/cellar/application/chemical_registration/register_molecule.py
 git commit -m "feat: add RegistrationAction enum + enhance RegistrationOutcome"
 ```
 
@@ -127,8 +127,8 @@ git commit -m "feat: add RegistrationAction enum + enhance RegistrationOutcome"
 ### Task 2: find_undisclosed_by_identifiers — Protocol + Implementation
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/chemical_registration/repository.py`
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py`
+- Modify: `backend/src/cellar/domain/chemical_registration/repository.py`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py`
 - Test: `backend/tests/integration/chemical_registration/test_molecule_repository.py`
 
 - [ ] **Step 1: Write the failing integration test**
@@ -274,7 +274,7 @@ Expected: FAIL with `AttributeError: 'SQLAlchemyMoleculeRepository' object has n
 
 - [ ] **Step 3: Add to Protocol**
 
-In `backend/src/chem_vault/domain/chemical_registration/repository.py`, add to the `MoleculeRepository` Protocol:
+In `backend/src/cellar/domain/chemical_registration/repository.py`, add to the `MoleculeRepository` Protocol:
 
 ```python
 async def find_undisclosed_by_identifiers(
@@ -290,7 +290,7 @@ async def find_undisclosed_by_identifiers(
 
 - [ ] **Step 4: Implement in SQLAlchemy repository**
 
-In `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py`, add the implementation:
+In `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py`, add the implementation:
 
 ```python
 async def find_undisclosed_by_identifiers(
@@ -337,7 +337,7 @@ Expected: All 4 tests PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/chemical_registration/repository.py backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py backend/tests/integration/chemical_registration/test_molecule_repository.py
+git add backend/src/cellar/domain/chemical_registration/repository.py backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py backend/tests/integration/chemical_registration/test_molecule_repository.py
 git commit -m "feat: add find_undisclosed_by_identifiers to MoleculeRepository"
 ```
 
@@ -346,8 +346,8 @@ git commit -m "feat: add find_undisclosed_by_identifiers to MoleculeRepository"
 ### Task 3: Enhance RegisterMolecule with Disclosure Detection
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/chemical_registration/register_molecule.py`
-- Modify: `backend/src/chem_vault/infrastructure/di/container.py`
+- Modify: `backend/src/cellar/application/chemical_registration/register_molecule.py`
+- Modify: `backend/src/cellar/infrastructure/di/container.py`
 - Test: `backend/tests/unit/chemical_registration/test_register_molecule.py`
 
 **Context:** When a row has SMILES and identifiers match an existing undisclosed molecule, RegisterMolecule should delegate to DisclosureService instead of creating a new molecule.
@@ -361,13 +361,13 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from returns.result import Success, Failure
 
-from chem_vault.application.chemical_registration.register_molecule import (
+from cellar.application.chemical_registration.register_molecule import (
     RegisterMolecule, RegisterMoleculeCommand, RegistrationOutcome, ExternalId,
 )
-from chem_vault.application.chemical_registration.disclosure_service import (
+from cellar.application.chemical_registration.disclosure_service import (
     DisclosureService, DisclosureOutcome, SubmitDisclosureCommand,
 )
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.enums import (
     MoleculeType, RegistrationAction, StructureStatus,
 )
 
@@ -520,7 +520,7 @@ Expected: FAIL — `RegisterMolecule.__init__` doesn't accept `disclosure_servic
 In `register_molecule.py`, update `__init__` (line 78):
 
 ```python
-from chem_vault.application.chemical_registration.disclosure_service import (
+from cellar.application.chemical_registration.disclosure_service import (
     DisclosureService,
     SubmitDisclosureCommand,
     DisclosureOutcome,
@@ -624,7 +624,7 @@ Expected: All tests PASS including the new disclosure detection tests.
 
 - [ ] **Step 6: Update DI container**
 
-In `backend/src/chem_vault/infrastructure/di/container.py`, find the `RegisterMolecule` factory and update it to optionally inject `DisclosureService`. The exact wiring depends on the existing factory pattern — look for where `RegisterMolecule` is defined via `_mol_cmd` and add `disclosure_service` as an optional parameter when the `DisclosureService` is available.
+In `backend/src/cellar/infrastructure/di/container.py`, find the `RegisterMolecule` factory and update it to optionally inject `DisclosureService`. The exact wiring depends on the existing factory pattern — look for where `RegisterMolecule` is defined via `_mol_cmd` and add `disclosure_service` as an optional parameter when the `DisclosureService` is available.
 
 - [ ] **Step 7: Run full chem-reg test suite**
 
@@ -634,7 +634,7 @@ Expected: All tests PASS (226+ existing + new tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add backend/src/chem_vault/application/chemical_registration/register_molecule.py backend/src/chem_vault/infrastructure/di/container.py backend/tests/unit/chemical_registration/test_register_molecule.py
+git add backend/src/cellar/application/chemical_registration/register_molecule.py backend/src/cellar/infrastructure/di/container.py backend/tests/unit/chemical_registration/test_register_molecule.py
 git commit -m "feat: add identifier-match disclosure detection to RegisterMolecule"
 ```
 
@@ -643,10 +643,10 @@ git commit -m "feat: add identifier-match disclosure detection to RegisterMolecu
 ### Task 4: Update Temporal DTOs + Activity for Richer Outcomes
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/temporal/activities/dtos.py`
-- Modify: `backend/src/chem_vault/infrastructure/temporal/activities/registration.py`
-- Modify: `backend/src/chem_vault/infrastructure/temporal/workflows/bulk_registration.py`
-- Modify: `backend/src/chem_vault/interface/routes/bulk_registration.py`
+- Modify: `backend/src/cellar/infrastructure/temporal/activities/dtos.py`
+- Modify: `backend/src/cellar/infrastructure/temporal/activities/registration.py`
+- Modify: `backend/src/cellar/infrastructure/temporal/workflows/bulk_registration.py`
+- Modify: `backend/src/cellar/interface/routes/bulk_registration.py`
 
 **Context:** The activity and workflow need to track the new action categories (disclosed, merge_candidate, conflict) in addition to registered/duplicate/error.
 
@@ -748,7 +748,7 @@ And update the `ChunkItemResult` creation (line 128):
 Add the import at the top:
 
 ```python
-from chem_vault.domain.chemical_registration.enums import RegistrationAction
+from cellar.domain.chemical_registration.enums import RegistrationAction
 ```
 
 Skip batch creation for merge_candidate and conflict actions (no batch needed):
@@ -891,7 +891,7 @@ Expected: All tests PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/temporal/activities/dtos.py backend/src/chem_vault/infrastructure/temporal/activities/registration.py backend/src/chem_vault/infrastructure/temporal/workflows/bulk_registration.py backend/src/chem_vault/interface/routes/bulk_registration.py
+git add backend/src/cellar/infrastructure/temporal/activities/dtos.py backend/src/cellar/infrastructure/temporal/activities/registration.py backend/src/cellar/infrastructure/temporal/workflows/bulk_registration.py backend/src/cellar/interface/routes/bulk_registration.py
 git commit -m "feat: track disclosure/merge_candidate/conflict in Temporal activity + workflow"
 ```
 
@@ -900,19 +900,19 @@ git commit -m "feat: track disclosure/merge_candidate/conflict in Temporal activ
 ### Task 5: Confirm-Merges Batch Endpoint
 
 **Files:**
-- Modify: `backend/src/chem_vault/interface/routes/bulk_registration.py`
-- Modify: `backend/src/chem_vault/interface/dependencies.py`
+- Modify: `backend/src/cellar/interface/routes/bulk_registration.py`
+- Modify: `backend/src/cellar/interface/dependencies.py`
 
 - [ ] **Step 1: Add confirm-merges endpoint**
 
 In `bulk_registration.py`, add request/response models and the route:
 
 ```python
-from chem_vault.application.chemical_registration.confirm_disclosure import (
+from cellar.application.chemical_registration.confirm_disclosure import (
     ConfirmDisclosure,
     ConfirmDisclosureCommand,
 )
-from chem_vault.application.chemical_registration.reject_disclosure import (
+from cellar.application.chemical_registration.reject_disclosure import (
     RejectDisclosure,
     RejectDisclosureCommand,
 )
@@ -1019,11 +1019,11 @@ async def confirm_merges(
 
 - [ ] **Step 2: Add DI dependencies**
 
-In `backend/src/chem_vault/interface/dependencies.py`, add:
+In `backend/src/cellar/interface/dependencies.py`, add:
 
 ```python
-from chem_vault.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
-from chem_vault.application.chemical_registration.reject_disclosure import RejectDisclosure
+from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
+from cellar.application.chemical_registration.reject_disclosure import RejectDisclosure
 
 ConfirmDisclosureDep = Annotated[ConfirmDisclosure, Depends(get(ConfirmDisclosure))]
 RejectDisclosureDep = Annotated[RejectDisclosure, Depends(get(RejectDisclosure))]
@@ -1035,18 +1035,18 @@ Note: Check if these already exist — they may already be wired for the disclos
 
 ```python
 from returns.result import Failure
-from chem_vault.interface.dependencies import AuthDep, BulkRegistrationServiceDep, ConfirmDisclosureDep, RejectDisclosureDep
+from cellar.interface.dependencies import AuthDep, BulkRegistrationServiceDep, ConfirmDisclosureDep, RejectDisclosureDep
 ```
 
 - [ ] **Step 4: Run the backend to verify routes register**
 
-Run: `cd backend && uv run python -c "from chem_vault.interface.routes.bulk_registration import router; print([r.path for r in router.routes])"`
+Run: `cd backend && uv run python -c "from cellar.interface.routes.bulk_registration import router; print([r.path for r in router.routes])"`
 Expected: Prints list including `/{workflow_id}/confirm-merges`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/interface/routes/bulk_registration.py backend/src/chem_vault/interface/dependencies.py
+git add backend/src/cellar/interface/routes/bulk_registration.py backend/src/cellar/interface/dependencies.py
 git commit -m "feat: add POST /bulk-registrations/{id}/confirm-merges batch endpoint"
 ```
 
@@ -1055,7 +1055,7 @@ git commit -m "feat: add POST /bulk-registrations/{id}/confirm-merges batch endp
 ### Task 6: Update POST /molecules Response with Action
 
 **Files:**
-- Modify: `backend/src/chem_vault/interface/routes/molecules.py`
+- Modify: `backend/src/cellar/interface/routes/molecules.py`
 
 - [ ] **Step 1: Update RegistrationResponse model**
 
@@ -1103,7 +1103,7 @@ Expected: All tests PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/chem_vault/interface/routes/molecules.py
+git add backend/src/cellar/interface/routes/molecules.py
 git commit -m "feat: include action + disclosure fields in POST /molecules response"
 ```
 

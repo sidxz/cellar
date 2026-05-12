@@ -6,18 +6,18 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.project import Project
-from chem_vault.domain.research_organization.project_membership import (
+from cellar.domain.research_organization.project import Project
+from cellar.domain.research_organization.project_membership import (
     ProjectMember,
     ProjectRole,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (
     SQLAlchemyProjectMemberRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
     SQLAlchemyProjectRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 @pytest.mark.integration
@@ -152,7 +152,7 @@ class TestProjectMemberRepository:
 
 import sqlalchemy as sa  # noqa: E402
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E402
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E402
     SQLAlchemyMoleculeRepository,
 )
 

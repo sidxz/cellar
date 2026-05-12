@@ -4,10 +4,10 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.inventory.enums import StorageLocationType
-from chem_vault.domain.inventory.storage_location import StorageLocation
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Barcode
+from cellar.domain.inventory.enums import StorageLocationType
+from cellar.domain.inventory.storage_location import StorageLocation
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Barcode
 
 
 @pytest.fixture

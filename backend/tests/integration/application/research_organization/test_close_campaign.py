@@ -15,18 +15,18 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 
-from chem_vault.application.research_organization.close_campaign import (
+from cellar.application.research_organization.close_campaign import (
     CloseCampaign,
     CloseCampaignCommand,
 )
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result import CampaignResult
 
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
@@ -34,23 +34,23 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
     ReadoutDataType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
     SQLAlchemyCollectionRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import pytest
-from chem_vault.domain.shared.cascade.actions import CascadeAction
-from chem_vault.infrastructure.cascade.rules import CascadeRule
-from chem_vault.infrastructure.cascade.registry import (
+from cellar.domain.shared.cascade.actions import CascadeAction
+from cellar.infrastructure.cascade.rules import CascadeRule
+from cellar.infrastructure.cascade.registry import (
     register_rules, get_rules_for_parent, all_rules, _clear_for_test,
 )
 

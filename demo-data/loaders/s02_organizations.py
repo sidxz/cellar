@@ -11,15 +11,15 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.workspace_config.create_organization import (
+    from cellar.application.workspace_config.create_organization import (
         CreateOrganization,
         CreateOrganizationCommand,
     )
-    from chem_vault.application.workspace_config.list_organizations import (
+    from cellar.application.workspace_config.list_organizations import (
         ListOrganizations,
         ListOrganizationsQuery,
     )
-    from chem_vault.domain.workspace_config.enums import OrganizationType
+    from cellar.domain.workspace_config.enums import OrganizationType
 
     data: dict = ctx.data("organizations.json")
     create_uc = ctx.container[CreateOrganization]

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land report-grade screener UX — multi-run import with hit-criteria preview (B6) + grid polish (B1 thumbnails, B5 chip filter, B7 ND-qualifier gating, B8 override reason) + Preview-as-published bonus — DRY against existing chem-vault machinery.
+**Goal:** Land report-grade screener UX — multi-run import with hit-criteria preview (B6) + grid polish (B1 thumbnails, B5 chip filter, B7 ND-qualifier gating, B8 override reason) + Preview-as-published bonus — DRY against existing cellar machinery.
 
 **Architecture:** New `PreviewRunImport` + `AddFromRuns` use cases replace single-run path; migration 028 extends `campaign_measurement` with snapshot + audit columns; FE wires a 2-step `<AddFromRunsDialog>` + new chip-filter bar + structure thumbnails + override-modal polish. All hit-call math runs through the existing `_compute_hit_call` pure function and channel resolver; all DAIKON output flows through the existing `_serialize_*` helpers.
 
@@ -16,21 +16,21 @@
 
 **Backend new:**
 - `backend/alembic/versions/028_*.py`
-- `backend/src/chem_vault/application/research_organization/preview_run_import.py`
-- `backend/src/chem_vault/application/research_organization/add_results_from_runs.py`
+- `backend/src/cellar/application/research_organization/preview_run_import.py`
+- `backend/src/cellar/application/research_organization/add_results_from_runs.py`
 - `backend/tests/unit/application/research_organization/test_preview_run_import.py`
 - `backend/tests/unit/application/research_organization/test_add_results_from_runs.py`
 
 **Backend modified:**
-- `backend/src/chem_vault/domain/research_organization/campaign_measurement.py` (relax `__post_init__`; add 6 new fields)
-- `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/*` ORM mapping (new columns)
-- `backend/src/chem_vault/application/research_organization/override_result_cell.py` (`reason: str | None`)
-- `backend/src/chem_vault/application/research_organization/get_published_campaign.py` (extend `_serialize_measurement`)
-- `backend/src/chem_vault/interface/routes/campaigns.py` (new routes, remove deprecated single-run route)
-- `backend/src/chem_vault/interface/dependencies.py` (DI for new use cases)
+- `backend/src/cellar/domain/research_organization/campaign_measurement.py` (relax `__post_init__`; add 6 new fields)
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/*` ORM mapping (new columns)
+- `backend/src/cellar/application/research_organization/override_result_cell.py` (`reason: str | None`)
+- `backend/src/cellar/application/research_organization/get_published_campaign.py` (extend `_serialize_measurement`)
+- `backend/src/cellar/interface/routes/campaigns.py` (new routes, remove deprecated single-run route)
+- `backend/src/cellar/interface/dependencies.py` (DI for new use cases)
 
 **Backend deleted:**
-- `backend/src/chem_vault/application/research_organization/add_results_from_run.py`
+- `backend/src/cellar/application/research_organization/add_results_from_run.py`
 - `backend/tests/unit/application/research_organization/test_add_results_from_run*.py`
 
 **FE new:**
@@ -59,9 +59,9 @@ Backend before FE; within backend, schema → domain → app → API → contrac
 
 **Files:**
 - Create: `backend/alembic/versions/028_campaign_measurement_extensions.py`
-- Modify: ORM model — locate via `rg -l "campaign_measurement" backend/src/chem_vault/infrastructure/persistence/`
+- Modify: ORM model — locate via `rg -l "campaign_measurement" backend/src/cellar/infrastructure/persistence/`
 
-- [ ] **Step 1.1: Locate the ORM model file** — `rg "class.*Campaign.*Measurement.*Model" backend/src/chem_vault/infrastructure/persistence/`. Capture the exact filename.
+- [ ] **Step 1.1: Locate the ORM model file** — `rg "class.*Campaign.*Measurement.*Model" backend/src/cellar/infrastructure/persistence/`. Capture the exact filename.
 
 - [ ] **Step 1.2: Write the migration.** Find the latest revision via `ls backend/alembic/versions/ | sort | tail -1` and use its head as `down_revision`. Migration body:
 
@@ -124,7 +124,7 @@ existing closed campaigns.
 ### Task 2 — Domain: extend `CampaignMeasurement` + relax `__post_init__` (B7 + B8)
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/research_organization/campaign_measurement.py`
+- Modify: `backend/src/cellar/domain/research_organization/campaign_measurement.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign_measurement.py`
 
 - [ ] **Step 2.1: Read the existing measurement file** — note current `__post_init__` and field list.
@@ -167,7 +167,7 @@ feat(campaign): relax CampaignMeasurement unit check for nd/excluded (B7) + add 
 ### Task 3 — Extend `OverrideResultCellCommand` with `reason` (B8)
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/research_organization/override_result_cell.py`
+- Modify: `backend/src/cellar/application/research_organization/override_result_cell.py`
 - Test: `backend/tests/unit/application/research_organization/test_override_result_cell.py` (extend existing)
 
 - [ ] **Step 3.1: Read existing UC + test** to understand the command shape and persistence path.
@@ -191,7 +191,7 @@ feat(campaign): override_reason field on OverrideResultCell (B8)
 ### Task 4 — `PreviewRunImport` use case + tests (B6 core)
 
 **Files:**
-- Create: `backend/src/chem_vault/application/research_organization/preview_run_import.py`
+- Create: `backend/src/cellar/application/research_organization/preview_run_import.py`
 - Create: `backend/tests/unit/application/research_organization/test_preview_run_import.py`
 
 - [ ] **Step 4.1: Inspect `channel_resolution.py`** for the per-channel resolver. The plan extracts a `resolve_for_runs(...)` helper if not already present — see §4.2 below.
@@ -206,18 +206,18 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
 from returns.result import Failure, Result, Success
-from chem_vault.application.auth import AuthContext, require_editor
-from chem_vault.application.shared.command import Command
-from chem_vault.application.shared.unit_of_work import UnitOfWork
-from chem_vault.application.research_organization.channel_resolution import (
+from cellar.application.auth import AuthContext, require_editor
+from cellar.application.shared.command import Command
+from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.research_organization.channel_resolution import (
     _compute_hit_call, resolve_for_runs,
 )
-from chem_vault.domain.research_organization.enums import SelectionRule
-from chem_vault.domain.research_organization.repository import CampaignRepository
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
-from chem_vault.domain.screening_assay.repository import RunRepository
-from chem_vault.domain.chemical_registration.repository import MoleculeRepository
-from chem_vault.domain.shared.errors import (
+from cellar.domain.research_organization.enums import SelectionRule
+from cellar.domain.research_organization.repository import CampaignRepository
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.screening_assay.repository import RunRepository
+from cellar.domain.chemical_registration.repository import MoleculeRepository
+from cellar.domain.shared.errors import (
     AuthorizationError, DomainError, NotFoundError, ValidationError,
 )
 
@@ -410,8 +410,8 @@ count, QC pass for report-grade preview.
 ### Task 5 — `AddResultsFromRuns` use case (replaces single-run)
 
 **Files:**
-- Create: `backend/src/chem_vault/application/research_organization/add_results_from_runs.py`
-- Delete: `backend/src/chem_vault/application/research_organization/add_results_from_run.py`
+- Create: `backend/src/cellar/application/research_organization/add_results_from_runs.py`
+- Delete: `backend/src/cellar/application/research_organization/add_results_from_run.py`
 - Create: `backend/tests/unit/application/research_organization/test_add_results_from_runs.py`
 - Delete: `backend/tests/unit/application/research_organization/test_add_results_from_run*.py`
 
@@ -460,8 +460,8 @@ Channel reuse + create unified path.
 ### Task 6 — Update DAIKON serializer + DTO (B8 + new snapshot fields)
 
 **Files:**
-- Modify: `backend/src/chem_vault/application/research_organization/get_published_campaign.py`
-- Modify: `backend/src/chem_vault/interface/routes/campaigns.py::CampaignMeasurementResponse`
+- Modify: `backend/src/cellar/application/research_organization/get_published_campaign.py`
+- Modify: `backend/src/cellar/interface/routes/campaigns.py::CampaignMeasurementResponse`
 - Modify/Add: `backend/tests/integration/test_campaign_published_contract.py` (or wherever contract tests live)
 
 - [ ] **Step 6.1: Extend `_serialize_measurement`** (around line 419):
@@ -510,8 +510,8 @@ null when absent. Existing closed campaigns remain valid.
 ### Task 7 — API routes: preview + add-from-runs + remove single + preview-published
 
 **Files:**
-- Modify: `backend/src/chem_vault/interface/routes/campaigns.py`
-- Modify: `backend/src/chem_vault/interface/dependencies.py`
+- Modify: `backend/src/cellar/interface/routes/campaigns.py`
+- Modify: `backend/src/cellar/interface/dependencies.py`
 - Modify: `backend/tests/api/test_campaigns_api.py`
 
 - [ ] **Step 7.1: DI wiring** — add `PreviewRunImportDep`, `AddResultsFromRunsDep`; remove `AddResultsFromRunDep`. Wire the new use cases in the DI container.
@@ -836,7 +836,7 @@ feat(fe/campaign): Preview-as-published dialog — render DRAFT through DAIKON s
 
 - [ ] **Step 14.4: Update CLAUDE.md "Current Session Notes"** — fresh handoff summarizing shipped tasks, deviations, remaining open follow-ups.
 
-- [ ] **Step 14.5: Update memory pointer** — `~/.claude/projects/-Users-sidx-workspace-chem-vault2/memory/project_screen_campaign.md`.
+- [ ] **Step 14.5: Update memory pointer** — `~/.claude/projects/-Users-sidx-workspace-cellar2/memory/project_screen_campaign.md`.
 
 - [ ] **Step 14.6: Commit final doc changes** (no remote push without explicit user permission).
 

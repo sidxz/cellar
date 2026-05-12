@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from returns.result import Success
 
-from chem_vault.application.research_organization.execute_search import (
+from cellar.application.research_organization.execute_search import (
     ExecuteSearch,
     ExecuteSearchQuery,
 )
-from chem_vault.domain.research_organization.saved_search import SavedSearch
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.research_organization.saved_search import SavedSearch
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 

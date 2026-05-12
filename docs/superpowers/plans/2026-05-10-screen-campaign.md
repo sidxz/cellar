@@ -16,33 +16,33 @@
 
 | Layer | File | Action |
 |-------|------|--------|
-| Domain (Phase 1) | `backend/src/chem_vault/domain/research_organization/collection.py` | Add `is_frozen` + `derived_from_campaign_id` + `add_*`/`remove_*` rejection when frozen |
-| Domain (Phase 2) | `backend/src/chem_vault/domain/research_organization/enums.py` | Add `CampaignStatus`, `SelectionRule`, `ChannelSourceKind`, `ValueQualifier`, `HitCall`, `CampaignDecision`, `QualifierHandling` |
-| Domain | `backend/src/chem_vault/domain/research_organization/compound_source.py` | NEW: `CompoundSource` discriminated VO (4 kinds) |
-| Domain | `backend/src/chem_vault/domain/research_organization/campaign_channel.py` | NEW: `CampaignChannel` entity |
-| Domain | `backend/src/chem_vault/domain/research_organization/campaign_measurement.py` | NEW: `CampaignMeasurement` entity |
-| Domain | `backend/src/chem_vault/domain/research_organization/campaign_result.py` | NEW: `CampaignResult` entity |
-| Domain | `backend/src/chem_vault/domain/research_organization/campaign.py` | NEW: `Campaign` aggregate root |
-| Domain | `backend/src/chem_vault/domain/research_organization/events.py` | Extend with `Campaign*` events |
-| Domain | `backend/src/chem_vault/domain/research_organization/campaign_lock_guard.py` | NEW: `CampaignLockGuard` + `CampaignLockChecker` port |
-| Domain | `backend/src/chem_vault/domain/research_organization/repository.py` | Extend with `CampaignRepository` Protocol |
-| Persistence (Phase 3) | `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py` | Add `CampaignModel`, `CampaignChannelModel`, `CampaignResultModel`, `CampaignMeasurementModel`; modify `CollectionModel` |
-| Persistence | `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py` | NEW: `SQLAlchemyCampaignRepository` |
+| Domain (Phase 1) | `backend/src/cellar/domain/research_organization/collection.py` | Add `is_frozen` + `derived_from_campaign_id` + `add_*`/`remove_*` rejection when frozen |
+| Domain (Phase 2) | `backend/src/cellar/domain/research_organization/enums.py` | Add `CampaignStatus`, `SelectionRule`, `ChannelSourceKind`, `ValueQualifier`, `HitCall`, `CampaignDecision`, `QualifierHandling` |
+| Domain | `backend/src/cellar/domain/research_organization/compound_source.py` | NEW: `CompoundSource` discriminated VO (4 kinds) |
+| Domain | `backend/src/cellar/domain/research_organization/campaign_channel.py` | NEW: `CampaignChannel` entity |
+| Domain | `backend/src/cellar/domain/research_organization/campaign_measurement.py` | NEW: `CampaignMeasurement` entity |
+| Domain | `backend/src/cellar/domain/research_organization/campaign_result.py` | NEW: `CampaignResult` entity |
+| Domain | `backend/src/cellar/domain/research_organization/campaign.py` | NEW: `Campaign` aggregate root |
+| Domain | `backend/src/cellar/domain/research_organization/events.py` | Extend with `Campaign*` events |
+| Domain | `backend/src/cellar/domain/research_organization/campaign_lock_guard.py` | NEW: `CampaignLockGuard` + `CampaignLockChecker` port |
+| Domain | `backend/src/cellar/domain/research_organization/repository.py` | Extend with `CampaignRepository` Protocol |
+| Persistence (Phase 3) | `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/models.py` | Add `CampaignModel`, `CampaignChannelModel`, `CampaignResultModel`, `CampaignMeasurementModel`; modify `CollectionModel` |
+| Persistence | `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py` | NEW: `SQLAlchemyCampaignRepository` |
 | Persistence | `backend/alembic/versions/026_screen_campaign.py` | NEW migration |
-| Resolver (Phase 4) | `backend/src/chem_vault/application/research_organization/channel_resolution.py` | NEW: `ChannelResolutionQuery` Protocol + `ChannelResolver` service |
-| Resolver | `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/channel_resolution_query.py` | NEW: SQL impl |
-| App (Phase 5) | `backend/src/chem_vault/application/research_organization/create_campaign.py` | NEW |
-| App | `backend/src/chem_vault/application/research_organization/update_campaign.py` | NEW (name/desc/source re-seed) |
-| App | `backend/src/chem_vault/application/research_organization/manage_campaign_channels.py` | NEW (add/remove/edit channel) |
-| App | `backend/src/chem_vault/application/research_organization/manage_campaign_results.py` | NEW (add row, exclude row, set decision, override cell) |
-| App | `backend/src/chem_vault/application/research_organization/refresh_campaign.py` | NEW (refresh from sources, recompute channel) |
-| App | `backend/src/chem_vault/application/research_organization/close_campaign.py` | NEW |
-| App | `backend/src/chem_vault/application/research_organization/supersede_campaign.py` | NEW |
-| App | `backend/src/chem_vault/application/research_organization/get_published_campaign.py` | NEW |
-| Interface (Phase 6) | `backend/src/chem_vault/interface/routes/campaigns.py` | NEW |
-| Interface | `backend/src/chem_vault/interface/app.py` | Register router |
-| Interface | `backend/src/chem_vault/infrastructure/di/container.py` | Wire repo + use cases |
-| Interface | `backend/src/chem_vault/interface/dependencies.py` | Add `CampaignRepoDep`, use-case factories |
+| Resolver (Phase 4) | `backend/src/cellar/application/research_organization/channel_resolution.py` | NEW: `ChannelResolutionQuery` Protocol + `ChannelResolver` service |
+| Resolver | `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/channel_resolution_query.py` | NEW: SQL impl |
+| App (Phase 5) | `backend/src/cellar/application/research_organization/create_campaign.py` | NEW |
+| App | `backend/src/cellar/application/research_organization/update_campaign.py` | NEW (name/desc/source re-seed) |
+| App | `backend/src/cellar/application/research_organization/manage_campaign_channels.py` | NEW (add/remove/edit channel) |
+| App | `backend/src/cellar/application/research_organization/manage_campaign_results.py` | NEW (add row, exclude row, set decision, override cell) |
+| App | `backend/src/cellar/application/research_organization/refresh_campaign.py` | NEW (refresh from sources, recompute channel) |
+| App | `backend/src/cellar/application/research_organization/close_campaign.py` | NEW |
+| App | `backend/src/cellar/application/research_organization/supersede_campaign.py` | NEW |
+| App | `backend/src/cellar/application/research_organization/get_published_campaign.py` | NEW |
+| Interface (Phase 6) | `backend/src/cellar/interface/routes/campaigns.py` | NEW |
+| Interface | `backend/src/cellar/interface/app.py` | Register router |
+| Interface | `backend/src/cellar/infrastructure/di/container.py` | Wire repo + use cases |
+| Interface | `backend/src/cellar/interface/dependencies.py` | Add `CampaignRepoDep`, use-case factories |
 | Frontend (Phase 7) | `frontend/src/features/screen-campaign/types/index.ts` | NEW |
 | Frontend | `frontend/src/features/screen-campaign/lib/api.ts` | NEW (orval-generated thin wrappers) |
 | Frontend | `frontend/src/features/screen-campaign/components/campaign-list.tsx` | NEW |
@@ -61,7 +61,7 @@
 ### Task 1.1: Add `is_frozen` and `derived_from_campaign_id` to `Collection` domain
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/research_organization/collection.py`
+- Modify: `backend/src/cellar/domain/research_organization/collection.py`
 - Test: `backend/tests/unit/domain/research_organization/test_collection_frozen.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -73,8 +73,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_collection_defaults_to_not_frozen():
@@ -137,7 +137,7 @@ Expected: FAIL — `AttributeError: 'Collection' object has no attribute 'is_fro
 
 - [ ] **Step 3: Add the fields + `freeze()` and guard `update()`**
 
-In `backend/src/chem_vault/domain/research_organization/collection.py`:
+In `backend/src/cellar/domain/research_organization/collection.py`:
 
 1. Extend `__init__` signature with `is_frozen: bool = False` and `derived_from_campaign_id: uuid.UUID | None = None`, assign as attributes (after `visibility`).
 2. Add method:
@@ -178,7 +178,7 @@ Expected: PASS (all five tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/domain/research_organization/collection.py backend/tests/unit/domain/research_organization/test_collection_frozen.py
+git add backend/src/cellar/domain/research_organization/collection.py backend/tests/unit/domain/research_organization/test_collection_frozen.py
 git commit -m "feat(domain): Collection gains is_frozen + derived_from_campaign_id"
 ```
 
@@ -187,7 +187,7 @@ git commit -m "feat(domain): Collection gains is_frozen + derived_from_campaign_
 ### Task 1.2: Reject membership mutations on frozen collections
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py`
 - Test: `backend/tests/integration/research_organization/test_collection_frozen_membership.py`
 
 - [ ] **Step 1: Write the failing integration test**
@@ -199,8 +199,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.shared.errors import ValidationError
 
 
 @pytest.mark.asyncio
@@ -255,7 +255,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py backend/tests/integration/research_organization/test_collection_frozen_membership.py
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py backend/tests/integration/research_organization/test_collection_frozen_membership.py
 git commit -m "feat(persistence): reject membership mutations on frozen Collections"
 ```
 
@@ -267,8 +267,8 @@ git commit -m "feat(persistence): reject membership mutations on frozen Collecti
 
 **Files:**
 - Create: `backend/alembic/versions/026_collection_frozen.py` (separate from the larger 027 to keep blast radius small)
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py` — add the two columns to `CollectionModel`
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py` — round-trip the new fields in `_to_domain` and `_update_model`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/models.py` — add the two columns to `CollectionModel`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py` — round-trip the new fields in `_to_domain` and `_update_model`
 
 - [ ] **Step 1: Add the SA columns**
 
@@ -361,8 +361,8 @@ Expected: PASS — including the frozen-guard test from Task 1.2 now exercises r
 
 ```bash
 git add backend/alembic/versions/026_collection_frozen.py \
-        backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py \
-        backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py
+        backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/models.py \
+        backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/collection_repository.py
 git commit -m "feat(db): collection.is_frozen + derived_from_campaign_id"
 ```
 
@@ -375,13 +375,13 @@ All three changes — migration, ORM column additions, and the `_to_domain`/`_up
 ### Task 2.1: Domain enums
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/research_organization/enums.py`
+- Modify: `backend/src/cellar/domain/research_organization/enums.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign_enums.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     CampaignDecision,
@@ -492,7 +492,7 @@ class QualifierHandling(StrEnum):
 
 ```bash
 cd backend && uv run pytest tests/unit/domain/research_organization/test_campaign_enums.py -v
-git add backend/src/chem_vault/domain/research_organization/enums.py backend/tests/unit/domain/research_organization/test_campaign_enums.py
+git add backend/src/cellar/domain/research_organization/enums.py backend/tests/unit/domain/research_organization/test_campaign_enums.py
 git commit -m "feat(domain): screen campaign enums"
 ```
 
@@ -501,7 +501,7 @@ git commit -m "feat(domain): screen campaign enums"
 ### Task 2.2: `CompoundSource` discriminated value object
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/research_organization/compound_source.py`
+- Create: `backend/src/cellar/domain/research_organization/compound_source.py`
 - Test: `backend/tests/unit/domain/research_organization/test_compound_source.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -511,15 +511,15 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.compound_source import (
+from cellar.domain.research_organization.compound_source import (
     CollectionSource,
     CompoundSource,
     DerivedFromCampaignSource,
     ExplicitListSource,
     SavedSearchSource,
 )
-from chem_vault.domain.research_organization.enums import CampaignDecision
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_explicit_list_round_trip():
@@ -585,8 +585,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from chem_vault.domain.research_organization.enums import CampaignDecision
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.shared.errors import ValidationError
 
 
 @dataclass(frozen=True)
@@ -682,7 +682,7 @@ class DerivedFromCampaignSource(CompoundSource):
 
 ```bash
 cd backend && uv run pytest tests/unit/domain/research_organization/test_compound_source.py -v
-git add backend/src/chem_vault/domain/research_organization/compound_source.py backend/tests/unit/domain/research_organization/test_compound_source.py
+git add backend/src/cellar/domain/research_organization/compound_source.py backend/tests/unit/domain/research_organization/test_compound_source.py
 git commit -m "feat(domain): CompoundSource discriminated VO"
 ```
 
@@ -691,7 +691,7 @@ git commit -m "feat(domain): CompoundSource discriminated VO"
 ### Task 2.3: `CampaignChannel` entity
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/research_organization/campaign_channel.py`
+- Create: `backend/src/cellar/domain/research_organization/campaign_channel.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign_channel.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -701,14 +701,14 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_channel_minimum_construction():
@@ -789,13 +789,13 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.errors import ValidationError
 
 
 @dataclass
@@ -826,7 +826,7 @@ class CampaignChannel:
 
 ```bash
 cd backend && uv run pytest tests/unit/domain/research_organization/test_campaign_channel.py -v
-git add backend/src/chem_vault/domain/research_organization/campaign_channel.py backend/tests/unit/domain/research_organization/test_campaign_channel.py
+git add backend/src/cellar/domain/research_organization/campaign_channel.py backend/tests/unit/domain/research_organization/test_campaign_channel.py
 git commit -m "feat(domain): CampaignChannel entity"
 ```
 
@@ -835,7 +835,7 @@ git commit -m "feat(domain): CampaignChannel entity"
 ### Task 2.4: `CampaignMeasurement` entity
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/research_organization/campaign_measurement.py`
+- Create: `backend/src/cellar/domain/research_organization/campaign_measurement.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign_measurement.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -846,11 +846,11 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.enums import HitCall, ValueQualifier
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.enums import HitCall, ValueQualifier
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_minimum_measurement():
@@ -940,8 +940,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date
 
-from chem_vault.domain.research_organization.enums import HitCall, ValueQualifier
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.enums import HitCall, ValueQualifier
+from cellar.domain.shared.errors import ValidationError
 
 
 @dataclass
@@ -985,7 +985,7 @@ class CampaignMeasurement:
 
 ```bash
 cd backend && uv run pytest tests/unit/domain/research_organization/test_campaign_measurement.py -v
-git add backend/src/chem_vault/domain/research_organization/campaign_measurement.py backend/tests/unit/domain/research_organization/test_campaign_measurement.py
+git add backend/src/cellar/domain/research_organization/campaign_measurement.py backend/tests/unit/domain/research_organization/test_campaign_measurement.py
 git commit -m "feat(domain): CampaignMeasurement entity"
 ```
 
@@ -994,7 +994,7 @@ git commit -m "feat(domain): CampaignMeasurement entity"
 ### Task 2.5: `CampaignResult` entity
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/research_organization/campaign_result.py`
+- Create: `backend/src/cellar/domain/research_organization/campaign_result.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign_result.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -1004,15 +1004,15 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import (
     CampaignDecision,
     ValueQualifier,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_default_decision_deferred():
@@ -1073,11 +1073,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.enums import CampaignDecision
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.shared.errors import ValidationError
 
 
 @dataclass
@@ -1120,7 +1120,7 @@ class CampaignResult:
 ### Task 2.6: `Campaign` aggregate root
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/research_organization/campaign.py`
+- Create: `backend/src/cellar/domain/research_organization/campaign.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign.py`
 
 - [ ] **Step 1: Write failing tests** — minimum eight tests covering: create, add_channel, remove_channel, add_result, close_pre_conditions (≥1 result), close transitions, supersede, can't-edit-when-closed. (Use the patterns from `test_collection_frozen.py` and Run aggregate tests.)
@@ -1145,17 +1145,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.compound_source import CompoundSource
-from chem_vault.domain.research_organization.enums import CampaignStatus
-from chem_vault.domain.research_organization.events import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.compound_source import CompoundSource
+from cellar.domain.research_organization.enums import CampaignStatus
+from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
     CampaignSuperseded,
 )
-from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.shared.errors import ValidationError
 
 
 class Campaign(AggregateRoot):
@@ -1354,7 +1354,7 @@ class Campaign(AggregateRoot):
 
 ```bash
 cd backend && uv run pytest tests/unit/domain/research_organization/test_campaign.py -v
-git add backend/src/chem_vault/domain/research_organization/campaign.py backend/tests/unit/domain/research_organization/test_campaign.py
+git add backend/src/cellar/domain/research_organization/campaign.py backend/tests/unit/domain/research_organization/test_campaign.py
 git commit -m "feat(domain): Campaign aggregate root"
 ```
 
@@ -1363,7 +1363,7 @@ git commit -m "feat(domain): Campaign aggregate root"
 ### Task 2.7: Domain events
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/research_organization/events.py`
+- Modify: `backend/src/cellar/domain/research_organization/events.py`
 
 Add:
 
@@ -1397,7 +1397,7 @@ class CampaignPublishedCollectionCreated(DomainEvent):
 Match the existing event class style (mirror `CollectionCreated`). Commit alongside Task 2.6 if possible:
 
 ```bash
-git add backend/src/chem_vault/domain/research_organization/events.py
+git add backend/src/cellar/domain/research_organization/events.py
 git commit -m "feat(domain): Campaign domain events"
 ```
 
@@ -1406,7 +1406,7 @@ git commit -m "feat(domain): Campaign domain events"
 ### Task 2.8: `CampaignLockGuard`
 
 **Files:**
-- Create: `backend/src/chem_vault/domain/research_organization/campaign_lock_guard.py`
+- Create: `backend/src/cellar/domain/research_organization/campaign_lock_guard.py`
 - Test: `backend/tests/unit/domain/research_organization/test_campaign_lock_guard.py`
 
 - [ ] **Step 1: Write failing tests** — mirror `test_data_lock_guard.py`. Use a fake `CampaignLockChecker` returning True/False.
@@ -1421,7 +1421,7 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
-from chem_vault.domain.shared.errors import DataLockedError
+from cellar.domain.shared.errors import DataLockedError
 
 
 @runtime_checkable
@@ -1447,7 +1447,7 @@ class CampaignLockGuard:
 ### Task 2.9: `CampaignRepository` Protocol
 
 **Files:**
-- Modify: `backend/src/chem_vault/domain/research_organization/repository.py`
+- Modify: `backend/src/cellar/domain/research_organization/repository.py`
 
 Append:
 
@@ -1485,7 +1485,7 @@ Don't forget the new `Campaign`, `CampaignResult` imports.
 Commit:
 
 ```bash
-git add backend/src/chem_vault/domain/research_organization/repository.py
+git add backend/src/cellar/domain/research_organization/repository.py
 git commit -m "feat(domain): CampaignRepository protocol"
 ```
 
@@ -1496,7 +1496,7 @@ git commit -m "feat(domain): CampaignRepository protocol"
 ### Task 3.1: SQLAlchemy models for campaign tables
 
 **Files:**
-- Modify: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py`
+- Modify: `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/models.py`
 
 Add four ORM models:
 
@@ -1729,7 +1729,7 @@ Expected: clean up-and-down.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/alembic/versions/027_screen_campaign.py backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/models.py
+git add backend/alembic/versions/027_screen_campaign.py backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/models.py
 git commit -m "feat(db): screen campaign tables + lock trigger"
 ```
 
@@ -1738,7 +1738,7 @@ git commit -m "feat(db): screen campaign tables + lock trigger"
 ### Task 3.3: `SQLAlchemyCampaignRepository`
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py`
+- Create: `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py`
 - Test: `backend/tests/integration/research_organization/test_campaign_repository.py`
 
 - [ ] **Step 1: Write failing integration tests** covering: save+load round-trip with channels + results + measurements, optimistic concurrency conflict (`version` mismatch), `is_locked` returns True for closed campaigns, deleting cascades children, `find_by_project` returns ordered list.
@@ -1782,7 +1782,7 @@ async def test_is_locked_returns_true_for_closed(uow_factory, campaign_repo, clo
 
 - [ ] **Step 2: Implement the repository**
 
-Follow `SQLAlchemyCollectionRepository` shape: subclass `SQLAlchemyRepository[Campaign, CampaignModel]`, implement `_to_domain`, `_to_model`, `_update_model`. Children (channels/results/measurements) are handled via in-place list reconciliation (build a dict by id, update in place, add new, delete missing) — match how the existing aggregates with owned children (e.g., `Protocol` + `ReadoutDefinition`) do it. Reference: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay/protocol_repository.py`.
+Follow `SQLAlchemyCollectionRepository` shape: subclass `SQLAlchemyRepository[Campaign, CampaignModel]`, implement `_to_domain`, `_to_model`, `_update_model`. Children (channels/results/measurements) are handled via in-place list reconciliation (build a dict by id, update in place, add new, delete missing) — match how the existing aggregates with owned children (e.g., `Protocol` + `ReadoutDefinition`) do it. Reference: `backend/src/cellar/infrastructure/persistence/sqlalchemy/screening_assay/protocol_repository.py`.
 
 Add `is_locked` and `find_results_paginated`:
 
@@ -1801,7 +1801,7 @@ Add `is_locked` and `find_results_paginated`:
 
 ```bash
 cd backend && uv run pytest tests/integration/research_organization/test_campaign_repository.py -v
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py backend/tests/integration/research_organization/test_campaign_repository.py
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py backend/tests/integration/research_organization/test_campaign_repository.py
 git commit -m "feat(persistence): SQLAlchemyCampaignRepository"
 ```
 
@@ -1812,7 +1812,7 @@ git commit -m "feat(persistence): SQLAlchemyCampaignRepository"
 ### Task 4.1: `ChannelResolutionQuery` Protocol + `ChannelResolver`
 
 **Files:**
-- Create: `backend/src/chem_vault/application/research_organization/channel_resolution.py`
+- Create: `backend/src/cellar/application/research_organization/channel_resolution.py`
 - Test: `backend/tests/unit/application/research_organization/test_channel_resolver.py`
 
 The Protocol is the port; the resolver is the pure domain-service-style aggregator that turns a candidate list into a `CampaignMeasurement`.
@@ -1824,20 +1824,20 @@ import uuid
 
 import pytest
 
-from chem_vault.application.research_organization.channel_resolution import (
+from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ChannelResolver,
     ResolvedCandidate,
 )
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
 
 
 class FakeQuery:
@@ -1969,17 +1969,17 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Protocol, runtime_checkable
 
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.enums import (
     HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.screening_assay.hit_criterion import HitCriterion
 
 
 @dataclass(frozen=True)
@@ -2134,7 +2134,7 @@ class ChannelResolver:
 
 ```bash
 cd backend && uv run pytest tests/unit/application/research_organization/test_channel_resolver.py -v
-git add backend/src/chem_vault/application/research_organization/channel_resolution.py backend/tests/unit/application/research_organization/test_channel_resolver.py
+git add backend/src/cellar/application/research_organization/channel_resolution.py backend/tests/unit/application/research_organization/test_channel_resolver.py
 git commit -m "feat(application): channel resolution service"
 ```
 
@@ -2143,7 +2143,7 @@ git commit -m "feat(application): channel resolution service"
 ### Task 4.2: SQL implementation of `ChannelResolutionQuery`
 
 **Files:**
-- Create: `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/channel_resolution_query.py`
+- Create: `backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/channel_resolution_query.py`
 - Test: `backend/tests/integration/research_organization/test_channel_resolution_query.py`
 
 - [ ] **Step 1: Integration test** — seed a real `Run` (approved), `ReadoutData` row, `DoseResponseCurve` row, and assert the query returns the expected `ResolvedCandidate` list with QC metrics from the run.
@@ -2212,7 +2212,7 @@ class SQLAlchemyChannelResolutionQuery:
 
 ```bash
 cd backend && uv run pytest tests/integration/research_organization/test_channel_resolution_query.py -v
-git add backend/src/chem_vault/infrastructure/persistence/sqlalchemy/research_organization/channel_resolution_query.py backend/tests/integration/research_organization/test_channel_resolution_query.py
+git add backend/src/cellar/infrastructure/persistence/sqlalchemy/research_organization/channel_resolution_query.py backend/tests/integration/research_organization/test_channel_resolution_query.py
 git commit -m "feat(persistence): SQL impl of channel resolution query"
 ```
 
@@ -2220,7 +2220,7 @@ git commit -m "feat(persistence): SQL impl of channel resolution query"
 
 ## Phase 5 — Application use cases
 
-For each use case below, follow the existing pattern (`Command` frozen dataclass → `UseCase` Protocol → concrete class returning `Result[T, DomainError]`, depends on `UnitOfWork` + repo + Sentinel auth context). Reference: `backend/src/chem_vault/application/research_organization/create_collection.py`.
+For each use case below, follow the existing pattern (`Command` frozen dataclass → `UseCase` Protocol → concrete class returning `Result[T, DomainError]`, depends on `UnitOfWork` + repo + Sentinel auth context). Reference: `backend/src/cellar/application/research_organization/create_collection.py`.
 
 Each use-case task structure is identical and shortened here. Per task:
 1. Write failing unit test (`tests/unit/application/research_organization/test_<usecase>.py`) using `FakeAuth` + `FakeUnitOfWork` + an in-memory `CampaignRepository`.
@@ -2348,7 +2348,7 @@ Commit: `feat(application): refresh campaign from sources`.
 > **NOTE:** When calling `collection_repo.add_molecules` immediately after `collection_repo.save(new_collection)`, ensure the session has flushed (the existing `_session()` context manager already flushes on commit; if you're inside one UoW, no extra step needed — but verify). Otherwise the SELECT inside the frozen-guard may not see the just-saved row and will raise `NotFoundError`.
 
 **Files:**
-- Create: `backend/src/chem_vault/application/research_organization/close_campaign.py`
+- Create: `backend/src/cellar/application/research_organization/close_campaign.py`
 - Test: `backend/tests/integration/application/research_organization/test_close_campaign.py`
 
 - [ ] Write integration test: closes a draft campaign with 1 channel + 2 results + measurements; asserts `status == CLOSED`, `source_protocols` materialized, `published_collection_id` set, derived `Collection` created with `is_frozen=True`, `decision == "selected"` molecules present, no `decision == "rejected"` molecules in the membership; verify `CampaignClosed` event dispatched.
@@ -2438,10 +2438,10 @@ Commit: `feat(application): published campaign query`.
 ### Task 6.1: `interface/routes/campaigns.py`
 
 **Files:**
-- Create: `backend/src/chem_vault/interface/routes/campaigns.py`
-- Modify: `backend/src/chem_vault/interface/app.py` (register router)
-- Modify: `backend/src/chem_vault/interface/dependencies.py` (add `CampaignRepoDep` + use-case factories)
-- Modify: `backend/src/chem_vault/infrastructure/di/container.py` (wire `CampaignRepository`, `ChannelResolver`, `CampaignLockGuard`)
+- Create: `backend/src/cellar/interface/routes/campaigns.py`
+- Modify: `backend/src/cellar/interface/app.py` (register router)
+- Modify: `backend/src/cellar/interface/dependencies.py` (add `CampaignRepoDep` + use-case factories)
+- Modify: `backend/src/cellar/infrastructure/di/container.py` (wire `CampaignRepository`, `ChannelResolver`, `CampaignLockGuard`)
 - Test: `backend/tests/api/test_campaigns_api.py`
 
 Endpoints:
@@ -2499,7 +2499,7 @@ In `container.py`:
 
 ```bash
 cd backend && uv run pytest tests/api/test_campaigns_api.py -v
-git add backend/src/chem_vault/interface/routes/campaigns.py backend/src/chem_vault/interface/app.py backend/src/chem_vault/interface/dependencies.py backend/src/chem_vault/infrastructure/di/container.py backend/tests/api/test_campaigns_api.py
+git add backend/src/cellar/interface/routes/campaigns.py backend/src/cellar/interface/app.py backend/src/cellar/interface/dependencies.py backend/src/cellar/infrastructure/di/container.py backend/tests/api/test_campaigns_api.py
 git commit -m "feat(api): screen campaign endpoints"
 ```
 

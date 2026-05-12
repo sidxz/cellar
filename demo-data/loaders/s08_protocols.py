@@ -11,15 +11,15 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.screening.create_protocol import (
+    from cellar.application.screening.create_protocol import (
         CreateProtocol,
         CreateProtocolCommand,
     )
-    from chem_vault.application.screening.get_protocol import (
+    from cellar.application.screening.get_protocol import (
         ListProtocols,
         ListProtocolsQuery,
     )
-    from chem_vault.application.screening.manage_protocol import (
+    from cellar.application.screening.manage_protocol import (
         PublishProtocol,
         PublishProtocolCommand,
     )
@@ -69,7 +69,7 @@ async def load(ctx: DemoContext) -> int:
             # Set recommended hit criteria if defined
             hit_criteria = rec.get("recommended_hit_criteria")
             if hit_criteria:
-                from chem_vault.application.screening.manage_protocol import (
+                from cellar.application.screening.manage_protocol import (
                     UpdateProtocol,
                     UpdateProtocolCommand,
                 )

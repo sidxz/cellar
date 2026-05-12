@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.project_membership import (
+from cellar.domain.research_organization.project_membership import (
     ProjectMember,
     ProjectRole,
 )

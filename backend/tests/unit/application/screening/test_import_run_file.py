@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.import_run_file import (
+from cellar.application.screening.import_run_file import (
     ImportRunFile,
     ImportRunFileCommand,
     InMemoryPreviewStore,
@@ -21,25 +21,25 @@ from chem_vault.application.screening.import_run_file import (
     RepreviewRunFile,
     RepreviewRunFileQuery,
 )
-from chem_vault.application.screening.long_format_normalizer import (
+from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     ReadoutColumn,
     infer_mapping,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
     ReadoutNormalization,
     WellType,
 )
-from chem_vault.domain.screening_assay.plate_template import PlateTemplate
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.enums import PlateFormat
-from chem_vault.domain.shared.errors import ConflictError, NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser, parse_tabular
+from cellar.domain.screening_assay.plate_template import PlateTemplate
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser, parse_tabular
 
 
 _NADD_FIXTURE = "/Users/sidx/Downloads/NadD_LG-2200467564_100uM-DR_4.20.26.xlsx"
@@ -393,7 +393,7 @@ def _seed_preview(
     """Helper: parse a file directly and stash it under a fresh preview_id."""
     import time
 
-    from chem_vault.application.screening.import_run_file import _StoredPreview
+    from cellar.application.screening.import_run_file import _StoredPreview
 
     table = parse_tabular(file_content, filename)
     preview_id = uuid.uuid4()
@@ -936,7 +936,7 @@ class TestNadDFixtureRoundtrip:
             filename="NadD.xlsx",
         )
         # Resolve only the one batch in the file. All others → unmatched & skipped.
-        from chem_vault.infrastructure.parsers.tabular_file import parse_tabular as _pt
+        from cellar.infrastructure.parsers.tabular_file import parse_tabular as _pt
 
         table = _pt(fixture_bytes, "NadD.xlsx")
         suggested = infer_mapping(table)
@@ -1003,10 +1003,10 @@ class TestConflictAwareReimport:
     @pytest.mark.asyncio
     async def test_existing_readout_cell_skipped_with_conflict(self) -> None:
         """A re-imported readout cell that already has a value is left alone."""
-        from chem_vault.domain.screening_assay.readout_data import ReadoutData
-        from chem_vault.domain.screening_assay.run import Plate, Well
-        from chem_vault.domain.shared.value_objects import QualifiedValue
-        from chem_vault.domain.shared.enums import Qualifier
+        from cellar.domain.screening_assay.readout_data import ReadoutData
+        from cellar.domain.screening_assay.run import Plate, Well
+        from cellar.domain.shared.value_objects import QualifiedValue
+        from cellar.domain.shared.enums import Qualifier
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1099,7 +1099,7 @@ class TestConflictAwareReimport:
     @pytest.mark.asyncio
     async def test_well_metadata_mismatch_skips_row(self) -> None:
         """A row whose well metadata disagrees with the existing well is skipped entirely."""
-        from chem_vault.domain.screening_assay.run import Plate, Well
+        from cellar.domain.screening_assay.run import Plate, Well
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1179,7 +1179,7 @@ class TestConflictAwareReimport:
     async def test_new_plate_appends_cleanly(self) -> None:
         """A file with a brand-new plate name on a run that already has one
         plate creates the new plate and leaves the existing untouched."""
-        from chem_vault.domain.screening_assay.run import Plate, Well
+        from cellar.domain.screening_assay.run import Plate, Well
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1253,10 +1253,10 @@ class TestConflictAwareReimport:
     @pytest.mark.asyncio
     async def test_text_readout_writes_when_numeric_already_present(self) -> None:
         """Same well, same plate — different readout def. The new one writes."""
-        from chem_vault.domain.screening_assay.readout_data import ReadoutData
-        from chem_vault.domain.screening_assay.run import Plate, Well
-        from chem_vault.domain.shared.value_objects import QualifiedValue
-        from chem_vault.domain.shared.enums import Qualifier
+        from cellar.domain.screening_assay.readout_data import ReadoutData
+        from cellar.domain.screening_assay.run import Plate, Well
+        from cellar.domain.shared.value_objects import QualifiedValue
+        from cellar.domain.shared.enums import Qualifier
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)

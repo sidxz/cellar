@@ -1,6 +1,6 @@
 import inspect
 
-from chem_vault.domain.research_organization.repository import CampaignRepository
+from cellar.domain.research_organization.repository import CampaignRepository
 
 
 def test_campaign_repository_protocol_exposes_expected_methods():

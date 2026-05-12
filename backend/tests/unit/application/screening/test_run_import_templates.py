@@ -10,7 +10,7 @@ from typing import Self
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.run_import_templates import (
+from cellar.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     CreateRunImportTemplateCommand,
     DeleteRunImportTemplate,
@@ -21,9 +21,9 @@ from chem_vault.application.screening.run_import_templates import (
     UpdateRunImportTemplateCommand,
     score_template_against_headers,
 )
-from chem_vault.domain.screening_assay.run_import_template import RunImportTemplate
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.screening_assay.run_import_template import RunImportTemplate
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 
 
 class FakeUoW:

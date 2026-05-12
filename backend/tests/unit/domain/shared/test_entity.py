@@ -3,8 +3,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from chem_vault.domain.shared.entity import AggregateRoot, Entity
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.entity import AggregateRoot, Entity
+from cellar.domain.shared.events import DomainEvent
 
 
 class TestEntity:

@@ -6,22 +6,22 @@ import uuid
 
 import sqlalchemy as sa
 
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.research_organization.project import Project
-from chem_vault.domain.research_organization.saved_search import (
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.project import Project
+from cellar.domain.research_organization.saved_search import (
     SavedSearch,
     SearchVisibility,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
     SQLAlchemyCollectionRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
     SQLAlchemyProjectRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
     SQLAlchemySavedSearchRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 # ---------------------------------------------------------------------------

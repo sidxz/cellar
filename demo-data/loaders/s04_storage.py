@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.inventory.manage_storage import (
+    from cellar.application.inventory.manage_storage import (
         CreateStorageLocation,
         CreateStorageLocationCommand,
         ListStorageLocations,

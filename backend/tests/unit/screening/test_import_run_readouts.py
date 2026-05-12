@@ -12,22 +12,22 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.import_run_readouts import (
+from cellar.application.screening.import_run_readouts import (
     ImportRunReadouts,
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
     WellType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.parsers.tabular_file import TabularFileParser
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +388,6 @@ class TestImportRunReadouts:
             readout_definition_id=rd_id,
         )
 
-        from chem_vault.domain.shared.errors import AuthorizationError
+        from cellar.domain.shared.errors import AuthorizationError
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)

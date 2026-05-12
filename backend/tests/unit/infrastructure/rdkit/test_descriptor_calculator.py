@@ -3,7 +3,7 @@
 import pytest
 from rdkit import Chem
 
-from chem_vault.infrastructure.rdkit.descriptor_calculator import DescriptorCalculator
+from cellar.infrastructure.rdkit.descriptor_calculator import DescriptorCalculator
 
 
 @pytest.fixture

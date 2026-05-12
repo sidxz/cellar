@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from chem_vault.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
-from chem_vault.domain.workspace_config.salt_entry import SaltEntry
+from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
+from cellar.domain.workspace_config.salt_entry import SaltEntry
 
 
 def _make_salt_entry(

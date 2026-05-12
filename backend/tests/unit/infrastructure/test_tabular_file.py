@@ -7,7 +7,7 @@ import io
 import pytest
 from openpyxl import Workbook
 
-from chem_vault.infrastructure.parsers.tabular_file import (
+from cellar.infrastructure.parsers.tabular_file import (
     ParsedTable,
     TabularParseError,
     parse_tabular,

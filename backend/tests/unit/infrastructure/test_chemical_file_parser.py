@@ -4,8 +4,8 @@ import io
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
-from chem_vault.infrastructure.parsers.chemical_file_parser import (
+from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from cellar.infrastructure.parsers.chemical_file_parser import (
     SDFParser,
     TabularParser,
     get_parser,

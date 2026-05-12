@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.domain.shared.errors import (
+from cellar.domain.shared.errors import (
     AuthorizationError,
     ConcurrencyConflictError,
     ConflictError,
@@ -14,7 +14,7 @@ from chem_vault.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from chem_vault.interface.error_handlers import (
+from cellar.interface.error_handlers import (
     _error_to_body,
     _error_to_status,
     result_to_response,

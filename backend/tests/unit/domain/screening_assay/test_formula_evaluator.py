@@ -6,11 +6,11 @@ import math
 
 import pytest
 
-from chem_vault.domain.screening_assay.formula_evaluator import (
+from cellar.domain.screening_assay.formula_evaluator import (
     FormulaEvaluator,
     FormulaValidationError,
 )
-from chem_vault.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ class TestFormulaValidation:
 
 
 # ---------------------------------------------------------------------------
-# Bracket syntax for readout names with spaces — chem-vault extension on
+# Bracket syntax for readout names with spaces — cellar extension on
 # top of asteval. `[Name With Spaces]` is preprocessed into a sanitized
 # alias before evaluation so the user can reference space-containing
 # readouts (e.g. "Raw AU") in formulas. See _expand_brackets in the

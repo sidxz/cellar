@@ -3,8 +3,9 @@
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.infrastructure.rdkit.errors import InvalidSmilesError, QCRejectedError
-from chem_vault.infrastructure.rdkit.structure_processor import StructureProcessor
+from cellar.domain.chemical_registration.enums import Stereochemistry
+from cellar.infrastructure.rdkit.errors import InvalidSmilesError, QCRejectedError
+from cellar.infrastructure.rdkit.structure_processor import StructureProcessor
 
 
 @pytest.fixture
@@ -92,3 +93,61 @@ class TestStructureProcessor:
         assert isinstance(r2, Success)
         assert r1.unwrap().structure.inchi_key == r2.unwrap().structure.inchi_key
         assert r1.unwrap().descriptors == r2.unwrap().descriptors
+
+
+class TestStereoClassification:
+    """The processor populates Molecule.stereochemistry. Atom stereo and
+    double-bond stereo both count toward the classification."""
+
+    def test_achiral(self, processor: StructureProcessor) -> None:
+        result = processor.process("CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.ACHIRAL
+
+    def test_single_atom_stereo(self, processor: StructureProcessor) -> None:
+        result = processor.process("CC[C@H](C)O")  # (R)-2-butanol
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.SINGLE_STEREO
+
+    def test_multi_atom_stereo(self, processor: StructureProcessor) -> None:
+        result = processor.process("C[C@@H](Cl)[C@@H](Cl)C")  # (2R,3R)-2,3-Cl-butane
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.MULTI_STEREO
+
+    def test_undefined(self, processor: StructureProcessor) -> None:
+        result = processor.process("CCC(C)O")  # 2-butanol, no stereo specified
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.UNDEFINED
+
+    def test_mixed_defined_and_undefined(self, processor: StructureProcessor) -> None:
+        result = processor.process("C[C@H](Cl)C(Cl)C")  # one center defined, one not
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.UNDEFINED
+
+    def test_l_alanine_now_preserves_stereo(self, processor: StructureProcessor) -> None:
+        """Regression target: L-alanine used to classify as UNDEFINED because
+        the dropped TautomerEnumerator step stripped its alpha-carbon stereo."""
+        result = processor.process("N[C@@H](C)C(=O)O")
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.SINGLE_STEREO
+
+    def test_double_bond_stereo_counts(self, processor: StructureProcessor) -> None:
+        """(E)-stilbene has a defined stereogenic double bond — SINGLE_STEREO."""
+        result = processor.process("C(=C/c1ccccc1)\\c1ccccc1")
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.SINGLE_STEREO
+
+    def test_e_and_z_distinct_inchikeys(self, processor: StructureProcessor) -> None:
+        """Fumarate (E) and maleate (Z) must produce different InChIKeys."""
+        e = processor.process("OC(=O)/C=C/C(=O)O")
+        z = processor.process("OC(=O)/C=C\\C(=O)O")
+        assert isinstance(e, Success)
+        assert isinstance(z, Success)
+        assert e.unwrap().structure.inchi_key != z.unwrap().structure.inchi_key
+
+    def test_atom_plus_bond_stereo_is_multi(self, processor: StructureProcessor) -> None:
+        """A compound with both an atom stereocenter and a defined double bond
+        is MULTI_STEREO."""
+        result = processor.process("C[C@H](O)/C=C/c1ccccc1")
+        assert isinstance(result, Success)
+        assert result.unwrap().stereochemistry == Stereochemistry.MULTI_STEREO

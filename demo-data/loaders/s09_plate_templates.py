@@ -11,13 +11,13 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.screening.plate_templates import (
+    from cellar.application.screening.plate_templates import (
         CreatePlateTemplate,
         CreatePlateTemplateCommand,
         ListPlateTemplates,
         ListPlateTemplatesQuery,
     )
-    from chem_vault.domain.screening_assay.enums import PlateFormat
+    from cellar.domain.screening_assay.enums import PlateFormat
 
     data = ctx.data("plate_templates.json")
     create_uc = ctx.container[CreatePlateTemplate]

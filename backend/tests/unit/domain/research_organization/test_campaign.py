@@ -2,13 +2,13 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.campaign import Campaign
-from chem_vault.domain.research_organization.campaign_channel import CampaignChannel
-from chem_vault.domain.research_organization.campaign_measurement import (
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from chem_vault.domain.research_organization.campaign_result import CampaignResult
-from chem_vault.domain.research_organization.enums import (
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
@@ -16,13 +16,13 @@ from chem_vault.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from chem_vault.domain.research_organization.events import (
+from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
     CampaignSuperseded,
 )
-from chem_vault.domain.research_organization.source_ref import CollectionRef
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.source_ref import CollectionRef
+from cellar.domain.shared.errors import ValidationError
 
 
 def _make_campaign(**overrides) -> Campaign:

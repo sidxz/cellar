@@ -7,18 +7,18 @@ from dataclasses import dataclass
 
 import pytest
 
-from chem_vault.application.audit.audit_recording_service import (
+from cellar.application.audit.audit_recording_service import (
     AuditRecordingService,
     _infer_operation_type,
 )
-from chem_vault.domain.audit_compliance.enums import (
+from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
     AuditStatus,
     OperationType,
 )
-from chem_vault.domain.audit_compliance.models import AuditEntry, AuditOperation
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.audit_compliance.models import AuditEntry, AuditOperation
+from cellar.domain.shared.events import DomainEvent
 
 
 # --- Fakes ---

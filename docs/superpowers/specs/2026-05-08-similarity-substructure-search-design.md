@@ -303,24 +303,24 @@ Run on the demo dataset; record p50/p95 latency for each mode at its default thr
 
 New files:
 
-- `backend/src/chem_vault/domain/sar_analysis/fingerprint_algorithm.py`
-- `backend/src/chem_vault/domain/sar_analysis/similarity_metric.py`
-- `backend/src/chem_vault/domain/sar_analysis/search_modes.py`
-- `backend/src/chem_vault/infrastructure/rdkit/fingerprints/__init__.py`
-- `backend/src/chem_vault/infrastructure/rdkit/fingerprints/registry.py`
-- `backend/src/chem_vault/infrastructure/rdkit/fingerprints/morgan.py`
-- `backend/src/chem_vault/infrastructure/rdkit/fingerprints/fcfp.py`
-- `backend/src/chem_vault/interface/api/v1/search/algorithms.py` (new endpoint)
+- `backend/src/cellar/domain/sar_analysis/fingerprint_algorithm.py`
+- `backend/src/cellar/domain/sar_analysis/similarity_metric.py`
+- `backend/src/cellar/domain/sar_analysis/search_modes.py`
+- `backend/src/cellar/infrastructure/rdkit/fingerprints/__init__.py`
+- `backend/src/cellar/infrastructure/rdkit/fingerprints/registry.py`
+- `backend/src/cellar/infrastructure/rdkit/fingerprints/morgan.py`
+- `backend/src/cellar/infrastructure/rdkit/fingerprints/fcfp.py`
+- `backend/src/cellar/interface/api/v1/search/algorithms.py` (new endpoint)
 - New Alembic migration in `backend/alembic/versions/`
 
 Modified files:
 
-- `backend/src/chem_vault/infrastructure/rdkit/fingerprint_generator.py` — strip dead fingerprints, use registry
-- `backend/src/chem_vault/infrastructure/rdkit/standardizer.py` — wire stereo-aware Morgan compute
-- `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py` — drop `LIMIT 100`, parameterize by algorithm
-- `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py` — discriminated-union routing, `mol_adjust_query_properties`, `@>>` support
-- `backend/src/chem_vault/interface/api/v1/search/execute.py` — discriminated-union request types
-- `backend/src/chem_vault/infrastructure/di/` — register fingerprint algorithms
+- `backend/src/cellar/infrastructure/rdkit/fingerprint_generator.py` — strip dead fingerprints, use registry
+- `backend/src/cellar/infrastructure/rdkit/standardizer.py` — wire stereo-aware Morgan compute
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_reader.py` — drop `LIMIT 100`, parameterize by algorithm
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/search_query_composer.py` — discriminated-union routing, `mol_adjust_query_properties`, `@>>` support
+- `backend/src/cellar/interface/api/v1/search/execute.py` — discriminated-union request types
+- `backend/src/cellar/infrastructure/di/` — register fingerprint algorithms
 - `frontend/src/features/research-organization/components/search-query-builder.tsx` — mode radios, generalized substructure toggle
 - `frontend/orval` regeneration after API schema change
 

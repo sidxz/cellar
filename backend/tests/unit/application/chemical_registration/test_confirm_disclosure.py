@@ -10,20 +10,20 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.confirm_disclosure import (
+from cellar.application.chemical_registration.confirm_disclosure import (
     ConfirmDisclosure,
     ConfirmDisclosureCommand,
 )
-from chem_vault.application.chemical_registration.merge_service import MergeEvent
-from chem_vault.domain.chemical_registration.disclosure_request import DisclosureRequest
-from chem_vault.domain.chemical_registration.enums import DisclosureStatus
-from chem_vault.domain.shared.errors import (
+from cellar.application.chemical_registration.merge_service import MergeEvent
+from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
+from cellar.domain.chemical_registration.enums import DisclosureStatus
+from cellar.domain.shared.errors import (
     ConflictError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------

@@ -2,11 +2,11 @@
 
 import pytest
 
-from chem_vault.application.admin.admin_delete_registry import (
+from cellar.application.admin.admin_delete_registry import (
     all_entity_types,
     get_entry,
 )
-from chem_vault.infrastructure.persistence.settings import DatabaseSettings
+from cellar.infrastructure.persistence.settings import DatabaseSettings
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def test_settings() -> DatabaseSettings:
 
 def test_vocabulary_registered_after_di_init(test_settings: DatabaseSettings):
     """Test that vocabulary is registered as admin-deletable after DI init."""
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
 
     create_container(test_settings)  # triggers all register_*() calls
 
@@ -31,7 +31,7 @@ def test_vocabulary_registered_after_di_init(test_settings: DatabaseSettings):
 
 def test_all_expected_entities_registered(test_settings: DatabaseSettings):
     """All 23 Tier-1 entities must be registered after DI bootstrap."""
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
 
     create_container(test_settings)
 

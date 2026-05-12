@@ -12,16 +12,16 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.reset_run_data import (
+from cellar.application.screening.reset_run_data import (
     ResetRunData,
     ResetRunDataCommand,
 )
-from chem_vault.domain.screening_assay.enums import RunStatus, WellType
-from chem_vault.domain.screening_assay.events import RunDataReset
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.enums import PlateFormat
-from chem_vault.domain.shared.errors import ConflictError, NotFoundError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.screening_assay.enums import RunStatus, WellType
+from cellar.domain.screening_assay.events import RunDataReset
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.errors import ConflictError, NotFoundError
+from cellar.domain.shared.events import DomainEvent
 
 
 class FakeUoW:

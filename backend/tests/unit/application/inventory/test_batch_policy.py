@@ -1,4 +1,4 @@
-from chem_vault.application.inventory.batch_policy import should_create_batch
+from cellar.application.inventory.batch_policy import should_create_batch
 
 
 def test_new_molecule_always_creates_batch_regardless_of_policy():

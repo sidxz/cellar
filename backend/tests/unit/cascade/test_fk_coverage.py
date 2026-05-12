@@ -18,27 +18,27 @@ import sys
 # Model imports are idempotent (no global registry side-effects) so they are
 # safe at module level.
 # ---------------------------------------------------------------------------
-import chem_vault.infrastructure.persistence.sqlalchemy.audit.audit_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.attachment.attachment_model  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_model  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.shipment_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.sample_request_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
-import chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.audit.audit_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
 
-from chem_vault.infrastructure.persistence.sqlalchemy.base import Base
-from chem_vault.infrastructure.cascade.registry import all_rules, _clear_for_test as _clear_cascade_registry
+from cellar.infrastructure.persistence.sqlalchemy.base import Base
+from cellar.infrastructure.cascade.registry import all_rules, _clear_for_test as _clear_cascade_registry
 
 # ---------------------------------------------------------------------------
 # Cascade module names.  Imported and unloaded within the test so that:
@@ -47,11 +47,11 @@ from chem_vault.infrastructure.cascade.registry import all_rules, _clear_for_tes
 #       subsequent tests that rely on a fresh first-import still get one.
 # ---------------------------------------------------------------------------
 _CASCADE_MODULES = [
-    "chem_vault.infrastructure.cascade.rules_audit_compliance",
-    "chem_vault.infrastructure.cascade.rules_chemical_registration",
-    "chem_vault.infrastructure.cascade.rules_inventory",
-    "chem_vault.infrastructure.cascade.rules_research_organization",
-    "chem_vault.infrastructure.cascade.rules_screening_assay",
+    "cellar.infrastructure.cascade.rules_audit_compliance",
+    "cellar.infrastructure.cascade.rules_chemical_registration",
+    "cellar.infrastructure.cascade.rules_inventory",
+    "cellar.infrastructure.cascade.rules_research_organization",
+    "cellar.infrastructure.cascade.rules_screening_assay",
 ]
 
 
@@ -293,7 +293,7 @@ def test_every_fk_is_categorized():
     tier2_keys = _collect_tier2_rule_keys()
 
     # 3. Evict cascade modules again so subsequent tests that do
-    #    `import chem_vault.domain.X.cascade` for the first time still get
+    #    `import cellar.domain.X.cascade` for the first time still get
     #    a fresh execution (register_rules fires) rather than a cached no-op.
     #    Also clear the registry so other tests start from a known state.
     _clear_cascade_registry()

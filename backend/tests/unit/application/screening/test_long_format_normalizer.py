@@ -7,7 +7,7 @@ import uuid
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.long_format_normalizer import (
+from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     NormalizedTable,
     ReadoutColumn,
@@ -16,9 +16,9 @@ from chem_vault.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
-from chem_vault.domain.shared.enums import PlateFormat
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.infrastructure.parsers.tabular_file import ParsedTable, parse_tabular
+from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.errors import ValidationError
+from cellar.infrastructure.parsers.tabular_file import ParsedTable, parse_tabular
 
 
 # ---------------------------------------------------------------------------

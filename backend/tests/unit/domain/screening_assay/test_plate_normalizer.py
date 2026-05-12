@@ -6,10 +6,10 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import ReadoutNormalization, WellType
-from chem_vault.domain.screening_assay.plate_normalizer import NormalizedValue, PlateNormalizer
-from chem_vault.domain.screening_assay.run import Well
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.enums import ReadoutNormalization, WellType
+from cellar.domain.screening_assay.plate_normalizer import NormalizedValue, PlateNormalizer
+from cellar.domain.screening_assay.run import Well
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +235,7 @@ class TestPercentInhibition:
         """LOW convention: lab labels known-inhibitor wells as POS (low signal),
         DMSO wells as NEG (high signal). The formula must swap anchors so a
         sample matching the DMSO control still reads as 0% inhibition."""
-        from chem_vault.domain.screening_assay.enums import PosControlSignal
+        from cellar.domain.screening_assay.enums import PosControlSignal
 
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
@@ -353,7 +353,7 @@ class TestPercentActivation:
             normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_ACTIVATION)
 
     def test_pos_low_convention_swaps_anchors(self) -> None:
-        from chem_vault.domain.screening_assay.enums import PosControlSignal
+        from cellar.domain.screening_assay.enums import PosControlSignal
 
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
@@ -453,7 +453,7 @@ class TestPercentControl:
     def test_pos_low_convention_swaps_baseline(self) -> None:
         """When pos_control_signal=LOW, the lab labels DMSO as NEG. The
         baseline therefore comes from NEG_CONTROL wells, not POS."""
-        from chem_vault.domain.screening_assay.enums import PosControlSignal
+        from cellar.domain.screening_assay.enums import PosControlSignal
 
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
@@ -574,7 +574,7 @@ class TestZScore:
     def test_pos_low_convention_uses_neg_anchor(self) -> None:
         """Under LOW convention NEG_CONTROL holds the high signal, so it
         becomes the baseline distribution."""
-        from chem_vault.domain.screening_assay.enums import PosControlSignal
+        from cellar.domain.screening_assay.enums import PosControlSignal
         import statistics
 
         normalizer = PlateNormalizer()

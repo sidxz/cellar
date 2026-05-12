@@ -8,13 +8,13 @@ import pytest
 from rdkit import Chem
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.workspace_config.models import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.models import (
     OrganizationModel,
 )
-from chem_vault.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
+from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 _morgan = MorganAlgorithm()
 

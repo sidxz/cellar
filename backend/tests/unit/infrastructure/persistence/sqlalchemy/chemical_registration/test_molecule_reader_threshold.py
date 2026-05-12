@@ -1,6 +1,6 @@
 import pytest
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
     _find_first_tanimoto_threshold,
 )
 
