@@ -25,6 +25,7 @@ import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-contex
 import { CampaignStatusChip } from "./campaign-status-chip";
 import { ChannelStrip } from "./channel-strip";
 import { ResultsGrid } from "./results-grid";
+import { ResultsGridV2 } from "./grid/results-grid";
 import { DecisionPanel } from "./decision-panel";
 import { CompoundListPane } from "./compound-list-pane";
 import { CloseSignDialog } from "./close-sign-dialog";
@@ -277,9 +278,11 @@ function CampaignBuilderV2({
         resultCount={campaign.results?.length ?? 0}
         onCustomizeReport={() => { /* phase 5 */ }}
       />
-      <div className="p-8 text-center text-sm text-muted-foreground border-t">
-        Results grid — Phase 3 (wired in the next task batch)
-      </div>
+      <ResultsGridV2
+        campaign={campaign}
+        filters={filters}
+        readOnly={campaign.status !== "draft"}
+      />
 
       <PreviewAsPublishedDialog
         campaignId={campaign.id}
