@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, FlaskConical, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
+import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,10 +95,6 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                 <Library className="mr-1.5 size-4" />
                 Collections
               </TabsTrigger>
-              <TabsTrigger value="campaigns">
-                <FlaskConical className="mr-1.5 size-4" />
-                Campaigns
-              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -126,6 +122,16 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                       </p>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Campaigns */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Campaigns</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CampaignList projectId={projectId} />
                 </CardContent>
               </Card>
 
@@ -162,10 +168,6 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
 
             <TabsContent value="collections">
               <CollectionList projectId={projectId} />
-            </TabsContent>
-
-            <TabsContent value="campaigns" className="space-y-3">
-              <CampaignList projectId={projectId} />
             </TabsContent>
           </Tabs>
         )}
