@@ -458,12 +458,13 @@ export function ResultsGridV2({
       });
     }
 
-    // 4. Decision (pinned right)
+    // 4. Decision (pinned right) — wider than a bare chip would need so the
+    //    inline reason/notes strip in DecisionChipCell has room to breathe.
     cols.push({
       headerName: "Decision",
       colId: "decision",
       pinned: "right",
-      width: 160,
+      width: 240,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
