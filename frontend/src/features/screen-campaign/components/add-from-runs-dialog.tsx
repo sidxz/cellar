@@ -53,6 +53,7 @@ import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-proto
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
 import { READOUT_NORMALIZATION_LABELS, type HitCriterion } from "@/features/screening-assay/types";
 import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
+import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 import {
   usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost,
@@ -359,6 +360,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             approvedOnly={approvedOnly}
             onApprovedOnlyChange={setApprovedOnly}
             channelConfigs={channelConfigs}
+            protocolDetail={protocolDetail}
             onChannelConfigChange={(idx, patch) =>
               setChannelConfigs((prev) =>
                 prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
@@ -437,6 +439,12 @@ interface ConfigureStepProps {
   approvedOnly: boolean;
   onApprovedOnlyChange: (v: boolean) => void;
   channelConfigs: ChannelConfigUI[];
+  /** Full protocol with readout_definitions + dose_unit, threaded so the
+   *  threshold input + caption can show the unit chemists expect. */
+  protocolDetail?: {
+    dose_unit?: string;
+    readout_definitions: Array<{ id: string; name: string; unit?: string | null }>;
+  };
   onChannelConfigChange: (idx: number, patch: Partial<ChannelConfigUI>) => void;
   filterMode: "any" | "all";
   onFilterModeChange: (v: "any" | "all") => void;
@@ -577,70 +585,130 @@ function ConfigureStep(p: ConfigureStepProps) {
                         </Select>
                       </div>
 
-                      <div className="flex items-end gap-2 flex-wrap">
-                        <div className="space-y-0.5">
-                          <Label className="text-[10px] uppercase text-muted-foreground">
-                            Hit if
-                          </Label>
-                          <Select
-                            value={c.hit_operator}
-                            onValueChange={(v) =>
-                              p.onChannelConfigChange(idx, { hit_operator: v })
-                            }
-                          >
-                            <SelectTrigger className="h-7 text-xs w-32">
-                              <SelectValue placeholder="(no threshold)" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="lt">&lt; less than</SelectItem>
-                              <SelectItem value="lte">≤ at most</SelectItem>
-                              <SelectItem value="gt">&gt; greater than</SelectItem>
-                              <SelectItem value="gte">≥ at least</SelectItem>
-                              <SelectItem value="between">between (range)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      {(() => {
+                        const rd = p.protocolDetail?.readout_definitions.find(
+                          (r) => r.id === c.readout_definition_id,
+                        );
+                        const unit = channelUnit({
+                          sourceKind: c.source_kind,
+                          rawUnit: rd?.unit ?? null,
+                          normalization: c.normalization_applied,
+                          doseUnit: p.protocolDetail?.dose_unit ?? null,
+                        });
+                        const opLabel: Record<string, string> = {
+                          lt: "<",
+                          lte: "≤",
+                          gt: ">",
+                          gte: "≥",
+                        };
+                        const captionForValue = (val: string): string | null => {
+                          const v = val.trim();
+                          if (!v || Number.isNaN(Number(v))) return null;
+                          const sym = opLabel[c.hit_operator] ?? c.hit_operator;
+                          return `Hit if ${c.label} ${sym} ${v}${unit ? ` ${unit}` : ""}`;
+                        };
+                        const betweenCaption =
+                          c.hit_operator === "between" &&
+                          c.hit_value_low.trim() !== "" &&
+                          c.hit_value_high.trim() !== "" &&
+                          !Number.isNaN(Number(c.hit_value_low)) &&
+                          !Number.isNaN(Number(c.hit_value_high))
+                            ? `Hit if ${c.label} is between ${c.hit_value_low} and ${c.hit_value_high}${unit ? ` ${unit}` : ""}`
+                            : null;
+                        return (
+                          <>
+                            <div className="flex items-end gap-2 flex-wrap">
+                              <div className="space-y-0.5">
+                                <Label className="text-[10px] uppercase text-muted-foreground">
+                                  Hit if
+                                </Label>
+                                <Select
+                                  value={c.hit_operator}
+                                  onValueChange={(v) =>
+                                    p.onChannelConfigChange(idx, { hit_operator: v })
+                                  }
+                                >
+                                  <SelectTrigger className="h-7 text-xs w-32">
+                                    <SelectValue placeholder="(no threshold)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="lt">&lt; less than</SelectItem>
+                                    <SelectItem value="lte">≤ at most</SelectItem>
+                                    <SelectItem value="gt">&gt; greater than</SelectItem>
+                                    <SelectItem value="gte">≥ at least</SelectItem>
+                                    <SelectItem value="between">between (range)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
 
-                        {c.hit_operator === "between" ? (
-                          <div className="flex items-end gap-1 flex-1 min-w-0">
-                            <Input
-                              value={c.hit_value_low}
-                              onChange={(e) =>
-                                p.onChannelConfigChange(idx, {
-                                  hit_value_low: e.target.value,
-                                })
-                              }
-                              placeholder="low"
-                              className="h-7 text-xs"
-                              type="number"
-                            />
-                            <span className="text-muted-foreground text-xs pb-1.5">
-                              and
-                            </span>
-                            <Input
-                              value={c.hit_value_high}
-                              onChange={(e) =>
-                                p.onChannelConfigChange(idx, {
-                                  hit_value_high: e.target.value,
-                                })
-                              }
-                              placeholder="high"
-                              className="h-7 text-xs"
-                              type="number"
-                            />
-                          </div>
-                        ) : c.hit_operator ? (
-                          <Input
-                            value={c.hit_value}
-                            onChange={(e) =>
-                              p.onChannelConfigChange(idx, { hit_value: e.target.value })
-                            }
-                            placeholder="threshold"
-                            className="h-7 text-xs flex-1 min-w-0"
-                            type="number"
-                          />
-                        ) : null}
-                      </div>
+                              {c.hit_operator === "between" ? (
+                                <div className="flex items-end gap-1 flex-1 min-w-0">
+                                  <Input
+                                    value={c.hit_value_low}
+                                    onChange={(e) =>
+                                      p.onChannelConfigChange(idx, {
+                                        hit_value_low: e.target.value,
+                                      })
+                                    }
+                                    placeholder="low"
+                                    className="h-7 text-xs"
+                                    type="number"
+                                  />
+                                  <span className="text-muted-foreground text-xs pb-1.5">
+                                    and
+                                  </span>
+                                  <Input
+                                    value={c.hit_value_high}
+                                    onChange={(e) =>
+                                      p.onChannelConfigChange(idx, {
+                                        hit_value_high: e.target.value,
+                                      })
+                                    }
+                                    placeholder="high"
+                                    className="h-7 text-xs"
+                                    type="number"
+                                  />
+                                  {unit && (
+                                    <span className="text-muted-foreground text-xs pb-1.5">
+                                      {unit}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : c.hit_operator ? (
+                                <div className="flex items-end gap-1 flex-1 min-w-0">
+                                  <Input
+                                    value={c.hit_value}
+                                    onChange={(e) =>
+                                      p.onChannelConfigChange(idx, {
+                                        hit_value: e.target.value,
+                                      })
+                                    }
+                                    placeholder="threshold"
+                                    className="h-7 text-xs flex-1 min-w-0"
+                                    type="number"
+                                  />
+                                  {unit && (
+                                    <span className="text-muted-foreground text-xs pb-1.5">
+                                      {unit}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                            {(c.hit_operator === "between"
+                              ? betweenCaption
+                              : c.hit_operator
+                                ? captionForValue(c.hit_value)
+                                : null) && (
+                              <p className="text-[10px] text-muted-foreground italic">
+                                {c.hit_operator === "between"
+                                  ? betweenCaption
+                                  : captionForValue(c.hit_value)}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       {/* Curve-class chip filter — DR-curve channels only */}
                       {c.source_kind === "dose_response_curve" && (

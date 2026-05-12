@@ -31,6 +31,7 @@ import {
   type HitCriterion,
 } from "@/features/screening-assay/types";
 import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
+import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import {
   useAddCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
   useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
@@ -494,53 +495,102 @@ export function ChannelPopoverForm({
         />
       </div>
 
-      {/* Hit threshold — operator + value(s). Drives the hit/miss chip on each cell. */}
-      <div className="space-y-1">
-        <Label>Hit threshold</Label>
-        <div className="flex items-end gap-2 flex-wrap">
-          <Controller
-            name="hit_operator"
-            control={control}
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">(no threshold)</SelectItem>
-                  <SelectItem value="lt">&lt; less than</SelectItem>
-                  <SelectItem value="lte">≤ at most</SelectItem>
-                  <SelectItem value="gt">&gt; greater than</SelectItem>
-                  <SelectItem value="gte">≥ at least</SelectItem>
-                  <SelectItem value="between">between (range)</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          />
-          {watch("hit_operator") === "between" ? (
-            <div className="flex items-end gap-1 flex-1 min-w-0">
-              <Input
-                {...register("hit_value_low")}
-                placeholder="low"
-                type="number"
-                className="h-9 text-sm"
+      {/* Hit threshold — operator + value(s). Drives the hit/miss chip on each cell.
+          Show the channel's unit suffix + a "Hit if … > N %" caption so chemists
+          can see at a glance what value the threshold compares against. */}
+      {(() => {
+        const rd = fullProtocol?.readout_definitions?.find(
+          (r) => r.id === watchedReadoutId,
+        );
+        const sourceKind = watch("source_kind");
+        const normValue = watch("normalization_applied");
+        const normalization =
+          sourceKind === "readout_data" && normValue && normValue !== "raw"
+            ? normValue
+            : null;
+        const unit = channelUnit({
+          sourceKind,
+          rawUnit: rd?.unit ?? null,
+          normalization,
+          doseUnit: fullProtocol?.dose_unit ?? null,
+        });
+        const label = watch("label");
+        const op = watch("hit_operator");
+        const opSym: Record<string, string> = {
+          lt: "<", lte: "≤", gt: ">", gte: "≥",
+        };
+        const single = watch("hit_value");
+        const lo = watch("hit_value_low");
+        const hi = watch("hit_value_high");
+        let caption: string | null = null;
+        if (op === "between") {
+          if (lo.trim() && hi.trim() && !Number.isNaN(Number(lo)) && !Number.isNaN(Number(hi))) {
+            caption = `Hit if ${label || "value"} is between ${lo} and ${hi}${unit ? ` ${unit}` : ""}`;
+          }
+        } else if (op !== "none" && single.trim() && !Number.isNaN(Number(single))) {
+          const sym = opSym[op] ?? op;
+          caption = `Hit if ${label || "value"} ${sym} ${single}${unit ? ` ${unit}` : ""}`;
+        }
+        return (
+          <div className="space-y-1">
+            <Label>Hit threshold</Label>
+            <div className="flex items-end gap-2 flex-wrap">
+              <Controller
+                name="hit_operator"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">(no threshold)</SelectItem>
+                      <SelectItem value="lt">&lt; less than</SelectItem>
+                      <SelectItem value="lte">≤ at most</SelectItem>
+                      <SelectItem value="gt">&gt; greater than</SelectItem>
+                      <SelectItem value="gte">≥ at least</SelectItem>
+                      <SelectItem value="between">between (range)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               />
-              <span className="text-muted-foreground text-xs pb-2.5">and</span>
-              <Input
-                {...register("hit_value_high")}
-                placeholder="high"
-                type="number"
-                className="h-9 text-sm"
-              />
+              {op === "between" ? (
+                <div className="flex items-end gap-1 flex-1 min-w-0">
+                  <Input
+                    {...register("hit_value_low")}
+                    placeholder="low"
+                    type="number"
+                    className="h-9 text-sm"
+                  />
+                  <span className="text-muted-foreground text-xs pb-2.5">and</span>
+                  <Input
+                    {...register("hit_value_high")}
+                    placeholder="high"
+                    type="number"
+                    className="h-9 text-sm"
+                  />
+                  {unit && (
+                    <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>
+                  )}
+                </div>
+              ) : op !== "none" ? (
+                <div className="flex items-end gap-1 flex-1 min-w-0">
+                  <Input
+                    {...register("hit_value")}
+                    placeholder="threshold"
+                    type="number"
+                    className="h-9 text-sm flex-1 min-w-0"
+                  />
+                  {unit && (
+                    <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>
+                  )}
+                </div>
+              ) : null}
             </div>
-          ) : watch("hit_operator") !== "none" ? (
-            <Input
-              {...register("hit_value")}
-              placeholder="threshold"
-              type="number"
-              className="h-9 text-sm flex-1 min-w-0"
-            />
-          ) : null}
-        </div>
-      </div>
+            {caption && (
+              <p className="text-[11px] text-muted-foreground italic">{caption}</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Qualifier handling — only at create time. */}
       {!isEdit && (
