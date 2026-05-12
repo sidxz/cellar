@@ -21,6 +21,7 @@ import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { READOUT_NORMALIZATION_LABELS, type Protocol } from "@/features/screening-assay/types";
+import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
 import type { ActivityValue, ReportConfig } from "../../types";
 import { DoseResponseCell } from "./dose-response-cell";
 
@@ -49,25 +50,6 @@ const ROW_HEIGHTS: Record<string, number> = {
 
 // ─── Curve class badge colors ───────────────────────────────────────────────
 
-function CurveClassBadge({ curveClass }: { curveClass: string | null }) {
-  if (!curveClass) return null;
-  const upper = curveClass.toUpperCase();
-  let colorClass = "";
-  if (upper === "F" || upper === "FULL")
-    colorClass = "bg-success/12 text-success";
-  else if (upper === "P" || upper === "PARTIAL")
-    colorClass = "bg-yellow-500/12 text-yellow-400";
-  else if (upper === "I" || upper === "INACTIVE")
-    colorClass = "bg-destructive/12 text-destructive";
-
-  return (
-    <Badge
-      className={`ml-1.5 text-[10px] px-1 py-0 border-0 ${colorClass}`}
-    >
-      {upper.charAt(0)}
-    </Badge>
-  );
-}
 
 // ─── Column builders ────────────────────────────────────────────────────────
 
@@ -310,6 +292,8 @@ function buildProtocolColumnGroups(
                 {av.unit ? ` ${av.unit}` : ""}
                 <CurveClassBadge
                   curveClass={av.curve_params?.curve_class ?? null}
+                  compact
+                  renderNullAs="nothing"
                 />
               </span>
             );

@@ -10,6 +10,7 @@ import type {
   SelectionChangedEvent,
 } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { CurveClassBadge } from "./curve-class-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -74,29 +75,7 @@ interface CompoundCurveRow {
 // ---------------------------------------------------------------------------
 
 function curveClassBadge(cc: CurveClass | null) {
-  if (cc == null) {
-    return (
-      <Badge variant="outline" className="text-muted-foreground">
-        --
-      </Badge>
-    );
-  }
-  // All classes use the same `border-x/40 bg-x/10 text-x` pattern so the
-  // visual weight stays consistent. variant="outline" clears the default
-  // primary fill — without it, "inactive" rendered as solid blue (no bg
-  // class to override the default) with hard-to-read text.
-  const styles: Record<CurveClass, string> = {
-    full: "border-success/40 bg-success/10 text-success",
-    partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
-    bell_shaped: "border-primary/40 bg-primary/10 text-primary",
-    inactive:
-      "border-muted-foreground/30 bg-muted/50 text-muted-foreground",
-  };
-  return (
-    <Badge variant="outline" className={styles[cc]}>
-      {CURVE_CLASS_LABELS[cc]}
-    </Badge>
-  );
+  return <CurveClassBadge curveClass={cc} />;
 }
 
 /** Group curves by molecule, pick best (lowest fitted_value for IC50-type).

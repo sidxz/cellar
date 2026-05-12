@@ -36,8 +36,8 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
+import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
 import {
-  CURVE_CLASS_LABELS,
   READOUT_NORMALIZATION_LABELS,
   type CurveClass,
   type CurveParams,
@@ -71,26 +71,6 @@ interface RowData {
   result: CampaignResultResponse;
 }
 
-// ── Curve-class badge (inline; protocol activity-tab uses the same recipe) ───
-
-function curveClassBadge(cc: CurveClass | string | null | undefined) {
-  if (cc == null) {
-    return (
-      <Badge variant="outline" className="text-muted-foreground">
-        --
-      </Badge>
-    );
-  }
-  const styles: Record<string, string> = {
-    full: "border-success/40 bg-success/10 text-success",
-    partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
-    bell_shaped: "border-primary/40 bg-primary/10 text-primary",
-    inactive: "border-muted text-muted-foreground",
-  };
-  const label = (CURVE_CLASS_LABELS as Record<string, string>)[cc] ?? cc;
-  const cls = styles[cc] ?? "border-muted text-muted-foreground";
-  return <Badge className={cls}>{label}</Badge>;
-}
 
 // ── Inline hit chip + value cell ─────────────────────────────────────────────
 
@@ -181,7 +161,10 @@ interface ResultsGridV2Props {
   readOnly: boolean;
 }
 
-const ROW_HEIGHT = 130;
+// Row height tuned to fit the search-default 104-px structure thumbnail and
+// the wider 220-px sparkline (140 px tall) without clipping. The compound
+// stack carries 3-4 lines vertically inside this space.
+const ROW_HEIGHT = 170;
 
 export function ResultsGridV2({
   campaign,
@@ -242,35 +225,51 @@ export function ResultsGridV2({
       headerName: "Compound",
       field: "result.molecule_id",
       pinned: "left",
-      flex: 1,
-      minWidth: 230,
+      width: 180,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
         const m = moleculesById.get(r.molecule_id);
-        const label =
-          m?.registration_number ?? r.molecule_id.slice(0, 8);
+        const label = m?.registration_number ?? r.molecule_id.slice(0, 8);
+        // Stack id → name → synonyms vertically. Saves horizontal space and
+        // makes use of the taller row. Synonyms are deduped against the
+        // primary name so we don't repeat the same string.
+        const synonyms =
+          m?.identifiers
+            ?.map((idn) => idn.identifier)
+            .filter((s) => !!s && s !== m?.name && s !== m?.registration_number) ??
+          [];
+        const visibleSynonyms = synonyms.slice(0, 3);
+        const extra = synonyms.length - visibleSynonyms.length;
         return (
-          <div className="flex items-start gap-2 leading-tight py-2">
-            <div className="min-w-0">
-              <span className="font-medium">{label}</span>
-              {m?.name && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {m.name}
-                </span>
-              )}
-            </div>
+          <div className="flex flex-col py-2 leading-tight">
+            <span className="font-medium text-sm">{label}</span>
+            {m?.name && (
+              <span className="text-xs text-muted-foreground truncate">
+                {m.name}
+              </span>
+            )}
+            {visibleSynonyms.map((s) => (
+              <span key={s} className="text-[11px] text-muted-foreground truncate">
+                {s}
+              </span>
+            ))}
+            {extra > 0 && (
+              <span className="text-[10px] text-muted-foreground/70 italic">
+                +{extra} more
+              </span>
+            )}
           </div>
         );
       },
     });
 
-    // 2. Structure
+    // 2. Structure — matches the search-page default thumbnail size (104px).
     cols.push({
       headerName: "Structure",
       colId: "structure",
-      width: 130,
+      width: 150,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
@@ -282,7 +281,7 @@ export function ResultsGridV2({
         }
         return (
           <div className="flex h-full items-center justify-center py-1">
-            <StructureThumbnail smiles={smiles} size={104} />
+            <StructureThumbnail smiles={smiles} size={130} />
           </div>
         );
       },
@@ -382,14 +381,18 @@ export function ResultsGridV2({
               const curve = m?.source_curve_id
                 ? curveMap.get(m.source_curve_id)
                 : null;
-              return curveClassBadge(curve?.curve_class ?? null);
+              return (
+                <CurveClassBadge
+                  curveClass={(curve?.curve_class as CurveClass | null) ?? null}
+                />
+              );
             },
           });
 
           groupChildren.push({
             headerName: "Curve",
             colId: `${ch.id}_curve`,
-            width: 150,
+            width: 240,
             sortable: false,
             cellRenderer: (params: ICellRendererParams<RowData>) => {
               const r = params.data?.result;
@@ -438,6 +441,8 @@ export function ResultsGridV2({
                     params={curveParams}
                     dataPoints={dataPoints}
                     curveClass={(curve.curve_class as CurveClass | null) ?? null}
+                    width={220}
+                    height={140}
                   />
                 </button>
               );

@@ -10,6 +10,7 @@ import type {
   SelectionChangedEvent,
 } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
+import { CurveClassBadge } from "../curve-class-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -64,20 +65,7 @@ const OPERATOR_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function curveClassBadge(cc: CurveClass | null) {
-  if (cc == null) {
-    return (
-      <Badge variant="outline" className="text-muted-foreground">
-        --
-      </Badge>
-    );
-  }
-  const styles: Record<CurveClass, string> = {
-    full: "border-success/40 bg-success/10 text-success",
-    partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
-    bell_shaped: "border-primary/40 bg-primary/10 text-primary",
-    inactive: "border-muted text-muted-foreground",
-  };
-  return <Badge className={styles[cc]}>{CURVE_CLASS_LABELS[cc]}</Badge>;
+  return <CurveClassBadge curveClass={cc} />;
 }
 
 // ---------------------------------------------------------------------------

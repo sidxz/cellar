@@ -1,11 +1,24 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import { RefreshCw, FileText, Lock, Download, AlertTriangle } from "lucide-react";
+import {
+  RefreshCw,
+  FileText,
+  Lock,
+  Download,
+  AlertTriangle,
+  Pencil,
+} from "lucide-react";
 import Link from "next/link";
+
+import { useUpdateCampaignApiV1CampaignsCampaignIdPatch } from "@/shared/lib/api/campaigns/campaigns";
+import { showError } from "@/shared/lib/toast";
 import type { CampaignResponse } from "../../types";
 import { CampaignStatusChip } from "../campaign-status-chip";
+import { campaignKeys } from "../../lib/hooks";
 
 interface HeaderStripProps {
   campaign: CampaignResponse;
@@ -158,14 +171,133 @@ export function HeaderStrip({
           )}
         </div>
       </div>
-      {campaign.description && (
-        <p className="text-sm text-muted-foreground">{campaign.description}</p>
-      )}
+      <DescriptionRow campaign={campaign} editable={isDraft} />
       {!isDraft && closedMetaParts.length > 0 && (
         <p className="text-xs text-muted-foreground">
           {closedMetaParts.join(" • ")}
         </p>
       )}
     </header>
+  );
+}
+
+/**
+ * Click-to-edit description line. Renders muted single-line text by default;
+ * switches to a multi-line textarea on click. Saves on blur or Cmd/Ctrl+Enter;
+ * Escape cancels. Read-only mode just renders the static line (no pencil).
+ */
+function DescriptionRow({
+  campaign,
+  editable,
+}: {
+  campaign: CampaignResponse;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(campaign.description ?? "");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Re-sync local draft whenever the parent campaign refresh brings new data
+  // (e.g. after another mutation invalidates and refetches). Avoids leaving a
+  // stale unsaved draft in the textbox when the canonical value updates.
+  useEffect(() => {
+    if (!editing) setDraft(campaign.description ?? "");
+  }, [campaign.description, editing]);
+
+  // Focus the textarea + move caret to end whenever we enter edit mode.
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      const ta = textareaRef.current;
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+  }, [editing]);
+
+  const mutation = useUpdateCampaignApiV1CampaignsCampaignIdPatch({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+        setEditing(false);
+      },
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        showError(`Couldn't save description: ${msg}`);
+      },
+    },
+  });
+
+  function commit() {
+    const trimmed = draft.trim();
+    const current = campaign.description ?? "";
+    if (trimmed === current.trim()) {
+      setEditing(false);
+      return;
+    }
+    mutation.mutate({
+      campaignId: campaign.id,
+      data: { description: trimmed === "" ? null : trimmed },
+    });
+  }
+
+  function cancel() {
+    setDraft(campaign.description ?? "");
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-start gap-2">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              cancel();
+            } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              commit();
+            }
+          }}
+          rows={2}
+          disabled={mutation.isPending}
+          placeholder="Describe what this campaign is for…"
+          className="flex-1 resize-y rounded-md border bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+        />
+        <span className="text-[10px] text-muted-foreground pt-1.5 shrink-0">
+          ⌘↵ to save · Esc to cancel
+        </span>
+      </div>
+    );
+  }
+
+  const hasDescription = !!campaign.description?.trim();
+  if (!hasDescription && !editable) return null;
+
+  return (
+    <div className="group flex items-start gap-2">
+      <p
+        className={`text-sm flex-1 ${
+          hasDescription
+            ? "text-muted-foreground"
+            : "text-muted-foreground/60 italic"
+        }`}
+      >
+        {hasDescription ? campaign.description : "Add a description…"}
+      </p>
+      {editable && (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Edit description"
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
