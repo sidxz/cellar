@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
@@ -37,10 +37,16 @@ async def get_curves_batch(
     """Look up dose-response curves by id, scoped to the caller's workspace.
 
     Returns an empty list for missing ids or curves in a foreign workspace.
-    Cap: 500 ids per request.
+    Cap: 500 ids per request (enforced by Pydantic ``max_length`` on the request body).
+
+    Note: identity fields (``registration_number``, ``molecule_name``,
+    ``synonyms``, ``smiles``, ``batch_number``) are intentionally returned
+    as ``None`` — callers correlate curves to molecules by ``molecule_id``
+    and fetch identity through a separate query (e.g. ``useMoleculesByIds``
+    on the campaign frontend). Use the enriched ``GET
+    /api/v1/protocols/{protocol_id}/compounds/{molecule_id}/dose-response``
+    endpoint if you need identity fields populated.
     """
-    if len(body.curve_ids) > 500:
-        raise HTTPException(status_code=400, detail="max 500 curve ids per request")
     repo = SQLAlchemyDoseResponseCurveRepository(uow)
     async with uow:
         curves = await repo.find_by_ids(auth.workspace_id, body.curve_ids)

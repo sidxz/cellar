@@ -63,8 +63,7 @@ class TestBatchCurvesEndpoint:
     async def test_max_500_ids(self, client: AsyncClient) -> None:
         body = {"curve_ids": [str(uuid.uuid4()) for _ in range(501)]}
         resp = await client.post("/api/v1/dose-response/curves:batch", json=body)
-        # Pydantic's max_length=500 returns 422; explicit raise returns 400.
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 422
 
     async def test_workspace_isolation(
         self, client: AsyncClient, foreign_curve_id: uuid.UUID
