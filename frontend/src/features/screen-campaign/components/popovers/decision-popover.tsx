@@ -1,27 +1,27 @@
 "use client";
 
 /**
- * DecisionPopover — Task 3.5
- *
- * Popover form for setting a result's decision (selected / deferred / rejected),
+ * DecisionPopover — set a result's decision (selected / deferred / rejected),
  * an optional reason, and freeform notes.
  *
- * - Auto-saves on 300 ms debounce (same pattern as DecisionPanel).
- * - Commits any remaining dirty state when the popover is closed/unmounted.
- * - Cancel closes without an extra save; Save fires immediately then closes.
+ * Save is *explicit*: clicking a radio button no longer flushes the decision
+ * — the chemist gets time to type a reason/notes first. Save commits the
+ * full triple in one PATCH; Cancel (and closing the popover by clicking
+ * outside) discards local edits.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
+import { showError } from "@/shared/lib/toast";
+
 import { useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch } from "@/shared/lib/api/campaigns/campaigns";
-import { useQueryClient } from "@tanstack/react-query";
 import { campaignKeys } from "../../lib/hooks";
 import type { CampaignResultResponse } from "../../types";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 type Decision = "selected" | "deferred" | "rejected";
 
@@ -30,8 +30,6 @@ export interface DecisionPopoverProps {
   result: CampaignResultResponse;
   onClose: () => void;
 }
-
-// ── Component ──────────────────────────────────────────────────────────────────
 
 export function DecisionPopover({
   campaignId,
@@ -44,102 +42,50 @@ export function DecisionPopover({
   const [reason, setReason] = useState(
     (result.decision_reason as string | undefined) ?? "",
   );
-  const [notes, setNotes] = useState(
-    (result.notes as string | undefined) ?? "",
-  );
+  const [notes, setNotes] = useState((result.notes as string | undefined) ?? "");
 
-  // Snapshot of last-saved values — used to skip no-op PATCHes.
-  const lastSaved = useRef<{
-    decision: Decision;
-    reason: string;
-    notes: string;
-  }>({
+  const qc = useQueryClient();
+  const mutation =
+    useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch({
+      mutation: {
+        onSuccess: () => {
+          void qc.invalidateQueries({
+            queryKey: campaignKeys.detail(campaignId),
+          });
+          onClose();
+        },
+        onError: (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          showError(`Couldn't save decision: ${msg}`);
+        },
+      },
+    });
+
+  const initial = {
     decision: (result.decision ?? "deferred") as Decision,
     reason: (result.decision_reason as string | undefined) ?? "",
     notes: (result.notes as string | undefined) ?? "",
-  });
-
-  // Whether we have un-sent local changes.
-  const dirty = useRef(false);
-
-  // Set to true by the Cancel button so the unmount autosave is suppressed.
-  const cancelledRef = useRef(false);
-
-  const qc = useQueryClient();
-
-  // Same hook the legacy DecisionPanel uses.
-  const mutation =
-    useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch();
-
-  // Invalidate the campaign detail query on success so any parent grid/view
-  // picks up the new values without a full page reload.
-  const fire = (
-    dec: Decision = decision,
-    rsn: string = reason,
-    nts: string = notes,
-  ) => {
-    mutation.mutate(
-      {
-        campaignId,
-        resultId: result.id,
-        data: {
-          decision: dec,
-          reason: rsn || undefined,
-          notes: nts || null,
-        },
-      },
-      {
-        onSuccess: () => {
-          qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
-        },
-      },
-    );
-    lastSaved.current = { decision: dec, reason: rsn, notes: nts };
-    dirty.current = false;
   };
+  const dirty =
+    decision !== initial.decision ||
+    reason !== initial.reason ||
+    notes !== initial.notes;
 
-  const isDirty = (dec: Decision, rsn: string, nts: string) =>
-    dec !== lastSaved.current.decision ||
-    rsn !== lastSaved.current.reason ||
-    nts !== lastSaved.current.notes;
-
-  // 300 ms debounced background save — mirrors DecisionPanel's approach.
-  useEffect(() => {
-    if (!isDirty(decision, reason, notes)) return;
-    dirty.current = true;
-    const t = setTimeout(() => {
-      fire(decision, reason, notes);
-    }, 300);
-    return () => clearTimeout(t);
-    // fire is intentionally omitted — it's a stable closure over the current
-    // state snapshot captured at effect evaluation time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decision, reason, notes]);
-
-  // Autosave on unmount if there's still a pending dirty state (e.g. the user
-  // closed the popover before the 300 ms timer fired).
-  // Skipped when Cancel was clicked — cancelledRef guards against persisting
-  // in-flight edits the user explicitly discarded.
-  useEffect(() => {
-    return () => {
-      if (!cancelledRef.current && dirty.current) {
-        // Capture current state via a ref-captured snapshot.
-        // At unmount time the closure variables (decision/reason/notes) are
-        // stale in strict-mode double-invocation, but dirty.current is only
-        // true when the debounce timer was cleared before it fired — meaning
-        // the values they hold ARE the unsynced values. Safe to fire here.
-        fire(decision, reason, notes);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const onSave = () => {
-    if (isDirty(decision, reason, notes)) {
-      fire(decision, reason, notes);
+  function onSave() {
+    if (!dirty) {
+      onClose();
+      return;
     }
-    onClose();
-  };
+    mutation.mutate({
+      campaignId,
+      resultId: result.id,
+      data: {
+        decision,
+        reason: reason.trim() ? reason.trim() : undefined,
+        notes: notes.trim() ? notes : null,
+      },
+    });
+  }
 
   return (
     <div className="space-y-3 p-1">
@@ -204,9 +150,6 @@ export function DecisionPopover({
           rows={3}
           className="text-sm"
         />
-        {mutation.isPending && (
-          <p className="text-xs text-muted-foreground">Saving…</p>
-        )}
       </div>
 
       {/* Actions */}
@@ -214,15 +157,17 @@ export function DecisionPopover({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            cancelledRef.current = true;
-            onClose();
-          }}
+          onClick={onClose}
+          disabled={mutation.isPending}
         >
           Cancel
         </Button>
-        <Button size="sm" onClick={onSave}>
-          Save
+        <Button
+          size="sm"
+          onClick={onSave}
+          disabled={mutation.isPending || !dirty}
+        >
+          {mutation.isPending ? "Saving…" : "Save"}
         </Button>
       </div>
     </div>
