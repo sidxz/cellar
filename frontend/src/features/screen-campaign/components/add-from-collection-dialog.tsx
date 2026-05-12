@@ -34,7 +34,6 @@ import { showSuccess, showError } from "@/shared/lib/toast";
 
 interface AddFromCollectionDialogProps {
   campaignId: string;
-  /** Phase 5: project-scoped collection filter. Accepted here; wired in Phase 5. */
   projectId: string;
   open: boolean;
   onClose: () => void;
@@ -42,7 +41,7 @@ interface AddFromCollectionDialogProps {
 
 export function AddFromCollectionDialog({
   campaignId,
-  projectId: _projectId,
+  projectId,
   open,
   onClose,
 }: AddFromCollectionDialogProps) {
@@ -50,7 +49,7 @@ export function AddFromCollectionDialog({
   const [collectionId, setCollectionId] = useState("");
   const [description, setDescription] = useState("");
 
-  const { data: collections, isLoading: collectionsLoading } = useCollections();
+  const { data: collections, isLoading: collectionsLoading } = useCollections([projectId]);
 
   const mutation = useAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost({
     mutation: {
