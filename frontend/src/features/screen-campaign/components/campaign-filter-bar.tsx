@@ -76,6 +76,10 @@ interface CampaignFilterBarProps {
   campaign: CampaignResponse;
   filters: CampaignFilters;
   onChange: (next: CampaignFilters) => void;
+  /** Optional result count rendered right-aligned. When supplied, replaces
+   *  the standalone "N results" line that used to live in CampaignToolbar
+   *  — saves a full row of vertical space above the grid. */
+  resultCount?: number;
 }
 
 interface CountByDecision {
@@ -136,6 +140,7 @@ export function CampaignFilterBar({
   campaign,
   filters,
   onChange,
+  resultCount,
 }: CampaignFilterBarProps) {
   const { byDecision, byHit, overridden } = tallyCounts(campaign.results);
 
@@ -223,10 +228,15 @@ export function CampaignFilterBar({
         <button
           type="button"
           onClick={clearAll}
-          className="ml-auto text-muted-foreground hover:text-foreground underline underline-offset-2"
+          className="text-muted-foreground hover:text-foreground underline underline-offset-2"
         >
           clear all
         </button>
+      )}
+      {resultCount != null && (
+        <span className="ml-auto text-muted-foreground tabular-nums">
+          {resultCount} {resultCount === 1 ? "result" : "results"}
+        </span>
       )}
     </div>
   );

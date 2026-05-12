@@ -28,7 +28,6 @@ import { SupersedeDialog } from "./supersede-dialog";
 import { HeaderStrip } from "../sections/header-strip";
 import { SourcesSection } from "../sections/sources-section";
 import { ChannelsSection } from "../sections/channels-section";
-import { CampaignToolbar } from "../sections/campaign-toolbar";
 import {
   CampaignFilterBar,
   emptyFilters,
@@ -156,8 +155,6 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         campaign={campaign}
         filters={filters}
         onChange={setFilters}
-      />
-      <CampaignToolbar
         resultCount={campaign.results?.length ?? 0}
       />
       <ResultsGridV2 campaign={campaign} filters={filters} readOnly />

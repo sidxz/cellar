@@ -124,9 +124,9 @@ function CampaignBuilderV2({
         campaign={campaign}
         filters={filters}
         onChange={setFilters}
+        resultCount={campaign.results?.length ?? 0}
       />
       <CampaignToolbar
-        resultCount={campaign.results?.length ?? 0}
         campaign={campaign}
         filters={filters}
         readOnly={campaign.status !== "draft"}
