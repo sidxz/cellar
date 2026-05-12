@@ -152,6 +152,22 @@ class SQLAlchemyDoseResponseCurveRepository:
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
+    async def find_by_ids(
+        self, ids: list[uuid.UUID], workspace_id: uuid.UUID
+    ) -> list[DoseResponseCurve]:
+        """Batch lookup by primary key, scoped to workspace."""
+        if not ids:
+            return []
+        stmt = (
+            select(DoseResponseCurveModel)
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.id.in_(ids),
+            )
+        )
+        result = await self._uow.session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
     async def find_best_curves_for_molecules(
         self,
         workspace_id: uuid.UUID,
