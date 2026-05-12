@@ -181,6 +181,7 @@ class SQLAlchemyChannelResolutionQuery:
                     DoseResponseCurveModel.id,
                     DoseResponseCurveModel.molecule_id,
                     DoseResponseCurveModel.fitted_value,
+                    DoseResponseCurveModel.curve_class,
                     DoseResponseCurveModel.run_id,
                     RunModel.run_date,
                     RunModel.status,
@@ -250,6 +251,7 @@ class SQLAlchemyChannelResolutionQuery:
                     protocol_version=row.protocol_version,
                     curve_id=row.id,
                     readout_id=None,
+                    curve_class=row.curve_class,
                 )
             else:
                 qualifier_str = row.value_qualifier or "="
