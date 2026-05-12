@@ -253,7 +253,7 @@ export function CompoundListPane({
             <span className="font-mono text-muted-foreground truncate flex-1 min-w-0">
               {moleculeById.get(r.molecule_id)?.registration_number ??
                 moleculeById.get(r.molecule_id)?.name ??
-                `${r.molecule_id.slice(0, 8)}…`}
+                "…"}
             </span>
             <span
               className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${

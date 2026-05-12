@@ -432,18 +432,12 @@ export function ResultsGrid({
           if (!params.data) return null;
           const isSelected = params.data.result.id === selectedResultId;
           const mol = moleculeById.get(params.data.molecule_id);
-          const label =
-            mol?.registration_number ??
-            mol?.name ??
-            `${params.data.molecule_id.slice(0, 8)}…`;
+          // Reg number → name → ellipsis. NEVER show a UUID.
+          const label = mol?.registration_number ?? mol?.name ?? "…";
           const smiles = mol?.structure?.smiles ?? null;
           return (
             <div className="flex items-center gap-2 py-1">
-              <MoleculeThumbnail
-                smiles={smiles}
-                size="sm"
-                fallback={label.slice(0, 6)}
-              />
+              <MoleculeThumbnail smiles={smiles} size="sm" fallback={label} />
               <span
                 className={`font-mono text-xs${
                   isSelected ? " font-semibold text-primary" : ""

@@ -123,20 +123,11 @@ export function CampaignView({ campaign }: CampaignViewProps) {
                   })}
                 </span>
               )}
-              {closedBy && (
-                <span>
-                  By{" "}
-                  <span className="font-mono">{closedBy}</span>
-                  {/* TODO: resolve to display name via Sentinel */}
-                </span>
-              )}
-              {signatureId && (
-                <span>
-                  Signature{" "}
-                  <span className="font-mono">{signatureId}</span>
-                  {/* TODO: show signed_at once audit lookup lands */}
-                </span>
-              )}
+              {/* closed_by + signature_id are backend UUIDs. Name + signed_at
+                  resolution via Sentinel/audit is a known follow-up (A2 in
+                  the backlog); until then, show a non-UUID placeholder. */}
+              {closedBy && <span>Signed off by author</span>}
+              {signatureId && <span>Electronic signature recorded</span>}
             </div>
           </div>
 

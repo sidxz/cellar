@@ -479,10 +479,10 @@ function ConfigureStep(p: ConfigureStepProps) {
                         onCheckedChange={() => p.onToggleRun(r.id)}
                       />
                       <span className="flex-1 min-w-0 truncate">
-                        Run {r.id.slice(0, 8)}…
-                      </span>
-                      <span className="text-muted-foreground shrink-0">
-                        {r.run_date}
+                        Run on{" "}
+                        {r.run_date
+                          ? new Date(r.run_date).toLocaleDateString()
+                          : "(unknown date)"}
                       </span>
                       <Badge
                         variant={r.status === "approved" ? "secondary" : "outline"}
@@ -827,11 +827,11 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
                   <MoleculeThumbnail
                     smiles={r.molecule.smiles}
                     size="sm"
-                    fallback={r.molecule.registration_number?.slice(0, 4) ?? "??"}
+                    fallback={r.molecule.registration_number ?? r.molecule.name ?? "…"}
                   />
                   <div>
                     <div className="font-mono">
-                      {r.molecule.registration_number ?? r.molecule.id.slice(0, 8)}
+                      {r.molecule.registration_number ?? r.molecule.name ?? "—"}
                     </div>
                     {r.molecule.name && (
                       <div className="text-muted-foreground truncate max-w-[120px]">

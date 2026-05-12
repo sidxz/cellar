@@ -6,7 +6,7 @@
  * Displays where each compound in the campaign came from. Reads
  * `campaign.compound_sources` (derived server-side from per-result
  * added_from attribution). Name lookups for Collection / Campaign / Run
- * refs are done concurrently via TanStack Query.
+ * refs are done concurrently via TanStack Query. Never displays raw UUIDs.
  *
  * Renders nothing when the campaign has no results.
  */
@@ -14,6 +14,8 @@
 import {
   useGetCampaignApiV1CampaignsCampaignIdGet,
 } from "@/shared/lib/api/campaigns/campaigns";
+import { useGetCollectionApiV1CollectionsCollectionIdGet } from "@/shared/lib/api/collections/collections";
+import { useGetRunApiV1RunsRunIdGet } from "@/shared/lib/api/runs/runs";
 import type { CampaignResponse } from "../types";
 
 // ── Type helpers ─────────────────────────────────────────────────────────────
@@ -36,8 +38,12 @@ function CollectionLabel({
   collectionId: string;
   description?: string | null;
 }) {
-  // Use the collection name from the general list if loaded, or fall back to ID prefix
-  const label = description ?? `Collection …${collectionId.slice(-6)}`;
+  const { data: collection } = useGetCollectionApiV1CollectionsCollectionIdGet(
+    collectionId,
+    { query: { staleTime: 60_000 } },
+  );
+  // Order of preference: caller-supplied description > collection name > generic.
+  const label = description ?? collection?.name ?? "Collection";
   return <>{label}</>;
 }
 
@@ -51,8 +57,28 @@ function CampaignLabel({
   const { data: campaign } = useGetCampaignApiV1CampaignsCampaignIdGet(campaignId, {
     query: { staleTime: 60_000 },
   });
-  const name = campaign?.name ?? description ?? `Campaign …${campaignId.slice(-6)}`;
+  const name = description ?? campaign?.name ?? "Campaign";
   return <>{name}</>;
+}
+
+function RunLabel({
+  runId,
+  description,
+}: {
+  runId: string;
+  description?: string | null;
+}) {
+  const { data: run } = useGetRunApiV1RunsRunIdGet(runId, {
+    query: { staleTime: 60_000 },
+  });
+  if (description) return <>{description}</>;
+  if (!run) return <>Run</>;
+  // No human-friendly run name in the schema; show the run date — that's how
+  // chemists actually identify a run ("the one from May 7th").
+  const date = run.run_date
+    ? new Date(run.run_date as unknown as string).toLocaleDateString()
+    : null;
+  return <>{date ? `Run on ${date}` : "Run"}</>;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -90,8 +116,8 @@ export function SourcesSummaryCard({ campaign }: SourcesSummaryCardProps) {
                   description={s.description}
                 />
               )}
-              {s.kind === "run" && (
-                <>Run …{s.run_id?.slice(-6) ?? "?"}</>
+              {s.kind === "run" && s.run_id && (
+                <RunLabel runId={s.run_id} description={s.description} />
               )}
               {!["manual", "collection", "campaign", "run"].includes(s.kind) && s.kind}
             </span>

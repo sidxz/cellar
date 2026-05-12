@@ -19,6 +19,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 
 import { useCampaign, campaignKeys } from "../lib/hooks";
+import { useProject } from "@/features/research-organization/hooks/use-projects";
+import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { CampaignStatusChip } from "./campaign-status-chip";
 import { ChannelStrip } from "./channel-strip";
 import { ResultsGrid } from "./results-grid";
@@ -46,10 +48,19 @@ interface CampaignBuilderProps {
 export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps) {
   const qc = useQueryClient();
   const { data: campaign, isLoading, error } = useCampaign(campaignId);
+  const { data: project } = useProject(projectId);
   const [selectedResult, setSelectedResult] = useState<CampaignResultResponse | null>(null);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [previewPublishedOpen, setPreviewPublishedOpen] = useState(false);
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
+
+  // Human-readable breadcrumbs — never display UUIDs.
+  useBreadcrumbTrail([
+    { label: "Projects", href: "/projects" },
+    { label: project?.name ?? "", href: `/projects/${projectId}` },
+    { label: "Campaigns", href: `/projects/${projectId}/campaigns` },
+    { label: campaign?.name ?? "" },
+  ]);
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {

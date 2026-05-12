@@ -14,6 +14,8 @@ import {
 } from "@/shared/components/ui/table";
 
 import { useCampaignsByProject } from "../lib/hooks";
+import { useProject } from "@/features/research-organization/hooks/use-projects";
+import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { CampaignStatusChip } from "./campaign-status-chip";
 import { CreateCampaignDialog } from "./create-campaign-dialog";
 
@@ -30,6 +32,13 @@ interface CampaignListProps {
  */
 export function CampaignList({ projectId }: CampaignListProps) {
   const { data, isLoading, error } = useCampaignsByProject(projectId);
+  const { data: project } = useProject(projectId);
+
+  useBreadcrumbTrail([
+    { label: "Projects", href: "/projects" },
+    { label: project?.name ?? "", href: `/projects/${projectId}` },
+    { label: "Campaigns" },
+  ]);
 
   if (isLoading) {
     return (
