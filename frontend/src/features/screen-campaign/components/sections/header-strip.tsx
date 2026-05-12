@@ -295,27 +295,33 @@ function DescriptionRow({
   const hasDescription = !!campaign.description?.trim();
   if (!hasDescription && !editable) return null;
 
+  // Notion-style: the description itself is the click target. No corner-
+  // floating pencil. Hover gives a subtle background + a faint pencil glyph
+  // inline at the end of the text so the affordance is discoverable without
+  // looking like a settings cog.
+  if (!editable) {
+    return (
+      <p className="text-sm text-muted-foreground">{campaign.description}</p>
+    );
+  }
+
   return (
-    <div className="group flex items-start gap-2">
-      <p
-        className={`text-sm flex-1 ${
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      aria-label={hasDescription ? "Edit description" : "Add description"}
+      className="group -ml-1 inline-flex max-w-full items-start gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-muted/50 focus:bg-muted/60 focus:outline-none transition-colors"
+    >
+      <span
+        className={`text-sm ${
           hasDescription
             ? "text-muted-foreground"
             : "text-muted-foreground/60 italic"
         }`}
       >
         {hasDescription ? campaign.description : "Add a description…"}
-      </p>
-      {editable && (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          aria-label="Edit description"
-          className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
+      </span>
+      <Pencil className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+    </button>
   );
 }
