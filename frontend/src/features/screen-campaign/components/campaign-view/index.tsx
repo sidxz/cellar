@@ -1,32 +1,39 @@
 "use client";
 
 /**
- * CampaignView — Task 9.1
+ * CampaignView — V2 single-column layout, read-only.
  *
- * Read-only view for closed / superseded campaigns.
- * Renders: header card (name, status, supersedes links, signature info),
- * source protocols, published collection link, and read-only ResultsGrid.
+ * Reuses the same V2 sections as the draft builder (HeaderStrip,
+ * SourcesSection, ChannelsSection, CampaignFilterBar, CampaignToolbar,
+ * ResultsGridV2) with `readOnly={true}`. The closed-only details
+ * (source protocols, published collection) are surfaced as a small
+ * cards row below the channels section. The supersede dialog is
+ * preserved and triggered from the HeaderStrip Supersede action.
  */
 
 import { useState } from "react";
-import Link from "next/link";
-import { Download, Lock, ArrowRight, AlertTriangle } from "lucide-react";
 
-import { Button } from "@/shared/components/ui/button";
-import { Badge } from "@/shared/components/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import { Separator } from "@/shared/components/ui/separator";
 
-import { CampaignStatusChip } from "../campaign-status-chip";
-import { ResultsGrid } from "../results-grid";
+import { ResultsGridV2 } from "../grid/results-grid";
 import { SourceProtocolsList } from "./source-protocols-list";
 import { PublishedCollectionLink } from "./published-collection-link";
 import { SupersedeDialog } from "./supersede-dialog";
+
+import { HeaderStrip } from "../sections/header-strip";
+import { SourcesSection } from "../sections/sources-section";
+import { ChannelsSection } from "../sections/channels-section";
+import { CampaignToolbar } from "../sections/campaign-toolbar";
+import {
+  CampaignFilterBar,
+  emptyFilters,
+  type CampaignFilters,
+} from "../campaign-filter-bar";
 
 import { useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
 
@@ -42,6 +49,7 @@ interface CampaignViewProps {
 
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
+  const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =
@@ -65,145 +73,98 @@ export function CampaignView({ campaign }: CampaignViewProps) {
     URL.revokeObjectURL(url);
   };
 
-  const supersededBy = campaign.superseded_by_campaign_id as string | undefined | null;
-  const supersedesId = campaign.supersedes_campaign_id as string | undefined | null;
+  const supersededBy = campaign.superseded_by_campaign_id as
+    | string
+    | undefined
+    | null;
+  const supersedesId = campaign.supersedes_campaign_id as
+    | string
+    | undefined
+    | null;
   const closedAt = campaign.closed_at as string | undefined | null;
   const closedBy = campaign.closed_by as string | undefined | null;
   const signatureId = campaign.signature_id as string | undefined | null;
 
+  const sourceProtocols =
+    (campaign.source_protocols as Array<Record<string, unknown>>) ?? [];
+  const publishedCollectionId = campaign.published_collection_id as
+    | string
+    | undefined
+    | null;
+
   return (
-    <div className="flex flex-col h-screen">
-      {/* ── Sticky header ── */}
-      <header className="sticky top-0 z-20 bg-background border-b px-4 py-3">
-        {/* Superseded-by banner */}
-        {supersededBy && (
-          <div className="mb-3 flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>
-              This campaign was superseded by{" "}
-              <Link
-                href={`/projects/${campaign.project_id}/campaigns/${supersededBy}`}
-                className="font-medium underline underline-offset-2 hover:opacity-80"
-              >
-                a newer campaign
-              </Link>
-              .
-            </span>
-          </div>
-        )}
+    <div className="flex flex-col">
+      <HeaderStrip
+        campaign={campaign}
+        isDraft={false}
+        refreshing={false}
+        onRefresh={() => {}}
+        onPreview={() => {}}
+        onCloseAndSign={() => {}}
+        closedAt={closedAt}
+        closedBy={closedBy}
+        signatureId={signatureId}
+        supersedesId={supersedesId}
+        supersededBy={supersededBy}
+        projectId={campaign.project_id}
+        onDownload={handleDownload}
+        downloadDisabled={isDownloading}
+        downloadLabel={isDownloading ? "Downloading…" : undefined}
+        onSupersede={
+          campaign.status !== "superseded"
+            ? () => setSupersedeOpen(true)
+            : undefined
+        }
+      />
+      <SourcesSection
+        campaign={campaign}
+        projectId={campaign.project_id}
+        readOnly
+      />
+      <ChannelsSection
+        campaign={campaign}
+        projectId={campaign.project_id}
+        readOnly
+      />
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-semibold truncate">{campaign.name}</h1>
-              <CampaignStatusChip status={campaign.status} />
+      {/* Closed-campaign-only details row */}
+      <section className="grid grid-cols-1 gap-4 border-b px-6 py-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              Source protocols
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SourceProtocolsList protocols={sourceProtocols} />
+          </CardContent>
+        </Card>
 
-              {supersedesId && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <ArrowRight className="h-3 w-3" />
-                  Supersedes{" "}
-                  <Link
-                    href={`/projects/${campaign.project_id}/campaigns/${supersedesId}`}
-                    className="underline underline-offset-2 hover:opacity-80"
-                  >
-                    prior campaign
-                  </Link>
-                </Badge>
-              )}
-            </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              Published collection
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PublishedCollectionLink id={publishedCollectionId} />
+          </CardContent>
+        </Card>
+      </section>
 
-            {/* Closed-at / closed-by / signature */}
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-xs text-muted-foreground">
-              {closedAt && (
-                <span>
-                  Closed{" "}
-                  {new Date(closedAt).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </span>
-              )}
-              {/* closed_by + signature_id are backend UUIDs. Name + signed_at
-                  resolution via Sentinel/audit is a known follow-up (A2 in
-                  the backlog); until then, show a non-UUID placeholder. */}
-              {closedBy && <span>Signed off by author</span>}
-              {signatureId && <span>Electronic signature recorded</span>}
-            </div>
-          </div>
+      <CampaignFilterBar
+        campaign={campaign}
+        filters={filters}
+        onChange={setFilters}
+      />
+      <CampaignToolbar
+        resultCount={campaign.results?.length ?? 0}
+        onCustomizeReport={() => { /* phase 5 */ }}
+        onExport={handleDownload}
+        exportDisabled={isDownloading}
+      />
+      <ResultsGridV2 campaign={campaign} filters={filters} readOnly />
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              disabled={isDownloading}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {isDownloading ? "Downloading…" : "Download JSON"}
-            </Button>
-
-            {campaign.status !== "superseded" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSupersedeOpen(true)}
-              >
-                <Lock className="mr-2 h-4 w-4" />
-                Supersede
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* ── Body ── */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
-        {/* Source protocols + collection row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">
-                Source protocols
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SourceProtocolsList
-                protocols={
-                  campaign.source_protocols as Array<Record<string, unknown>>
-                }
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">
-                Published collection
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PublishedCollectionLink
-                id={campaign.published_collection_id as string | undefined | null}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        <Separator />
-
-        {/* Read-only results grid */}
-        <div className="h-[600px]">
-          <ResultsGrid
-            campaign={campaign}
-            selectedResultId={null}
-            onRowSelect={() => {}}
-            readOnly
-          />
-        </div>
-      </div>
-
-      {/* Supersede dialog */}
       <SupersedeDialog
         open={supersedeOpen}
         onOpenChange={setSupersedeOpen}
