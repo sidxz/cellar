@@ -3,3 +3,4 @@
 export * from "./types";
 export * from "./lib/api";
 export * from "./lib/hooks";
+export * from "./lib/use-campaign-curves";

@@ -1,5 +1,3 @@
-"use client";
-
 import { useQuery } from "@tanstack/react-query";
 import type { CampaignResponse } from "../types";
 import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
@@ -28,7 +26,7 @@ export function useCampaignCurves(campaign: CampaignResponse | undefined) {
       });
       return new Map(resp.curves.map((c) => [c.id, c] as const));
     },
-    enabled: !!campaign,
+    enabled: !!campaign && curveIds.length > 0,
     staleTime: 60_000,
   });
 }
