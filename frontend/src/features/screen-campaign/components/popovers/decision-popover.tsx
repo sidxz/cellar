@@ -62,6 +62,9 @@ export function DecisionPopover({
   // Whether we have un-sent local changes.
   const dirty = useRef(false);
 
+  // Set to true by the Cancel button so the unmount autosave is suppressed.
+  const cancelledRef = useRef(false);
+
   const qc = useQueryClient();
 
   // Same hook the legacy DecisionPanel uses.
@@ -115,9 +118,11 @@ export function DecisionPopover({
 
   // Autosave on unmount if there's still a pending dirty state (e.g. the user
   // closed the popover before the 300 ms timer fired).
+  // Skipped when Cancel was clicked — cancelledRef guards against persisting
+  // in-flight edits the user explicitly discarded.
   useEffect(() => {
     return () => {
-      if (dirty.current) {
+      if (!cancelledRef.current && dirty.current) {
         // Capture current state via a ref-captured snapshot.
         // At unmount time the closure variables (decision/reason/notes) are
         // stale in strict-mode double-invocation, but dirty.current is only
@@ -206,7 +211,14 @@ export function DecisionPopover({
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            cancelledRef.current = true;
+            onClose();
+          }}
+        >
           Cancel
         </Button>
         <Button size="sm" onClick={onSave}>

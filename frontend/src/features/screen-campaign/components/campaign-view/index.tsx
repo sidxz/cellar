@@ -162,8 +162,6 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       <CampaignToolbar
         resultCount={campaign.results?.length ?? 0}
         onCustomizeReport={() => setReportOpen(true)}
-        onExport={handleDownload}
-        exportDisabled={isDownloading}
       />
       <ResultsGridV2 campaign={campaign} filters={filters} readOnly />
 

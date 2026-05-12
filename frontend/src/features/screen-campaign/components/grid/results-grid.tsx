@@ -458,7 +458,7 @@ export function ResultsGridV2({
   if (!campaign.results || campaign.results.length === 0) {
     return (
       <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        No compounds — add some via the compound list pane.
+        No compounds yet — add via the +Add pills above.
       </div>
     );
   }
