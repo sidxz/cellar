@@ -7,13 +7,15 @@
  * textarea, notes textarea. PATCHes on change with 300ms debounce.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Badge } from "@/shared/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 import { useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch } from "@/shared/lib/api/campaigns/campaigns";
+import { useCompoundCurves } from "@/features/screening-assay/hooks/use-compound-curves";
+import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
 import { useMoleculesByIds } from "../lib/hooks";
 import type {
   CampaignResultResponse,
@@ -32,17 +34,62 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+// ── CurveBlock — fetches + renders a single DR curve for one channel ─────────
+
+interface CurveBlockProps {
+  channelLabel: string;
+  protocolId: string;
+  moleculeId: string;
+  sourceCurveId: string;
+}
+
+function CurveBlock({
+  channelLabel,
+  protocolId,
+  moleculeId,
+  sourceCurveId,
+}: CurveBlockProps) {
+  const { data: curves, isLoading } = useCompoundCurves(protocolId, moleculeId);
+  const curve = curves?.find((c) => c.id === sourceCurveId) ?? curves?.[0];
+
+  return (
+    <div className="space-y-1">
+      <h4 className="text-xs uppercase text-muted-foreground font-medium">
+        {channelLabel} — dose response
+      </h4>
+      {isLoading ? (
+        <div className="h-32 rounded border bg-muted/20 flex items-center justify-center text-xs text-muted-foreground">
+          Loading curve…
+        </div>
+      ) : !curve ? (
+        <div className="h-20 rounded border border-dashed bg-muted/20 flex items-center justify-center text-xs text-muted-foreground">
+          No curve found for this measurement.
+        </div>
+      ) : (
+        <div className="rounded border bg-background overflow-hidden">
+          <DoseResponseChart curves={[curve]} isInteractive={false} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface DecisionPanelProps {
   campaignId: string;
   result: CampaignResultResponse;
-  /** The channel corresponding to the first measurement (informational). */
-  channel: CampaignChannelResponse | null;
+  /** All channels on the campaign; the panel uses these to resolve protocol_id
+   *  per measurement (needed for DR-curve fetches). */
+  channels: CampaignChannelResponse[];
   onUpdate?: () => void;
 }
 
-export function DecisionPanel({ campaignId, result, onUpdate }: DecisionPanelProps) {
+export function DecisionPanel({ campaignId, result, channels, onUpdate }: DecisionPanelProps) {
+  const channelById = useMemo(
+    () => new Map(channels.map((c) => [c.id, c] as const)),
+    [channels],
+  );
   const [decision, setDecision] = useState(result.decision);
   const [reason, setReason] = useState((result.decision_reason as string | undefined) ?? "");
   const [notes, setNotes] = useState((result.notes as string | undefined) ?? "");
@@ -151,6 +198,27 @@ export function DecisionPanel({ campaignId, result, onUpdate }: DecisionPanelPro
           </div>
         </div>
       )}
+
+      {/* Dose-response curves — one per DR-source measurement (B2) */}
+      {result.measurements
+        .filter((m) => {
+          if (!m.source_curve_id) return false;
+          const ch = channelById.get(m.channel_id);
+          return ch?.source_kind === "dose_response_curve";
+        })
+        .map((m) => {
+          const ch = channelById.get(m.channel_id);
+          if (!ch) return null;
+          return (
+            <CurveBlock
+              key={m.id}
+              channelLabel={ch.label}
+              protocolId={ch.protocol_id}
+              moleculeId={result.molecule_id}
+              sourceCurveId={m.source_curve_id as string}
+            />
+          );
+        })}
 
       {/* Decision */}
       <div>

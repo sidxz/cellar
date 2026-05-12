@@ -165,10 +165,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
             <DecisionPanel
               campaignId={campaignId}
               result={selectedResult}
-              channel={campaign.channels.find(
-                (ch) =>
-                  selectedResult.measurements.find((m) => m.channel_id === ch.id)
-              ) ?? null}
+              channels={campaign.channels}
               onUpdate={() => {
                 void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
               }}
