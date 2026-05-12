@@ -182,7 +182,7 @@ The `▸` glyph is the row-detail expand chevron — click expands `RowDetailDra
 
 - Width: ~360px. Anchored to the decision chip with `align="end"`.
 - **Save semantics** (single, consistent rule): typing fires a 300ms debounce that PATCHes silently. The explicit **Save** button does the same PATCH immediately (skips debounce) and closes the popover. **Cancel** discards local edits and closes. Closing the popover by clicking outside *commits* any dirty state — no data loss. (Same pattern as today's `DecisionPanel`.)
-- Backend: `PATCH /api/v1/campaigns/{id}/results/{result_id}` with `{ decision, decision_reason, notes }`. Today `SetResultDecision` silently drops `notes`; this redesign requires wiring it through — see §6.3.
+- Backend: `PATCH /api/v1/campaigns/{id}/results/{result_id}` with `{ decision, decision_reason, notes }`. The notes field is already wired through the command + use case + route + response (verified: `SetResultDecisionCommand.notes` with `UNSET` semantics, `SetResultDecisionRequest.notes`, `CampaignResultResponse.notes`, and three unit tests for set/clear/leave-unchanged). No backend change required for decisions.
 
 ### 3.4. Row-detail expansion (new)
 
@@ -311,18 +311,7 @@ The serializer reuses the existing curve DTO shape used by `GET /api/v1/protocol
 
 `DoseResponseCurveRepository.find_by_ids(ids: list[UUID], workspace_id: UUID) -> list[DoseResponseCurve]` — add if missing. SQL: `SELECT ... WHERE id = ANY(:ids) AND workspace_id = :workspace_id`. No additional indexing needed (PK is already indexed).
 
-### 6.3. `SetResultDecision.notes` field — wire properly
-
-Open follow-up from the prior session (CLAUDE.md, Phase-5 open follow-up #1): `SetResultDecisionCommand` doesn't currently accept a `notes` field, but the FE sends one. This redesign requires `notes` to be supported.
-
-Changes:
-- `SetResultDecisionCommand`: add `notes: str | None = None`.
-- `SetResultDecision.__call__`: assign `result.notes = command.notes` (the `CampaignResult` entity already has a `notes` attribute).
-- API route `PATCH /api/v1/campaigns/{id}/results/{result_id}`: include `notes` in the request schema and pass through.
-
-This is a single, well-scoped backend change. Two unit tests: notes set, notes cleared.
-
-### 6.4. Nothing else changes
+### 6.3. Nothing else changes
 
 All other backend code is untouched. The CampaignResponse already exposes everything the new UI needs (per the earlier audit). The new `+Add` pills wire to existing endpoints (`add-from-runs`, `add-from-collection`, `add-from-campaign`, `results` for manual).
 
@@ -332,7 +321,7 @@ All other backend code is untouched. The CampaignResponse already exposes everyt
 
 A phased rollout keeps each PR reviewable:
 
-1. **BE batch endpoint + `SetResultDecision.notes`** (1 PR). Add `POST /api/v1/dose-response/curves:batch`, `find_by_ids` repo method, JSON-schema contract, integration test. Add `notes` to `SetResultDecisionCommand` + API. Re-run orval on the FE.
+1. **BE batch DRC endpoint** (1 PR). Add `POST /api/v1/dose-response/curves:batch`, `find_by_ids` repo method, integration test. Re-run orval on the FE. (Decision-notes wiring is already done — see §6.)
 2. **FE: new sections, no grid changes yet** (1 PR). Build `HeaderStrip`, `SourcesSection`, `ChannelsSection`, `CampaignToolbar` as new files. Wire them into the existing `CampaignBuilder` *alongside* the existing 3-pane layout under a `?v2=1` query param (no feature-flag infra needed; this is dev-only and removed in Phase 4). The current builder layout stays default.
 3. **FE: new grid + DR cell + popover/drawer** (1 PR). New `results-grid.tsx`, `measurement-cell.tsx`, `decision-chip-cell.tsx`, `dose-response-cell.tsx`, `decision-popover.tsx`, `row-detail-drawer.tsx`. Still hidden behind the `?v2` switch.
 4. **FE: switch default, delete the old shell** (1 PR). `CampaignBuilder` and `CampaignView` use the new layout unconditionally. Delete `CompoundListPane`, `SourcesSummaryCard`, `DecisionPanel`, `ChannelStrip`. Update tests. Update CLAUDE.md "Current Session Notes".
@@ -360,7 +349,6 @@ These pre-existed before the redesign and must be respected by it (not new work)
 
 ### 9.1. Backend
 - `POST /api/v1/dose-response/curves:batch` — unit on repo `find_by_ids`, API test for happy path, workspace isolation, 400 on >500 ids, empty list returns empty array.
-- `SetResultDecision.notes` — unit: set and clear; API test asserting the PATCH round-trips `notes`.
 
 ### 9.2. Frontend
 - `pnpm tsc --noEmit` must pass after each FE PR.
