@@ -32,6 +32,7 @@ import { HeaderStrip } from "./sections/header-strip";
 import { SourcesSection } from "./sections/sources-section";
 import { ChannelsSection } from "./sections/channels-section";
 import { CampaignToolbar } from "./sections/campaign-toolbar";
+import { CampaignReportSheet } from "./sections/campaign-report-sheet";
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ function CampaignBuilderV2({
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [closeSignOpen, setCloseSignOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
@@ -127,7 +129,7 @@ function CampaignBuilderV2({
       />
       <CampaignToolbar
         resultCount={campaign.results?.length ?? 0}
-        onCustomizeReport={() => { /* phase 5 */ }}
+        onCustomizeReport={() => setReportOpen(true)}
       />
       <ResultsGridV2
         campaign={campaign}
@@ -145,6 +147,11 @@ function CampaignBuilderV2({
         campaign={campaign}
         open={closeSignOpen}
         onOpenChange={setCloseSignOpen}
+      />
+      <CampaignReportSheet
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        campaignId={campaign.id}
       />
     </div>
   );

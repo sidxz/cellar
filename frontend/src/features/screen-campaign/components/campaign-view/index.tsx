@@ -29,6 +29,7 @@ import { HeaderStrip } from "../sections/header-strip";
 import { SourcesSection } from "../sections/sources-section";
 import { ChannelsSection } from "../sections/channels-section";
 import { CampaignToolbar } from "../sections/campaign-toolbar";
+import { CampaignReportSheet } from "../sections/campaign-report-sheet";
 import {
   CampaignFilterBar,
   emptyFilters,
@@ -50,6 +51,7 @@ interface CampaignViewProps {
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =
@@ -159,7 +161,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       />
       <CampaignToolbar
         resultCount={campaign.results?.length ?? 0}
-        onCustomizeReport={() => { /* phase 5 */ }}
+        onCustomizeReport={() => setReportOpen(true)}
         onExport={handleDownload}
         exportDisabled={isDownloading}
       />
@@ -169,6 +171,11 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         open={supersedeOpen}
         onOpenChange={setSupersedeOpen}
         campaign={campaign}
+      />
+      <CampaignReportSheet
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        campaignId={campaign.id}
       />
     </div>
   );
