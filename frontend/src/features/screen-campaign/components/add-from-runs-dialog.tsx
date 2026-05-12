@@ -84,7 +84,7 @@ const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as cons
 interface AddFromRunsDialogProps {
   campaignId: string;
   /** Phase 5: project-scoped protocol/run filter. Accepted here; wired in Phase 5. */
-  projectId?: string;
+  projectId: string;
   open: boolean;
   onClose: () => void;
 }

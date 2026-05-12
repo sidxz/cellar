@@ -35,7 +35,7 @@ import { showSuccess, showError } from "@/shared/lib/toast";
 interface AddFromCollectionDialogProps {
   campaignId: string;
   /** Phase 5: project-scoped collection filter. Accepted here; wired in Phase 5. */
-  projectId?: string;
+  projectId: string;
   open: boolean;
   onClose: () => void;
 }
