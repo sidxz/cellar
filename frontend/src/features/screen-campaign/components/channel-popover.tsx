@@ -7,7 +7,7 @@
  * Used by both the legacy ChannelStrip chip-strip and the new ChannelsSection.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -174,6 +174,40 @@ export function ChannelPopoverForm({
   });
 
   const watchedProtocol = watch("protocol_id");
+  const watchedReadoutId = watch("readout_definition_id");
+
+  // Pre-fill hit threshold from protocol recommendations when a readout is selected
+  // in create mode. Never fires when editing an existing channel.
+  useEffect(() => {
+    if (existing) return;
+    if (!watchedReadoutId || !fullProtocol?.readout_definitions || !fullProtocol.recommended_hit_criteria) return;
+
+    const rd = fullProtocol.readout_definitions.find((r) => r.id === watchedReadoutId);
+    if (!rd?.name) return;
+
+    const recommended = (fullProtocol.recommended_hit_criteria ?? []).find(
+      (c) => c && (c as { readout_name?: string }).readout_name === rd.name,
+    ) as { operator?: string; value?: number | number[] | string } | undefined;
+
+    if (!recommended?.operator || recommended.operator === "none") return;
+
+    setValue("hit_operator", recommended.operator as ChannelFormValues["hit_operator"]);
+
+    const v = recommended.value;
+    if (recommended.operator === "between" && Array.isArray(v) && v.length === 2) {
+      setValue("hit_value_low", String(v[0]));
+      setValue("hit_value_high", String(v[1]));
+      setValue("hit_value", "");
+    } else if (typeof v === "number") {
+      setValue("hit_value", String(v));
+      setValue("hit_value_low", "");
+      setValue("hit_value_high", "");
+    } else if (typeof v === "string") {
+      setValue("hit_value", v);
+      setValue("hit_value_low", "");
+      setValue("hit_value_high", "");
+    }
+  }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
   const onSubmit = (values: ChannelFormValues) => {
     const qcFilter = values.require_approved || values.min_z_prime > 0
