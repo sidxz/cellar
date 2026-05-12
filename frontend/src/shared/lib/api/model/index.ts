@@ -93,6 +93,8 @@ export * from './batchBodySupplierOrgId';
 export * from './batchBodySynthesisDate';
 export * from './batchBodyVendorCatalogNumber';
 export * from './batchBodyVendorLotNumber';
+export * from './batchCurvesRequest';
+export * from './batchCurvesResponse';
 export * from './batchListItemResponse';
 export * from './batchListItemResponseAppearance';
 export * from './batchListItemResponseExpiryDate';
