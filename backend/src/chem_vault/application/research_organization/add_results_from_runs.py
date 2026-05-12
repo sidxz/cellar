@@ -53,6 +53,7 @@ from chem_vault.domain.research_organization.campaign_result import CampaignResu
 from chem_vault.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
+    ChannelSourceKind,
     QualifierHandling,
     ValueQualifier,
 )
@@ -161,16 +162,16 @@ class AddResultsFromRuns:
                     ValidationError("At least one channel_config is required")
                 )
 
-            # Step 1 — channel resolution: reuse or create
+            # Step 1 — channel resolution: reuse or create.
+            # Reuse key is (protocol, readout, normalization_applied) so that
+            # a single readout exposed through different normalization layers
+            # (raw vs % Inhibition vs Z-score) becomes distinct channels.
             channels_created = 0
             channels_reused = 0
-            channel_by_config: dict[
-                tuple[uuid.UUID, uuid.UUID], CampaignChannel
-            ] = {}
-            existing_by_key: dict[
-                tuple[uuid.UUID, uuid.UUID], CampaignChannel
-            ] = {
-                (ch.protocol_id, ch.readout_definition_id): ch
+            ChannelKey = tuple[uuid.UUID, uuid.UUID, str | None]
+            channel_by_config: dict[ChannelKey, CampaignChannel] = {}
+            existing_by_key: dict[ChannelKey, CampaignChannel] = {
+                (ch.protocol_id, ch.readout_definition_id, ch.normalization_applied): ch
                 for ch in campaign.channels
             }
             next_display_order = (
@@ -178,7 +179,12 @@ class AddResultsFromRuns:
             )
 
             for cfg in input.channel_configs:
-                key = (cfg.protocol_id, cfg.readout_definition_id)
+                norm = (
+                    cfg.normalization_applied
+                    if cfg.source_kind == ChannelSourceKind.READOUT_DATA
+                    else None
+                )
+                key: ChannelKey = (cfg.protocol_id, cfg.readout_definition_id, norm)
                 existing = existing_by_key.get(key)
                 if existing:
                     # Reuse — apply updated selection rule + threshold
@@ -197,6 +203,7 @@ class AddResultsFromRuns:
                         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
                         display_order=next_display_order,
                         hit_threshold=cfg.hit_threshold,
+                        normalization_applied=norm,
                     )
                     next_display_order += 1
                     try:
@@ -213,7 +220,12 @@ class AddResultsFromRuns:
             active_channel_ids: set[uuid.UUID] = set()
 
             for cfg in input.channel_configs:
-                key = (cfg.protocol_id, cfg.readout_definition_id)
+                norm = (
+                    cfg.normalization_applied
+                    if cfg.source_kind == ChannelSourceKind.READOUT_DATA
+                    else None
+                )
+                key = (cfg.protocol_id, cfg.readout_definition_id, norm)
                 channel = channel_by_config[key]
                 if cfg.use_for_filter and cfg.hit_threshold is not None:
                     active_channel_ids.add(channel.id)
@@ -223,6 +235,7 @@ class AddResultsFromRuns:
                     protocol_id=cfg.protocol_id,
                     readout_definition_id=cfg.readout_definition_id,
                     source_kind=cfg.source_kind,
+                    normalization_applied=norm,
                 )
                 for mol_id, candidates in candidates_by_mol.items():
                     if cfg.allowed_curve_classes:

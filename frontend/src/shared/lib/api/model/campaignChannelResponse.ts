@@ -6,6 +6,7 @@
  */
 import type { CampaignChannelResponseQcFilter } from './campaignChannelResponseQcFilter';
 import type { CampaignChannelResponseHitThreshold } from './campaignChannelResponseHitThreshold';
+import type { CampaignChannelResponseNormalizationApplied } from './campaignChannelResponseNormalizationApplied';
 
 export interface CampaignChannelResponse {
   id: string;
@@ -18,4 +19,5 @@ export interface CampaignChannelResponse {
   qc_filter?: CampaignChannelResponseQcFilter;
   hit_threshold?: CampaignChannelResponseHitThreshold;
   display_order: number;
+  normalization_applied?: CampaignChannelResponseNormalizationApplied;
 }

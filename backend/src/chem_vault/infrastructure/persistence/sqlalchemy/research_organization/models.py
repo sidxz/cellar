@@ -265,6 +265,12 @@ class CampaignChannelModel(Base, EntityModelMixin):
     qualifier_handling: Mapped[str] = mapped_column(String(32), nullable=False)
     qc_filter: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     hit_threshold: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Picks which `normalization_applied` layer the channel reads from
+    # readout_data. NULL = raw layer; any string filters to that formula
+    # (e.g. "percent_inhibition"). Ignored when source_kind="dose_response_curve".
+    normalization_applied: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
 
 
 class CampaignResultModel(Base, EntityModelMixin):

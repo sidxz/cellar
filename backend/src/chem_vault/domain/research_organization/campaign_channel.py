@@ -34,6 +34,13 @@ class CampaignChannel:
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     qc_filter: dict[str, Any] | None = None
     hit_threshold: HitCriterion | None = None
+    #: Which normalization layer of the readout this channel reads. None for
+    #: the raw layer (``normalization_applied IS NULL``); set to a formula
+    #: name (e.g. ``"percent_inhibition"``) to pick the computed layer.
+    #: Only meaningful when ``source_kind == READOUT_DATA``; ignored for
+    #: dose-response curve channels (the curve's normalization is locked in
+    #: by the protocol's ``dose_response_config.y_normalization``).
+    normalization_applied: str | None = None
 
     def __post_init__(self) -> None:
         if not self.label or not self.label.strip():

@@ -156,6 +156,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                 if model.hit_threshold
                 else None
             ),
+            normalization_applied=model.normalization_applied,
         )
 
     @staticmethod
@@ -172,6 +173,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             qualifier_handling=ch.qualifier_handling.value,
             qc_filter=ch.qc_filter,
             hit_threshold=ch.hit_threshold.to_dict() if ch.hit_threshold else None,
+            normalization_applied=ch.normalization_applied,
         )
 
     @staticmethod
@@ -187,6 +189,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.qualifier_handling = ch.qualifier_handling.value
         model.qc_filter = ch.qc_filter
         model.hit_threshold = ch.hit_threshold.to_dict() if ch.hit_threshold else None
+        model.normalization_applied = ch.normalization_applied
 
     # ------------------------------------------------------------------
     # Result mapping

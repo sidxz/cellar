@@ -22,6 +22,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type {
   ColDef,
+  ColGroupDef,
   ICellRendererParams,
   IRowNode,
 } from "ag-grid-community";
@@ -37,9 +38,11 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
 import {
   CURVE_CLASS_LABELS,
+  READOUT_NORMALIZATION_LABELS,
   type CurveClass,
   type CurveParams,
 } from "@/features/screening-assay/types";
+import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 
 import { useMoleculesByIds } from "../../lib/hooks";
 import { useCampaignCurves } from "../../lib/use-campaign-curves";
@@ -205,6 +208,17 @@ export function ResultsGridV2({
   const curvesQuery = useCampaignCurves(campaign);
   const curveMap = curvesQuery.data ?? new Map();
 
+  // Protocol name lookup for the channel-group header. `includeAll` is on so
+  // we resolve any protocol referenced by a channel regardless of project
+  // scope (campaigns sometimes mix protocols across programs).
+  const { data: protocolSummaries } = useProtocolSummaries(undefined, {
+    includeAll: true,
+  });
+  const protocolNameById = useMemo(
+    () => new Map((protocolSummaries ?? []).map((p) => [p.id, p.name] as const)),
+    [protocolSummaries],
+  );
+
   // ── Row data ────────────────────────────────────────────────────────────────
 
   const rowData = useMemo<RowData[]>(
@@ -214,12 +228,12 @@ export function ResultsGridV2({
 
   // ── Column defs ─────────────────────────────────────────────────────────────
 
-  const columnDefs = useMemo<ColDef<RowData>[]>(() => {
+  const columnDefs = useMemo<(ColDef<RowData> | ColGroupDef<RowData>)[]>(() => {
     const sortedChannels = [...(campaign.channels ?? [])].sort(
       (a, b) => a.display_order - b.display_order,
     );
 
-    const cols: ColDef<RowData>[] = [];
+    const cols: (ColDef<RowData> | ColGroupDef<RowData>)[] = [];
 
     // 1. Compound (pinned left, flex)
     cols.push({
@@ -272,110 +286,145 @@ export function ResultsGridV2({
       },
     });
 
-    // 3. Per-channel: Value [+ Class + Curve if DR]
+    // 3. Per-channel grouped by protocol — mirrors the search-results layout
+    //    so chemists comparing multiple protocols can scan "NadD-Sumo HTS"
+    //    columns separately from "NadD Dose Response".
+    const groupedChannels = new Map<string, typeof sortedChannels>();
     for (const ch of sortedChannels) {
-      const isDR = ch.source_kind === "dose_response_curve";
-      // Derive a representative unit for the header from the first non-empty
-      // measurement on this channel (CampaignChannelResponse has no `unit`
-      // field; the unit lives on each measurement).
-      const sampleUnit =
-        (campaign.results ?? [])
-          .map((r) =>
-            r.measurements?.find((mm) => mm.channel_id === ch.id)?.unit ?? "",
-          )
-          .find((u) => u && u !== "-") ?? "";
-      const unitSuffix = sampleUnit ? ` (${sampleUnit})` : "";
+      const arr = groupedChannels.get(ch.protocol_id) ?? [];
+      arr.push(ch);
+      groupedChannels.set(ch.protocol_id, arr);
+    }
 
-      // Value column
-      cols.push({
-        headerName: `${ch.label}${unitSuffix}`,
-        colId: `${ch.id}_value`,
-        width: 120,
-        valueGetter: (p) => {
-          const r = p.data?.result;
-          const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
-          return m?.value ?? null;
-        },
-        cellRenderer: (params: ICellRendererParams<RowData>) => {
-          const r = params.data?.result;
-          if (!r) return null;
-          const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
-          if (!m) {
-            return <span className="text-muted-foreground">--</span>;
-          }
-          const q = m.value_qualifier;
-          if (q === "nd" || q === "excluded") {
-            return <span className="text-muted-foreground italic">{q}</span>;
-          }
-          const prefix = q === "<" || q === ">" ? `${q} ` : "";
-          return (
-            <CompoundValueCell
-              prefix={prefix}
-              value={m.value ?? null}
-              unit={m.unit}
-              replicates={m.replicate_count ?? null}
-              hitCall={m.hit_call}
-              overridden={m.is_manual_override}
-              overrideReason={m.override_reason}
-              readOnly={readOnly}
-              onEdit={() =>
-                setOverrideTarget({ result: r, channel: ch, measurement: m })
-              }
-            />
-          );
-        },
-      });
+    for (const [protoId, channels] of groupedChannels) {
+      const protoName = protocolNameById.get(protoId) ?? "Protocol";
+      const groupChildren: ColDef<RowData>[] = [];
+      for (const ch of channels) {
+        const isDR = ch.source_kind === "dose_response_curve";
+        // For non-DR channels the channel header includes the normalization
+        // label (e.g. "Raw Data (% Inhibition)") so the chemist sees what
+        // formula produced each cell.
+        const norm = ch.normalization_applied ?? null;
+        const normLabel = norm
+          ? READOUT_NORMALIZATION_LABELS[
+              norm as keyof typeof READOUT_NORMALIZATION_LABELS
+            ] ?? norm
+          : null;
+        // Derive a representative unit from the first non-empty measurement
+        // on this channel (CampaignChannelResponse has no `unit` field — the
+        // unit lives on each measurement, derived per layer at resolve time).
+        const sampleUnit =
+          (campaign.results ?? [])
+            .map(
+              (r) =>
+                r.measurements?.find((mm) => mm.channel_id === ch.id)?.unit ??
+                "",
+            )
+            .find((u) => u && u !== "-") ?? "";
+        // Pick which suffix to show — normalization label wins (more
+        // chemist-meaningful than a raw "%" unit), else fall back to unit.
+        const headerSuffix = normLabel
+          ? ` (${normLabel})`
+          : sampleUnit
+            ? ` (${sampleUnit})`
+            : "";
 
-      if (isDR) {
-        cols.push({
-          headerName: "Class",
-          colId: `${ch.id}_class`,
-          width: 90,
-          sortable: false,
-          cellRenderer: (params: ICellRendererParams<RowData>) => {
-            const r = params.data?.result;
+        groupChildren.push({
+          headerName: `${ch.label}${headerSuffix}`,
+          colId: `${ch.id}_value`,
+          width: 120,
+          valueGetter: (p) => {
+            const r = p.data?.result;
             const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
-            const curve = m?.source_curve_id
-              ? curveMap.get(m.source_curve_id)
-              : null;
-            return curveClassBadge(curve?.curve_class ?? null);
+            return m?.value ?? null;
           },
-        });
-
-        cols.push({
-          headerName: "Curve",
-          colId: `${ch.id}_curve`,
-          width: 150,
-          sortable: false,
           cellRenderer: (params: ICellRendererParams<RowData>) => {
             const r = params.data?.result;
-            const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
-            const curve = m?.source_curve_id
-              ? curveMap.get(m.source_curve_id)
-              : null;
-            if (!curve) {
+            if (!r) return null;
+            const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
+            if (!m) {
               return <span className="text-muted-foreground">--</span>;
             }
-            const curveParams: CurveParams = {
-              top: curve.top,
-              bottom: curve.bottom,
-              hill_slope: curve.hill_slope,
-              fitted_value: curve.fitted_value,
-              r_squared: curve.r_squared,
-            };
-            const dataPoints =
-              (curve.raw_data as Array<{ x: number; y: number }> | null) ??
-              null;
+            const q = m.value_qualifier;
+            if (q === "nd" || q === "excluded") {
+              return <span className="text-muted-foreground italic">{q}</span>;
+            }
+            const prefix = q === "<" || q === ">" ? `${q} ` : "";
             return (
-              <DoseResponseSparkline
-                params={curveParams}
-                dataPoints={dataPoints}
-                curveClass={(curve.curve_class as CurveClass | null) ?? null}
+              <CompoundValueCell
+                prefix={prefix}
+                value={m.value ?? null}
+                unit={m.unit}
+                replicates={m.replicate_count ?? null}
+                hitCall={m.hit_call}
+                overridden={m.is_manual_override}
+                overrideReason={m.override_reason}
+                readOnly={readOnly}
+                onEdit={() =>
+                  setOverrideTarget({ result: r, channel: ch, measurement: m })
+                }
               />
             );
           },
         });
+
+        if (isDR) {
+          groupChildren.push({
+            headerName: "Class",
+            colId: `${ch.id}_class`,
+            width: 90,
+            sortable: false,
+            cellRenderer: (params: ICellRendererParams<RowData>) => {
+              const r = params.data?.result;
+              const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
+              const curve = m?.source_curve_id
+                ? curveMap.get(m.source_curve_id)
+                : null;
+              return curveClassBadge(curve?.curve_class ?? null);
+            },
+          });
+
+          groupChildren.push({
+            headerName: "Curve",
+            colId: `${ch.id}_curve`,
+            width: 150,
+            sortable: false,
+            cellRenderer: (params: ICellRendererParams<RowData>) => {
+              const r = params.data?.result;
+              const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
+              const curve = m?.source_curve_id
+                ? curveMap.get(m.source_curve_id)
+                : null;
+              if (!curve) {
+                return <span className="text-muted-foreground">--</span>;
+              }
+              const curveParams: CurveParams = {
+                top: curve.top,
+                bottom: curve.bottom,
+                hill_slope: curve.hill_slope,
+                fitted_value: curve.fitted_value,
+                r_squared: curve.r_squared,
+              };
+              const dataPoints =
+                (curve.raw_data as Array<{ x: number; y: number }> | null) ??
+                null;
+              return (
+                <DoseResponseSparkline
+                  params={curveParams}
+                  dataPoints={dataPoints}
+                  curveClass={(curve.curve_class as CurveClass | null) ?? null}
+                />
+              );
+            },
+          });
+        }
       }
+
+      cols.push({
+        headerName: protoName,
+        headerClass: "ag-protocol-group-header",
+        children: groupChildren,
+      });
     }
 
     // 4. Decision (pinned right)
@@ -400,6 +449,7 @@ export function ResultsGridV2({
 
     return cols;
   }, [
+    protocolNameById,
     campaign.channels,
     campaign.id,
     campaign.results,

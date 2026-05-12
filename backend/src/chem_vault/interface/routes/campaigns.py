@@ -171,6 +171,9 @@ class ChannelImportConfigDTO(BaseModel):
     hit_threshold: HitCriterionDTO | None = None
     use_for_filter: bool = True
     allowed_curve_classes: list[str] | None = None
+    #: Normalization layer for ``readout_data`` source: None=raw,
+    #: "percent_inhibition"=computed, etc. Ignored for dose-response curves.
+    normalization_applied: str | None = None
 
     def to_domain(self) -> ChannelImportConfig:
         return ChannelImportConfig(
@@ -182,6 +185,7 @@ class ChannelImportConfigDTO(BaseModel):
             hit_threshold=self.hit_threshold.to_domain() if self.hit_threshold else None,
             use_for_filter=self.use_for_filter,
             allowed_curve_classes=self.allowed_curve_classes,
+            normalization_applied=self.normalization_applied,
         )
 
 
@@ -208,6 +212,8 @@ class AddChannelRequest(BaseModel):
     qc_filter: dict[str, Any] | None = None
     hit_threshold: HitCriterionDTO | None = None
     display_order: int = 0
+    #: Normalization layer for ``readout_data`` source. Ignored for dose-response.
+    normalization_applied: str | None = None
 
 
 class UpdateChannelRequest(BaseModel):
@@ -340,6 +346,7 @@ class CampaignChannelResponse(BaseModel):
     qc_filter: dict[str, Any] | None = None
     hit_threshold: HitCriterionDTO | None = None
     display_order: int
+    normalization_applied: str | None = None
 
     @classmethod
     def from_domain(cls, ch: CampaignChannel) -> CampaignChannelResponse:
@@ -354,6 +361,7 @@ class CampaignChannelResponse(BaseModel):
             qc_filter=ch.qc_filter,
             hit_threshold=HitCriterionDTO.from_domain(ch.hit_threshold) if ch.hit_threshold is not None else None,
             display_order=ch.display_order,
+            normalization_applied=ch.normalization_applied,
         )
 
 
@@ -636,6 +644,7 @@ async def add_campaign_channel(
         qc_filter=body.qc_filter,
         hit_threshold=body.hit_threshold.to_domain() if body.hit_threshold is not None else None,
         display_order=body.display_order,
+        normalization_applied=body.normalization_applied,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

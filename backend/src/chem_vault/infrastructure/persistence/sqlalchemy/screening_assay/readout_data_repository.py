@@ -9,7 +9,10 @@ import uuid
 
 from sqlalchemy import delete, func, select
 
-from chem_vault.domain.screening_assay.enums import ReadoutNormalization
+from chem_vault.domain.screening_assay.enums import (
+    ReadoutNormalization,
+    unit_for_normalization,
+)
 from chem_vault.domain.screening_assay.readout_data import ReadoutData
 from chem_vault.domain.shared.enums import Qualifier
 from chem_vault.domain.shared.value_objects import QualifiedValue
@@ -17,31 +20,6 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
     ReadoutDataModel,
 )
 from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
-
-def _normalization_unit(normalization_applied: str | None, raw_unit: str | None) -> str | None:
-    """Resolve the display unit for an aggregated value.
-
-    Normalization formulas have well-defined output units that override the
-    raw readout's unit (a "Raw Data" readout in nM still produces "%" after
-    PERCENT_INHIBITION). Unknown / future formulas fall back to the raw unit
-    so display stays reasonable without code changes.
-    """
-    if normalization_applied is None:
-        return raw_unit
-    try:
-        formula = ReadoutNormalization(normalization_applied)
-    except ValueError:
-        return raw_unit
-    if formula in (
-        ReadoutNormalization.PERCENT_INHIBITION,
-        ReadoutNormalization.PERCENT_ACTIVATION,
-        ReadoutNormalization.PERCENT_CONTROL,
-    ):
-        return "%"
-    if formula == ReadoutNormalization.Z_SCORE:
-        return None  # unitless
-    return raw_unit
 
 
 class SQLAlchemyReadoutDataRepository:
@@ -183,7 +161,7 @@ class SQLAlchemyReadoutDataRepository:
             # Normalized rows (% inh / % act / % control) carry the formula's
             # output unit, not the raw readout's unit. The raw readout's unit
             # is meaningful only for the raw layer.
-            unit = _normalization_unit(row.normalization_applied, row.unit)
+            unit = unit_for_normalization(row.normalization_applied, row.unit)
 
             entry = AggregatedReadout(
                 readout_definition_id=row.readout_definition_id,

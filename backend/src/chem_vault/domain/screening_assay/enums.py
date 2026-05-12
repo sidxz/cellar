@@ -55,6 +55,34 @@ class ReadoutNormalization(StrEnum):
     Z_SCORE = "z_score"
 
 
+def unit_for_normalization(
+    normalization_applied: str | None, raw_unit: str | None
+) -> str | None:
+    """Display unit for a value that came through a given normalization layer.
+
+    Normalization formulas have well-defined output units that override the
+    raw readout's unit (a "Raw Data" readout in nM still produces "%" after
+    PERCENT_INHIBITION). Unknown / future formulas fall back to the raw unit
+    so display stays reasonable without code changes. Returns ``None`` for
+    the unitless Z-score formula.
+    """
+    if normalization_applied is None:
+        return raw_unit
+    try:
+        formula = ReadoutNormalization(normalization_applied)
+    except ValueError:
+        return raw_unit
+    if formula in (
+        ReadoutNormalization.PERCENT_INHIBITION,
+        ReadoutNormalization.PERCENT_ACTIVATION,
+        ReadoutNormalization.PERCENT_CONTROL,
+    ):
+        return "%"
+    if formula == ReadoutNormalization.Z_SCORE:
+        return None
+    return raw_unit
+
+
 class ConditionDataType(StrEnum):
     """Data type of a condition variable."""
 

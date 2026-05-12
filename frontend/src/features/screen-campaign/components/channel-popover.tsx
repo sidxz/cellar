@@ -27,6 +27,11 @@ import {
 
 import { useProtocolSummaries, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import {
+  READOUT_NORMALIZATION_LABELS,
+  type HitCriterion,
+} from "@/features/screening-assay/types";
+import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
+import {
   useAddCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
   useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
 } from "@/shared/lib/api/campaigns/campaigns";
@@ -59,6 +64,11 @@ const channelSchema = z.object({
   hit_value: z.string(),
   hit_value_low: z.string(),
   hit_value_high: z.string(),
+  // Normalization layer for readout_data channels. "raw" sentinel maps to the
+  // raw layer (NULL on the wire); any other value selects that formula.
+  // Locked at create-time — Radix Select forbids empty-string values, hence
+  // the explicit sentinel.
+  normalization_applied: z.string(),
 });
 
 type ChannelFormValues = z.infer<typeof channelSchema>;
@@ -170,43 +180,47 @@ export function ChannelPopoverForm({
       hit_value: defaultHitValue,
       hit_value_low: defaultHitLow,
       hit_value_high: defaultHitHigh,
+      normalization_applied: existing?.normalization_applied ?? "raw",
     },
   });
 
   const watchedProtocol = watch("protocol_id");
   const watchedReadoutId = watch("readout_definition_id");
 
-  // Pre-fill hit threshold from protocol recommendations when a readout is selected
-  // in create mode. Never fires when editing an existing channel.
+  // Pre-fill hit threshold from protocol recommendations when a readout is
+  // selected in create mode. Shares the same carry-forward rules as the
+  // "Add from runs" dialog (see deriveChannelHitDefaults). Never fires when
+  // editing an existing channel.
   useEffect(() => {
     if (existing) return;
-    if (!watchedReadoutId || !fullProtocol?.readout_definitions || !fullProtocol.recommended_hit_criteria) return;
-
+    if (!watchedReadoutId || !fullProtocol?.readout_definitions) return;
     const rd = fullProtocol.readout_definitions.find((r) => r.id === watchedReadoutId);
     if (!rd?.name) return;
 
-    const recommended = (fullProtocol.recommended_hit_criteria ?? []).find(
-      (c) => c && (c as { readout_name?: string }).readout_name === rd.name,
-    ) as { operator?: string; value?: number | number[] | string } | undefined;
+    const defaults = deriveChannelHitDefaults(
+      (fullProtocol.recommended_hit_criteria ?? []) as unknown as HitCriterion[],
+      { name: rd.name, data_type: rd.data_type },
+    );
 
-    if (!recommended?.operator || recommended.operator === "none") return;
+    setValue(
+      "hit_operator",
+      (defaults.hit_operator === "" ? "none" : defaults.hit_operator) as ChannelFormValues["hit_operator"],
+    );
+    setValue("hit_value", defaults.hit_value);
+    setValue("hit_value_low", defaults.hit_value_low);
+    setValue("hit_value_high", defaults.hit_value_high);
+  }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
-    setValue("hit_operator", recommended.operator as ChannelFormValues["hit_operator"]);
-
-    const v = recommended.value;
-    if (recommended.operator === "between" && Array.isArray(v) && v.length === 2) {
-      setValue("hit_value_low", String(v[0]));
-      setValue("hit_value_high", String(v[1]));
-      setValue("hit_value", "");
-    } else if (typeof v === "number") {
-      setValue("hit_value", String(v));
-      setValue("hit_value_low", "");
-      setValue("hit_value_high", "");
-    } else if (typeof v === "string") {
-      setValue("hit_value", v);
-      setValue("hit_value_low", "");
-      setValue("hit_value_high", "");
-    }
+  // Auto-pick the readout's primary normalization layer when the readout is
+  // chosen (create mode only). Chemists want "% Inhibition" by default, not
+  // raw absorbance — but they can still flip back to "raw" with the picker.
+  useEffect(() => {
+    if (existing) return;
+    if (!watchedReadoutId || !fullProtocol?.readout_definitions) return;
+    const rd = fullProtocol.readout_definitions.find((r) => r.id === watchedReadoutId);
+    if (!rd) return;
+    const primary = rd.normalizations?.find((n) => n !== "none");
+    setValue("normalization_applied", primary ?? "raw");
   }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
   const onSubmit = (values: ChannelFormValues) => {
@@ -255,6 +269,12 @@ export function ChannelPopoverForm({
         },
       });
     } else {
+      // "raw" sentinel → wire NULL so the resolver picks the raw layer. DR-curve
+      // channels ignore the field entirely on the backend, so we send null.
+      const normalizationApplied =
+        values.source_kind === "readout_data" && values.normalization_applied !== "raw"
+          ? values.normalization_applied
+          : null;
       addMutation.mutate({
         campaignId,
         data: {
@@ -266,6 +286,7 @@ export function ChannelPopoverForm({
           qualifier_handling: values.qualifier_handling,
           qc_filter: qcFilter ?? null,
           hit_threshold: hitThreshold,
+          normalization_applied: normalizationApplied,
         },
       });
     }
@@ -378,6 +399,49 @@ export function ChannelPopoverForm({
             {existing.source_kind === "dose_response_curve"
               ? "Dose-response curve"
               : "Readout data"}
+          </span>{" "}
+          <span className="text-muted-foreground/70">(locked after creation)</span>
+        </div>
+      )}
+
+      {/* Normalization layer — only for readout_data, create mode, when the
+          chosen readout actually emits normalizations. Locked after creation
+          for the same reason source_kind is: changing it would invalidate
+          every existing measurement. */}
+      {!isEdit && watch("source_kind") === "readout_data" && (() => {
+        const rd = readouts.find((r) => r.id === watchedReadoutId);
+        const norms = rd?.normalizations?.filter((n) => n !== "none") ?? [];
+        if (norms.length === 0) return null;
+        return (
+          <div className="space-y-1">
+            <Label>Normalization</Label>
+            <Controller
+              name="normalization_applied"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="raw">Raw (no normalization)</SelectItem>
+                    {norms.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {READOUT_NORMALIZATION_LABELS[n as keyof typeof READOUT_NORMALIZATION_LABELS] ?? n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        );
+      })()}
+      {isEdit && existing && existing.normalization_applied && (
+        <div className="text-xs text-muted-foreground">
+          Normalization:{" "}
+          <span className="font-medium text-foreground">
+            {READOUT_NORMALIZATION_LABELS[
+              existing.normalization_applied as keyof typeof READOUT_NORMALIZATION_LABELS
+            ] ?? existing.normalization_applied}
           </span>{" "}
           <span className="text-muted-foreground/70">(locked after creation)</span>
         </div>

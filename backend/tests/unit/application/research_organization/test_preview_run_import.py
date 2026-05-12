@@ -66,8 +66,11 @@ class FakeChannelQuery:
         protocol_id,
         readout_definition_id,
         source_kind,
+        normalization_applied=None,
     ):
-        self.calls.append((run_ids, protocol_id, readout_definition_id, source_kind))
+        self.calls.append(
+            (run_ids, protocol_id, readout_definition_id, source_kind, normalization_applied)
+        )
         all_for_channel = self._data.get((protocol_id, readout_definition_id), {})
         # Filter candidates to those whose run_id is in the requested run_ids
         out: dict[uuid.UUID, list[ResolvedCandidate]] = {}

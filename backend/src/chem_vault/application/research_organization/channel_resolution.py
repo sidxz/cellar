@@ -93,12 +93,16 @@ class ChannelResolutionQuery(Protocol):
         protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
         source_kind: "ChannelSourceKind",
+        normalization_applied: str | None = None,
     ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
         """Per-molecule candidates restricted to a specific set of runs.
 
         Used by PreviewRunImport / AddResultsFromRuns to enumerate all molecules
         tested in the selected runs for a given (protocol, readout) pair.
-        Returns ``dict[molecule_id, list[ResolvedCandidate]]``.
+        ``normalization_applied`` filters readout_data rows by their formula
+        layer (None = raw; "percent_inhibition" = computed); ignored for
+        dose-response curve channels. Returns
+        ``dict[molecule_id, list[ResolvedCandidate]]``.
         """
         ...
 

@@ -57,7 +57,14 @@ class FakeChannelQuery:
         return []
 
     async def fetch_candidates_for_runs(
-        self, *, workspace_id, run_ids, protocol_id, readout_definition_id, source_kind
+        self,
+        *,
+        workspace_id,
+        run_ids,
+        protocol_id,
+        readout_definition_id,
+        source_kind,
+        normalization_applied=None,
     ):
         run_set = set(run_ids)
         out: dict[uuid.UUID, list[ResolvedCandidate]] = {}

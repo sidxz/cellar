@@ -20,7 +20,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from chem_vault.application.research_organization.channel_resolution import (
@@ -31,6 +31,7 @@ from chem_vault.domain.research_organization.enums import (
     ChannelSourceKind,
     ValueQualifier,
 )
+from chem_vault.domain.screening_assay.enums import unit_for_normalization
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ProtocolModel,
@@ -38,6 +39,18 @@ from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models imp
     ReadoutDefinitionModel,
     RunModel,
 )
+
+
+def _normalization_clause(normalization_applied: str | None) -> ColumnElement[bool]:
+    """SQL predicate that pins readout_data to one ``normalization_applied`` layer.
+
+    Without this filter raw rows and their computed siblings
+    (percent_inhibition / z_score / …) share a single ``readout_definition_id``
+    and would all be returned, mixing absorbance with percentages.
+    """
+    if normalization_applied is None:
+        return ReadoutDataModel.normalization_applied.is_(None)
+    return ReadoutDataModel.normalization_applied == normalization_applied
 
 
 def _extract_min_z_prime(qc_metrics: dict | None) -> float | None:
@@ -152,6 +165,7 @@ class SQLAlchemyChannelResolutionQuery:
         protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
         source_kind: ChannelSourceKind,
+        normalization_applied: str | None = None,
     ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
         """Per-molecule candidates restricted to a set of run_ids.
 
@@ -214,6 +228,7 @@ class SQLAlchemyChannelResolutionQuery:
                     ReadoutDataModel.run_id.in_(run_ids),
                     ReadoutDataModel.value_numeric.is_not(None),
                     ReadoutDataModel.is_outlier.is_(False),
+                    _normalization_clause(normalization_applied),
                 )
             )
 
@@ -245,7 +260,7 @@ class SQLAlchemyChannelResolutionQuery:
                 cand = ResolvedCandidate(
                     value=float(row.value_numeric),
                     qualifier=qualifier,
-                    unit=row.unit or "",
+                    unit=unit_for_normalization(normalization_applied, row.unit) or "",
                     run_id=row.run_id,
                     run_date=row.run_date,
                     run_approved=row.status == "approved",
@@ -296,6 +311,10 @@ class SQLAlchemyChannelResolutionQuery:
                 # Skip outliers — they would otherwise corrupt MEAN/
                 # GEOMEAN aggregations.
                 ReadoutDataModel.is_outlier.is_(False),
+                # Restrict to the channel's normalization layer so a raw
+                # readout's computed siblings (percent_inhibition / z_score)
+                # don't bleed into the aggregate.
+                _normalization_clause(channel.normalization_applied),
             )
         )
         async with self._sf() as session:
@@ -311,7 +330,7 @@ class SQLAlchemyChannelResolutionQuery:
                 ResolvedCandidate(
                     value=float(row.value_numeric),
                     qualifier=qualifier,
-                    unit=row.unit or "",
+                    unit=unit_for_normalization(channel.normalization_applied, row.unit) or "",
                     run_id=row.run_id,
                     run_date=row.run_date,
                     run_approved=row.status == "approved",

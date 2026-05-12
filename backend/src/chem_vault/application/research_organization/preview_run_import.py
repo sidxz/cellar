@@ -74,6 +74,10 @@ class ChannelImportConfig:
     hit_threshold: HitCriterion | None = None
     use_for_filter: bool = True
     allowed_curve_classes: list[str] | None = None
+    #: Normalization layer when source_kind is READOUT_DATA (None = raw,
+    #: "percent_inhibition" / "z_score" / … select that computed layer).
+    #: Ignored for dose-response curve channels.
+    normalization_applied: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -221,17 +225,33 @@ class PreviewRunImport:
         if not q.channel_configs:
             return Failure(ValidationError("At least one channel_config is required"))
 
-        # Step 2 — channel meta (new vs reused).
-        existing_by_key: dict[tuple[uuid.UUID, uuid.UUID], Any] = {
-            (ch.protocol_id, ch.readout_definition_id): ch for ch in campaign.channels
+        # Step 2 — channel meta (new vs reused). Reuse key is
+        # (protocol, readout, normalization_applied) so the same readout
+        # exposed through different normalization layers stays distinct.
+        def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
+            return (
+                cfg.normalization_applied
+                if cfg.source_kind == ChannelSourceKind.READOUT_DATA
+                else None
+            )
+
+        existing_by_key: dict[tuple[uuid.UUID, uuid.UUID, str | None], Any] = {
+            (ch.protocol_id, ch.readout_definition_id, ch.normalization_applied): ch
+            for ch in campaign.channels
         }
         channels_meta: list[dict[str, Any]] = []
+
+        def _channel_key(cfg: ChannelImportConfig) -> str:
+            norm = _cfg_norm(cfg)
+            suffix = f":{norm}" if norm else ""
+            return f"{cfg.protocol_id}/{cfg.readout_definition_id}{suffix}"
+
         for cfg in q.channel_configs:
-            key = (cfg.protocol_id, cfg.readout_definition_id)
+            key = (cfg.protocol_id, cfg.readout_definition_id, _cfg_norm(cfg))
             existing = existing_by_key.get(key)
             channels_meta.append(
                 {
-                    "channel_key": f"{cfg.protocol_id}/{cfg.readout_definition_id}",
+                    "channel_key": _channel_key(cfg),
                     "label": cfg.label,
                     "source": "reused" if existing else "new",
                     "reuse_of_channel_id": str(existing.id) if existing else None,
@@ -247,7 +267,7 @@ class PreviewRunImport:
         rows_by_molecule: dict[uuid.UUID, dict[str, Any]] = {}
         active_keys: set[str] = set()
         for cfg in q.channel_configs:
-            key = f"{cfg.protocol_id}/{cfg.readout_definition_id}"
+            key = _channel_key(cfg)
             if cfg.use_for_filter and cfg.hit_threshold is not None:
                 active_keys.add(key)
             candidates_by_mol = await self._query.fetch_candidates_for_runs(
@@ -256,6 +276,7 @@ class PreviewRunImport:
                 protocol_id=cfg.protocol_id,
                 readout_definition_id=cfg.readout_definition_id,
                 source_kind=cfg.source_kind,
+                normalization_applied=cfg.normalization_applied,
             )
             for molecule_id, candidates in candidates_by_mol.items():
                 # B6: optional curve_class filter (DR-curve sources only).

@@ -51,6 +51,8 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { useGetProtocolApiV1ProtocolsProtocolIdGet } from "@/shared/lib/api/protocols/protocols";
 import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
+import { READOUT_NORMALIZATION_LABELS, type HitCriterion } from "@/features/screening-assay/types";
+import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 import {
   usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost,
@@ -78,6 +80,11 @@ interface ChannelConfigUI {
   /** Multi-select of curve classes ("full", "partial", "bell_shaped", "inactive").
    *  Empty array means "no class filter — all classes pass". DR-curve channels only. */
   allowed_curve_classes: string[];
+  /** For readout_data channels with normalizations: picks which formula layer
+   *  to read ("percent_inhibition" / "z_score" / …). null means the raw layer.
+   *  Auto-derived from the readout's first non-`none` normalization on selection.
+   *  Ignored for dose-response curve channels. */
+  normalization_applied: string | null;
 }
 
 const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as const;
@@ -135,27 +142,40 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       .map((rd) => {
         const prior = existing.get(rd.id);
         if (prior) return prior;
-        const recommended = (protocolDetail.recommended_hit_criteria ?? []).find(
-          (h) => h && (h as { readout_name?: string }).readout_name === rd.name,
-        ) as { operator?: string; value?: number | string[] } | undefined;
-        const hasNumericRecommended =
-          recommended != null && typeof recommended.value === "number";
         // Auto-pick source kind: dose-response readouts come from the curves
         // table (fitted IC50/EC50/etc.), not the per-well ReadoutData.
         const isDoseResponse = rd.data_type === "dose_response";
+        // Pick the readout's first non-`none` normalization as the chemist's
+        // primary view (% Inhibition, Z-Score, etc.). Raw if no normalizations
+        // configured. Ignored for DR-curve channels.
+        const primaryNorm = isDoseResponse
+          ? null
+          : (rd.normalizations?.find((n) => n !== "none") ?? null);
+        const labelSuffix = primaryNorm
+          ? ` (${READOUT_NORMALIZATION_LABELS[primaryNorm as keyof typeof READOUT_NORMALIZATION_LABELS] ?? primaryNorm})`
+          : "";
+        const defaults = deriveChannelHitDefaults(
+          (protocolDetail.recommended_hit_criteria ?? []) as unknown as HitCriterion[],
+          { name: rd.name, data_type: rd.data_type },
+        );
+        const hasThreshold = defaults.hit_operator !== "";
         const result: ChannelConfigUI = {
           protocol_id: protocolDetail.id,
           readout_definition_id: rd.id,
-          label: rd.name,
+          label: `${rd.name}${labelSuffix}`,
           source_kind: isDoseResponse ? "dose_response_curve" : "readout_data",
           selection_rule: "latest_approved_run",
-          hit_operator: hasNumericRecommended ? (recommended!.operator ?? "lt") : "",
-          hit_value: hasNumericRecommended ? String(recommended!.value) : "",
-          hit_value_low: "",
-          hit_value_high: "",
-          // DR-curve readouts are the natural hit candidates → filter ON by default.
-          use_for_filter: hasNumericRecommended || isDoseResponse,
-          allowed_curve_classes: [],
+          hit_operator: defaults.hit_operator,
+          hit_value: defaults.hit_value,
+          hit_value_low: defaults.hit_value_low,
+          hit_value_high: defaults.hit_value_high,
+          // DR readouts are the natural hit candidates → filter ON by default
+          // even without a numeric threshold; any non-DR readout needs a
+          // threshold or curve-class filter to contribute to filtering.
+          use_for_filter:
+            hasThreshold || isDoseResponse || defaults.allowed_curve_classes.length > 0,
+          allowed_curve_classes: defaults.allowed_curve_classes,
+          normalization_applied: primaryNorm,
         };
         return result;
       });
@@ -190,6 +210,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
         | null;
       use_for_filter: boolean;
       allowed_curve_classes?: string[] | null;
+      normalization_applied?: string | null;
     }[];
     filter_mode: "any" | "all";
   } {
@@ -235,6 +256,8 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             c.source_kind === "dose_response_curve" && c.allowed_curve_classes.length > 0
               ? c.allowed_curve_classes
               : null,
+          normalization_applied:
+            c.source_kind === "readout_data" ? c.normalization_applied : null,
         };
       }),
       filter_mode: filterMode,

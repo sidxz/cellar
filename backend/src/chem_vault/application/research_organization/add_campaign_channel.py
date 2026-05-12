@@ -53,6 +53,10 @@ class AddCampaignChannelCommand(Command):
     qc_filter: dict | None
     hit_threshold: HitCriterion | None  # None → attempt carry-forward from protocol
     display_order: int
+    #: Optional normalization layer to read for readout_data channels (e.g.
+    #: "percent_inhibition"). ``None`` selects the raw layer. Ignored for
+    #: dose-response curve channels.
+    normalization_applied: str | None = None
 
 
 class AddCampaignChannel:
@@ -149,6 +153,11 @@ class AddCampaignChannel:
                     qc_filter=input.qc_filter,
                     hit_threshold=effective_threshold,
                     display_order=input.display_order,
+                    normalization_applied=(
+                        input.normalization_applied
+                        if input.source_kind == ChannelSourceKind.READOUT_DATA
+                        else None
+                    ),
                 )
                 campaign.add_channel(channel)
             except ValidationError as e:
