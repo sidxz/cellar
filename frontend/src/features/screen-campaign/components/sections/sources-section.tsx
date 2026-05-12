@@ -21,6 +21,9 @@ type SourceEntry = {
   saved_search_id?: string;
   description?: string | null;
   count?: number;
+  /** Backend resolves the bench scientist for run-kind entries by looking
+   *  up the run's "Scientist" readout at response time. */
+  scientist?: string | null;
 };
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -109,6 +112,8 @@ function describeSource(
         snapshotLabel ||
         (source.run_id ? source.run_id.slice(0, 8) : null);
       if (runLabel) parts.push(runLabel);
+      const scientist = source.scientist?.trim();
+      if (scientist) parts.push(`by ${scientist}`);
       break;
     }
 

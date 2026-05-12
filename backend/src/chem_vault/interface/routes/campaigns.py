@@ -8,6 +8,9 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
+from sqlalchemy import select
+
+from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 from chem_vault.application.research_organization.add_campaign_channel import (
     AddCampaignChannelCommand,
@@ -383,11 +386,20 @@ class CampaignChannelResponse(BaseModel):
         )
 
 
-def _derive_compound_sources(results: list[CampaignResult]) -> list[dict[str, Any]]:
+def _derive_compound_sources(
+    results: list[CampaignResult],
+    scientist_by_run_id: dict[uuid.UUID, str] | None = None,
+) -> list[dict[str, Any]]:
     """Derive compound_sources summary from per-result added_from attribution.
 
     Groups results by their source ref. Results with added_from=None are
     treated as ManualRef. Returns a list of {kind, ref, description, count}.
+
+    When ``scientist_by_run_id`` is supplied, run-kind entries are decorated
+    with the bench scientist name from the run's "Scientist" readout. The
+    map is computed once per response in the GET handler (cheap one-shot
+    query) rather than stored on the campaign aggregate, so it works
+    retroactively on already-imported campaigns.
     """
     from collections import Counter
 
@@ -406,10 +418,66 @@ def _derive_compound_sources(results: list[CampaignResult]) -> list[dict[str, An
         key = (d.get("kind", "manual"), d.get("description"))
         counts[key] += 1
 
-    return [
-        {**groups[k], "count": counts[k]}
-        for k in groups
-    ]
+    out: list[dict[str, Any]] = []
+    for k in groups:
+        entry = {**groups[k], "count": counts[k]}
+        if (
+            entry.get("kind") == "run"
+            and scientist_by_run_id is not None
+            and entry.get("run_id")
+        ):
+            try:
+                rid = uuid.UUID(entry["run_id"])
+            except (ValueError, TypeError):
+                rid = None
+            if rid is not None:
+                name = scientist_by_run_id.get(rid)
+                if name:
+                    entry["scientist"] = name
+        out.append(entry)
+    return out
+
+
+async def _resolve_scientist_by_run_id(
+    uow: AsyncUnitOfWork,
+    workspace_id: uuid.UUID,
+    run_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, str]:
+    """Look up the "Scientist" readout text for each run_id in one query.
+
+    A protocol may declare a free-text "Scientist" readout (case-insensitive
+    match) that the bench operator filled in at run time. We return the first
+    non-empty value seen per run. Returns an empty dict when no run carries
+    a value or no run_ids are supplied.
+    """
+    if not run_ids:
+        return {}
+    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+        ReadoutDataModel,
+        ReadoutDefinitionModel,
+    )
+    from sqlalchemy import func
+
+    stmt = (
+        select(
+            ReadoutDataModel.run_id,
+            func.min(ReadoutDataModel.value_text).label("scientist"),
+        )
+        .join(
+            ReadoutDefinitionModel,
+            ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+        )
+        .where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.run_id.in_(run_ids),
+            func.lower(ReadoutDefinitionModel.name) == "scientist",
+            ReadoutDataModel.value_text.is_not(None),
+            func.length(ReadoutDataModel.value_text) > 0,
+        )
+        .group_by(ReadoutDataModel.run_id)
+    )
+    rows = (await uow.session.execute(stmt)).all()
+    return {row.run_id: row.scientist for row in rows if row.scientist}
 
 
 class CampaignResponse(BaseModel):
@@ -436,7 +504,11 @@ class CampaignResponse(BaseModel):
     results: list[CampaignResultResponse]
 
     @classmethod
-    def from_domain(cls, c: Campaign) -> CampaignResponse:
+    def from_domain(
+        cls,
+        c: Campaign,
+        scientist_by_run_id: dict[uuid.UUID, str] | None = None,
+    ) -> CampaignResponse:
         return cls(
             id=c.id,
             workspace_id=c.workspace_id,
@@ -444,7 +516,7 @@ class CampaignResponse(BaseModel):
             name=c.name,
             description=c.description,
             status=c.status.value,
-            compound_sources=_derive_compound_sources(c.results),
+            compound_sources=_derive_compound_sources(c.results, scientist_by_run_id),
             publishes_collection=c.publishes_collection,
             supersedes_campaign_id=c.supersedes_campaign_id,
             superseded_by_campaign_id=c.superseded_by_campaign_id,
@@ -529,9 +601,18 @@ async def get_campaign(
     repo = SQLAlchemyCampaignRepository(uow)
     async with uow:
         campaign = await repo.find_by_id_in_workspace(auth.workspace_id, campaign_id)
-    if campaign is None:
-        raise NotFoundError("Campaign", str(campaign_id))
-    return CampaignResponse.from_domain(campaign)
+        if campaign is None:
+            raise NotFoundError("Campaign", str(campaign_id))
+        run_ids = {
+            m.source_run_id
+            for r in campaign.results
+            for m in r.measurements
+            if m.source_run_id is not None
+        }
+        scientist_by_run_id = await _resolve_scientist_by_run_id(
+            uow, auth.workspace_id, run_ids
+        )
+    return CampaignResponse.from_domain(campaign, scientist_by_run_id)
 
 
 @router.patch("/{campaign_id}", response_model=CampaignResponse)
