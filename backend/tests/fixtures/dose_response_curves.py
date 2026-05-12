@@ -111,5 +111,4 @@ async def seed_curve(
 
     repo = SQLAlchemyDoseResponseCurveRepository(uow)
     await repo.save(curve)
-    await uow.commit()
     return curve

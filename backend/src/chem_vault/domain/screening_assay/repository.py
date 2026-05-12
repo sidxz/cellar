@@ -175,7 +175,7 @@ class DoseResponseCurveRepository(Protocol):
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[DoseResponseCurve]: ...
     async def find_by_ids(
-        self, ids: list[uuid.UUID], workspace_id: uuid.UUID
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
     ) -> list[DoseResponseCurve]: ...
     async def find_best_curves_for_molecules(
         self,

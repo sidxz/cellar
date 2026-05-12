@@ -19,9 +19,10 @@ class TestFindByIds:
             c1 = await seed_curve(uow, workspace_id=workspace_id)
             c2 = await seed_curve(uow, workspace_id=workspace_id)
             c3 = await seed_curve(uow, workspace_id=workspace_id)
+            await uow.commit()
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([c1.id, c3.id], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [c1.id, c3.id])
         ids = {c.id for c in curves}
         assert ids == {c1.id, c3.id}
 
@@ -30,21 +31,23 @@ class TestFindByIds:
         async with uow:
             c1 = await seed_curve(uow, workspace_id=workspace_id)
             c2 = await seed_curve(uow, workspace_id=other_ws)
+            await uow.commit()
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([c1.id, c2.id], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [c1.id, c2.id])
         assert {c.id for c in curves} == {c1.id}
 
     async def test_empty_input_returns_empty(self, uow, workspace_id):
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [])
         assert curves == []
 
     async def test_missing_ids_silently_dropped(self, uow, workspace_id):
         async with uow:
             c1 = await seed_curve(uow, workspace_id=workspace_id)
+            await uow.commit()
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([c1.id, uuid.uuid4()], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [c1.id, uuid.uuid4()])
         assert [c.id for c in curves] == [c1.id]
