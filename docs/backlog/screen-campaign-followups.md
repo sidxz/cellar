@@ -210,6 +210,15 @@ A second pass against the stated intent ("snapshot for DAIKON publication; scree
 
 ---
 
+## ChannelPopoverForm follow-ups (2026-05-12, found during Task 2.5 extraction)
+
+Both are pre-existing in the original `ChannelForm` (before extraction in `fb8f5b72`). Tracked for a separate fix session, not a redesign blocker.
+
+- **`between` range silent-drop.** `channel-popover.tsx:187-200` — when user enters `low > high`, the form silently saves without the threshold. No validation error shown. Fix: add a `superRefine` to the schema that emits `path: ["hit_value_high"]` when `Number(low) > Number(high)`.
+- **`"in"` operator silent clearing on edit.** `channel-popover.tsx:68-79` + `channels-section.tsx:112` — `parseHitThreshold` returns `null` for `string[]` operand values, so opening the edit popover for a channel created with `operator: "in"` (e.g. from `recommended_hit_criteria`) silently clears the existing threshold on save and hides it in the section display. Fix: detect `operator === "in"` in the edit form and render as read-only; in `formatThreshold`, handle the `"in"` case explicitly.
+
+---
+
 ## Quick reference — key recent commits on `fe2`
 
 - `082d47fb..cef359e4` — backend refactor (per-result attribution, 6 commits)
