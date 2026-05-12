@@ -117,7 +117,11 @@ function OverrideModal({
   const [value, setValue] = useState(String(measurement?.value ?? ""));
   const [qualifier, setQualifier] = useState(measurement?.value_qualifier ?? "=");
   const [unit, setUnit] = useState(measurement?.unit ?? "");
-  const [hitCall, setHitCall] = useState<string>(measurement?.hit_call ?? "");
+  // Radix Select forbids empty-string item values, so use "none" as the
+  // internal sentinel and translate to undefined on submit.
+  const [hitCall, setHitCall] = useState<string>(
+    (measurement?.hit_call as string | undefined) ?? "none",
+  );
   const [reason, setReason] = useState(measurement?.override_reason ?? "");
 
   const isPlaceholderQualifier = qualifier === "nd" || qualifier === "excluded";
@@ -128,7 +132,7 @@ function OverrideModal({
     if (isPlaceholderQualifier) {
       setValue("");
       setUnit("");
-      setHitCall("");
+      setHitCall("none");
     }
   }, [isPlaceholderQualifier]);
 
@@ -140,7 +144,7 @@ function OverrideModal({
       numValue !== (measurement.value ?? null) ||
       qualifier !== measurement.value_qualifier ||
       (!isPlaceholderQualifier && unit !== measurement.unit) ||
-      hitCall !== (measurement.hit_call ?? "")
+      hitCall !== ((measurement.hit_call as string | undefined) ?? "none")
     );
   })();
   const reasonRequired = valueDiffersFromAuto;
@@ -171,7 +175,7 @@ function OverrideModal({
             : undefined,
         value_qualifier: qualifier,
         unit: isPlaceholderQualifier ? "" : unit,
-        hit_call: isPlaceholderQualifier ? undefined : (hitCall || undefined),
+        hit_call: isPlaceholderQualifier || hitCall === "none" ? undefined : hitCall,
         reason: reason.trim() || undefined,
       },
     });
@@ -255,9 +259,9 @@ function OverrideModal({
               onValueChange={setHitCall}
               disabled={isPlaceholderQualifier}
             >
-              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {["hit", "miss", "inconclusive"].map((h) => (
                   <SelectItem key={h} value={h}>{h}</SelectItem>
                 ))}

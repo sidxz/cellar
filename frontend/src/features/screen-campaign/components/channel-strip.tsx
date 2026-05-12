@@ -72,8 +72,9 @@ const channelSchema = z.object({
   ]),
   require_approved: z.boolean(),
   min_z_prime: z.number().min(0).max(1),
-  // Hit threshold — operator "" means "no threshold". For between, low/high; otherwise single value.
-  hit_operator: z.enum(["", "lt", "lte", "gt", "gte", "between"]),
+  // Hit threshold — operator "none" means "no threshold". For between, low/high; otherwise single value.
+  // (Radix Select forbids empty-string values, hence the explicit "none" sentinel.)
+  hit_operator: z.enum(["none", "lt", "lte", "gt", "gte", "between"]),
   hit_value: z.string(),
   hit_value_low: z.string(),
   hit_value_high: z.string(),
@@ -138,7 +139,7 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
   // Parse existing hit_threshold into the form's split fields.
   const existingHit = parseHitThreshold(existing?.hit_threshold);
   const defaultHitOperator: ChannelFormValues["hit_operator"] =
-    (existingHit?.operator as ChannelFormValues["hit_operator"] | undefined) ?? "";
+    (existingHit?.operator as ChannelFormValues["hit_operator"] | undefined) ?? "none";
   const defaultHitValue =
     existingHit && typeof existingHit.value === "number" ? String(existingHit.value) : "";
   const defaultHitLow =
@@ -207,7 +208,7 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
           value: [low, high],
         };
       }
-    } else if (values.hit_operator) {
+    } else if (values.hit_operator !== "none") {
       const num = values.hit_value === "" ? null : Number(values.hit_value);
       if (num !== null && !Number.isNaN(num)) {
         hitThreshold = {
@@ -392,9 +393,9 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
             control={control}
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className="w-36"><SelectValue placeholder="(no threshold)" /></SelectTrigger>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">(no threshold)</SelectItem>
+                  <SelectItem value="none">(no threshold)</SelectItem>
                   <SelectItem value="lt">&lt; less than</SelectItem>
                   <SelectItem value="lte">≤ at most</SelectItem>
                   <SelectItem value="gt">&gt; greater than</SelectItem>
@@ -420,7 +421,7 @@ function ChannelForm({ campaignId, existing, onClose, projectId }: ChannelFormPr
                 className="h-9 text-sm"
               />
             </div>
-          ) : watch("hit_operator") ? (
+          ) : watch("hit_operator") !== "none" ? (
             <Input
               {...register("hit_value")}
               placeholder="threshold"
