@@ -17,6 +17,7 @@ type SourceEntry = {
   collection_id?: string;
   campaign_id?: string;
   run_id?: string;
+  saved_search_id?: string;
   description?: string | null;
   count?: number;
 };
@@ -29,7 +30,7 @@ interface SourcesSectionProps {
   readOnly: boolean;
   /** Not wired to any backend operation today — pass `undefined`. The × button
    *  stays hidden when this prop is absent. */
-  onRemoveSource?: (sourceKey: string) => void;
+  onRemoveSource?: (source: SourceEntry) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,8 +93,10 @@ function describeSource(source: SourceEntry): string {
 
     case "saved_search": {
       parts.push("Saved search");
-      const searchLabel = source.description?.trim() ?? null;
-      if (searchLabel) parts.push(searchLabel);
+      const label =
+        source.description?.trim() ||
+        (source.saved_search_id ? source.saved_search_id.slice(0, 8) : null);
+      if (label) parts.push(label);
       break;
     }
 
@@ -137,7 +140,9 @@ export function SourcesSection({
 
       {sources.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No compounds yet — add via the pills above.
+          {readOnly
+            ? "No compounds were added to this campaign."
+            : "No compounds yet — add via the pills above."}
         </p>
       ) : (
         <ul className="space-y-1">
@@ -149,7 +154,7 @@ export function SourcesSection({
                 source={s}
                 readOnly={readOnly}
                 onRemove={
-                  onRemoveSource ? () => onRemoveSource(key) : undefined
+                  onRemoveSource ? () => onRemoveSource(s) : undefined
                 }
               />
             );
