@@ -48,8 +48,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
-import { useListProtocolsApiV1ProtocolsGet } from "@/shared/lib/api/protocols/protocols";
 import { useGetProtocolApiV1ProtocolsProtocolIdGet } from "@/shared/lib/api/protocols/protocols";
+import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 import {
   usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost,
@@ -83,7 +84,6 @@ const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as cons
 
 interface AddFromRunsDialogProps {
   campaignId: string;
-  /** Phase 5: project-scoped protocol/run filter. Accepted here; wired in Phase 5. */
   projectId: string;
   open: boolean;
   onClose: () => void;
@@ -91,7 +91,7 @@ interface AddFromRunsDialogProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AddFromRunsDialog({ campaignId, projectId: _projectId, open, onClose }: AddFromRunsDialogProps) {
+export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddFromRunsDialogProps) {
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
 
@@ -110,8 +110,8 @@ export function AddFromRunsDialog({ campaignId, projectId: _projectId, open, onC
   const [approvedOnly, setApprovedOnly] = useState(true);
 
   // — Data —
-  const { data: protocolsResp } = useListProtocolsApiV1ProtocolsGet();
-  const protocols = protocolsResp ?? [];
+  const { data: protocolsData } = useProtocolSummaries([projectId]);
+  const protocols = protocolsData ?? [];
   const { data: protocolDetail } = useGetProtocolApiV1ProtocolsProtocolIdGet(
     protocolId ?? "",
     { query: { enabled: !!protocolId } },
@@ -395,11 +395,6 @@ export function AddFromRunsDialog({ campaignId, projectId: _projectId, open, onC
 }
 
 // ── Step 1 — Configure ───────────────────────────────────────────────────────
-
-interface ProtocolSummary {
-  id: string;
-  name: string;
-}
 
 interface RunSummary {
   id: string;
