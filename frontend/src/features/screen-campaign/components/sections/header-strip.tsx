@@ -16,6 +16,7 @@ import Link from "next/link";
 
 import { useUpdateCampaignApiV1CampaignsCampaignIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 import { showError } from "@/shared/lib/toast";
+import { MemberName } from "@/shared/components/entity-name";
 import type { CampaignResponse } from "../../types";
 import { CampaignStatusChip } from "../campaign-status-chip";
 import { campaignKeys } from "../../lib/hooks";
@@ -73,24 +74,11 @@ export function HeaderStrip({
   const channelCount = campaign.channels?.length ?? 0;
   const compoundCount = campaign.results?.length ?? 0;
 
-  // Compose the closed-metadata muted line. Each piece is optional.
-  const closedMetaParts: string[] = [];
-  if (closedAt) {
-    closedMetaParts.push(
-      `Closed ${new Date(closedAt).toLocaleString(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })}`,
-    );
-  }
-  if (closedBy) {
-    // closed_by is a Sentinel user UUID. Until name resolution lands, show a
-    // stable 8-char slice so the line is debuggable but never a full UUID.
-    closedMetaParts.push(`by ${closedBy.slice(0, 8)}`);
-  }
-  if (signatureId) {
-    closedMetaParts.push(`Signature ${signatureId.slice(0, 8)}`);
-  }
+  // Closed-metadata muted line. Resolves closed_by (Sentinel UUID) to the
+  // member's display name via <MemberName />; the e-signature UUID is hidden
+  // from the visible header and surfaced only via a hover tooltip so it
+  // stays auditable without polluting the chemist's reading line.
+  const hasClosedMeta = !!(closedAt || closedBy || signatureId);
 
   return (
     <header className="flex flex-col gap-1 border-b px-6 py-4">
@@ -172,9 +160,30 @@ export function HeaderStrip({
         </div>
       </div>
       <DescriptionRow campaign={campaign} editable={isDraft} />
-      {!isDraft && closedMetaParts.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {closedMetaParts.join(" • ")}
+      {!isDraft && hasClosedMeta && (
+        <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2">
+          {closedAt && (
+            <span>
+              Closed{" "}
+              {new Date(closedAt).toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </span>
+          )}
+          {closedBy && (
+            <span>
+              by <MemberName id={closedBy} />
+            </span>
+          )}
+          {signatureId && (
+            <span
+              className="cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-2"
+              title={`E-signature ID (audit only): ${signatureId}`}
+            >
+              Signed
+            </span>
+          )}
         </p>
       )}
     </header>
