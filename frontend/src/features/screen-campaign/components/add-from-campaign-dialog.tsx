@@ -44,12 +44,15 @@ const DECISION_OPTIONS = [
 
 interface AddFromCampaignDialogProps {
   campaignId: string;
+  /** Phase 5: project-scoped campaign filter. Accepted here; wired in Phase 5. */
+  projectId?: string;
   open: boolean;
   onClose: () => void;
 }
 
 export function AddFromCampaignDialog({
   campaignId,
+  projectId: _projectId,
   open,
   onClose,
 }: AddFromCampaignDialogProps) {

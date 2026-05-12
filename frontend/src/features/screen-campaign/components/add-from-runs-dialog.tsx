@@ -83,13 +83,15 @@ const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as cons
 
 interface AddFromRunsDialogProps {
   campaignId: string;
+  /** Phase 5: project-scoped protocol/run filter. Accepted here; wired in Phase 5. */
+  projectId?: string;
   open: boolean;
   onClose: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AddFromRunsDialog({ campaignId, open, onClose }: AddFromRunsDialogProps) {
+export function AddFromRunsDialog({ campaignId, projectId: _projectId, open, onClose }: AddFromRunsDialogProps) {
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
 

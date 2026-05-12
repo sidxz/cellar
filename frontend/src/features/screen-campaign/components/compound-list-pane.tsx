@@ -18,14 +18,6 @@ import { Trash2, Search, ChevronDown } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -43,110 +35,29 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 
-import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import {
-  useAddResultRowApiV1CampaignsCampaignIdResultsPost,
   useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete,
 } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
 import { AddFromCollectionDialog } from "./add-from-collection-dialog";
 import { AddFromCampaignDialog } from "./add-from-campaign-dialog";
 import { AddFromRunsDialog } from "./add-from-runs-dialog";
+import { ManualAddDialog } from "./add/manual-add-dialog";
 import type { CampaignResponse, CampaignResultResponse } from "../types";
-
-// ── Add compound dialog (single / manual) ────────────────────────────────────
-
-interface AddCompoundDialogProps {
-  campaignId: string;
-  open: boolean;
-  onClose: () => void;
-}
-
-function AddCompoundDialog({ campaignId, open, onClose }: AddCompoundDialogProps) {
-  const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const { data: results, isLoading } = useMoleculeSearch(search);
-
-  const addMutation = useAddResultRowApiV1CampaignsCampaignIdResultsPost({
-    mutation: {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
-        onClose();
-      },
-    },
-  });
-
-  const handleSelect = (moleculeId: string) => {
-    addMutation.mutate({
-      campaignId,
-      data: { molecule_id: moleculeId },
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add Compound</DialogTitle>
-          <DialogDescription>
-            Search for a compound to add to this campaign.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Search by name or reg number..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            autoFocus
-          />
-        </div>
-
-        <div className="max-h-52 overflow-y-auto border rounded divide-y text-sm">
-          {search.length < 2 && (
-            <p className="p-2 text-muted-foreground text-xs">Type at least 2 characters</p>
-          )}
-          {isLoading && <p className="p-2 text-muted-foreground text-xs">Searching…</p>}
-          {!isLoading && search.length >= 2 && !results?.length && (
-            <p className="p-2 text-muted-foreground text-xs">No results</p>
-          )}
-          {results?.map((mol) => (
-            <button
-              key={mol.id}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 text-left"
-              onClick={() => handleSelect(mol.id)}
-              disabled={addMutation.isPending}
-            >
-              <span className="font-mono text-xs text-muted-foreground">
-                {mol.registration_number}
-              </span>
-              <span className="truncate">{mol.name}</span>
-            </button>
-          ))}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ── Main pane ─────────────────────────────────────────────────────────────────
 
 interface CompoundListPaneProps {
   campaign: CampaignResponse;
+  /** Passed through to add-dialogs for Phase 5 project-scoped filtering. */
+  projectId: string;
   selectedResultId: string | null;
   onSelectResult: (result: CampaignResultResponse | null) => void;
 }
 
 export function CompoundListPane({
   campaign,
+  projectId,
   selectedResultId,
   onSelectResult,
 }: CompoundListPaneProps) {
@@ -306,23 +217,26 @@ export function CompoundListPane({
       </div>
 
       {/* Dialogs */}
-      <AddCompoundDialog
+      <ManualAddDialog
         campaignId={campaign.id}
         open={manualOpen}
-        onClose={() => setManualOpen(false)}
+        onOpenChange={(v) => setManualOpen(v)}
       />
       <AddFromCollectionDialog
         campaignId={campaign.id}
+        projectId={projectId}
         open={fromCollectionOpen}
         onClose={() => setFromCollectionOpen(false)}
       />
       <AddFromCampaignDialog
         campaignId={campaign.id}
+        projectId={projectId}
         open={fromCampaignOpen}
         onClose={() => setFromCampaignOpen(false)}
       />
       <AddFromRunsDialog
         campaignId={campaign.id}
+        projectId={projectId}
         open={fromRunsOpen}
         onClose={() => setFromRunsOpen(false)}
       />

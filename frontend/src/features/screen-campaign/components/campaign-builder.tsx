@@ -154,6 +154,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
         <aside className="border-r overflow-y-auto">
           <CompoundListPane
             campaign={campaign}
+            projectId={projectId}
             selectedResultId={selectedResult?.id ?? null}
             onSelectResult={setSelectedResult}
           />
