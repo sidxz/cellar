@@ -39,6 +39,7 @@ import {
 } from "@/shared/components/ui/select";
 import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys, useMoleculesByIds } from "../lib/hooks";
@@ -187,8 +188,8 @@ function OverrideModal({
           <div className="rounded bg-muted/50 p-3 text-sm space-y-1 mb-2">
             <p className="text-xs text-muted-foreground font-medium">Auto-resolved value</p>
             <p>
-              {measurement.value_qualifier}
-              {measurement.value} {measurement.unit}
+              {measurement.value_qualifier !== "=" ? measurement.value_qualifier : ""}
+              {formatMeasurementValue(measurement.value)} {measurement.unit}
               {measurement.hit_call && (
                 <span className="ml-2"><HitCallChip hitCall={measurement.hit_call as string} /></span>
               )}
@@ -388,7 +389,7 @@ export function ResultsGrid({
           <div className="flex items-center gap-1 text-xs">
             <span>
               {m.value_qualifier !== "=" ? m.value_qualifier : ""}
-              {m.value != null ? String(m.value) : "ND"}
+              {m.value != null ? formatMeasurementValue(m.value) : "ND"}
               {m.unit && m.unit !== "-" ? <span className="text-muted-foreground ml-0.5">{m.unit}</span> : null}
             </span>
             {m.hit_call && <HitCallChip hitCall={m.hit_call as string} />}

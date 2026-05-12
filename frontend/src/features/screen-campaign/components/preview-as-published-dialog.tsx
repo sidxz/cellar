@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
 
@@ -209,7 +210,7 @@ export function PreviewAsPublishedDialog({
                             }
                             return (
                               <td key={c.id} className="p-2">
-                                {m.value} {m.unit !== "-" ? m.unit : ""}
+                                {formatMeasurementValue(m.value)} {m.unit !== "-" ? m.unit : ""}
                                 {m.hit_call === "hit" && (
                                   <Badge className="ml-1 bg-orange-100 text-orange-800 text-[9px] px-1 py-0">
                                     HIT

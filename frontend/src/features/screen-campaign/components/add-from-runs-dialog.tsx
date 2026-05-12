@@ -46,6 +46,7 @@ import {
 import { Switch } from "@/shared/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { useListProtocolsApiV1ProtocolsGet } from "@/shared/lib/api/protocols/protocols";
 import { useGetProtocolApiV1ProtocolsProtocolIdGet } from "@/shared/lib/api/protocols/protocols";
@@ -858,7 +859,7 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
                       <div className="flex items-center gap-1">
                         <span>
                           {cell.value_qualifier !== "=" && cell.value_qualifier}
-                          {cell.value} {cell.unit && cell.unit !== "-" ? cell.unit : ""}
+                          {formatMeasurementValue(cell.value)} {cell.unit && cell.unit !== "-" ? cell.unit : ""}
                         </span>
                         {cell.hit_call === "hit" && (
                           <Badge className="bg-orange-100 text-orange-800 text-[9px] px-1 py-0">

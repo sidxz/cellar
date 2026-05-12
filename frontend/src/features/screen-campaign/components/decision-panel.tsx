@@ -13,6 +13,7 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { Badge } from "@/shared/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 import { useCompoundCurves } from "@/features/screening-assay/hooks/use-compound-curves";
 import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
@@ -175,7 +176,7 @@ export function DecisionPanel({ campaignId, result, channels, onUpdate }: Decisi
                   {m.value_qualifier !== "=" ? m.value_qualifier : ""}
                 </span>
                 <span className="font-medium">
-                  {m.value != null ? String(m.value) : "ND"}
+                  {m.value != null ? formatMeasurementValue(m.value) : "ND"}
                   {m.unit && m.unit !== "-" && (
                     <span className="text-muted-foreground ml-0.5">{m.unit}</span>
                   )}
