@@ -275,6 +275,9 @@ class AddResultRowRequest(BaseModel):
 class CloseCampaignRequest(BaseModel):
     signature_id: uuid.UUID
     signature_meaning: str | None = None
+    #: Override the campaign's stored publishes_collection at close time.
+    #: None ⇒ keep the create-time value (default behaviour).
+    publishes_collection: bool | None = None
 
 
 class SupersedeRequest(BaseModel):
@@ -955,6 +958,7 @@ async def close_campaign(
         user_id=auth.user_id,
         signature_id=body.signature_id,
         signature_meaning=body.signature_meaning,
+        publishes_collection=body.publishes_collection,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

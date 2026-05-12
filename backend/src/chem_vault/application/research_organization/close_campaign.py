@@ -74,6 +74,11 @@ class CloseCampaignCommand(Command):
     user_id: uuid.UUID
     signature_id: uuid.UUID
     signature_meaning: str | None = None  # placeholder — for the audit log when SignatureService lands
+    #: Override the campaign's stored ``publishes_collection`` at close time.
+    #: When None, keep whatever was set at campaign creation. Lets chemists
+    #: choose at sign time instead of having to remember the create-time
+    #: toggle.
+    publishes_collection: bool | None = None
 
 
 class CloseCampaign:
@@ -233,6 +238,12 @@ class CloseCampaign:
             await self._campaign_repo.save(campaign)
             await self._uow.session.flush()  # type: ignore[attr-defined]
 
+            # Allow the caller to override `publishes_collection` at close
+            # time — chemists shouldn't have to remember a toggle they set
+            # weeks ago at campaign creation.
+            if input.publishes_collection is not None:
+                campaign.publishes_collection = input.publishes_collection
+
             # Now close the aggregate in memory.
             campaign.close(
                 closed_by=input.user_id,
@@ -249,7 +260,9 @@ class CloseCampaign:
                 coll = Collection.create(
                     workspace_id=campaign.workspace_id,
                     name=f"Hits — {campaign.name}",
-                    description=f"Frozen output of campaign {campaign.id}",
+                    description=(
+                        f'Frozen output of campaign "{campaign.name}"'
+                    ),
                     project_id=campaign.project_id,
                     created_by=input.user_id,
                 )

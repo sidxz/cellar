@@ -225,6 +225,7 @@ export * from './chemVaultInterfaceRoutesShipmentsImportPreviewResponse';
 export * from './chemVaultInterfaceRoutesSynthesisRequestsFulfillRequest';
 export * from './classifyDoseResponseCurveRequest';
 export * from './closeCampaignRequest';
+export * from './closeCampaignRequestPublishesCollection';
 export * from './closeCampaignRequestSignatureMeaning';
 export * from './collectionResponse';
 export * from './collectionResponseDescription';

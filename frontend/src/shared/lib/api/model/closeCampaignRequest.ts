@@ -5,8 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CloseCampaignRequestSignatureMeaning } from './closeCampaignRequestSignatureMeaning';
+import type { CloseCampaignRequestPublishesCollection } from './closeCampaignRequestPublishesCollection';
 
 export interface CloseCampaignRequest {
   signature_id: string;
   signature_meaning?: CloseCampaignRequestSignatureMeaning;
+  publishes_collection?: CloseCampaignRequestPublishesCollection;
 }

@@ -85,6 +85,10 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
       data: {
         signature_id: signatureId,
         signature_meaning: sigMeaning,
+        // Override the campaign's stored value at sign time — chemists pick
+        // this fresh on close instead of trying to remember the create-time
+        // toggle.
+        publishes_collection: publishCollection,
       },
     });
   };

@@ -18239,6 +18239,17 @@
               }
             ],
             "title": "Signature Meaning"
+          },
+          "publishes_collection": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishes Collection"
           }
         },
         "type": "object",
