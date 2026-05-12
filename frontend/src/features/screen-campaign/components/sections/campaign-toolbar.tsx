@@ -1,18 +1,16 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
-import { Download, Settings2 } from "lucide-react";
+import { Download } from "lucide-react";
 
 interface CampaignToolbarProps {
   resultCount: number;
-  onCustomizeReport: () => void;
   onExport?: () => void;
   exportDisabled?: boolean;
 }
 
 export function CampaignToolbar({
   resultCount,
-  onCustomizeReport,
   onExport,
   exportDisabled,
 }: CampaignToolbarProps) {
@@ -26,10 +24,6 @@ export function CampaignToolbar({
             Export
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onCustomizeReport}>
-          <Settings2 className="h-4 w-4" />
-          Customize Report
-        </Button>
       </div>
     </div>
   );

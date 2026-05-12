@@ -14,7 +14,7 @@
  * OverrideModal is shared — imported from ../override-modal.tsx.
  */
 
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type {
   ColDef,
   ColGroupDef,
@@ -31,7 +31,6 @@ import { chemVaultTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 
 import { useMoleculesByIds } from "../../lib/hooks";
-import { useReportConfig } from "../../lib/report-config";
 import { OverrideModal } from "../override-modal";
 import { useCampaignCurves } from "../../lib/use-campaign-curves";
 import {
@@ -66,6 +65,7 @@ interface RowData {
 }
 
 const EXPANDED_HEIGHT = 260;
+const COLLAPSED_HEIGHT = 60;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -86,13 +86,6 @@ export function ResultsGridV2({
     channel: CampaignChannelResponse;
     measurement?: CampaignMeasurementResponse;
   } | null>(null);
-
-  // ── Report config ────────────────────────────────────────────────────────────
-  const cfg = useReportConfig((s) => s.get(campaign.id));
-
-  // Mutable ref so getRowHeight (stable callback) can always read the latest
-  // collapsed height without being in the dep array.
-  const collapsedHeightRef = useRef<number>(60);
 
   const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -181,153 +174,6 @@ export function ResultsGridV2({
       ],
     }));
 
-    // ── Property columns (toggled via report config) ──────────────────────────
-    const propertyColumns: ColDef<RowData>[] = [];
-    if (cfg.showProperties.mw) {
-      propertyColumns.push({
-        colId: "__prop_mw__",
-        headerName: "MW",
-        width: 80,
-        sortable: true,
-        valueGetter: (p: any) => {
-          const mol = moleculeById.get(p.data?.result?.molecule_id);
-          return (mol?.descriptors as any)?.molecular_weight ?? null;
-        },
-        valueFormatter: (p: any) =>
-          p.value != null ? (p.value as number).toFixed(2) : "—",
-      });
-    }
-    if (cfg.showProperties.logP) {
-      propertyColumns.push({
-        colId: "__prop_logp__",
-        headerName: "LogP",
-        width: 80,
-        sortable: true,
-        valueGetter: (p: any) => {
-          const mol = moleculeById.get(p.data?.result?.molecule_id);
-          return (mol?.descriptors as any)?.logp ?? null;
-        },
-        valueFormatter: (p: any) =>
-          p.value != null ? (p.value as number).toFixed(2) : "—",
-      });
-    }
-    if (cfg.showProperties.hbd) {
-      propertyColumns.push({
-        colId: "__prop_hbd__",
-        headerName: "HBD",
-        width: 70,
-        sortable: true,
-        valueGetter: (p: any) => {
-          const mol = moleculeById.get(p.data?.result?.molecule_id);
-          return (mol?.descriptors as any)?.hbd ?? null;
-        },
-        valueFormatter: (p: any) =>
-          p.value != null ? String(p.value) : "—",
-      });
-    }
-    if (cfg.showProperties.hba) {
-      propertyColumns.push({
-        colId: "__prop_hba__",
-        headerName: "HBA",
-        width: 70,
-        sortable: true,
-        valueGetter: (p: any) => {
-          const mol = moleculeById.get(p.data?.result?.molecule_id);
-          return (mol?.descriptors as any)?.hba ?? null;
-        },
-        valueFormatter: (p: any) =>
-          p.value != null ? String(p.value) : "—",
-      });
-    }
-    if (cfg.showProperties.tpsa) {
-      propertyColumns.push({
-        colId: "__prop_tpsa__",
-        headerName: "TPSA",
-        width: 80,
-        sortable: true,
-        valueGetter: (p: any) => {
-          const mol = moleculeById.get(p.data?.result?.molecule_id);
-          return (mol?.descriptors as any)?.tpsa ?? null;
-        },
-        valueFormatter: (p: any) =>
-          p.value != null ? (p.value as number).toFixed(1) : "—",
-      });
-    }
-
-    // ── Optional annotation columns ───────────────────────────────────────────
-    const reasonNoteCols: ColDef<RowData>[] = [];
-    if (cfg.showDecisionReasonColumn) {
-      reasonNoteCols.push({
-        colId: "__reason__",
-        headerName: "Reason",
-        width: 200,
-        sortable: true,
-        valueGetter: (p: any) => p.data?.result?.decision_reason ?? "",
-        cellRenderer: (params: ICellRendererParams<RowData>) => (
-          <span className="text-xs truncate block">
-            {params.data?.result?.decision_reason ?? ""}
-          </span>
-        ),
-      });
-    }
-    if (cfg.showNotesColumn) {
-      reasonNoteCols.push({
-        colId: "__notes__",
-        headerName: "Notes",
-        width: 200,
-        sortable: true,
-        valueGetter: (p: any) => p.data?.result?.notes ?? "",
-        cellRenderer: (params: ICellRendererParams<RowData>) => (
-          <span className="text-xs truncate block">
-            {params.data?.result?.notes ?? ""}
-          </span>
-        ),
-      });
-    }
-    if (cfg.showOverrideStatusColumn) {
-      reasonNoteCols.push({
-        colId: "__override__",
-        headerName: "Override",
-        width: 90,
-        sortable: true,
-        valueGetter: (p: any) => {
-          const r = p.data?.result as CampaignResultResponse | undefined;
-          return (r?.measurements ?? []).some((m: any) => m.is_manual_override)
-            ? "yes"
-            : "";
-        },
-        cellRenderer: (params: ICellRendererParams<RowData>) => {
-          const r = params.data?.result as CampaignResultResponse | undefined;
-          const overridden = (r?.measurements ?? []).some(
-            (m: any) => m.is_manual_override,
-          );
-          return overridden ? (
-            <span className="text-xs">yes</span>
-          ) : (
-            <span className="text-muted-foreground text-xs">—</span>
-          );
-        },
-      });
-    }
-
-    // ── Image size → thumbnail size prop ─────────────────────────────────────
-    const thumbSize =
-      cfg.imageSize === "small"
-        ? "sm"
-        : cfg.imageSize === "medium"
-          ? "md"
-          : "lg";
-
-    // ── Collapsed row height scales with image size ───────────────────────────
-    // Stored in a variable but applied via getRowHeight below; kept here so the
-    // dep array stays consistent. The AG Grid grid itself uses getRowHeight
-    // for the actual sizing — see getRowHeight below.
-    const collapsedHeight =
-      cfg.imageSize === "small" ? 60 : cfg.imageSize === "medium" ? 90 : 140;
-
-    // Expose to outer scope for getRowHeight (closure capture).
-    collapsedHeightRef.current = collapsedHeight;
-
     const defs: (ColDef<RowData> | ColGroupDef<RowData>)[] = [
       // 1. Chevron (pinned left)
       {
@@ -373,19 +219,15 @@ export function ResultsGridV2({
           const smiles = mol?.structure?.smiles ?? null;
           return (
             <div className="flex items-center gap-2 py-1">
-              <MoleculeThumbnail smiles={smiles} size={thumbSize} fallback={label} />
+              <MoleculeThumbnail smiles={smiles} size="sm" fallback={label} />
               <span className="font-mono text-xs">{label}</span>
             </div>
           );
         },
       },
-      // 3. Property columns (optional)
-      ...propertyColumns,
-      // 4. Channel groups
+      // 3. Channel groups
       ...channelGroups,
-      // 5. Annotation columns (optional)
-      ...reasonNoteCols,
-      // 6. Decision (pinned right)
+      // 4. Decision (pinned right)
       {
         colId: "__decision__",
         headerName: "Decision",
@@ -409,7 +251,6 @@ export function ResultsGridV2({
   }, [
     campaign.channels,
     campaign.id,
-    cfg,
     curveMap,
     expanded,
     moleculeById,
@@ -421,7 +262,7 @@ export function ResultsGridV2({
 
   const getRowHeight = useCallback(
     (params: RowHeightParams<RowData>): number | undefined => {
-      return params.data?.isDetail ? EXPANDED_HEIGHT : collapsedHeightRef.current;
+      return params.data?.isDetail ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
     },
     [],
   );
