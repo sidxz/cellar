@@ -96,26 +96,40 @@ export function CampaignList({ projectId }: CampaignListProps) {
           <TableHead>Status</TableHead>
           <TableHead>Channels</TableHead>
           <TableHead>Compounds</TableHead>
+          <TableHead>Created</TableHead>
           <TableHead>Closed</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.map((c) => (
-          <TableRow key={c.id} data-testid={`campaign-row-${c.id}`}>
-            <TableCell>
+          <TableRow key={c.id} data-testid={`campaign-row-${c.id}`} className="align-top">
+            <TableCell className="max-w-xs">
               <Link
                 href={`/projects/${projectId}/campaigns/${c.id}`}
-                className="text-primary hover:underline"
+                className="text-primary hover:underline font-medium"
               >
                 {c.name}
               </Link>
+              {c.description && (
+                <p
+                  className="mt-0.5 text-xs text-muted-foreground line-clamp-2"
+                  title={c.description}
+                >
+                  {c.description}
+                </p>
+              )}
             </TableCell>
             <TableCell>
               <CampaignStatusChip status={c.status} />
             </TableCell>
             <TableCell>{c.channels?.length ?? 0}</TableCell>
             <TableCell>{c.results?.length ?? 0}</TableCell>
-            <TableCell>
+            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+              {c.created_at
+                ? new Date(c.created_at as string).toLocaleDateString()
+                : "—"}
+            </TableCell>
+            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
               {c.closed_at
                 ? new Date(c.closed_at as string).toLocaleDateString()
                 : "—"}
