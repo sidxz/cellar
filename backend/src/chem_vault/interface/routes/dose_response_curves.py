@@ -11,6 +11,7 @@ import uuid
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from chem_vault.application.screening import _condense_raw_data
 from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
     SQLAlchemyDoseResponseCurveRepository,
 )
@@ -50,6 +51,11 @@ async def get_curves_batch(
     repo = SQLAlchemyDoseResponseCurveRepository(uow)
     async with uow:
         curves = await repo.find_by_ids(auth.workspace_id, body.curve_ids)
-    return BatchCurvesResponse(
-        curves=[DoseResponseCurveResponse.from_domain(c) for c in curves]
-    )
+    responses = []
+    for c in curves:
+        r = DoseResponseCurveResponse.from_domain(c)
+        # Standardize raw_data to [{x, y}] for the FE sparkline.
+        if r.raw_data:
+            r.raw_data = _condense_raw_data(r.raw_data)
+        responses.append(r)
+    return BatchCurvesResponse(curves=responses)

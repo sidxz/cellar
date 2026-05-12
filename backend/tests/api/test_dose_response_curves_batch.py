@@ -52,6 +52,11 @@ class TestBatchCurvesEndpoint:
         first = data["curves"][0]
         assert "raw_data" in first
         assert "fitted_value" in first
+        # raw_data is condensed to {x, y} shape
+        if first.get("raw_data"):
+            pt = first["raw_data"][0]
+            assert "x" in pt and "y" in pt
+            assert "concentration" not in pt
 
     async def test_empty_input_returns_empty(self, client: AsyncClient) -> None:
         resp = await client.post(
