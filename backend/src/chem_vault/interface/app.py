@@ -185,6 +185,8 @@ def create_app() -> FastAPI:
     app.include_router(protocol_router)
     app.include_router(run_router)
     app.include_router(readout_data_router)
+    from chem_vault.interface.routes.dose_response_curves import router as drc_batch_router
+    app.include_router(drc_batch_router)
     app.include_router(audit_router)
     app.include_router(synth_route_router)
     app.include_router(sample_request_router)
