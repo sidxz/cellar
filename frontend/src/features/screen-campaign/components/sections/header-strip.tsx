@@ -182,9 +182,11 @@ export function HeaderStrip({
 }
 
 /**
- * Click-to-edit description line. Renders muted single-line text by default;
- * switches to a multi-line textarea on click. Saves on blur or Cmd/Ctrl+Enter;
- * Escape cancels. Read-only mode just renders the static line (no pencil).
+ * Click-to-edit description line. Renders muted text by default with a
+ * pencil-edit affordance; switches to a textarea with explicit Save /
+ * Cancel buttons on click. ⌘/Ctrl+Enter still saves and Escape still
+ * cancels for keyboard-first chemists, but the buttons are the primary
+ * commit path. Read-only mode skips the affordance.
  */
 function DescriptionRow({
   campaign,
@@ -246,13 +248,13 @@ function DescriptionRow({
   }
 
   if (editing) {
+    const dirty = draft.trim() !== (campaign.description ?? "").trim();
     return (
-      <div className="flex items-start gap-2">
+      <div className="flex flex-col gap-2">
         <textarea
           ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.preventDefault();
@@ -262,14 +264,30 @@ function DescriptionRow({
               commit();
             }
           }}
-          rows={2}
+          rows={3}
           disabled={mutation.isPending}
           placeholder="Describe what this campaign is for…"
-          className="flex-1 resize-y rounded-md border bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+          className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
         />
-        <span className="text-[10px] text-muted-foreground pt-1.5 shrink-0">
-          ⌘↵ to save · Esc to cancel
-        </span>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={cancel}
+            disabled={mutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={commit}
+            disabled={mutation.isPending || !dirty}
+          >
+            {mutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
       </div>
     );
   }
