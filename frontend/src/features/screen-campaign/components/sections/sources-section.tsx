@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import type { CampaignResponse } from "../../types";
@@ -38,20 +39,32 @@ interface SourcesSectionProps {
 const SECTION_HEADING =
   "text-sm font-semibold uppercase tracking-wide text-muted-foreground";
 
+/** Cached per-run label info derived from the measurement snapshots so the
+ *  UI doesn't need an extra round-trip to /runs/{id} just to render a row. */
+interface RunInfo {
+  protocol_name?: string;
+  run_date?: string;
+}
+
 /** Short human-readable label for a source entry.
  *
- * Uses `description` when the server supplies one; otherwise falls back to the
- * first 8 chars of the relevant ID. Count is appended when present.
+ * Uses `description` when the server supplies one; for run-sourced entries
+ * additionally falls back to the protocol-name + run-date snapshot we get
+ * from any measurement attributed to that run. Final fallback is the first
+ * 8 chars of the relevant ID. Count is appended when present.
  *
  * Examples produced:
- *   "Run · NadD-Sumo dose response · 31 compounds"
- *   "Run · 3f8a1b9c · 31 compounds"
+ *   "Run · NadD-Sumo dose response · 2026-05-07 · 31 compounds"
+ *   "Run · 3f8a1b9c · 31 compounds"          (no snapshot available)
  *   "Collection · Primary hits Q1 · 12 compounds"
  *   "Campaign · fc3a291d · 7 compounds"
  *   "Manual · 5 compounds"
  *   "Saved search · 0 compounds"
  */
-function describeSource(source: SourceEntry): string {
+function describeSource(
+  source: SourceEntry,
+  runInfoById: Map<string, RunInfo>,
+): string {
   const countPart =
     source.count !== undefined
       ? `${source.count} ${source.count === 1 ? "compound" : "compounds"}`
@@ -84,8 +97,16 @@ function describeSource(source: SourceEntry): string {
 
     case "run": {
       parts.push("Run");
+      const info = source.run_id ? runInfoById.get(source.run_id) : undefined;
+      // Prefer protocol_name + run_date snapshot — much more useful than a
+      // bare UUID when a campaign mixes runs from several protocols.
+      const snapshotLabel =
+        info?.protocol_name || info?.run_date
+          ? [info?.protocol_name, info?.run_date].filter(Boolean).join(" · ")
+          : null;
       const runLabel =
         source.description?.trim() ||
+        snapshotLabel ||
         (source.run_id ? source.run_id.slice(0, 8) : null);
       if (runLabel) parts.push(runLabel);
       break;
@@ -129,6 +150,25 @@ export function SourcesSection({
 }: SourcesSectionProps) {
   const sources = (campaign.compound_sources ?? []) as SourceEntry[];
 
+  // Build a run_id → {protocol_name, run_date} map from the per-measurement
+  // snapshots. We pick the first non-empty snapshot seen for each run_id —
+  // every measurement attributed to that run carries the same snapshot at
+  // import time, so order doesn't matter.
+  const runInfoById = useMemo(() => {
+    const map = new Map<string, RunInfo>();
+    for (const r of campaign.results ?? []) {
+      for (const m of r.measurements ?? []) {
+        const rid = m.source_run_id ?? undefined;
+        if (!rid || map.has(rid)) continue;
+        map.set(rid, {
+          protocol_name: m.protocol_name_snapshot || undefined,
+          run_date: m.run_date_snapshot || undefined,
+        });
+      }
+    }
+    return map;
+  }, [campaign.results]);
+
   return (
     <section className="border-b px-6 py-4">
       <div className="mb-2 flex items-center justify-between">
@@ -152,6 +192,7 @@ export function SourcesSection({
               <SourceRow
                 key={key}
                 source={s}
+                runInfoById={runInfoById}
                 readOnly={readOnly}
                 onRemove={
                   onRemoveSource ? () => onRemoveSource(s) : undefined
@@ -169,14 +210,16 @@ export function SourcesSection({
 
 function SourceRow({
   source,
+  runInfoById,
   readOnly,
   onRemove,
 }: {
   source: SourceEntry;
+  runInfoById: Map<string, RunInfo>;
   readOnly: boolean;
   onRemove?: () => void;
 }) {
-  const label = describeSource(source);
+  const label = describeSource(source, runInfoById);
 
   return (
     <li className="flex items-center justify-between rounded-md border bg-card px-3 py-1.5">
