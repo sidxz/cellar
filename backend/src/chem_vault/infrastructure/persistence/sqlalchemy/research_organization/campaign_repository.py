@@ -275,6 +275,13 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             protocol_name_snapshot=model.protocol_name_snapshot,
             protocol_version_snapshot=model.protocol_version_snapshot,
             run_date_snapshot=model.run_date_snapshot,
+            override_reason=model.override_reason,
+            test_concentration_value=model.test_concentration_value,
+            test_concentration_unit=model.test_concentration_unit,
+            replicate_count=model.replicate_count,
+            qc_pass=model.qc_pass,
+            contributing_run_ids=model.contributing_run_ids,
+            curve_snapshot=model.curve_snapshot,
         )
 
     @staticmethod
@@ -294,6 +301,13 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             protocol_name_snapshot=m.protocol_name_snapshot,
             protocol_version_snapshot=m.protocol_version_snapshot,
             run_date_snapshot=m.run_date_snapshot,
+            override_reason=m.override_reason,
+            test_concentration_value=m.test_concentration_value,
+            test_concentration_unit=m.test_concentration_unit,
+            replicate_count=m.replicate_count,
+            qc_pass=m.qc_pass,
+            contributing_run_ids=m.contributing_run_ids,
+            curve_snapshot=m.curve_snapshot,
         )
 
     @staticmethod
@@ -312,6 +326,13 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.protocol_name_snapshot = m.protocol_name_snapshot
         model.protocol_version_snapshot = m.protocol_version_snapshot
         model.run_date_snapshot = m.run_date_snapshot
+        model.override_reason = m.override_reason
+        model.test_concentration_value = m.test_concentration_value
+        model.test_concentration_unit = m.test_concentration_unit
+        model.replicate_count = m.replicate_count
+        model.qc_pass = m.qc_pass
+        model.contributing_run_ids = m.contributing_run_ids
+        model.curve_snapshot = m.curve_snapshot
 
     # ------------------------------------------------------------------
     # Protocol-required reads

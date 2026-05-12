@@ -17364,6 +17364,18 @@
               }
             ],
             "title": "Contributing Run Ids"
+          },
+          "curve_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Snapshot"
           }
         },
         "type": "object",

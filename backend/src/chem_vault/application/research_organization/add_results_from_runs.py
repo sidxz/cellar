@@ -424,6 +424,7 @@ def _build_measurement(
         replicate_count=picked.replicate_count,
         qc_pass=cell.qc_pass,
         contributing_run_ids=picked.contributing_run_ids,
+        curve_snapshot=picked.curve_snapshot,
     )
     if preserve_id is not None:
         kwargs["id"] = preserve_id

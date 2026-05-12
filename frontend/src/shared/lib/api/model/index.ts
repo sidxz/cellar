@@ -167,6 +167,8 @@ export * from './campaignChannelResponseQcFilter';
 export * from './campaignChannelResponseQcFilterAnyOf';
 export * from './campaignMeasurementResponse';
 export * from './campaignMeasurementResponseContributingRunIds';
+export * from './campaignMeasurementResponseCurveSnapshot';
+export * from './campaignMeasurementResponseCurveSnapshotAnyOf';
 export * from './campaignMeasurementResponseHitCall';
 export * from './campaignMeasurementResponseOverrideReason';
 export * from './campaignMeasurementResponseQcPass';

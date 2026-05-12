@@ -16,6 +16,7 @@ import type { CampaignMeasurementResponseTestConcentrationUnit } from './campaig
 import type { CampaignMeasurementResponseReplicateCount } from './campaignMeasurementResponseReplicateCount';
 import type { CampaignMeasurementResponseQcPass } from './campaignMeasurementResponseQcPass';
 import type { CampaignMeasurementResponseContributingRunIds } from './campaignMeasurementResponseContributingRunIds';
+import type { CampaignMeasurementResponseCurveSnapshot } from './campaignMeasurementResponseCurveSnapshot';
 
 export interface CampaignMeasurementResponse {
   id: string;
@@ -37,4 +38,5 @@ export interface CampaignMeasurementResponse {
   replicate_count?: CampaignMeasurementResponseReplicateCount;
   qc_pass?: CampaignMeasurementResponseQcPass;
   contributing_run_ids?: CampaignMeasurementResponseContributingRunIds;
+  curve_snapshot?: CampaignMeasurementResponseCurveSnapshot;
 }

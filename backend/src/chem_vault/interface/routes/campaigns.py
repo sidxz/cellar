@@ -311,6 +311,10 @@ class CampaignMeasurementResponse(BaseModel):
     replicate_count: int | None = None
     qc_pass: bool | None = None
     contributing_run_ids: list[uuid.UUID] | None = None
+    # Migration 031 — frozen copy of the upstream dose-response curve.
+    # Populated for source_kind=dose_response_curve cells; ReadoutData
+    # cells serialize this as null.
+    curve_snapshot: dict[str, Any] | None = None
 
     @classmethod
     def from_domain(cls, m: CampaignMeasurement) -> CampaignMeasurementResponse:
@@ -334,6 +338,7 @@ class CampaignMeasurementResponse(BaseModel):
             replicate_count=m.replicate_count,
             qc_pass=m.qc_pass,
             contributing_run_ids=m.contributing_run_ids,
+            curve_snapshot=m.curve_snapshot,
         )
 
 

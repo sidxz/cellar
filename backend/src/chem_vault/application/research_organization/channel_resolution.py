@@ -55,8 +55,10 @@ class ResolvedCandidate:
     indifferent to source kind — by the time it sees candidates, they
     look uniform.
 
-    ``curve_class`` is only meaningful for dose_response_curve-sourced
-    candidates (None for readout_data-sourced).
+    ``curve_class`` and the curve-shape fields are only meaningful for
+    dose_response_curve-sourced candidates (None for readout_data-sourced).
+    The curve-shape fields are populated so the resolver can freeze a
+    full ``curve_snapshot`` onto the CampaignMeasurement at import time.
     """
 
     value: float
@@ -71,6 +73,14 @@ class ResolvedCandidate:
     curve_id: uuid.UUID | None
     readout_id: uuid.UUID | None
     curve_class: str | None = None
+    # DR-curve shape — populated only for source_kind=dose_response_curve;
+    # the resolver packs these into a curve_snapshot dict on the measurement.
+    curve_top: float | None = None
+    curve_bottom: float | None = None
+    curve_hill_slope: float | None = None
+    curve_r_squared: float | None = None
+    curve_raw_data: list[dict] | None = None
+    curve_excluded_points: list[dict] | None = None
 
 
 @runtime_checkable
@@ -171,6 +181,57 @@ def _nd_measurement(
     )
 
 
+def _condense_curve_points(
+    raw: list[dict] | None,
+) -> list[dict] | None:
+    """Convert raw_data items to ``{x, y, ...}`` for FE consumption.
+
+    Accepts both legacy ``{concentration, response}`` and modern ``{x, y}``
+    shapes; preserves every other field (is_excluded, is_outlier,
+    replicate_count, …) so the campaign rendering matches what the
+    protocol Activity tab draws.
+    """
+    if not raw:
+        return None
+    out: list[dict] = []
+    for pt in raw:
+        if not isinstance(pt, dict):
+            continue
+        item: dict = dict(pt)  # shallow copy so we don't mutate the JSONB
+        if "x" not in item and "concentration" in item:
+            item["x"] = item.pop("concentration")
+        if "y" not in item and "response" in item:
+            item["y"] = item.pop("response")
+        out.append(item)
+    return out
+
+
+def _build_curve_snapshot(c: ResolvedCandidate) -> dict | None:
+    """Freeze a DR candidate's full curve shape into a JSONB-able dict.
+
+    Returns None when the candidate has no curve shape (readout_data
+    sources, or a defensive fallback when the SQL didn't populate the
+    extra columns). The shape mirrors what the frontend's shared
+    DoseResponseFigure component expects, so the campaign drawing is
+    reproducible from this dict alone without a live FK lookup.
+    """
+    if c.curve_top is None or c.curve_bottom is None or c.curve_hill_slope is None:
+        return None
+    snap: dict = {
+        "fitted_value": c.value,
+        "top": c.curve_top,
+        "bottom": c.curve_bottom,
+        "hill_slope": c.curve_hill_slope,
+        "r_squared": c.curve_r_squared,
+        "curve_class": c.curve_class,
+        "raw_data": _condense_curve_points(c.curve_raw_data) or [],
+    }
+    excluded = _condense_curve_points(c.curve_excluded_points)
+    if excluded:
+        snap["excluded_points"] = excluded
+    return snap
+
+
 class ChannelResolver:
     """Application service that resolves one (channel, molecule) cell."""
 
@@ -220,6 +281,10 @@ class ChannelResolver:
             qualifier = ValueQualifier.EQ
             source_run = curve = readout = None
             rdate = None
+            # Snapshot from the latest-run candidate as a representative
+            # curve shape — the aggregate value can't be a sigmoid, but a
+            # drawing still needs *something* to render.
+            pick = max(candidates, key=lambda c: c.run_date or date.min)
         elif channel.selection_rule == SelectionRule.GEOMETRIC_MEAN:
             positives = [c.value for c in candidates if c.value > 0]
             if not positives:
@@ -234,6 +299,7 @@ class ChannelResolver:
             qualifier = ValueQualifier.EQ
             source_run = curve = readout = None
             rdate = None
+            pick = max(candidates, key=lambda c: c.run_date or date.min)
         else:  # MANUAL_PICK — user fills in later; cell stays ND.
             return _nd_measurement(
                 result_id=result_id,
@@ -256,4 +322,5 @@ class ChannelResolver:
             protocol_name_snapshot=pname,
             protocol_version_snapshot=pver,
             run_date_snapshot=rdate,
+            curve_snapshot=_build_curve_snapshot(pick),
         )

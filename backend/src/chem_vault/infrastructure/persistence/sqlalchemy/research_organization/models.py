@@ -366,6 +366,8 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
     contributing_run_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
         PG_ARRAY(PG_UUID(as_uuid=True)), nullable=True
     )
+    # Migration 031 — frozen copy of the upstream dose-response curve.
+    curve_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     __table_args__ = (
         Index(

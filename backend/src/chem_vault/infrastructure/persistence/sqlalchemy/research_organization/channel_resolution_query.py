@@ -118,6 +118,12 @@ class SQLAlchemyChannelResolutionQuery:
                 DoseResponseCurveModel.id,
                 DoseResponseCurveModel.fitted_value,
                 DoseResponseCurveModel.curve_class,
+                DoseResponseCurveModel.top,
+                DoseResponseCurveModel.bottom,
+                DoseResponseCurveModel.hill_slope,
+                DoseResponseCurveModel.r_squared,
+                DoseResponseCurveModel.raw_data,
+                DoseResponseCurveModel.excluded_points,
                 DoseResponseCurveModel.run_id,
                 RunModel.run_date,
                 RunModel.status,
@@ -153,6 +159,12 @@ class SQLAlchemyChannelResolutionQuery:
                 curve_id=row.id,
                 readout_id=None,
                 curve_class=row.curve_class,
+                curve_top=row.top,
+                curve_bottom=row.bottom,
+                curve_hill_slope=row.hill_slope,
+                curve_r_squared=row.r_squared,
+                curve_raw_data=row.raw_data,
+                curve_excluded_points=row.excluded_points,
             )
             for row in rows
         ]
@@ -182,6 +194,12 @@ class SQLAlchemyChannelResolutionQuery:
                     DoseResponseCurveModel.molecule_id,
                     DoseResponseCurveModel.fitted_value,
                     DoseResponseCurveModel.curve_class,
+                    DoseResponseCurveModel.top,
+                    DoseResponseCurveModel.bottom,
+                    DoseResponseCurveModel.hill_slope,
+                    DoseResponseCurveModel.r_squared,
+                    DoseResponseCurveModel.raw_data,
+                    DoseResponseCurveModel.excluded_points,
                     DoseResponseCurveModel.run_id,
                     RunModel.run_date,
                     RunModel.status,
@@ -252,6 +270,12 @@ class SQLAlchemyChannelResolutionQuery:
                     curve_id=row.id,
                     readout_id=None,
                     curve_class=row.curve_class,
+                    curve_top=row.top,
+                    curve_bottom=row.bottom,
+                    curve_hill_slope=row.hill_slope,
+                    curve_r_squared=row.r_squared,
+                    curve_raw_data=row.raw_data,
+                    curve_excluded_points=row.excluded_points,
                 )
             else:
                 qualifier_str = row.value_qualifier or "="

@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
 from chem_vault.domain.research_organization.enums import HitCall, ValueQualifier
 from chem_vault.domain.shared.errors import ValidationError
@@ -39,6 +40,15 @@ class CampaignMeasurement:
     replicate_count: int | None = None
     qc_pass: bool | None = None
     contributing_run_ids: list[uuid.UUID] | None = None
+    # Migration 031 — frozen copy of the underlying dose-response curve so the
+    # campaign's drawing is reproducible from the row alone (no live FK lookup
+    # against `dose_response_curves`). Only populated for source_kind=
+    # dose_response_curve channels; ReadoutData cells leave this NULL.
+    # Shape:
+    #   {"fitted_value", "top", "bottom", "hill_slope", "r_squared",
+    #    "curve_class", "raw_data": [{"x", "y"}, ...],
+    #    "excluded_points": [{"x", "y"}, ...] | null}
+    curve_snapshot: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         numeric_qualifiers = {

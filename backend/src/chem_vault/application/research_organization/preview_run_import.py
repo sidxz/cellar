@@ -27,6 +27,7 @@ from chem_vault.application.auth import AuthContext, require_editor
 from chem_vault.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ResolvedCandidate,
+    _build_curve_snapshot,
     _compute_hit_call,
 )
 from chem_vault.application.shared.command import Command
@@ -107,6 +108,10 @@ class _Picked:
     run_date: date | None
     contributing_run_ids: list[uuid.UUID]
     replicate_count: int
+    #: Frozen curve shape (DR-curve picks only). Built from the
+    #: representative candidate so the campaign cell can render the
+    #: dose-response figure without a live FK lookup.
+    curve_snapshot: dict | None = None
 
 
 def _apply_selection_rule(
@@ -124,8 +129,14 @@ def _apply_selection_rule(
     pname_seed = candidates[0].protocol_name
     pver_seed = candidates[0].protocol_version
 
+    # Representative candidate for curve-shape snapshot (latest run by date).
+    # No-op for readout_data sources — _build_curve_snapshot returns None
+    # when the candidate carries no curve_top/bottom/hill_slope.
+    rep = max(candidates, key=lambda c: c.run_date or date.min)
+    snapshot = _build_curve_snapshot(rep)
+
     if rule == SelectionRule.LATEST_APPROVED_RUN:
-        pick = max(candidates, key=lambda c: c.run_date or date.min)
+        pick = rep
         return _Picked(
             value=pick.value,
             qualifier=pick.qualifier,
@@ -138,6 +149,7 @@ def _apply_selection_rule(
             run_date=pick.run_date,
             contributing_run_ids=contributing,
             replicate_count=n,
+            curve_snapshot=snapshot,
         )
     if rule == SelectionRule.MEAN_ACROSS_RUNS:
         vals = [c.value for c in candidates]
@@ -153,6 +165,7 @@ def _apply_selection_rule(
             run_date=None,
             contributing_run_ids=contributing,
             replicate_count=n,
+            curve_snapshot=snapshot,
         )
     if rule == SelectionRule.GEOMETRIC_MEAN:
         positives = [c.value for c in candidates if c.value > 0]
@@ -170,6 +183,7 @@ def _apply_selection_rule(
             run_date=None,
             contributing_run_ids=contributing,
             replicate_count=n,
+            curve_snapshot=snapshot,
         )
     # MANUAL_PICK — ND placeholder
     return None

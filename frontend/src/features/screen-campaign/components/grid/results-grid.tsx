@@ -63,12 +63,44 @@ import type {
   CampaignMeasurementResponse,
 } from "../../types";
 
+import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
+
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 // ── Row shape ─────────────────────────────────────────────────────────────────
 
 interface RowData {
   result: CampaignResultResponse;
+}
+
+/**
+ * Resolve a CurveSnapshot for a measurement. Prefers the frozen
+ * `curve_snapshot` field stamped onto the measurement at import / refresh
+ * (migration 031). Falls back to the live FK lookup via useCampaignCurves
+ * so pre-snapshot campaigns keep drawing; the snapshot is filled in on the
+ * next Refresh on a draft campaign.
+ */
+function curveSnapshotFromMeasurement(
+  m: CampaignMeasurementResponse,
+  liveById: Map<string, DoseResponseCurveResponse>,
+): CurveSnapshot | null {
+  const snap = (m as unknown as { curve_snapshot?: CurveSnapshot | null })
+    .curve_snapshot;
+  if (snap && Number.isFinite(snap.fitted_value)) return snap;
+  const live = m.source_curve_id ? liveById.get(m.source_curve_id) : null;
+  if (!live) return null;
+  return {
+    fitted_value: live.fitted_value,
+    top: live.top,
+    bottom: live.bottom,
+    hill_slope: live.hill_slope,
+    r_squared: live.r_squared,
+    curve_class: (live.curve_class as string | null) ?? null,
+    raw_data:
+      (live.raw_data as Array<{ x: number; y: number }> | null | undefined) ??
+      null,
+  };
 }
 
 
@@ -397,22 +429,17 @@ export function ResultsGridV2({
             cellRenderer: (params: ICellRendererParams<RowData>) => {
               const r = params.data?.result;
               const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
-              const curve = m?.source_curve_id
-                ? curveMap.get(m.source_curve_id)
-                : null;
-              if (!r || !curve) {
+              if (!r || !m) {
                 return <span className="text-muted-foreground">--</span>;
               }
-              const curveParams: CurveParams = {
-                top: curve.top,
-                bottom: curve.bottom,
-                hill_slope: curve.hill_slope,
-                fitted_value: curve.fitted_value,
-                r_squared: curve.r_squared,
-              };
-              const dataPoints =
-                (curve.raw_data as Array<{ x: number; y: number }> | null) ??
-                null;
+              // Prefer the frozen curve_snapshot on the measurement (added
+              // by migration 031); fall back to the live FK lookup for
+              // pre-snapshot rows. Either way, we hand the same
+              // CurveSnapshot shape to the shared figure component.
+              const snapshot = curveSnapshotFromMeasurement(m, curveMap);
+              if (!snapshot) {
+                return <span className="text-muted-foreground">--</span>;
+              }
               const mol = moleculesById.get(r.molecule_id);
               const moleculeLabel =
                 mol?.registration_number ?? r.molecule_id.slice(0, 8);
@@ -423,24 +450,26 @@ export function ResultsGridV2({
                   title="Click to expand"
                   onClick={() =>
                     setExpandedCurve({
-                      fitted_value: curve.fitted_value,
-                      top: curve.top,
-                      bottom: curve.bottom,
-                      hill_slope: curve.hill_slope,
-                      r_squared: curve.r_squared,
-                      curve_class:
-                        (curve.curve_class as CurveClass | null) ?? null,
-                      raw_data: dataPoints,
-                      unit: m?.unit ?? null,
+                      ...snapshot,
+                      unit: m.unit ?? null,
                       moleculeLabel,
                       channelLabel: ch.label,
                     })
                   }
                 >
                   <DoseResponseSparkline
-                    params={curveParams}
-                    dataPoints={dataPoints}
-                    curveClass={(curve.curve_class as CurveClass | null) ?? null}
+                    params={{
+                      top: snapshot.top,
+                      bottom: snapshot.bottom,
+                      hill_slope: snapshot.hill_slope,
+                      fitted_value: snapshot.fitted_value,
+                      r_squared: snapshot.r_squared ?? 0,
+                    }}
+                    dataPoints={
+                      (snapshot.raw_data as Array<{ x: number; y: number }> | null) ??
+                      null
+                    }
+                    curveClass={(snapshot.curve_class as CurveClass | null) ?? null}
                     width={220}
                     height={140}
                   />
