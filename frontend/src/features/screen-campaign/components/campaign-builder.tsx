@@ -1,36 +1,23 @@
 "use client";
 
 /**
- * CampaignBuilder — Task 8.2 (builder shell)
+ * CampaignBuilder — V2 single-column layout
  *
- * 3-pane grid layout:
- *   left  (300 px) — compound list
- *   center         — channel strip + results grid
- *   right (300 px) — decision panel (shown when a row is selected)
- *
- * If the campaign status !== "draft", renders the CampaignView placeholder.
+ * Renders the V2 layout (HeaderStrip + SourcesSection + ChannelsSection +
+ * CampaignFilterBar + CampaignToolbar + ResultsGridV2) for draft campaigns.
+ * Closed/superseded campaigns dispatch to CampaignView.
  */
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { FileJson, Loader2, RefreshCw, Lock } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-
-import { Button } from "@/shared/components/ui/button";
-import { Badge } from "@/shared/components/ui/badge";
 
 import { useCampaign, campaignKeys } from "../lib/hooks";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
-import { CampaignStatusChip } from "./campaign-status-chip";
-import { ChannelStrip } from "./channel-strip";
-import { ResultsGrid } from "./results-grid";
 import { ResultsGridV2 } from "./grid/results-grid";
-import { DecisionPanel } from "./decision-panel";
-import { CompoundListPane } from "./compound-list-pane";
 import { CloseSignDialog } from "./close-sign-dialog";
 import { CampaignView } from "./campaign-view";
-import { SourcesSummaryCard } from "./sources-summary-card";
 import {
   CampaignFilterBar,
   emptyFilters,
@@ -38,7 +25,7 @@ import {
 } from "./campaign-filter-bar";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
-import type { CampaignResponse, CampaignResultResponse } from "../types";
+import type { CampaignResponse } from "../types";
 
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
@@ -54,15 +41,8 @@ interface CampaignBuilderProps {
 }
 
 export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps) {
-  const qc = useQueryClient();
   const { data: campaign, isLoading, error } = useCampaign(campaignId);
-  const searchParams = useSearchParams();
-  const useV2 = searchParams.get("v2") === "1";
   const { data: project } = useProject(projectId);
-  const [selectedResult, setSelectedResult] = useState<CampaignResultResponse | null>(null);
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const [previewPublishedOpen, setPreviewPublishedOpen] = useState(false);
-  const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
 
   // Human-readable breadcrumbs — never display UUIDs.
   useBreadcrumbTrail([
@@ -71,14 +51,6 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
     { label: "Campaigns", href: `/projects/${projectId}/campaigns` },
     { label: campaign?.name ?? "" },
   ]);
-
-  const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
-    mutation: {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
-      },
-    },
-  });
 
   if (isLoading) {
     return (
@@ -100,128 +72,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
     return <CampaignView campaign={campaign} />;
   }
 
-  if (useV2) {
-    return <CampaignBuilderV2 campaign={campaign} projectId={projectId} />;
-  }
-
-  return (
-    <div className="flex flex-col h-screen">
-      {/* ── Sticky header ── */}
-      <header className="sticky top-0 z-20 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg font-semibold truncate">{campaign.name}</h1>
-            <CampaignStatusChip status={campaign.status} />
-            {campaign.channels.length > 0 && (
-              <Badge variant="secondary">{campaign.channels.length} channels</Badge>
-            )}
-            {campaign.results.length > 0 && (
-              <Badge variant="secondary">{campaign.results.length} compounds</Badge>
-            )}
-          </div>
-          {campaign.description && (
-            <p className="text-sm text-muted-foreground truncate mt-0.5">
-              {campaign.description as string}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          <SourcesSummaryCard campaign={campaign} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refreshMutation.mutate({ campaignId })}
-            disabled={refreshMutation.isPending}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPreviewPublishedOpen(true)}
-          >
-            <FileJson className="mr-2 h-4 w-4" />
-            Preview as published
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setCloseDialogOpen(true)}
-          >
-            <Lock className="mr-2 h-4 w-4" />
-            Close &amp; Sign
-          </Button>
-        </div>
-      </header>
-
-      {/* ── 3-pane grid ── */}
-      <div className="grid grid-cols-[300px_1fr_300px] gap-0 flex-1 min-h-0 overflow-hidden">
-        {/* Left — compound list */}
-        <aside className="border-r overflow-y-auto">
-          <CompoundListPane
-            campaign={campaign}
-            projectId={projectId}
-            selectedResultId={selectedResult?.id ?? null}
-            onSelectResult={setSelectedResult}
-          />
-        </aside>
-
-        {/* Center — channel strip + filter bar + results grid */}
-        <main className="flex flex-col overflow-hidden">
-          <ChannelStrip campaign={campaign} />
-          <CampaignFilterBar
-            campaign={campaign}
-            filters={filters}
-            onChange={setFilters}
-          />
-          <div className="flex-1 overflow-auto p-2">
-            <ResultsGrid
-              campaign={campaign}
-              selectedResultId={selectedResult?.id ?? null}
-              onRowSelect={setSelectedResult}
-              filters={filters}
-            />
-          </div>
-        </main>
-
-        {/* Right — decision panel */}
-        <aside className="border-l overflow-y-auto">
-          {selectedResult ? (
-            <DecisionPanel
-              campaignId={campaignId}
-              result={selectedResult}
-              channels={campaign.channels}
-              onUpdate={() => {
-                void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
-              }}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-center p-6">
-              <p className="text-sm text-muted-foreground">
-                Select a compound row to review its decision.
-              </p>
-            </div>
-          )}
-        </aside>
-      </div>
-
-      {/* Close & sign dialog */}
-      <CloseSignDialog
-        campaign={campaign}
-        open={closeDialogOpen}
-        onOpenChange={setCloseDialogOpen}
-      />
-
-      {/* Preview as published */}
-      <PreviewAsPublishedDialog
-        campaignId={campaign.id}
-        campaignName={campaign.name}
-        open={previewPublishedOpen}
-        onClose={() => setPreviewPublishedOpen(false)}
-      />
-    </div>
-  );
+  return <CampaignBuilderV2 campaign={campaign} projectId={projectId} />;
 }
 
 // ── V2 shell ──────────────────────────────────────────────────────────────────
