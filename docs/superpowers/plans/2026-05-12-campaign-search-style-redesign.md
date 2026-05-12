@@ -46,7 +46,7 @@ class TestFindByIds:
             c3 = await seed_curve(uow, workspace_id=workspace_id)
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([c1.id, c3.id], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [c1.id, c3.id])
         ids = {c.id for c in curves}
         assert ids == {c1.id, c3.id}
 
@@ -57,13 +57,13 @@ class TestFindByIds:
             c2 = await seed_curve(uow, workspace_id=other_ws)
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([c1.id, c2.id], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [c1.id, c2.id])
         assert {c.id for c in curves} == {c1.id}
 
     async def test_empty_input_returns_empty(self, uow, workspace_id):
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [])
         assert curves == []
 
     async def test_missing_ids_silently_dropped(self, uow, workspace_id):
@@ -71,7 +71,7 @@ class TestFindByIds:
             c1 = await seed_curve(uow, workspace_id=workspace_id)
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            curves = await repo.find_by_ids([c1.id, uuid.uuid4()], workspace_id=workspace_id)
+            curves = await repo.find_by_ids(workspace_id, [c1.id, uuid.uuid4()])
         assert [c.id for c in curves] == [c1.id]
 ```
 
@@ -92,9 +92,11 @@ In `backend/src/chem_vault/domain/screening_assay/repository.py`, add to `DoseRe
 
 ```python
     async def find_by_ids(
-        self, ids: list[uuid.UUID], workspace_id: uuid.UUID
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
     ) -> list[DoseResponseCurve]: ...
 ```
+
+(Parameter order `(workspace_id, ids)` matches the existing convention in `AssayProtocolRepository.find_by_ids` and `MoleculeRepository.find_by_ids`. Don't invert.)
 
 - [ ] **Step 5: Implement `find_by_ids` in the SQLAlchemy repo**
 
@@ -102,7 +104,7 @@ In `backend/src/chem_vault/infrastructure/persistence/sqlalchemy/screening_assay
 
 ```python
     async def find_by_ids(
-        self, ids: list[uuid.UUID], workspace_id: uuid.UUID
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
     ) -> list[DoseResponseCurve]:
         """Batch lookup by primary key, scoped to workspace."""
         if not ids:
@@ -243,7 +245,7 @@ async def get_curves_batch(
         raise HTTPException(status_code=400, detail="max 500 curve ids per request")
     repo = SQLAlchemyDoseResponseCurveRepository(uow)
     async with uow:
-        curves = await repo.find_by_ids(body.curve_ids, workspace_id=auth.workspace_id)
+        curves = await repo.find_by_ids(auth.workspace_id, body.curve_ids)
     return BatchCurvesResponse(
         curves=[DoseResponseCurveResponse.from_domain(c) for c in curves]
     )
