@@ -45,7 +45,7 @@ export function measurementToActivity(
     source: "readout",
     curve_type: null,
     r_squared: null,
-    data_point_count: 0,
+    data_point_count: m.replicate_count ?? 1,
     raw_data: null,
     curve_params: null,
   };

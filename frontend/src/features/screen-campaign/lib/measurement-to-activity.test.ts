@@ -23,6 +23,12 @@ describe("measurementToActivity", () => {
         curve_params: null,
       }),
     );
+    expect(av?.data_point_count).toBe(1);
+  });
+  it("uses replicate_count for data_point_count in readout branch when present", () => {
+    const m = { value: 53.4, value_qualifier: "=", unit: "uM", hit_call: "hit", source_curve_id: null, replicate_count: 3 };
+    const av = measurementToActivity(m as any, null);
+    expect(av?.data_point_count).toBe(3);
   });
   it("returns dose_response ActivityValue when curve is provided", () => {
     const m = {
