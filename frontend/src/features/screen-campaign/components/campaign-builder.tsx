@@ -39,6 +39,12 @@ import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import type { CampaignResponse, CampaignResultResponse } from "../types";
 
+// ── V2 section imports ────────────────────────────────────────────────────────
+import { HeaderStrip } from "./sections/header-strip";
+import { SourcesSection } from "./sections/sources-section";
+import { ChannelsSection } from "./sections/channels-section";
+import { CampaignToolbar } from "./sections/campaign-toolbar";
+
 // ── Builder ───────────────────────────────────────────────────────────────────
 
 interface CampaignBuilderProps {
@@ -217,7 +223,7 @@ export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps)
   );
 }
 
-// ── V2 shell (placeholder — populated by later tasks) ─────────────────────────
+// ── V2 shell ──────────────────────────────────────────────────────────────────
 
 function CampaignBuilderV2({
   campaign,
@@ -226,7 +232,66 @@ function CampaignBuilderV2({
   campaign: CampaignResponse;
   projectId: string;
 }) {
+  const qc = useQueryClient();
+
+  const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [closeSignOpen, setCloseSignOpen] = useState(false);
+
+  const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+      },
+    },
+  });
+  const refreshing = refreshMutation.isPending;
+  const onRefresh = () => refreshMutation.mutate({ campaignId: campaign.id });
+
   return (
-    <div className="p-8 text-muted-foreground">v2 layout — under construction</div>
+    <div className="flex flex-col">
+      <HeaderStrip
+        campaign={campaign}
+        isDraft={campaign.status === "draft"}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        onPreview={() => setPreviewOpen(true)}
+        onCloseAndSign={() => setCloseSignOpen(true)}
+      />
+      <SourcesSection
+        campaign={campaign}
+        projectId={projectId}
+        readOnly={campaign.status !== "draft"}
+      />
+      <ChannelsSection
+        campaign={campaign}
+        projectId={projectId}
+        readOnly={campaign.status !== "draft"}
+      />
+      <CampaignFilterBar
+        campaign={campaign}
+        filters={filters}
+        onChange={setFilters}
+      />
+      <CampaignToolbar
+        resultCount={campaign.results?.length ?? 0}
+        onCustomizeReport={() => { /* phase 5 */ }}
+      />
+      <div className="p-8 text-center text-sm text-muted-foreground border-t">
+        Results grid — Phase 3 (wired in the next task batch)
+      </div>
+
+      <PreviewAsPublishedDialog
+        campaignId={campaign.id}
+        campaignName={campaign.name}
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+      />
+      <CloseSignDialog
+        campaign={campaign}
+        open={closeSignOpen}
+        onOpenChange={setCloseSignOpen}
+      />
+    </div>
   );
 }
