@@ -734,6 +734,9 @@ from chem_vault.application.research_organization.remove_campaign_channel import
 from chem_vault.application.research_organization.remove_result_row import RemoveResultRow
 
 from chem_vault.application.research_organization.set_result_decision import SetResultDecision
+from chem_vault.application.research_organization.bulk_set_result_decisions import (
+    BulkSetResultDecisions,
+)
 from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
 from chem_vault.application.research_organization.recompute_channel import RecomputeChannel
 from chem_vault.application.research_organization.update_campaign_channel import UpdateCampaignChannel
@@ -757,6 +760,7 @@ AddCampaignChannelDep = Annotated[AddCampaignChannel, Depends(_get_use_case(AddC
 UpdateCampaignChannelDep = Annotated[UpdateCampaignChannel, Depends(_get_use_case(UpdateCampaignChannel))]
 RemoveCampaignChannelDep = Annotated[RemoveCampaignChannel, Depends(_get_use_case(RemoveCampaignChannel))]
 SetResultDecisionDep = Annotated[SetResultDecision, Depends(_get_use_case(SetResultDecision))]
+BulkSetResultDecisionsDep = Annotated[BulkSetResultDecisions, Depends(_get_use_case(BulkSetResultDecisions))]
 OverrideResultCellDep = Annotated[OverrideResultCell, Depends(_get_use_case(OverrideResultCell))]
 AddResultRowDep = Annotated[AddResultRow, Depends(_get_use_case(AddResultRow))]
 RemoveResultRowDep = Annotated[RemoveResultRow, Depends(_get_use_case(RemoveResultRow))]

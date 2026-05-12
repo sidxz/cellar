@@ -127,6 +127,9 @@ function CampaignBuilderV2({
       />
       <CampaignToolbar
         resultCount={campaign.results?.length ?? 0}
+        campaign={campaign}
+        filters={filters}
+        readOnly={campaign.status !== "draft"}
       />
       <ResultsGridV2
         campaign={campaign}

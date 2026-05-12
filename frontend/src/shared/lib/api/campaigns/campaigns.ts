@@ -30,6 +30,8 @@ import type {
   AddFromRunsRequest,
   AddResultRowRequest,
   AddResultsOutcomeResponse,
+  BulkSetResultDecisionsRequest,
+  BulkSetResultDecisionsResponse,
   CampaignResponse,
   CloseCampaignRequest,
   CreateCampaignRequest,
@@ -964,6 +966,75 @@ export const useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete = <
       > => {
 
       const mutationOptions = getRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Bulk-set decision for many CampaignResult rows in one transaction.
+
+The frontend posts the currently-filtered ``result_ids`` so chemists can
+"Mark all visible as Selected/Deferred/Rejected" without hitting the
+per-row endpoint 100+ times.
+ * @summary Bulk Set Result Decisions
+ */
+export const bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch = (
+    campaignId: string,
+    bulkSetResultDecisionsRequest: BulkSetResultDecisionsRequest,
+ ) => {
+      
+      
+      return customInstance<BulkSetResultDecisionsResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/results/bulk-decision`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkSetResultDecisionsRequest
+    },
+      );
+    }
+  
+
+
+export const getBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, TError,{campaignId: string;data: BulkSetResultDecisionsRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, TError,{campaignId: string;data: BulkSetResultDecisionsRequest}, TContext> => {
+
+const mutationKey = ['bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, {campaignId: string;data: BulkSetResultDecisionsRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationResult = NonNullable<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>>
+    export type BulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationBody = BulkSetResultDecisionsRequest
+    export type BulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationError = HTTPValidationError
+
+    /**
+ * @summary Bulk Set Result Decisions
+ */
+export const useBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, TError,{campaignId: string;data: BulkSetResultDecisionsRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>,
+        TError,
+        {campaignId: string;data: BulkSetResultDecisionsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

@@ -98,6 +98,9 @@ from chem_vault.application.research_organization.remove_campaign_channel import
 from chem_vault.application.research_organization.remove_result_row import RemoveResultRow
 
 from chem_vault.application.research_organization.set_result_decision import SetResultDecision
+from chem_vault.application.research_organization.bulk_set_result_decisions import (
+    BulkSetResultDecisions,
+)
 from chem_vault.application.research_organization.supersede_campaign import SupersedeCampaign as SupersedeCampaignUC
 from chem_vault.application.research_organization.update_campaign_channel import UpdateCampaignChannel
 from chem_vault.application.research_organization.update_campaign_metadata import UpdateCampaignMetadata
@@ -404,6 +407,14 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _bulk_set_decisions(c: Container) -> BulkSetResultDecisions:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return BulkSetResultDecisions(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     def _override_cell(c: Container) -> OverrideResultCell:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return OverrideResultCell(
@@ -495,6 +506,7 @@ def register_research_organization(container: Container) -> None:
     container.define(UpdateCampaignChannel, _update_channel)
     container.define(RemoveCampaignChannel, _remove_channel)
     container.define(SetResultDecision, _set_decision)
+    container.define(BulkSetResultDecisions, _bulk_set_decisions)
     container.define(OverrideResultCell, _override_cell)
     container.define(AddResultRow, _add_result_row)
     container.define(RemoveResultRow, _remove_result_row)

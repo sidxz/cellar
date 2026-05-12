@@ -53,6 +53,9 @@ from chem_vault.application.research_organization.set_result_decision import (
     UNSET as DECISION_UNSET,
     SetResultDecisionCommand,
 )
+from chem_vault.application.research_organization.bulk_set_result_decisions import (
+    BulkSetResultDecisionsCommand,
+)
 from chem_vault.application.research_organization.supersede_campaign import (
     SupersedeCampaignCommand,
 )
@@ -97,6 +100,7 @@ from chem_vault.interface.dependencies import (
     RefreshFromSourcesDep,
     RemoveCampaignChannelDep,
     RemoveResultRowDep,
+    BulkSetResultDecisionsDep,
     SetResultDecisionDep,
     SupersedeCampaignDep,
     UpdateCampaignChannelDep,
@@ -235,6 +239,20 @@ class SetResultDecisionRequest(BaseModel):
     decision: str
     reason: str | None = None
     notes: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class BulkSetResultDecisionsRequest(BaseModel):
+    """Bulk-set decision for many CampaignResult rows in one transaction.
+
+    ``result_ids`` is typically the frontend's currently-filtered subset so a
+    chemist can "Mark all visible as Selected" / "Reject all non-hits" / etc.
+    """
+
+    result_ids: list[uuid.UUID]
+    decision: str
+    reason: str | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -724,6 +742,45 @@ async def set_result_decision(
     cmd = SetResultDecisionCommand(**cmd_kwargs)
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
+
+
+class BulkSetResultDecisionsResponse(BaseModel):
+    """Bulk-decision outcome: refreshed campaign + applied/missing counts."""
+
+    campaign: CampaignResponse
+    updated_count: int
+    missing_ids: list[uuid.UUID]
+
+
+@router.patch(
+    "/{campaign_id}/results/bulk-decision",
+    response_model=BulkSetResultDecisionsResponse,
+)
+async def bulk_set_result_decisions(
+    campaign_id: uuid.UUID,
+    body: BulkSetResultDecisionsRequest,
+    auth: AuthDep,
+    uc: BulkSetResultDecisionsDep,
+) -> BulkSetResultDecisionsResponse:
+    """Bulk-set decision for many CampaignResult rows in one transaction.
+
+    The frontend posts the currently-filtered ``result_ids`` so chemists can
+    "Mark all visible as Selected/Deferred/Rejected" without hitting the
+    per-row endpoint 100+ times.
+    """
+    cmd = BulkSetResultDecisionsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        result_ids=body.result_ids,
+        decision=CampaignDecision(body.decision),
+        reason=body.reason,
+    )
+    outcome = result_to_response(await uc(cmd, auth=auth))
+    return BulkSetResultDecisionsResponse(
+        campaign=CampaignResponse.from_domain(outcome.campaign),
+        updated_count=outcome.updated_count,
+        missing_ids=outcome.missing_ids,
+    )
 
 
 @router.patch(

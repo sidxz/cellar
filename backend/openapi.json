@@ -10584,6 +10584,60 @@
         }
       }
     },
+    "/api/v1/campaigns/{campaign_id}/results/bulk-decision": {
+      "patch": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Bulk Set Result Decisions",
+        "description": "Bulk-set decision for many CampaignResult rows in one transaction.\n\nThe frontend posts the currently-filtered ``result_ids`` so chemists can\n\"Mark all visible as Selected/Deferred/Rejected\" without hitting the\nper-row endpoint 100+ times.",
+        "operationId": "bulk_set_result_decisions_api_v1_campaigns__campaign_id__results_bulk_decision_patch",
+        "parameters": [
+          {
+            "name": "campaign_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Campaign Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSetResultDecisionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSetResultDecisionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/campaigns/{campaign_id}/results/{result_id}/cells/{channel_id}": {
       "patch": {
         "tags": [
@@ -16993,6 +17047,68 @@
           "chunks_total"
         ],
         "title": "BulkRegistrationStatusResponse"
+      },
+      "BulkSetResultDecisionsRequest": {
+        "properties": {
+          "result_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Result Ids"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result_ids",
+          "decision"
+        ],
+        "title": "BulkSetResultDecisionsRequest",
+        "description": "Bulk-set decision for many CampaignResult rows in one transaction.\n\n``result_ids`` is typically the frontend's currently-filtered subset so a\nchemist can \"Mark all visible as Selected\" / \"Reject all non-hits\" / etc."
+      },
+      "BulkSetResultDecisionsResponse": {
+        "properties": {
+          "campaign": {
+            "$ref": "#/components/schemas/CampaignResponse"
+          },
+          "updated_count": {
+            "type": "integer",
+            "title": "Updated Count"
+          },
+          "missing_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Missing Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "campaign",
+          "updated_count",
+          "missing_ids"
+        ],
+        "title": "BulkSetResultDecisionsResponse",
+        "description": "Bulk-decision outcome: refreshed campaign + applied/missing counts."
       },
       "CampaignChannelResponse": {
         "properties": {
