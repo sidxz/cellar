@@ -45,6 +45,7 @@ The user's words: *"campaign is a snapshot of search results"*. The Search page 
 | FE: channels | `ChannelStrip` → `ChannelsSection` — uppercase header, one detail row per channel (label, readout, hit threshold, selection rule), `+Add Channel` pill. Existing add/edit popover is reused. |
 | FE: customize | Reuse the Search `ReportCustomizer` sheet. Campaign-specific knobs: show/hide property columns, show/hide Decision Reason / Notes / Override-status columns. |
 | FE: deletions | `CompoundListPane` (~331 lines), `SourcesSummaryCard` (~132 lines), `DecisionPanel` (~289 lines) — removed. Their behavior is folded into the new layout. |
+| FE: project scoping | Every entity picker (`+Add Collection`, `+Add Campaign`, `+Add Run` → protocol picker) wired to the campaign's `project_id`. Backend support already exists; this is pure FE prop-drilling. See §3.5. |
 | BE: one new endpoint | `POST /api/v1/dose-response/curves:batch` returning DRC details for a list of curve IDs. Required to feed inline DR plots. |
 
 ---
@@ -196,7 +197,29 @@ State: `Set<resultId>` of expanded rows held in component state (not persisted).
 
 Implementation note: AG-Grid Community supports `getRowHeight(params)` + a `fullWidthCellRenderer` for the expanded portion. No Master/Detail (Enterprise) required.
 
-### 3.5. Customize-Report sheet (reused)
+### 3.5. Project-scoped pickers (mandatory)
+
+Every entity picker in the Campaign UI **must** scope its listing to the campaign's `project_id`. This matches the Search UI convention (`useProtocolSummaries([projectId])`) and prevents chemists from accidentally picking resources that belong to a different project. Current state and required wiring:
+
+| Picker | Where | Current state | Fix |
+|---|---|---|---|
+| Protocol picker (`+Add Channel`) | `ChannelStrip` / `channels-section.tsx` | Already project-scoped via `useProtocolSummaries([projectId])` | No change |
+| Collection picker (`+Add Collection`) | `AddFromCollectionDialog` | Uses `useCollections()` — workspace-wide | Pass `projectId` → `useCollections([projectId])` |
+| Campaign picker (`+Add Campaign`) | `AddFromCampaignDialog` | No project filter today | Swap to `useCampaignsByProject(projectId)` (already exists). Filter to `status ∈ {closed, draft}` of the *same* project. |
+| Protocol picker (`+Add Run` step 1) | `AddFromRunsDialog` | Uses `useListProtocolsApiV1ProtocolsGet()` — workspace-wide | Swap to `useProtocolSummaries([projectId])` |
+| Run picker (`+Add Run` step 1, after protocol picked) | `AddFromRunsDialog` | Implicitly scoped by selected protocol | No change (runs inherit scope from protocol) |
+| Compound picker (`+Add Manual`) | manual add dialog | Workspace-wide compound search | **No change** — adding an existing-elsewhere compound to a project-specific campaign is a legitimate cross-project transfer (e.g., a hit found in NadD that screens well in another project). Keep it workspace-wide but display the compound's source project as a chip in the dialog when known. |
+
+Backend already supports project filtering on all three list routes:
+- `GET /api/v1/protocols/list-summaries?project_ids=…` — confirmed at `interface/routes/protocols.py:446`
+- `GET /api/v1/collections?project_ids=…` — confirmed at `interface/routes/collections.py:124`
+- `GET /api/v1/campaigns?project_id=…` — confirmed via `useCampaignsByProject`
+
+So this is **FE-only wiring**. No new endpoints needed.
+
+The `projectId` reaches every picker via prop drilling from `CampaignBuilder` / `CampaignView` (both already receive it). Add a `projectId: string` prop to `AddFromCollectionDialog`, `AddFromCampaignDialog`, `AddFromRunsDialog`, and the new `SourcesSection` that hosts the `+Add` pills. Each dialog passes the prop to its picker hook.
+
+### 3.6. Customize-Report sheet (reused)
 
 We reuse Search's `ReportCustomizer` shape (`Sheet`, right-side, 420px wide). Campaign-scoped knobs:
 
@@ -313,7 +336,7 @@ A phased rollout keeps each PR reviewable:
 2. **FE: new sections, no grid changes yet** (1 PR). Build `HeaderStrip`, `SourcesSection`, `ChannelsSection`, `CampaignToolbar` as new files. Wire them into the existing `CampaignBuilder` *alongside* the existing 3-pane layout under a `?v2=1` query param (no feature-flag infra needed; this is dev-only and removed in Phase 4). The current builder layout stays default.
 3. **FE: new grid + DR cell + popover/drawer** (1 PR). New `results-grid.tsx`, `measurement-cell.tsx`, `decision-chip-cell.tsx`, `dose-response-cell.tsx`, `decision-popover.tsx`, `row-detail-drawer.tsx`. Still hidden behind the `?v2` switch.
 4. **FE: switch default, delete the old shell** (1 PR). `CampaignBuilder` and `CampaignView` use the new layout unconditionally. Delete `CompoundListPane`, `SourcesSummaryCard`, `DecisionPanel`, `ChannelStrip`. Update tests. Update CLAUDE.md "Current Session Notes".
-5. **FE: customize-report sheet + property columns** (1 PR). Add the report-customizer wired to a campaign-scoped Zustand store. Wire optional property columns + Decision-Reason / Notes / Override-status toggles.
+5. **FE: customize-report sheet + property columns + project-scoped pickers** (1 PR). Add the report-customizer wired to a campaign-scoped Zustand store. Wire optional property columns + Decision-Reason / Notes / Override-status toggles. Fix the project-scoping wiring in the three add-dialogs per §3.5 in the same PR (small, related, easy to review together).
 6. **Playwright smoke** (1 PR). Land the `screen-campaign.spec.ts` (currently a `.TODO` stub) covering: create campaign → add from runs → set decisions inline → close & sign. Hooks into the existing test infra.
 
 Each PR is independently revertable. Phase 1 and Phase 6 are mandatory bookends; Phases 2-5 carry the user-visible work.
