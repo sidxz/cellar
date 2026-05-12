@@ -34,7 +34,19 @@ import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-cri
 import {
   useAddCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
   useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
+  useRemoveCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDelete,
 } from "@/shared/lib/api/campaigns/campaigns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { campaignKeys } from "../lib/hooks";
 import type { CampaignChannelResponse } from "../types";
 
@@ -131,6 +143,15 @@ export function ChannelPopoverForm({
       },
     },
   });
+  const deleteMutation = useRemoveCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDelete({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        onClose();
+      },
+    },
+  });
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const isEdit = !!existing;
 
@@ -292,7 +313,8 @@ export function ChannelPopoverForm({
     }
   };
 
-  const isPending = addMutation.isPending || updateMutation.isPending;
+  const isPending =
+    addMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const readouts = fullProtocol?.readout_definitions ?? [];
 
@@ -589,14 +611,63 @@ export function ChannelPopoverForm({
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Saving..." : isEdit ? "Update" : "Add Channel"}
-        </Button>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        {isEdit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            disabled={isPending}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </Button>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={isPending}>
+            {isPending ? "Saving..." : isEdit ? "Update" : "Add Channel"}
+          </Button>
+        </div>
       </div>
+
+      {/* Deleting a channel drops every measurement under it across all
+          results. Reversible only by re-adding (with a different id) +
+          re-resolving — make the chemist confirm explicitly. */}
+      {isEdit && existing && (
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete channel "{existing.label}"?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the channel and every measurement it produced
+                across all results in this campaign. You can re-add the same
+                readout afterwards, but the new channel will have a fresh id
+                — manual overrides on this channel will not carry over.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() =>
+                  deleteMutation.mutate({
+                    campaignId,
+                    channelId: existing.id,
+                  })
+                }
+              >
+                Delete channel
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </form>
   );
 }
