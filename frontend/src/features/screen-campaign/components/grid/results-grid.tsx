@@ -54,6 +54,7 @@ import {
 } from "../campaign-filter-bar";
 
 import { DecisionChipCell } from "./decision-chip-cell";
+import { CurveExpandDialog, type ExpandedCurve } from "./curve-expand-dialog";
 
 import type {
   CampaignResponse,
@@ -192,6 +193,7 @@ export function ResultsGridV2({
     channel: CampaignChannelResponse;
     measurement?: CampaignMeasurementResponse;
   } | null>(null);
+  const [expandedCurve, setExpandedCurve] = useState<ExpandedCurve | null>(null);
 
   // ── Bulk fetches ────────────────────────────────────────────────────────────
 
@@ -395,7 +397,7 @@ export function ResultsGridV2({
               const curve = m?.source_curve_id
                 ? curveMap.get(m.source_curve_id)
                 : null;
-              if (!curve) {
+              if (!r || !curve) {
                 return <span className="text-muted-foreground">--</span>;
               }
               const curveParams: CurveParams = {
@@ -408,12 +410,36 @@ export function ResultsGridV2({
               const dataPoints =
                 (curve.raw_data as Array<{ x: number; y: number }> | null) ??
                 null;
+              const mol = moleculesById.get(r.molecule_id);
+              const moleculeLabel =
+                mol?.registration_number ?? r.molecule_id.slice(0, 8);
               return (
-                <DoseResponseSparkline
-                  params={curveParams}
-                  dataPoints={dataPoints}
-                  curveClass={(curve.curve_class as CurveClass | null) ?? null}
-                />
+                <button
+                  type="button"
+                  className="block rounded hover:bg-muted/50 focus:bg-muted/60 focus:outline-none"
+                  title="Click to expand"
+                  onClick={() =>
+                    setExpandedCurve({
+                      fitted_value: curve.fitted_value,
+                      top: curve.top,
+                      bottom: curve.bottom,
+                      hill_slope: curve.hill_slope,
+                      r_squared: curve.r_squared,
+                      curve_class:
+                        (curve.curve_class as CurveClass | null) ?? null,
+                      raw_data: dataPoints,
+                      unit: m?.unit ?? null,
+                      moleculeLabel,
+                      channelLabel: ch.label,
+                    })
+                  }
+                >
+                  <DoseResponseSparkline
+                    params={curveParams}
+                    dataPoints={dataPoints}
+                    curveClass={(curve.curve_class as CurveClass | null) ?? null}
+                  />
+                </button>
               );
             },
           });
@@ -512,6 +538,13 @@ export function ResultsGridV2({
           measurement={overrideTarget.measurement}
         />
       )}
+
+      <CurveExpandDialog
+        data={expandedCurve}
+        onOpenChange={(open) => {
+          if (!open) setExpandedCurve(null);
+        }}
+      />
     </>
   );
 }
