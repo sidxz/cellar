@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { Boxes, Package, MapPin, Plus } from "lucide-react";
 import {
   Tabs,
@@ -21,7 +22,7 @@ import type { BatchGlobalParams } from "../hooks/use-batches";
 import type { SampleGlobalParams } from "../hooks/use-samples";
 
 export function InventoryDashboard() {
-  const [tab, setTab] = useState("batches");
+  const [tab, setTab] = useHashTab("batches");
   const [search, setSearch] = useState("");
   const [createBatchOpen, setCreateBatchOpen] = useState(false);
   const [createSampleOpen, setCreateSampleOpen] = useState(false);

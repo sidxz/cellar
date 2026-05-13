@@ -35,8 +35,6 @@ const STATUS_CATEGORIES: Record<string, StatusCategory> = {
 
   // Active / in-use
   in_use: "active",
-  preclinical_candidate: "active",
-  development_candidate: "active",
 
   // Success end-states
   stored: "success",
@@ -60,6 +58,8 @@ const STATUS_CATEGORIES: Record<string, StatusCategory> = {
   registered: "info",
   hit: "info",
   lead: "info",
+  preclinical_candidate: "info",
+  development_candidate: "info",
 };
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
