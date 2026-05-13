@@ -6,6 +6,7 @@ import { useGridPreferences } from "@/shared/hooks/use-grid-preferences";
 import {
   AllCommunityModule,
   type ColDef,
+  type ColGroupDef,
   type GridReadyEvent,
   ModuleRegistry,
   type RowClickedEvent,
@@ -13,7 +14,7 @@ import {
 } from "ag-grid-community";
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import { Search } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cellarTheme } from "./ag-grid-theme";
 import { type ExcelEnhancer, ExportToolbar } from "./export-toolbar";
 
@@ -22,7 +23,8 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 export interface DataGridProps<TData = unknown>
   extends Omit<AgGridReactProps<TData>, "theme" | "rowData" | "columnDefs"> {
   rowData: TData[] | undefined;
-  columnDefs: ColDef<TData>[];
+  /** Accepts flat ColDef arrays or ColDef/ColGroupDef mixed arrays (for grouped headers). */
+  columnDefs: (ColDef<TData> | ColGroupDef<TData>)[];
   loading?: boolean;
   /** Rendered when rowData is empty (not loading) */
   emptyState?: ReactNode;
@@ -59,6 +61,13 @@ export interface DataGridProps<TData = unknown>
    *  When provided, the toolbar is rendered even in loading/empty states so
    *  the action remains reachable when the table has no rows yet. */
   toolbarActions?: ReactNode;
+  /**
+   * When this value changes to a truthy value, the grid calls `api.deselectAll()`.
+   * Useful for syncing external clear-selection events (e.g. after a new search).
+   * Typical usage: pass `clearSelectionToken={searchVersion}` and bump the
+   * version whenever the parent wants to reset selection.
+   */
+  clearSelectionToken?: unknown;
 }
 
 export function DataGrid<TData = unknown>({
@@ -77,6 +86,7 @@ export function DataGrid<TData = unknown>({
   suppressSelectColumn,
   searchPlaceholder = "Filter...",
   toolbarActions,
+  clearSelectionToken,
   ...rest
 }: DataGridProps<TData>) {
   const selectionEnabled = !!selectionToolbar || !!enableMultiSelect;
@@ -104,9 +114,10 @@ export function DataGrid<TData = unknown>({
 
   // Inject header tooltips (so clipped headers show full name on hover) and
   // prepend the selection checkbox column when a selection toolbar is wired.
-  const finalColumnDefs = useMemo<ColDef<TData>[]>(() => {
+  const finalColumnDefs = useMemo<(ColDef<TData> | ColGroupDef<TData>)[]>(() => {
     const withTooltips = columnDefs.map((c) =>
-      c.headerTooltip == null && typeof c.headerName === "string"
+      // Only inject tooltips on leaf ColDef (ColGroupDef has `children`, not a headerTooltip need)
+      !("children" in c) && c.headerTooltip == null && typeof c.headerName === "string"
         ? { ...c, headerTooltip: c.headerName }
         : c,
     );
@@ -128,6 +139,17 @@ export function DataGrid<TData = unknown>({
     };
     return [selectCol, ...withTooltips];
   }, [columnDefs, selectionEnabled, suppressSelectColumn]);
+
+  // Sync external clear-selection signal (e.g. after a new search resets state).
+  // The effect fires whenever clearSelectionToken changes; `deselectAll` is
+  // called only when the token is falsy (i.e. 0 / null / ""), which the caller
+  // sets when it wants to clear grid selection. Callers typically pass the
+  // tracked set's size — 0 triggers the clear, positive values are ignored.
+  useEffect(() => {
+    if (clearSelectionToken !== undefined && !clearSelectionToken && gridRef.current?.api) {
+      gridRef.current.api.deselectAll();
+    }
+  }, [clearSelectionToken]);
 
   const handleRowClicked = useCallback(
     (event: RowClickedEvent<TData>) => {

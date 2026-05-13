@@ -1,23 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { AgGridReact } from "ag-grid-react";
+import { useMemo } from "react";
 import {
-  AllCommunityModule,
-  ModuleRegistry,
   type ColDef,
   type ColGroupDef,
   type ICellRendererParams,
-  type RowClickedEvent,
-  type GridReadyEvent,
-  type SelectionChangedEvent,
 } from "ag-grid-community";
 
-ModuleRegistry.registerModules([AllCommunityModule]);
-import { Skeleton } from "@/shared/components/ui/skeleton";
-import { Badge } from "@/shared/components/ui/badge";
 import { StructureThumbnail } from "@/shared/components/chemistry";
-import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { READOUT_NORMALIZATION_LABELS, type Protocol } from "@/features/screening-assay/types";
@@ -47,63 +38,6 @@ const ROW_HEIGHTS: Record<string, number> = {
   medium: 220,
   large: 330,
 };
-
-// ─── Curve class badge colors ───────────────────────────────────────────────
-
-
-// ─── Column builders ────────────────────────────────────────────────────────
-
-function buildFixedColumns(
-  imageSize: string,
-): ColDef<EnrichedMolecule>[] {
-  const thumbSize = imageSize === "large" ? 260 : imageSize === "medium" ? 156 : 72;
-
-  return [
-    {
-      headerCheckboxSelection: true,
-      checkboxSelection: true,
-      width: 48,
-      sortable: false,
-      filter: false,
-      pinned: "left",
-      suppressMovable: true,
-      headerName: "",
-    },
-    {
-      headerName: "Molecule",
-      width: imageSize === "large" ? 290 : imageSize === "medium" ? 200 : 130,
-      pinned: "left",
-      sortable: false,
-      filter: false,
-      cellStyle: { display: "flex", justifyContent: "center" },
-      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-        const mol = params.data;
-        if (!mol) return null;
-        const smiles = mol.structure?.smiles;
-        return (
-          <div className="flex h-full flex-col items-center justify-center py-2">
-            {smiles ? (
-              <StructureThumbnail smiles={smiles} size={thumbSize} />
-            ) : (
-              <div
-                className="shrink-0 rounded bg-muted"
-                style={{ width: thumbSize, height: thumbSize }}
-              />
-            )}
-            <div className="mt-1 text-center min-w-0 w-full">
-              <p className="truncate font-mono text-xs text-muted-foreground">
-                {mol.registration_number ?? "\u2014"}
-              </p>
-              <p className="truncate text-sm">
-                {mol.name || "Unnamed"}
-              </p>
-            </div>
-          </div>
-        );
-      },
-    },
-  ];
-}
 
 // ─── Similarity column ─────────────────────────────────────────────────────
 
@@ -161,7 +95,7 @@ function buildPropertyColumns(
       width: 90,
       valueGetter: (p) => p.data?.descriptors?.molecular_weight ?? null,
       valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toFixed(1) : "\u2014",
+        p.value != null ? Number(p.value).toFixed(1) : "—",
     });
   }
 
@@ -171,7 +105,7 @@ function buildPropertyColumns(
       width: 80,
       valueGetter: (p) => p.data?.descriptors?.logp ?? null,
       valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toFixed(2) : "\u2014",
+        p.value != null ? Number(p.value).toFixed(2) : "—",
     });
   }
 
@@ -181,7 +115,7 @@ function buildPropertyColumns(
       width: 70,
       headerTooltip: "Hydrogen-bond donors (Lipinski Rule of Five)",
       valueGetter: (p) => p.data?.descriptors?.hbd ?? null,
-      valueFormatter: (p) => (p.value != null ? String(p.value) : "\u2014"),
+      valueFormatter: (p) => (p.value != null ? String(p.value) : "—"),
     });
   }
 
@@ -191,7 +125,7 @@ function buildPropertyColumns(
       width: 70,
       headerTooltip: "Hydrogen-bond acceptors (Lipinski Rule of Five)",
       valueGetter: (p) => p.data?.descriptors?.hba ?? null,
-      valueFormatter: (p) => (p.value != null ? String(p.value) : "\u2014"),
+      valueFormatter: (p) => (p.value != null ? String(p.value) : "—"),
     });
   }
 
@@ -200,10 +134,10 @@ function buildPropertyColumns(
       headerName: "TPSA",
       width: 80,
       headerTooltip:
-        "Topological polar surface area (Veber's rule \u2014 predicts permeability)",
+        "Topological polar surface area (Veber's rule — predicts permeability)",
       valueGetter: (p) => p.data?.descriptors?.tpsa ?? null,
       valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toFixed(1) : "\u2014",
+        p.value != null ? Number(p.value).toFixed(1) : "—",
     });
   }
 
@@ -324,6 +258,50 @@ function buildProtocolColumnGroups(
   return groups;
 }
 
+// Fixed molecule column (structure + identity stack) — no standalone checkbox
+// column because DataGrid's suppressSelectColumn + enableMultiSelect lets each
+// caller host the checkbox inside the Molecule cell via the grid's built-in
+// headerCheckboxSelection. Here we use DataGrid's auto-prepended __select__
+// column for simplicity (suppressSelectColumn=false, enableMultiSelect=true).
+function buildMoleculeColumn(
+  imageSize: string,
+): ColDef<EnrichedMolecule> {
+  const thumbSize = imageSize === "large" ? 260 : imageSize === "medium" ? 156 : 72;
+  return {
+    headerName: "Molecule",
+    width: imageSize === "large" ? 290 : imageSize === "medium" ? 200 : 130,
+    pinned: "left",
+    sortable: false,
+    filter: false,
+    cellStyle: { display: "flex", justifyContent: "center" },
+    cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+      const mol = params.data;
+      if (!mol) return null;
+      const smiles = mol.structure?.smiles;
+      return (
+        <div className="flex h-full flex-col items-center justify-center py-2">
+          {smiles ? (
+            <StructureThumbnail smiles={smiles} size={thumbSize} />
+          ) : (
+            <div
+              className="shrink-0 rounded bg-muted"
+              style={{ width: thumbSize, height: thumbSize }}
+            />
+          )}
+          <div className="mt-1 text-center min-w-0 w-full">
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {mol.registration_number ?? "—"}
+            </p>
+            <p className="truncate text-sm">
+              {mol.name || "Unnamed"}
+            </p>
+          </div>
+        </div>
+      );
+    },
+  };
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function ResultsGrid({
@@ -336,8 +314,6 @@ export function ResultsGrid({
   selectedIds,
   onSelectionChange,
 }: ResultsGridProps) {
-  const gridRef = useRef<AgGridReact<EnrichedMolecule>>(null);
-
   const rowHeight = ROW_HEIGHTS[reportConfig.imageSize] ?? 150;
 
   // Show the similarity column only when at least one row actually carries
@@ -348,14 +324,12 @@ export function ResultsGrid({
     [results],
   );
 
-  const columnDefs = useMemo<(ColDef<EnrichedMolecule> | ColGroupDef)[]>(() => {
-    const fixed = buildFixedColumns(reportConfig.imageSize);
+  const columnDefs = useMemo<(ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[]>(() => {
+    const molecule = buildMoleculeColumn(reportConfig.imageSize);
     const sim = hasSimilarityScores ? [buildSimilarityColumn()] : [];
-    const props = buildPropertyColumns(
-      reportConfig.visibleFields.properties,
-    );
+    const props = buildPropertyColumns(reportConfig.visibleFields.properties);
     const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols);
-    return [...fixed, ...sim, ...props, ...protoGroups];
+    return [molecule, ...sim, ...props, ...protoGroups];
   }, [
     reportConfig.imageSize,
     reportConfig.visibleFields.properties,
@@ -364,67 +338,12 @@ export function ResultsGrid({
     hasSimilarityScores,
   ]);
 
-  const defaultColDef = useMemo<ColDef>(
-    () => ({
-      sortable: true,
-      resizable: true,
-      filter: false,
-      suppressMovable: true,
-      minWidth: 60,
-    }),
-    [],
-  );
-
-  const handleRowClicked = useCallback(
-    (event: RowClickedEvent<EnrichedMolecule>) => {
-      if (!event.data) return;
-      const target = event.event?.target as HTMLElement | null;
-      if (target?.closest("button, a, [role='button'], input[type='checkbox']"))
-        return;
-      onRowClick(event.data);
-    },
-    [onRowClick],
-  );
-
-  const handleGridReady = useCallback((event: GridReadyEvent) => {
-    event.api.sizeColumnsToFit();
-  }, []);
-
-  const handleSelectionChanged = useCallback(
-    (event: SelectionChangedEvent<EnrichedMolecule>) => {
-      const rows = event.api.getSelectedRows();
-      onSelectionChange(new Set(rows.map((r) => r.id)));
-    },
-    [onSelectionChange],
-  );
-
-  // Sync grid selection when parent clears selectedIds (e.g. after search reset)
-  useEffect(() => {
-    if (selectedIds.size === 0) {
-      gridRef.current?.api?.deselectAll();
-    }
-  }, [selectedIds.size]);
-
-  if (loading) {
-    return (
-      <div className="space-y-2 p-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
-        ))}
-      </div>
-    );
-  }
-
-  if (results.length === 0) {
-    return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        No results to display.
-      </p>
-    );
-  }
+  // When the parent resets selection (selectedIds.size → 0), DataGrid's
+  // clearSelectionToken mechanism detects the falsy value and calls deselectAll.
+  const clearSelectionToken = selectedIds.size;
 
   return (
-    <div style={{ width: "100%", height: "calc(100vh - 80px)" }}>
+    <>
       <style>{`
         .ag-protocol-group-header .ag-header-group-cell-label {
           color: hsl(var(--primary)) !important;
@@ -434,22 +353,31 @@ export function ResultsGrid({
           letter-spacing: 0.3px;
         }
       `}</style>
-      <AgGridReact<EnrichedMolecule>
-        ref={gridRef}
-        theme={cellarTheme}
+      <DataGrid<EnrichedMolecule>
         rowData={results}
         columnDefs={columnDefs}
-        defaultColDef={defaultColDef}
+        loading={loading}
+        emptyState={
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No results to display.
+          </p>
+        }
+        height="calc(100vh - 80px)"
         rowHeight={rowHeight}
         headerHeight={36}
         groupHeaderHeight={32}
-        onRowClicked={handleRowClicked}
-        onGridReady={handleGridReady}
-        onSelectionChanged={handleSelectionChanged}
-        rowSelection="multiple"
+        enableMultiSelect
+        suppressSelectColumn
+        searchPlaceholder={false}
+        onRowClick={onRowClick}
+        onSelectionChanged={(event) => {
+          const rows = event.api.getSelectedRows();
+          onSelectionChange(new Set(rows.map((r) => r.id)));
+        }}
+        clearSelectionToken={clearSelectionToken}
         suppressCellFocus
         animateRows={false}
       />
-    </div>
+    </>
   );
 }

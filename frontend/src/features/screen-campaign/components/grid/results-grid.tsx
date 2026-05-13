@@ -26,12 +26,10 @@ import type {
   ICellRendererParams,
   IRowNode,
 } from "ag-grid-community";
-import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
-import { AgGridReact } from "ag-grid-react";
 import { Pencil } from "lucide-react";
 
 import { Badge } from "@/shared/components/ui/badge";
-import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
@@ -67,8 +65,6 @@ import type {
 
 import type { CurveSnapshot } from "@/features/screening-assay";
 import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
-
-ModuleRegistry.registerModules([AllCommunityModule]);
 
 // ── Row shape ─────────────────────────────────────────────────────────────────
 
@@ -550,20 +546,18 @@ export function ResultsGridV2({
 
   return (
     <>
-      <div style={{ height: 600, width: "100%" }}>
-        <AgGridReact<RowData>
-          theme={cellarTheme}
-          rowData={rowData}
-          columnDefs={columnDefs}
-          defaultColDef={{ sortable: true, resizable: true, minWidth: 80 }}
-          rowHeight={ROW_HEIGHT}
-          getRowId={(p) => p.data.result.id}
-          isExternalFilterPresent={isExternalFilterPresent}
-          doesExternalFilterPass={doesExternalFilterPass}
-          suppressCellFocus
-          animateRows={false}
-        />
-      </div>
+      <DataGrid<RowData>
+        rowData={rowData}
+        columnDefs={columnDefs}
+        height={600}
+        rowHeight={ROW_HEIGHT}
+        getRowId={(p) => p.data.result.id}
+        isExternalFilterPresent={isExternalFilterPresent}
+        doesExternalFilterPass={doesExternalFilterPass}
+        searchPlaceholder={false}
+        suppressCellFocus
+        animateRows={false}
+      />
 
       {overrideTarget && (
         <OverrideModal
