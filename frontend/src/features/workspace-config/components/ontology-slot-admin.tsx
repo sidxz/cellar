@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -38,71 +41,99 @@ import {
 // OntologySlot dialog (create / edit)
 // ---------------------------------------------------------------------------
 
+// ── Schema ──────────────────────────────────────────────────────────────────
+
+const ONTOLOGY_OPTIONS = [
+  { value: "BAO", label: "BAO — BioAssay Ontology" },
+  { value: "GO", label: "GO — Gene Ontology" },
+  { value: "CLO", label: "CLO — Cell Line Ontology" },
+  { value: "DOID", label: "DOID — Disease Ontology" },
+  { value: "CHEBI", label: "CHEBI — Chemical Entities" },
+  { value: "OBI", label: "OBI — Biomedical Investigation" },
+  { value: "NCBITAXON", label: "NCBI Taxonomy" },
+  { value: "PATO", label: "PATO — Phenotype & Trait" },
+] as const;
+
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  label: z.string().min(1, "Label is required"),
+  ontology_sources: z.array(z.string()).min(1, "Select at least one ontology"),
+  root_concept_id: z.string().optional(),
+  is_required: z.boolean(),
+  allow_free_text: z.boolean(),
+  display_order: z.number().int().min(0),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+const defaultValues: FormValues = {
+  name: "",
+  label: "",
+  ontology_sources: [],
+  root_concept_id: "",
+  is_required: false,
+  allow_free_text: false,
+  display_order: 0,
+};
+
+function toFormValues(editing: OntologySlotDefinition): FormValues {
+  return {
+    name: editing.name,
+    label: editing.label,
+    ontology_sources: editing.ontology_sources,
+    root_concept_id: editing.root_concept_id ?? "",
+    is_required: editing.is_required,
+    allow_free_text: editing.allow_free_text,
+    display_order: editing.display_order,
+  };
+}
+
+// ── Props ────────────────────────────────────────────────────────────────────
+
 interface SlotDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: OntologySlotDefinition | null;
 }
 
-function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
-  const [name, setName] = useState("");
-  const [label, setLabel] = useState("");
-  const [ontologySources, setOntologySources] = useState("");
-  const [rootConceptId, setRootConceptId] = useState("");
-  const [isRequired, setIsRequired] = useState(false);
-  const [allowFreeText, setAllowFreeText] = useState(false);
-  const [displayOrder, setDisplayOrder] = useState("0");
+// ── Component ────────────────────────────────────────────────────────────────
 
+function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
   const isEdit = editing !== null;
   const create = useCreateOntologySlot();
   const update = useUpdateOntologySlot(editing?.id ?? "");
 
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
+
   useEffect(() => {
-    if (editing) {
-      setName(editing.name);
-      setLabel(editing.label);
-      setOntologySources(editing.ontology_sources.join(", "));
-      setRootConceptId(editing.root_concept_id ?? "");
-      setIsRequired(editing.is_required);
-      setAllowFreeText(editing.allow_free_text);
-      setDisplayOrder(String(editing.display_order));
-    } else {
-      setName("");
-      setLabel("");
-      setOntologySources("");
-      setRootConceptId("");
-      setIsRequired(false);
-      setAllowFreeText(false);
-      setDisplayOrder("0");
+    if (open) {
+      form.reset(editing ? toFormValues(editing) : defaultValues);
     }
-  }, [editing, open]);
+  }, [open, editing, form]);
 
-  const handleSubmit = async () => {
-    const sources = ontologySources
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const order = parseInt(displayOrder, 10);
-
+  const onSubmit = async (values: FormValues) => {
     if (isEdit) {
       const data: UpdateOntologySlotInput = {
-        label: label.trim(),
-        ontology_sources: sources,
-        root_concept_id: rootConceptId.trim() || null,
-        is_required: isRequired,
-        allow_free_text: allowFreeText,
-        display_order: isNaN(order) ? 0 : order,
+        label: values.label.trim(),
+        ontology_sources: values.ontology_sources,
+        root_concept_id: values.root_concept_id?.trim() || null,
+        is_required: values.is_required,
+        allow_free_text: values.allow_free_text,
+        display_order: values.display_order,
       };
       await update.mutateAsync(data);
     } else {
       const data: CreateOntologySlotInput = {
-        name: name.trim(),
-        label: label.trim(),
-        ontology_sources: sources,
-        root_concept_id: rootConceptId.trim() || null,
-        is_required: isRequired,
-        allow_free_text: allowFreeText,
-        display_order: isNaN(order) ? 0 : order,
+        name: values.name.trim(),
+        label: values.label.trim(),
+        ontology_sources: values.ontology_sources,
+        root_concept_id: values.root_concept_id?.trim() || null,
+        is_required: values.is_required,
+        allow_free_text: values.allow_free_text,
+        display_order: values.display_order,
       };
       await create.mutateAsync(data);
     }
@@ -110,7 +141,6 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
   };
 
   const isPending = create.isPending || update.isPending;
-  const canSubmit = label.trim() && ontologySources.trim() && (isEdit || name.trim());
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,140 +150,158 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
             {isEdit ? "Edit Ontology Slot" : "New Ontology Slot"}
           </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {!isEdit ? (
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
+            {!isEdit ? (
+              <div className="grid gap-2">
+                <Label htmlFor="slot-name">Name</Label>
+                <Input
+                  id="slot-name"
+                  {...form.register("name")}
+                  placeholder="e.g., assay_type"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Machine identifier. Cannot be changed after creation.
+                </p>
+                {form.formState.errors.name && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.name.message}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>Name</Label>
+                <Input
+                  value={editing?.name ?? ""}
+                  disabled
+                  className="font-mono"
+                />
+              </div>
+            )}
+
             <div className="grid gap-2">
-              <Label htmlFor="slot-name">Name</Label>
+              <Label htmlFor="slot-label">Label</Label>
               <Input
-                id="slot-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., assay_type"
-                className="font-mono"
+                id="slot-label"
+                {...form.register("label")}
+                placeholder="e.g., Assay Type"
+              />
+              {form.formState.errors.label && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.label.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Ontology Sources</Label>
+              <Controller
+                name="ontology_sources"
+                control={form.control}
+                render={({ field }) => (
+                  <div className="grid grid-cols-2 gap-2 rounded-md border p-3">
+                    {ONTOLOGY_OPTIONS.map((ont) => {
+                      const isChecked = field.value.includes(ont.value);
+                      return (
+                        <label
+                          key={ont.value}
+                          className="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const updated = e.target.checked
+                                ? [...field.value, ont.value]
+                                : field.value.filter((s) => s !== ont.value);
+                              field.onChange(updated);
+                            }}
+                            className="rounded border-input"
+                          />
+                          <span>{ont.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               />
               <p className="text-xs text-muted-foreground">
-                Machine identifier. Cannot be changed after creation.
+                Select which ontologies to search for this slot.
+              </p>
+              {form.formState.errors.ontology_sources && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.ontology_sources.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="slot-root-concept">Root Concept ID (optional)</Label>
+              <Input
+                id="slot-root-concept"
+                {...form.register("root_concept_id")}
+                placeholder="e.g., http://www.bioassayontology.org/bao#BAO_0000008"
+              />
+              <p className="text-xs text-muted-foreground">
+                Constrain search to a subtree. Use the full URI from BioPortal.
               </p>
             </div>
-          ) : (
+
             <div className="grid gap-2">
-              <Label>Name</Label>
+              <Label htmlFor="slot-order">Display Order</Label>
               <Input
-                value={editing?.name ?? ""}
-                disabled
-                className="font-mono"
+                id="slot-order"
+                type="number"
+                {...form.register("display_order", { valueAsNumber: true })}
+                min={0}
               />
             </div>
-          )}
 
-          <div className="grid gap-2">
-            <Label htmlFor="slot-label">Label</Label>
-            <Input
-              id="slot-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g., Assay Type"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Ontology Sources</Label>
-            <div className="grid grid-cols-2 gap-2 rounded-md border p-3">
-              {[
-                { value: "BAO", label: "BAO — BioAssay Ontology" },
-                { value: "GO", label: "GO — Gene Ontology" },
-                { value: "CLO", label: "CLO — Cell Line Ontology" },
-                { value: "DOID", label: "DOID — Disease Ontology" },
-                { value: "CHEBI", label: "CHEBI — Chemical Entities" },
-                { value: "OBI", label: "OBI — Biomedical Investigation" },
-                { value: "NCBITAXON", label: "NCBI Taxonomy" },
-                { value: "PATO", label: "PATO — Phenotype & Trait" },
-              ].map((ont) => {
-                const selected = ontologySources
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-                const isChecked = selected.includes(ont.value);
-                return (
-                  <label
-                    key={ont.value}
-                    className="flex items-center gap-2 text-sm cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        const updated = e.target.checked
-                          ? [...selected, ont.value]
-                          : selected.filter((s) => s !== ont.value);
-                        setOntologySources(updated.join(", "));
-                      }}
-                      className="rounded border-input"
-                    />
-                    <span>{ont.label}</span>
-                  </label>
-                );
-              })}
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label htmlFor="slot-required" className="cursor-pointer">
+                Required
+              </Label>
+              <Controller
+                name="is_required"
+                control={form.control}
+                render={({ field }) => (
+                  <Switch
+                    id="slot-required"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Select which ontologies to search for this slot.
-            </p>
-          </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="slot-root-concept">Root Concept ID (optional)</Label>
-            <Input
-              id="slot-root-concept"
-              value={rootConceptId}
-              onChange={(e) => setRootConceptId(e.target.value)}
-              placeholder="e.g., http://www.bioassayontology.org/bao#BAO_0000008"
-            />
-            <p className="text-xs text-muted-foreground">
-              Constrain search to a subtree. Use the full URI from BioPortal.
-            </p>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label htmlFor="slot-freetext" className="cursor-pointer">
+                Allow Free Text
+              </Label>
+              <Controller
+                name="allow_free_text"
+                control={form.control}
+                render={({ field }) => (
+                  <Switch
+                    id="slot-freetext"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
           </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="slot-order">Display Order</Label>
-            <Input
-              id="slot-order"
-              type="number"
-              value={displayOrder}
-              onChange={(e) => setDisplayOrder(e.target.value)}
-              min={0}
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label htmlFor="slot-required" className="cursor-pointer">
-              Required
-            </Label>
-            <Switch
-              id="slot-required"
-              checked={isRequired}
-              onCheckedChange={setIsRequired}
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label htmlFor="slot-freetext" className="cursor-pointer">
-              Allow Free Text
-            </Label>
-            <Switch
-              id="slot-freetext"
-              checked={allowFreeText}
-              onCheckedChange={setAllowFreeText}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || isPending}>
-            {isPending ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={form.formState.isSubmitting || isPending}>
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -361,14 +409,14 @@ function SlotTable({ entries, onEdit, onDelete }: SlotTableProps) {
                 {entry.is_required ? (
                   <Badge variant="default" className="text-xs">Required</Badge>
                 ) : (
-                  <span className="text-sm text-muted-foreground">{"\u2014"}</span>
+                  <span className="text-sm text-muted-foreground">{"—"}</span>
                 )}
               </TableCell>
               <TableCell>
                 {entry.allow_free_text ? (
                   <Badge variant="outline" className="text-xs">Yes</Badge>
                 ) : (
-                  <span className="text-sm text-muted-foreground">{"\u2014"}</span>
+                  <span className="text-sm text-muted-foreground">{"—"}</span>
                 )}
               </TableCell>
               <TableCell className="tabular-nums">{entry.display_order}</TableCell>
