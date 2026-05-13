@@ -250,9 +250,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
 function BulkProcessing() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
   const workflowId = useRegistrationWizard((s) => s.workflowId);
-  const progress = useRegistrationWizard((s) => s.progress);
   const setWorkflowId = useRegistrationWizard((s) => s.setWorkflowId);
-  const setProgress = useRegistrationWizard((s) => s.setProgress);
   const setMergeCandidates = useRegistrationWizard((s) => s.setMergeCandidates);
   const setCurrentStep = useRegistrationWizard((s) => s.setCurrentStep);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
@@ -283,12 +281,9 @@ function BulkProcessing() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll for progress
+  // Poll for progress — read directly from the query; no Zustand mirror needed
   const statusQuery = useBulkRegistrationStatus(workflowId, !!workflowId);
-
-  useEffect(() => {
-    if (statusQuery.data) setProgress(statusQuery.data);
-  }, [statusQuery.data, setProgress]);
+  const progress = statusQuery.data;
 
   // Auto-advance when complete
   const hasAdvanced = useRef(false);
