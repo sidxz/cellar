@@ -10,16 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/shared/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import {
   useAttachments,
   useDeleteAttachment,
@@ -113,34 +104,19 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
         })}
       </div>
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete file?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete{" "}
-              <strong>{deleteTarget?.file_name}</strong>. This action cannot be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id);
-                  setDeleteTarget(null);
-                }
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Delete file?"
+        description={`This will permanently delete "${deleteTarget?.file_name ?? ""}". This action cannot be undone.`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </>
   );
 }

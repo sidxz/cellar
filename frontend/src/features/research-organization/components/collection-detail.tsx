@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -291,28 +292,14 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
       />
 
       {/* Delete confirmation */}
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete collection?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete &ldquo;{query.data?.name}&rdquo; and
-              remove all molecule associations. The molecules themselves will not
-              be deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete collection?"
+        description={`This will permanently delete "${query.data?.name ?? ""}" and remove all molecule associations. The molecules themselves will not be deleted.`}
+        onConfirm={handleDelete}
+        isPending={deleteMutation.isPending}
+      />
 
       {/* Remove molecules confirmation */}
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
