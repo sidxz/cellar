@@ -6,15 +6,23 @@
  * Renders the V2 layout (HeaderStrip + SourcesSection + ChannelsSection +
  * CampaignFilterBar + CampaignToolbar + ResultsGridV2) for draft campaigns.
  * Closed/superseded campaigns dispatch to CampaignView.
+ *
+ * Note: Path B was chosen over DetailShell wrapping because HeaderStrip IS the
+ * campaign's page header — inserting DetailShell's back-button + title row above
+ * it would double-header the page. Loading/error/not-found states are aligned
+ * with the same primitives DetailShell uses (Skeleton, AlertCircle, ArrowLeft).
  */
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useCampaign, campaignKeys } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
+import { Button } from "@/shared/components/ui/button";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { CloseSignDialog } from "./close-sign-dialog";
 import { CampaignView } from "./campaign-view";
@@ -43,28 +51,43 @@ interface CampaignBuilderProps {
 export function CampaignBuilder({ campaignId, projectId }: CampaignBuilderProps) {
   const { data: campaign, isLoading, error } = useCampaign(campaignId);
   const { data: project } = useProject(projectId);
+  const backHref = `/projects/${projectId}/campaigns`;
 
   // Human-readable breadcrumbs — never display UUIDs.
   useBreadcrumbTrail([
     { label: "Projects", href: "/projects" },
     { label: project?.name ?? "", href: `/projects/${projectId}` },
-    { label: "Campaigns", href: `/projects/${projectId}/campaigns` },
+    { label: "Campaigns", href: backHref },
     { label: campaign?.name ?? "" },
   ]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-32" />
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
 
   if (error || !campaign) {
     return (
-      <p className="text-destructive p-6">
-        Failed to load campaign. Please refresh the page.
-      </p>
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <AlertCircle className="h-12 w-12 text-muted-foreground/40" />
+        <p className="mt-4 text-muted-foreground">
+          {error ? "Failed to load campaign." : "Campaign not found."}
+        </p>
+        <Button variant="ghost" size="sm" className="mt-4" asChild>
+          <Link href={backHref}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Campaigns
+          </Link>
+        </Button>
+      </div>
     );
   }
 
