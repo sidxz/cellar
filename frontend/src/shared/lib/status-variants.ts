@@ -33,6 +33,16 @@ const STATUS_CATEGORIES: Record<string, StatusCategory> = {
   cancelled: "error",
   returned: "error",
 
+  // Active / in-use
+  in_use: "active",
+
+  // Success end-states
+  stored: "success",
+  merged: "success",
+
+  // Warning
+  conflict: "warning",
+
   // Neutral end-states (routine, NOT red)
   archived: "neutral",
   retired: "neutral",
