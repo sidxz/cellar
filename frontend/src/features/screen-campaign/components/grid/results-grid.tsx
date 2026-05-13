@@ -35,14 +35,16 @@ import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
-import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
-import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
+import {
+  DoseResponseSparkline,
+  CurveClassBadge,
+  useProtocolSummaries,
+} from "@/features/screening-assay";
 import {
   READOUT_NORMALIZATION_LABELS,
   type CurveClass,
   type CurveParams,
 } from "@/features/screening-assay/types";
-import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 
 import { useMoleculesByIds } from "../../lib/hooks";
 import { useCampaignCurves } from "../../lib/use-campaign-curves";
@@ -63,7 +65,7 @@ import type {
   CampaignMeasurementResponse,
 } from "../../types";
 
-import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import type { CurveSnapshot } from "@/features/screening-assay";
 import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
 
 ModuleRegistry.registerModules([AllCommunityModule]);

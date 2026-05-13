@@ -35,7 +35,7 @@ import { AddProtocolDialog } from "./add-protocol-dialog";
 import { CollectionList } from "./collection-list";
 import { SavedSearchList } from "./saved-search-list";
 import { ProjectMembers } from "./project-members";
-import { CampaignList } from "@/features/screen-campaign/components/campaign-list";
+import { CampaignList } from "@/features/screen-campaign";
 
 interface ProjectDetailProps {
   projectId: string;

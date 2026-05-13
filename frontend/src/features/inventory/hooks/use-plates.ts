@@ -12,7 +12,7 @@ import type {
   UpdatePlateInput,
   WellMapping,
 } from "../types/plates";
-import { MOLECULES_KEY } from "@/features/chemical-registration/hooks/query-keys";
+import { MOLECULES_KEY } from "@/features/chemical-registration";
 
 const PLATES_KEY = ["plates"];
 

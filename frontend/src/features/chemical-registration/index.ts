@@ -17,3 +17,6 @@ export type {
   MergeInput,
   MergeEventResponse,
 } from "./types/disclosure";
+
+// Query key constants (exported for cross-feature cache invalidation)
+export { MOLECULES_KEY } from "./hooks/query-keys";

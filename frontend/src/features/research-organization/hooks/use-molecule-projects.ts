@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { MOLECULES_KEY } from "@/features/chemical-registration/hooks/query-keys";
+import { MOLECULES_KEY } from "@/features/chemical-registration";
 
 const moleculeProjectsKey = (moleculeId: string) => [...MOLECULES_KEY, moleculeId, "projects"];
 

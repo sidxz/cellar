@@ -16,3 +16,9 @@ export {
   useAddProtocolToProject,
   useRemoveProtocolFromProject,
 } from "./hooks/use-protocol-projects";
+export { useProtocolSummaries } from "./hooks/use-protocols";
+
+// Shared visual components (used by screen-campaign)
+export { DoseResponseSparkline } from "./components/dose-response-sparkline";
+export { CurveClassBadge } from "./components/curve-class-badge";
+export type { CurveSnapshot } from "./components/dose-response-figure";
