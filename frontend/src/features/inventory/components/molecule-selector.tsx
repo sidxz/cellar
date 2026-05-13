@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDebounce } from "@/shared/hooks/use-debounce";
 import { X } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
@@ -16,7 +17,7 @@ export function MoleculeSelector({
   onSelect,
 }: MoleculeSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedTerm, setDebouncedTerm] = useState("");
+  const debouncedTerm = useDebounce(searchTerm, 300);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedMolecule, setSelectedMolecule] = useState<Molecule | null>(
     null,
@@ -26,14 +27,6 @@ export function MoleculeSelector({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: results, isLoading } = useMoleculeSearch(debouncedTerm);
-
-  // Debounce the search term (300ms)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedTerm(searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
 
   // When results arrive and contain the already-selected molecule, capture it
   // (handles initial display when selectedId is set externally)
@@ -64,7 +57,6 @@ export function MoleculeSelector({
     (mol: Molecule) => {
       setSelectedMolecule(mol);
       setSearchTerm("");
-      setDebouncedTerm("");
       setIsOpen(false);
       onSelect(mol.id);
     },
@@ -74,7 +66,6 @@ export function MoleculeSelector({
   const handleClear = useCallback(() => {
     setSelectedMolecule(null);
     setSearchTerm("");
-    setDebouncedTerm("");
     onSelect(null);
     inputRef.current?.focus();
   }, [onSelect]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useDebounce } from "@/shared/hooks/use-debounce";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { SearchQuery } from "../types";
@@ -26,13 +26,7 @@ const DEBOUNCE_MS = 250;
  */
 export function useSearchCount(query: SearchQuery, enabled: boolean) {
   const serialized = JSON.stringify(query);
-  const [debouncedKey, setDebouncedKey] = useState(serialized);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const handle = setTimeout(() => setDebouncedKey(serialized), DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [serialized, enabled]);
+  const debouncedKey = useDebounce(serialized, DEBOUNCE_MS);
 
   return useQuery({
     queryKey: [...COUNT_KEY, debouncedKey],
