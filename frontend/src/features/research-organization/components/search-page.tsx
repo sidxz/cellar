@@ -17,7 +17,7 @@ import { ResultsGrid } from "./search/results-grid";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
 import { SaveSearchDialog } from "./search/save-search-dialog";
-import { CollectionPickerDialog } from "./collection-picker-dialog";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

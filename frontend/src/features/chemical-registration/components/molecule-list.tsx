@@ -20,7 +20,7 @@ import {
   type Molecule,
   type MoleculeType,
 } from "../types";
-import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { CompoundSearchBar } from "./compound-search-bar";
 
 export function MoleculeList() {

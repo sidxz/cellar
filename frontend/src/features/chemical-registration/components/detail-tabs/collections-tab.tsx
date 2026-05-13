@@ -12,7 +12,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMoleculeCollections } from "../../hooks/use-molecule-collections";
 import { MOLECULES_KEY } from "../../hooks/query-keys";
-import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 
 // ---------------------------------------------------------------------------
 // CollectionsTab

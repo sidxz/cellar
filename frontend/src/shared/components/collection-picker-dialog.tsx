@@ -1,6 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useAddMolecules } from "@/features/research-organization/hooks/use-collection-molecules";
+import {
+  useCollections,
+  useCreateCollection,
+} from "@/features/research-organization/hooks/use-collections";
+import type { MembershipResult, MoleculeReference } from "@/features/research-organization/types";
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -19,17 +25,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Badge } from "@/shared/components/ui/badge";
-import { Plus, CheckCircle2, AlertCircle } from "lucide-react";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { useCollections, useCreateCollection } from "../hooks/use-collections";
-import { useAddMolecules } from "../hooks/use-collection-molecules";
-import type { MembershipResult, MoleculeReference } from "../types";
+import { AlertCircle, CheckCircle2, Plus } from "lucide-react";
+import { useState } from "react";
 
 interface CollectionPickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   moleculeIds: string[];
+  /**
+   * When true the "Create New Collection" inline flow and the post-add result
+   * panel are hidden, matching the simpler screening-assay UX.
+   */
+  simple?: boolean;
   onComplete?: () => void;
 }
 
@@ -37,6 +45,7 @@ export function CollectionPickerDialog({
   open,
   onOpenChange,
   moleculeIds,
+  simple = false,
   onComplete,
 }: CollectionPickerDialogProps) {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
@@ -100,8 +109,20 @@ export function CollectionPickerDialog({
       value: id,
       ref_type: "uuid",
     }));
-    const res = await addMutation.mutateAsync({ references: refs });
-    setResult(res);
+    if (simple) {
+      // Simple mode: close immediately on success (no result panel).
+      addMutation.mutate(
+        { references: refs },
+        {
+          onSuccess: () => {
+            handleOpenChange(false);
+          },
+        },
+      );
+    } else {
+      const res = await addMutation.mutateAsync({ references: refs });
+      setResult(res);
+    }
   };
 
   const handleDone = () => {
@@ -109,8 +130,7 @@ export function CollectionPickerDialog({
     onComplete?.();
   };
 
-  const isPending =
-    addMutation.isPending || createMutation.isPending || isPendingDirect;
+  const isPending = addMutation.isPending || createMutation.isPending || isPendingDirect;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -118,36 +138,30 @@ export function CollectionPickerDialog({
         <DialogHeader>
           <DialogTitle>Add to Collection</DialogTitle>
           <DialogDescription>
-            Add {moleculeIds.length} molecule
+            Add {moleculeIds.length} compound
             {moleculeIds.length !== 1 ? "s" : ""} to a collection.
           </DialogDescription>
         </DialogHeader>
 
-        {result ? (
+        {!simple && result ? (
           <div className="space-y-3 py-2">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-500" />
-              <span className="text-sm font-medium">
-                {result.added_count} added
-              </span>
+              <span className="text-sm font-medium">{result.added_count} added</span>
               {result.already_present > 0 && (
-                <Badge variant="secondary">
-                  {result.already_present} already present
-                </Badge>
+                <Badge variant="secondary">{result.already_present} already present</Badge>
               )}
             </div>
             {result.unresolved.length > 0 && (
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-yellow-500" />
-                <span className="text-sm">
-                  {result.unresolved.length} could not be resolved
-                </span>
+                <span className="text-sm">{result.unresolved.length} could not be resolved</span>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-4 py-2">
-            {creating ? (
+            {!simple && creating ? (
               <div className="space-y-2">
                 <Label>New collection name</Label>
                 <div className="flex gap-2">
@@ -165,21 +179,14 @@ export function CollectionPickerDialog({
                     Create &amp; Add
                   </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCreating(false)}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setCreating(false)}>
                   Cancel
                 </Button>
               </div>
             ) : (
               <div className="space-y-2">
                 <Label>Choose collection</Label>
-                <Select
-                  value={selectedCollectionId}
-                  onValueChange={setSelectedCollectionId}
-                >
+                <Select value={selectedCollectionId} onValueChange={setSelectedCollectionId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a collection..." />
                   </SelectTrigger>
@@ -194,26 +201,24 @@ export function CollectionPickerDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreating(true)}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  Create New Collection
-                </Button>
+                {!simple && (
+                  <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+                    <Plus className="mr-1 h-3 w-3" />
+                    Create New Collection
+                  </Button>
+                )}
               </div>
             )}
           </div>
         )}
 
         <DialogFooter>
-          {result ? (
+          {!simple && result ? (
             <Button onClick={handleDone}>Done</Button>
           ) : (
             <Button
               onClick={handleAdd}
-              disabled={!selectedCollectionId || isPending || creating}
+              disabled={!selectedCollectionId || isPending || (!simple && creating)}
             >
               {isPending ? "Adding..." : "Add to Collection"}
             </Button>

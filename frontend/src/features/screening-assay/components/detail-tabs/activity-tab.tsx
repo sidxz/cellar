@@ -19,7 +19,7 @@ import { Eye, Filter, FlaskConical, FolderPlus, Settings2, Star } from "lucide-r
 import { useCallback, useMemo } from "react";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
 import type { CompoundActivity, CurveClass, Protocol } from "../../types";
-import { CollectionPickerDialog } from "../collection-picker-dialog";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
 import { CurveNavigator } from "../curve-navigator";
@@ -652,6 +652,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         open={collectionDialogOpen}
         onOpenChange={setCollectionDialogOpen}
         moleculeIds={selectedRows.map((r) => r.molecule_id)}
+        simple
       />
     </div>
   );
