@@ -9,6 +9,7 @@ import {
 import { MoleculeName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { StatusBadge } from "@/shared/components/status-badge";
+import { formatDate } from "@/shared/lib/format-date";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -175,9 +176,9 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                       {d.disclosed_smiles}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Requested {new Date(d.requested_at).toLocaleDateString()}
+                      Requested {formatDate(d.requested_at)}
                       {d.resolved_at &&
-                        ` \u2022 Resolved ${new Date(d.resolved_at).toLocaleDateString()}`}
+                        ` \u2022 Resolved ${formatDate(d.resolved_at)}`}
                     </p>
                     {d.notes && (
                       <p className="text-xs text-muted-foreground mt-1">
@@ -232,7 +233,7 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                       {m.reason}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(m.merged_at).toLocaleDateString()}
+                      {formatDate(m.merged_at)}
                       {" \u2022 "}
                       Source: <MoleculeName id={m.source_molecule_id} />
                       {" \u2192 "}

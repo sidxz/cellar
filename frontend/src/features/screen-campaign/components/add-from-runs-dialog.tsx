@@ -47,6 +47,7 @@ import { Switch } from "@/shared/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
+import { formatDate } from "@/shared/lib/format-date";
 
 import { useGetProtocolApiV1ProtocolsProtocolIdGet } from "@/shared/lib/api/protocols/protocols";
 import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
@@ -509,7 +510,7 @@ function ConfigureStep(p: ConfigureStepProps) {
                       <span className="flex-1 min-w-0 truncate">
                         Run on{" "}
                         {r.run_date
-                          ? new Date(r.run_date).toLocaleDateString()
+                          ? formatDate(r.run_date)
                           : "(unknown date)"}
                       </span>
                       <Badge

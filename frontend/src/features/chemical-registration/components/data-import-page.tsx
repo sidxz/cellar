@@ -39,6 +39,7 @@ import {
   RadioGroupItem,
 } from "@/shared/components/ui/radio-group";
 import { PageHeader } from "@/shared/components/page-header";
+import { formatDateTime } from "@/shared/lib/format-date";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import {
@@ -413,7 +414,7 @@ export function DataImportPage() {
                 {history.map((imp) => (
                   <TableRow key={imp.id}>
                     <TableCell className="whitespace-nowrap">
-                      {formatDate(imp.submitted_at)}
+                      {formatDateTime(imp.submitted_at)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
@@ -662,7 +663,7 @@ function PlateImportTab() {
               {plateHistory.map((imp) => (
                 <TableRow key={imp.id}>
                   <TableCell className="whitespace-nowrap">
-                    {formatDate(imp.submitted_at)}
+                    {formatDateTime(imp.submitted_at)}
                   </TableCell>
                   <TableCell>
                     <ImportStatusBadge status={imp.status} />
@@ -781,7 +782,4 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
 }
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-}
+

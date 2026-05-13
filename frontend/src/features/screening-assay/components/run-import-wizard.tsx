@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { showError, showSuccess } from "@/shared/lib/toast";
+import { formatDate } from "@/shared/lib/format-date";
 import { cn } from "@/shared/lib/utils";
 
 const ROLE_OPTIONS: Array<{ value: ImportRole | "ignore"; label: string }> = [
@@ -1035,7 +1036,7 @@ function DisambiguatePanel({
                         </span>
                       )}
                       <span className="ml-2 text-xs text-muted-foreground">
-                        · {new Date(b.created_at).toLocaleDateString()}
+                        · {formatDate(b.created_at)}
                       </span>
                     </SelectItem>
                   ))}

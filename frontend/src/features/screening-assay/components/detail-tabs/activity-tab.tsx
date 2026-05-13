@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { Plot } from "@/shared/lib/plotly";
+import { formatDate } from "@/shared/lib/format-date";
 import { GROUP_PALETTE, CHART_COLORS, CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Eye, Filter, FlaskConical, FolderPlus, RotateCcw, Settings2, Star } from "lucide-react";
 import type {
@@ -289,11 +290,7 @@ function buildColumnDefs(
     cellClass: "font-mono",
     valueFormatter: (p) => {
       if (!p.value) return "--";
-      return new Date(p.value as string).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
+      return formatDate(p.value as string);
     },
   });
 

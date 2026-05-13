@@ -56,6 +56,8 @@ function protocolStatusColor(status: string): string {
   return "bg-muted-foreground/40";
 }
 
+// inline: custom date logic — "today"/"yesterday" with date-only input; shared
+// formatRelativeDate works from timestamps and would not produce the same output.
 /** Format ISO date as a relative-ish suffix ("today", "3d ago", "Apr 20").
  *  Keeps the picker scannable without taking too much horizontal space. */
 function formatLastRun(iso: string | null): string {

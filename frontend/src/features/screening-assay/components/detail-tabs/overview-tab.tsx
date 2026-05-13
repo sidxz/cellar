@@ -11,6 +11,7 @@ import {
 } from "@/shared/components/ui/card";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { StatusBadge } from "@/shared/components/status-badge";
+import { formatDate } from "@/shared/lib/format-date";
 import { useProtocolStats } from "../../hooks/use-protocol-stats";
 import {
   PROTOCOL_TYPE_LABELS,
@@ -165,10 +166,7 @@ export function OverviewTab({
               <div className="flex items-center gap-4">
                 <div>
                   <p className="font-medium">
-                    {new Date(stats.latest_run.run_date).toLocaleDateString(
-                      undefined,
-                      { year: "numeric", month: "short", day: "numeric" }
-                    )}
+                    {formatDate(stats.latest_run.run_date)}
                   </p>
                   <div className="mt-1 flex items-center gap-2">
                     <StatusBadge status={stats.latest_run.status} />

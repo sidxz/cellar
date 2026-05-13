@@ -5,6 +5,7 @@ import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { PageHeader } from "@/shared/components/page-header";
+import { formatDate } from "@/shared/lib/format-date";
 import {
   Dialog,
   DialogContent,
@@ -356,7 +357,7 @@ function ApiKeyTable({ entries, onEdit, onDelete }: ApiKeyTableProps) {
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {entry.last_used_at
-                  ? new Date(entry.last_used_at).toLocaleDateString()
+                  ? formatDate(entry.last_used_at)
                   : "\u2014"}
               </TableCell>
               <TableCell>

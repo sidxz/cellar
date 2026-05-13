@@ -165,6 +165,7 @@ export function HeaderStrip({
           {closedAt && (
             <span>
               Closed{" "}
+              {/* inline: custom date format — dateStyle:"medium" + timeStyle:"short" */}
               {new Date(closedAt).toLocaleString(undefined, {
                 dateStyle: "medium",
                 timeStyle: "short",

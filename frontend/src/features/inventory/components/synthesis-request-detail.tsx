@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
+import { formatDate, formatDateTime } from "@/shared/lib/format-date";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
@@ -308,7 +309,7 @@ export function SynthesisRequestDetail({
             <div>
               <p className="text-xs text-muted-foreground">Approved At</p>
               <p className="font-medium text-sm">
-                {new Date(request.approved_at).toLocaleString()}
+                {formatDateTime(request.approved_at)}
               </p>
             </div>
           )}
@@ -318,7 +319,7 @@ export function SynthesisRequestDetail({
                 Est. Completion
               </p>
               <p className="font-medium text-sm">
-                {new Date(request.estimated_completion_date).toLocaleDateString()}
+                {formatDate(request.estimated_completion_date)}
               </p>
             </div>
           )}
@@ -328,7 +329,7 @@ export function SynthesisRequestDetail({
                 Actual Completion
               </p>
               <p className="font-medium text-sm">
-                {new Date(request.actual_completion_date).toLocaleDateString()}
+                {formatDate(request.actual_completion_date)}
               </p>
             </div>
           )}

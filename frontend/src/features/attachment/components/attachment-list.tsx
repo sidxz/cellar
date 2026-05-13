@@ -25,6 +25,7 @@ import {
   useDeleteAttachment,
   useDownloadAttachment,
 } from "../hooks/use-attachments";
+import { formatDate } from "@/shared/lib/format-date";
 import type { AttachableType, AttachmentResponse } from "../types";
 
 function formatFileSize(bytes: number): string {
@@ -85,7 +86,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
                   <p className="text-sm font-medium">{att.file_name}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatFileSize(att.file_size)} &middot;{" "}
-                    {new Date(att.created_at).toLocaleDateString()}
+                    {formatDate(att.created_at)}
                   </p>
                 </div>
               </div>

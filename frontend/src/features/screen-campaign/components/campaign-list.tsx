@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Loader2, Plus } from "lucide-react";
 
 import { Button } from "@/shared/components/ui/button";
+import { formatDate } from "@/shared/lib/format-date";
 import {
   Table,
   TableBody,
@@ -125,14 +126,10 @@ export function CampaignList({ projectId }: CampaignListProps) {
             <TableCell>{c.channels?.length ?? 0}</TableCell>
             <TableCell>{c.results?.length ?? 0}</TableCell>
             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-              {c.created_at
-                ? new Date(c.created_at as string).toLocaleDateString()
-                : "—"}
+              {c.created_at ? formatDate(c.created_at as string) : "—"}
             </TableCell>
             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-              {c.closed_at
-                ? new Date(c.closed_at as string).toLocaleDateString()
-                : "—"}
+              {c.closed_at ? formatDate(c.closed_at as string) : "—"}
             </TableCell>
           </TableRow>
         ))}

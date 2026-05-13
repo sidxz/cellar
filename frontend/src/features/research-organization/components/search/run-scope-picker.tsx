@@ -52,6 +52,8 @@ function statusColor(status: RunStatus, isLocked: boolean): string {
   return "bg-muted-foreground/40";
 }
 
+// inline: custom date format — produces "2026-05-12 14:30" (ISO date + 24-h time),
+// which is more compact than the shared formatDateTime "May 12, 2026, 2:30 PM".
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;

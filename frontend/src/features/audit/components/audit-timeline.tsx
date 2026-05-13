@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from "@/shared/components/ui/card";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { MemberName } from "@/shared/components/entity-name";
+import { formatDateTime } from "@/shared/lib/format-date";
 import { useAuditOperations, useAuditByEntity } from "../hooks/use-audit";
 import type { AuditOperation } from "../types";
 
@@ -103,7 +104,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Clock className="size-3" />
-            {new Date(operation.performed_at).toLocaleString()}
+            {formatDateTime(operation.performed_at)}
           </div>
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -158,7 +159,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
                   {operation.signature.reason}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                  {new Date(operation.signature.signed_at).toLocaleString()}
+                  {formatDateTime(operation.signature.signed_at)}
                 </span>
               </div>
             )}
