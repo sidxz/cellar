@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from "@/shared/components/ui/card";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { MemberName } from "@/shared/components/entity-name";
+import { EmptyState } from "@/shared/components/empty-state";
 import { formatDateTime } from "@/shared/lib/format-date";
 import { useAuditOperations, useAuditByEntity } from "../hooks/use-audit";
 import type { AuditOperation } from "../types";
@@ -194,16 +195,6 @@ function TimelineSkeleton() {
   );
 }
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Clock className="size-10 text-muted-foreground/50 mb-3" />
-      <p className="text-sm text-muted-foreground">No audit operations found.</p>
-    </div>
-  );
-}
 
 // ─── Timeline (data-driven) ─────────────────────────────────────────────────
 
@@ -215,7 +206,13 @@ function TimelineContent({
   isLoading: boolean;
 }) {
   if (isLoading) return <TimelineSkeleton />;
-  if (!operations || operations.length === 0) return <EmptyState />;
+  if (!operations || operations.length === 0) return (
+    <EmptyState
+      icon={Clock}
+      title="No audit operations"
+      description="No audit operations found."
+    />
+  );
 
   return (
     <div className="space-y-3">

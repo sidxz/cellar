@@ -142,13 +142,8 @@ function CompoundValueCell({
   readOnly,
   onEdit,
 }: CompoundValueCellProps) {
-  const [hover, setHover] = useState(false);
   return (
-    <div
-      className="flex items-center gap-1 py-2"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
+    <div className="group flex items-center gap-1 py-2">
       <div className="leading-tight">
         <span className="text-sm">
           {prefix}
@@ -169,12 +164,12 @@ function CompoundValueCell({
           <div className="text-[10px] text-muted-foreground">n={replicates}</div>
         )}
       </div>
-      {!readOnly && hover && (
+      {!readOnly && (
         <button
           type="button"
           onClick={onEdit}
           aria-label="Edit measurement"
-          className="ml-1 text-muted-foreground hover:text-foreground"
+          className="ml-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <Pencil className="h-3 w-3" />
         </button>

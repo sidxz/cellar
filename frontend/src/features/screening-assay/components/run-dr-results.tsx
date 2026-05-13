@@ -321,6 +321,10 @@ function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
   ];
 }
 
+// Module-level constant — buildColumnDefs has no component-state closure
+// so there is no need to re-create the array each render.
+const COLUMN_DEFS = buildColumnDefs();
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -404,7 +408,7 @@ export function RunDoseResponseResults({
     navigateTo(newIdx);
   }, [selectedIndex, filteredRows.length, navigateTo]);
 
-  const columnDefs = useMemo(() => buildColumnDefs(), []);
+  const columnDefs = COLUMN_DEFS;
 
   // Excel enhancer — fill image columns + add SMILES/Synonyms + raw data sheet
   const excelEnhancer: ExcelEnhancer = useCallback(
