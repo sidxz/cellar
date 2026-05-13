@@ -20,15 +20,21 @@ import { Download, ImageIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
 import {
-  CURVE_FIT_POINTS,
   PLOT_MARKER,
   X_AXIS_FALLBACK_MAX_RATIO,
   X_AXIS_FALLBACK_MIN_RATIO,
   X_AXIS_FLOOR,
   X_AXIS_MAX_RATIO,
   X_AXIS_MIN_RATIO,
-  generate4PLPoints,
 } from "../lib/dose-response-display";
+import {
+  computeReplicateStats,
+  extractPoints,
+  generate4PLCurve,
+  isDegenerateFit,
+  isPercentNormalization,
+  rSquaredColor,
+} from "../lib/dose-response-math";
 import { PERCENT_FIT_RANGES } from "../lib/readout-constants";
 import {
   CURVE_CLASS_LABELS,
@@ -99,127 +105,6 @@ function constraintsValid(c: CurveConstraints): boolean {
   if (c.bottomMode === "range" && !isRangeValid(c.bottomMin, c.bottomMax)) return false;
   if (c.hillCustomRange && !isRangeValid(c.hillMin, c.hillMax)) return false;
   return true;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * A curve has no meaningful sigmoid to draw when classified Inactive or
- * the fit produced degenerate parameters. ``ec50_at_bound`` curves are
- * still rendered (with an amber warning badge) so the user can see the
- * data and the extrapolated fit; only truly inactive / zero curves are
- * suppressed here.
- */
-function isDegenerateFit(curve: DoseResponseCurve): boolean {
-  return (
-    curve.curve_class === "inactive" ||
-    !Number.isFinite(curve.fitted_value) ||
-    curve.fitted_value <= 0 ||
-    curve.hill_slope === 0
-  );
-}
-
-/** Plotly-friendly wrapper around the shared 4PL evaluator. Kept as a
- *  thin function so existing callers don't need to thread the curve
- *  destructure through ``generate4PLPoints``. */
-function generate4PLCurve(
-  curve: DoseResponseCurve,
-  xMin: number,
-  xMax: number,
-): { x: number[]; y: number[] } {
-  const { x, y } = generate4PLPoints(curve, xMin, xMax, CURVE_FIT_POINTS + 1);
-  return { x, y };
-}
-
-/** Extract (concentration, response) pairs from raw_data / excluded_points */
-function extractPoints(points: Array<Record<string, unknown>> | null): {
-  x: number[];
-  y: number[];
-  reasons: (string | null)[];
-} {
-  if (!points || points.length === 0) return { x: [], y: [], reasons: [] };
-  const xs: number[] = [];
-  const ys: number[] = [];
-  const reasons: (string | null)[] = [];
-  for (const pt of points) {
-    const conc = pt.concentration ?? pt.x;
-    const resp = pt.response ?? pt.y;
-    if (typeof conc === "number" && typeof resp === "number") {
-      xs.push(conc);
-      ys.push(resp);
-      reasons.push(typeof pt.reason === "string" ? pt.reason : null);
-    }
-  }
-  return { x: xs, y: ys, reasons };
-}
-
-/** Group points by concentration, return mean ± SD arrays for error bars */
-function computeReplicateStats(
-  x: number[],
-  y: number[],
-): {
-  meanX: number[];
-  meanY: number[];
-  sdY: number[];
-  replicateX: number[];
-  replicateY: number[];
-} {
-  if (x.length === 0) {
-    return { meanX: [], meanY: [], sdY: [], replicateX: [], replicateY: [] };
-  }
-
-  // Group by concentration (use string key to avoid float equality issues)
-  const groups = new Map<string, { conc: number; responses: number[] }>();
-  for (let i = 0; i < x.length; i++) {
-    const key = x[i].toPrecision(10);
-    if (!groups.has(key)) groups.set(key, { conc: x[i], responses: [] });
-    groups.get(key)?.responses.push(y[i]);
-  }
-
-  const meanX: number[] = [];
-  const meanY: number[] = [];
-  const sdY: number[] = [];
-  const replicateX: number[] = [];
-  const replicateY: number[] = [];
-
-  for (const { conc, responses } of groups.values()) {
-    const mean = responses.reduce((a, b) => a + b, 0) / responses.length;
-    meanX.push(conc);
-    meanY.push(mean);
-
-    if (responses.length > 1) {
-      const variance =
-        responses.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (responses.length - 1);
-      sdY.push(Math.sqrt(variance));
-    } else {
-      sdY.push(0);
-    }
-
-    // Individual replicates for scatter layer
-    if (responses.length > 1) {
-      for (const resp of responses) {
-        replicateX.push(conc);
-        replicateY.push(resp);
-      }
-    }
-  }
-
-  return { meanX, meanY, sdY, replicateX, replicateY };
-}
-
-/** R² color class */
-function rSquaredColor(r2: number): string {
-  if (r2 >= 0.9) return "text-green-400";
-  if (r2 >= 0.8) return "text-yellow-400";
-  return "text-destructive";
-}
-
-/** Whether a Y-axis normalization belongs to the percent-scale family that
- *  the [85,110]/[-10,10]/[0.9,1.1] constraint defaults are calibrated for. */
-function isPercentNormalization(norm: string | null | undefined): boolean {
-  return (
-    norm === "percent_inhibition" || norm === "percent_activation" || norm === "percent_control"
-  );
 }
 
 /** Pure helper: derive the per-curve UI defaults from the protocol's config
