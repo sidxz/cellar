@@ -93,12 +93,13 @@ function CreateDialog({ open, onOpenChange, apiKeys }: CreateDialogProps) {
     }
   }, [open]);
 
-  // Auto-fill name from source type
-  useEffect(() => {
-    if (sourceType && !name) {
-      setName(sourceTypeLabel(sourceType));
+  const handleSourceTypeChange = (v: string) => {
+    setSourceType(v);
+    // Auto-fill name when user picks a source type and the name field is blank
+    if (v && !name) {
+      setName(sourceTypeLabel(v));
     }
-  }, [sourceType, name]);
+  };
 
   const handleSubmit = async () => {
     const data: CreateDataSourceInput = {
@@ -131,7 +132,7 @@ function CreateDialog({ open, onOpenChange, apiKeys }: CreateDialogProps) {
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label>Source Type</Label>
-            <Select value={sourceType} onValueChange={setSourceType}>
+            <Select value={sourceType} onValueChange={handleSourceTypeChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Select source type..." />
               </SelectTrigger>
