@@ -89,7 +89,7 @@ async def load(ctx: DemoContext) -> int:
             list_result = await list_uc(
                 ListProtocolsQuery(workspace_id=WORKSPACE_ID), auth=ctx.auth
             )
-            protocols = list_result.unwrap()
+            protocols = list_result.unwrap().items
             match = next((p for p in protocols if p.name == rec["name"]), None)
             if match is not None:
                 ctx.registry.put(key, match.id)

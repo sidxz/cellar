@@ -51,7 +51,7 @@ async def load(ctx: DemoContext) -> int:
             list_result = await list_uc(
                 ListTargetsQuery(workspace_id=WORKSPACE_ID), auth=ctx.auth
             )
-            targets = list_result.unwrap()
+            targets = list_result.unwrap().items
             match = next((t for t in targets if t.name == rec["name"]), None)
             if match is not None:
                 ctx.registry.put(key, match.id)

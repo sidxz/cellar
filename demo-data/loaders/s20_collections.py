@@ -52,7 +52,7 @@ async def load(ctx: DemoContext) -> int:
         list_uc = ctx.container[ListCollections]
         query = ListCollectionsQuery(workspace_id=WORKSPACE_ID)
         all_result = await list_uc(query)
-        all_collections = all_result.unwrap()
+        all_collections = all_result.unwrap().items
         name_to_id = {c.name: c.id for c in all_collections}
         for key, rec in data.items():
             if not ctx.registry.has(key):

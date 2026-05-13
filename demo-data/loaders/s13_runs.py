@@ -144,7 +144,6 @@ async def load(ctx: DemoContext) -> int:
                     run_id=run_id,
                     compound_assignments=compound_assignments,
                     concentration_series=concentrations,
-                    concentration_unit="nM",
                 ),
                 auth=ctx.auth,
             )

@@ -197,7 +197,7 @@ async def _load_dose_response_run(
             logger.info("readout.controls_created", run_key=run_key, count=len(ctrl_wells))
 
     for well in run.wells:
-        if well.batch_id is None or well.concentration is None:
+        if well.batch_id is None or well.dose is None:
             continue
 
         mol_key = batch_to_mol_key.get(well.batch_id)
@@ -218,7 +218,7 @@ async def _load_dose_response_run(
         if batch_id is None:
             continue
 
-        conc = well.concentration.value  # in nM
+        conc = well.dose  # in nM (Protocol.dose_unit)
 
         # Hill equation: % Inhibition = bottom + (top - bottom) / (1 + (IC50/conc)^hill_slope)
         # At conc >> IC50: response -> top (high inhibition)

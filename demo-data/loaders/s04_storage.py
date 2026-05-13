@@ -23,7 +23,7 @@ async def load(ctx: DemoContext) -> int:
 
     # Guard: if locations exist, backfill registry and skip
     list_uc = ctx.container[ListStorageLocations]
-    existing = (await list_uc(ListStorageLocationsQuery(workspace_id=WORKSPACE_ID))).unwrap()
+    existing = (await list_uc(ListStorageLocationsQuery(workspace_id=WORKSPACE_ID))).unwrap().items
     if existing:
         name_to_id = {loc.name: loc.id for loc in existing}
         for key, rec in data.items():
@@ -63,7 +63,7 @@ async def load(ctx: DemoContext) -> int:
         list_uc = ctx.container[ListStorageLocations]
         query = ListStorageLocationsQuery(workspace_id=WORKSPACE_ID)
         all_locs_result = await list_uc(query)
-        all_locs = all_locs_result.unwrap()
+        all_locs = all_locs_result.unwrap().items
         name_to_id = {loc.name: loc.id for loc in all_locs}
         for key, rec in data.items():
             if not ctx.registry.has(key):
