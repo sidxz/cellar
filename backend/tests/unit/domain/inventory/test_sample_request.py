@@ -4,17 +4,17 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.inventory.enums import RequestPriority, SampleRequestStatus
-from chem_vault.domain.inventory.events import (
+from cellar.domain.inventory.enums import RequestPriority, SampleRequestStatus
+from cellar.domain.inventory.events import (
     SampleRequestApproved,
     SampleRequestCreated,
     SampleRequestFulfilled,
     SampleRequestRejected,
 )
-from chem_vault.domain.inventory.sample_request import SampleRequest
-from chem_vault.domain.shared.enums import AmountUnit
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Amount
+from cellar.domain.inventory.sample_request import SampleRequest
+from cellar.domain.shared.enums import AmountUnit
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Amount
 
 
 @pytest.fixture

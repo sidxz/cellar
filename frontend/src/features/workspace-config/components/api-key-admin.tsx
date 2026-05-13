@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { PageHeader } from "@/shared/components/page-header";
+import { formatDate } from "@/shared/lib/format-date";
 import {
   Dialog,
   DialogContent,
@@ -65,56 +69,81 @@ const KNOWN_API_KEYS = [
 // ApiKey dialog (create / edit)
 // ---------------------------------------------------------------------------
 
+// ── Schema ──────────────────────────────────────────────────────────────────
+
+const formSchema = z.object({
+  key_name: z.string().min(1, "Service is required"),
+  label: z.string().min(1, "Label is required"),
+  description: z.string().optional(),
+  secret_value: z.string().optional(),
+  is_active: z.boolean(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+const defaultValues: FormValues = {
+  key_name: "",
+  label: "",
+  description: "",
+  secret_value: "",
+  is_active: true,
+};
+
+function toFormValues(editing: ExternalApiKey): FormValues {
+  return {
+    key_name: editing.key_name,
+    label: editing.label,
+    description: editing.description ?? "",
+    secret_value: "",
+    is_active: editing.is_active,
+  };
+}
+
+// ── Props ────────────────────────────────────────────────────────────────────
+
 interface ApiKeyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: ExternalApiKey | null;
 }
 
-function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
-  const [keyName, setKeyName] = useState("");
-  const [label, setLabel] = useState("");
-  const [description, setDescription] = useState("");
-  const [secretValue, setSecretValue] = useState("");
-  const [isActive, setIsActive] = useState(true);
+// ── Component ────────────────────────────────────────────────────────────────
 
+function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
   const isEdit = editing !== null;
   const create = useCreateApiKey();
   const update = useUpdateApiKey(editing?.id ?? "");
 
-  useEffect(() => {
-    if (editing) {
-      setKeyName(editing.key_name);
-      setLabel(editing.label);
-      setDescription(editing.description ?? "");
-      setSecretValue("");
-      setIsActive(editing.is_active);
-    } else {
-      setKeyName("");
-      setLabel("");
-      setDescription("");
-      setSecretValue("");
-      setIsActive(true);
-    }
-  }, [editing, open]);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    if (open) {
+      form.reset(editing ? toFormValues(editing) : defaultValues);
+    }
+  }, [open, editing, form]);
+
+  const watchedKeyName = form.watch("key_name");
+
+  const onSubmit = async (values: FormValues) => {
     if (isEdit) {
       const data: UpdateApiKeyInput = {
-        label: label.trim(),
-        description: description.trim() || null,
-        is_active: isActive,
+        label: values.label.trim(),
+        description: values.description?.trim() || null,
+        is_active: values.is_active,
       };
-      if (secretValue.trim()) {
-        data.secret_value = secretValue.trim();
+      if (values.secret_value?.trim()) {
+        data.secret_value = values.secret_value.trim();
       }
       await update.mutateAsync(data);
     } else {
       const data: CreateApiKeyInput = {
-        key_name: keyName.trim(),
-        label: label.trim(),
-        description: description.trim() || null,
-        secret_value: secretValue.trim(),
+        key_name: values.key_name.trim(),
+        label: values.label.trim(),
+        description: values.description?.trim() || null,
+        secret_value: values.secret_value?.trim() ?? "",
       };
       await create.mutateAsync(data);
     }
@@ -122,9 +151,6 @@ function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
   };
 
   const isPending = create.isPending || update.isPending;
-  const canSubmit = isEdit
-    ? label.trim()
-    : keyName.trim() && label.trim() && secretValue.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,108 +158,137 @@ function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit API Key" : "New API Key"}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {!isEdit ? (
-            <div className="grid gap-2">
-              <Label>Service</Label>
-              <Select
-                value={keyName}
-                onValueChange={(v) => {
-                  setKeyName(v);
-                  const def = KNOWN_API_KEYS.find((k) => k.key_name === v);
-                  if (def) {
-                    setLabel(def.label);
-                    setDescription(def.description);
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
+            {!isEdit ? (
+              <div className="grid gap-2">
+                <Label>Service</Label>
+                <Controller
+                  name="key_name"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => {
+                        field.onChange(v);
+                        const def = KNOWN_API_KEYS.find((k) => k.key_name === v);
+                        if (def) {
+                          form.setValue("label", def.label);
+                          form.setValue("description", def.description);
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select service..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {KNOWN_API_KEYS.map((k) => (
+                          <SelectItem key={k.key_name} value={k.key_name}>
+                            {k.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {form.formState.errors.key_name && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.key_name.message}
+                  </p>
+                )}
+                {watchedKeyName && (
+                  <p className="text-xs text-muted-foreground">
+                    {KNOWN_API_KEYS.find((k) => k.key_name === watchedKeyName)?.help}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>Service</Label>
+                <Input
+                  value={
+                    KNOWN_API_KEYS.find((k) => k.key_name === editing?.key_name)?.label ??
+                    editing?.key_name ??
+                    ""
                   }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select service..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {KNOWN_API_KEYS.map((k) => (
-                    <SelectItem key={k.key_name} value={k.key_name}>
-                      {k.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {keyName && (
-                <p className="text-xs text-muted-foreground">
-                  {KNOWN_API_KEYS.find((k) => k.key_name === keyName)?.help}
+                  disabled
+                />
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="key-label">Label</Label>
+              <Input
+                id="key-label"
+                {...form.register("label")}
+                placeholder="e.g., BioPortal API Key"
+              />
+              {form.formState.errors.label && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.label.message}
                 </p>
               )}
             </div>
-          ) : (
+
             <div className="grid gap-2">
-              <Label>Service</Label>
-              <Input
-                value={KNOWN_API_KEYS.find((k) => k.key_name === editing?.key_name)?.label ?? editing?.key_name ?? ""}
-                disabled
+              <Label htmlFor="key-description">Description</Label>
+              <Textarea
+                id="key-description"
+                {...form.register("description")}
+                placeholder="Optional notes about this key"
+                rows={2}
               />
             </div>
-          )}
 
-          <div className="grid gap-2">
-            <Label htmlFor="key-label">Label</Label>
-            <Input
-              id="key-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g., BioPortal API Key"
-            />
-          </div>
+            <div className="grid gap-2">
+              <Label htmlFor="key-secret">
+                {isEdit ? "New Secret Value (optional)" : "Secret Value"}
+              </Label>
+              <Input
+                id="key-secret"
+                type="password"
+                {...form.register("secret_value")}
+                placeholder={
+                  isEdit
+                    ? "Leave blank to keep current value"
+                    : "Paste your API key"
+                }
+              />
+              {isEdit && (
+                <p className="text-xs text-muted-foreground">
+                  Only provide if rotating the secret.
+                </p>
+              )}
+            </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="key-description">Description</Label>
-            <Textarea
-              id="key-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional notes about this key"
-              rows={2}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="key-secret">
-              {isEdit ? "New Secret Value (optional)" : "Secret Value"}
-            </Label>
-            <Input
-              id="key-secret"
-              type="password"
-              value={secretValue}
-              onChange={(e) => setSecretValue(e.target.value)}
-              placeholder={isEdit ? "Leave blank to keep current value" : "Paste your API key"}
-            />
             {isEdit && (
-              <p className="text-xs text-muted-foreground">
-                Only provide if rotating the secret.
-              </p>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <Label htmlFor="key-active" className="cursor-pointer">
+                  Active
+                </Label>
+                <Controller
+                  name="is_active"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Switch
+                      id="key-active"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  )}
+                />
+              </div>
             )}
           </div>
-
-          {isEdit && (
-            <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <Label htmlFor="key-active" className="cursor-pointer">
-                Active
-              </Label>
-              <Switch
-                id="key-active"
-                checked={isActive}
-                onCheckedChange={setIsActive}
-              />
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || isPending}>
-            {isPending ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={form.formState.isSubmitting || isPending}>
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -356,8 +411,8 @@ function ApiKeyTable({ entries, onEdit, onDelete }: ApiKeyTableProps) {
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {entry.last_used_at
-                  ? new Date(entry.last_used_at).toLocaleDateString()
-                  : "\u2014"}
+                  ? formatDate(entry.last_used_at)
+                  : "—"}
               </TableCell>
               <TableCell>
                 <ActiveToggle entry={entry} />

@@ -3,8 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { Collection } from "@/features/research-organization/types";
-
-const MOLECULES_KEY = ["molecules"];
+import { MOLECULES_KEY } from "./query-keys";
 
 export function useMoleculeCollections(moleculeId: string | undefined) {
   return useQuery({

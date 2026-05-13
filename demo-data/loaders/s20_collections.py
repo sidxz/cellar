@@ -11,19 +11,19 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.research_organization.collection_membership import (
+    from cellar.application.research_organization.collection_membership import (
         AddMoleculesToCollection,
         AddMoleculesToCollectionCommand,
     )
-    from chem_vault.application.research_organization.create_collection import (
+    from cellar.application.research_organization.create_collection import (
         CreateCollection,
         CreateCollectionCommand,
     )
-    from chem_vault.application.research_organization.get_collection import (
+    from cellar.application.research_organization.get_collection import (
         ListCollections,
         ListCollectionsQuery,
     )
-    from chem_vault.application.shared.molecule_resolver import MoleculeReference
+    from cellar.application.shared.molecule_resolver import MoleculeReference
 
     data: dict = ctx.data("collections.json")
     create_uc = ctx.container[CreateCollection]
@@ -52,7 +52,7 @@ async def load(ctx: DemoContext) -> int:
         list_uc = ctx.container[ListCollections]
         query = ListCollectionsQuery(workspace_id=WORKSPACE_ID)
         all_result = await list_uc(query)
-        all_collections = all_result.unwrap()
+        all_collections = all_result.unwrap().items
         name_to_id = {c.name: c.id for c in all_collections}
         for key, rec in data.items():
             if not ctx.registry.has(key):

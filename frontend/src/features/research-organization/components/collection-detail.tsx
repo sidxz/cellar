@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -41,6 +42,8 @@ import { useProject } from "../hooks/use-projects";
 import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 
 interface CollectionDetailProps {
   collectionId: string;
@@ -52,6 +55,7 @@ interface MoleculeRow {
 
 export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const router = useRouter();
+  const isAdmin = useAuthzHasRole("admin");
   const query = useCollection(collectionId);
   const { data: moleculeIds, isLoading: moleculesLoading } =
     useCollectionMolecules(collectionId);
@@ -160,6 +164,14 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               <Plus className="mr-2 h-4 w-4" />
               Add Molecules
             </Button>
+            {isAdmin && (
+              <AdminDeleteButton
+                entityType="collection"
+                entityId={collectionId}
+                entityLabel={query.data?.name ?? collectionId}
+                onDeleted={() => router.push("/collections")}
+              />
+            )}
           </>
         )}
       >
@@ -280,28 +292,14 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
       />
 
       {/* Delete confirmation */}
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete collection?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete &ldquo;{query.data?.name}&rdquo; and
-              remove all molecule associations. The molecules themselves will not
-              be deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete collection?"
+        description={`This will permanently delete "${query.data?.name ?? ""}" and remove all molecule associations. The molecules themselves will not be deleted.`}
+        onConfirm={handleDelete}
+        isPending={deleteMutation.isPending}
+      />
 
       {/* Remove molecules confirmation */}
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>

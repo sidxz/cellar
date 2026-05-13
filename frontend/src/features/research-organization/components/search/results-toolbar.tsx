@@ -37,7 +37,7 @@ export function ResultsToolbar({
           · {selectedCount} selected
         </span>
       )}
-      <span className="text-xs text-muted-foreground/60">
+      <span className="text-sm text-muted-foreground/60">
         Select:{" "}
         <button
           type="button"
@@ -59,28 +59,28 @@ export function ResultsToolbar({
       <div className="flex-1" />
 
       <div className="flex gap-1.5">
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={onExport}>
+        <Button variant="outline" size="sm" className="h-8 text-sm gap-1.5" onClick={onExport}>
           <Download className="h-3.5 w-3.5" />
           Export
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-xs gap-1.5"
+          className="h-8 text-sm gap-1.5"
           disabled={selectedCount === 0}
           onClick={onAddToCollection}
         >
           <ListPlus className="h-3.5 w-3.5" />
           Add to Collection
         </Button>
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={onCustomizeReport}>
+        <Button variant="outline" size="sm" className="h-8 text-sm gap-1.5" onClick={onCustomizeReport}>
           <Settings2 className="h-3.5 w-3.5" />
           Customize Report
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-xs gap-1.5 border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
+          className="h-8 text-sm gap-1.5 border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
           onClick={onSaveSearch}
         >
           <BookmarkPlus className="h-3.5 w-3.5" />

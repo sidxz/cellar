@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDebounce } from "@/shared/hooks/use-debounce";
 import { X } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
@@ -16,35 +17,19 @@ export function MoleculeSelector({
   onSelect,
 }: MoleculeSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedTerm, setDebouncedTerm] = useState("");
+  const debouncedTerm = useDebounce(searchTerm, 300);
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedMolecule, setSelectedMolecule] = useState<Molecule | null>(
-    null,
-  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: results, isLoading } = useMoleculeSearch(debouncedTerm);
 
-  // Debounce the search term (300ms)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedTerm(searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  // When results arrive and contain the already-selected molecule, capture it
-  // (handles initial display when selectedId is set externally)
-  useEffect(() => {
-    if (selectedId && results) {
-      const match = results.find((m) => m.id === selectedId);
-      if (match) {
-        setSelectedMolecule(match);
-      }
-    }
-  }, [selectedId, results]);
+  // Derive selectedMolecule from results + selectedId — no separate state needed
+  const selectedMolecule = useMemo(
+    () => results?.find((m) => m.id === selectedId) ?? null,
+    [results, selectedId],
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -62,9 +47,7 @@ export function MoleculeSelector({
 
   const handleSelect = useCallback(
     (mol: Molecule) => {
-      setSelectedMolecule(mol);
       setSearchTerm("");
-      setDebouncedTerm("");
       setIsOpen(false);
       onSelect(mol.id);
     },
@@ -72,9 +55,7 @@ export function MoleculeSelector({
   );
 
   const handleClear = useCallback(() => {
-    setSelectedMolecule(null);
     setSearchTerm("");
-    setDebouncedTerm("");
     onSelect(null);
     inputRef.current?.focus();
   }, [onSelect]);
@@ -89,7 +70,6 @@ export function MoleculeSelector({
       }
       // If user types while a molecule is selected, clear the selection
       if (selectedMolecule) {
-        setSelectedMolecule(null);
         onSelect(null);
       }
     },

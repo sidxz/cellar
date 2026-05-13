@@ -25,6 +25,7 @@ import {
 } from "../../types";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { worstZPrime } from "../../lib/qc-metrics";
 
 interface RunsTabProps {
   protocol: Protocol;
@@ -32,11 +33,11 @@ interface RunsTabProps {
 }
 
 function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
-  const zp = qcMetrics?.z_prime as number | undefined;
+  const zp = worstZPrime(qcMetrics);
   if (zp == null) return <span className="text-muted-foreground">&mdash;</span>;
   if (zp >= 0.5)
     return (
-      <Badge variant="outline" className="border-emerald-500/40 text-emerald-400">
+      <Badge variant="outline" className="border-success/40 text-success">
         {zp.toFixed(2)}
       </Badge>
     );
@@ -47,7 +48,7 @@ function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
       </Badge>
     );
   return (
-    <Badge variant="outline" className="border-red-500/40 text-red-400">
+    <Badge variant="outline" className="border-destructive/40 text-destructive">
       {zp.toFixed(2)}
     </Badge>
   );
@@ -147,6 +148,22 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         cellRenderer: (params: ICellRendererParams<Run>) => (
           <StatusBadge status={params.value} />
         ),
+      },
+      {
+        headerName: "Notes",
+        field: "notes",
+        flex: 1,
+        minWidth: 160,
+        cellRenderer: (params: ICellRendererParams<Run>) => {
+          const text = params.value as string | null;
+          if (!text)
+            return <span className="text-muted-foreground">&mdash;</span>;
+          return (
+            <span className="text-sm" title={text}>
+              {text.length > 80 ? `${text.slice(0, 80)}...` : text}
+            </span>
+          );
+        },
       },
     ],
     [memberName, orgName]

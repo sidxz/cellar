@@ -2,7 +2,7 @@
 
 import pytest
 
-from chem_vault.infrastructure.storage.fsspec_client import (
+from cellar.infrastructure.storage.fsspec_client import (
     BLOCKED_EXTENSIONS,
     FsspecStorageClient,
     MAX_FILE_SIZE,
@@ -10,7 +10,7 @@ from chem_vault.infrastructure.storage.fsspec_client import (
     validate_extension,
     validate_file_size,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 class TestValidateExtension:

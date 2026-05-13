@@ -6,6 +6,7 @@ import { AlertTriangle, Boxes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/empty-state";
+import { formatDate } from "@/shared/lib/format-date";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import {
   useBatchesByMolecule,
@@ -201,7 +202,7 @@ export function GlobalBatchList({ params }: GlobalBatchListProps) {
         field: "created_at",
         width: 120,
         valueFormatter: (p) =>
-          p.value ? new Date(p.value).toLocaleDateString() : "\u2014",
+          p.value ? formatDate(p.value) : "\u2014",
       },
     ],
     []

@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from chem_vault.domain.research_organization.events import SavedSearchCreated
-from chem_vault.domain.research_organization.saved_search import (
+from cellar.domain.research_organization.events import SavedSearchCreated
+from cellar.domain.research_organization.saved_search import (
     SavedSearch,
     SearchVisibility,
 )
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ValidationError
 
 
 @pytest.fixture

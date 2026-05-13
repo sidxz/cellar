@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.inventory.shipments import (
+    from cellar.application.inventory.shipments import (
         CreateShipment,
         CreateShipmentCommand,
         DeliverShipment,

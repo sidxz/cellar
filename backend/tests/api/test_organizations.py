@@ -12,7 +12,7 @@ class TestListOrganizations:
     async def test_empty_list(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/organizations")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
     async def test_list_after_create(self, client: AsyncClient) -> None:
         await client.post(
@@ -21,7 +21,7 @@ class TestListOrganizations:
         )
         resp = await client.get("/api/v1/organizations")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["items"]
         assert len(data) == 1
         assert data[0]["name"] == "Merck"
 
@@ -41,7 +41,7 @@ class TestListOrganizations:
         # Note: deactivation not exposed via PATCH — inactive orgs still show with include_inactive
         resp = await client.get("/api/v1/organizations", params={"include_inactive": "true"})
         assert resp.status_code == 200
-        assert len(resp.json()) == 2
+        assert len(resp.json()["items"]) == 2
 
 
 class TestCreateOrganization:

@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.research_organization.events import CollectionCreated
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.events import CollectionCreated
+from cellar.domain.shared.errors import ValidationError
 
 
 @pytest.fixture

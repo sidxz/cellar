@@ -11,20 +11,20 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.condition_grouping_service import (
+from cellar.application.screening.condition_grouping_service import (
     ConditionGroupingService,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     ProtocolType,
     ReadoutDataType,
 )
-from chem_vault.domain.screening_assay.protocol import (
+from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
     ReadoutDefinition,
 )
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.errors import NotFoundError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Shared fixtures + helpers

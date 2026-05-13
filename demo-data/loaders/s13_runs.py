@@ -14,12 +14,12 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.screening.create_run import (
+    from cellar.application.screening.create_run import (
         CreateRun,
         CreateRunCommand,
     )
-    from chem_vault.application.screening.get_run import GetRun, GetRunQuery
-    from chem_vault.application.screening.manage_run import (
+    from cellar.application.screening.get_run import GetRun, GetRunQuery
+    from cellar.application.screening.manage_run import (
         ApproveRun,
         ApproveRunCommand,
         CompleteRun,
@@ -29,7 +29,7 @@ async def load(ctx: DemoContext) -> int:
         StartRun,
         StartRunCommand,
     )
-    from chem_vault.application.screening.plate_setup import (
+    from cellar.application.screening.plate_setup import (
         CompoundAssignment,
         SetUpRunPlate,
         SetUpRunPlateCommand,
@@ -144,7 +144,6 @@ async def load(ctx: DemoContext) -> int:
                     run_id=run_id,
                     compound_assignments=compound_assignments,
                     concentration_series=concentrations,
-                    concentration_unit="nM",
                 ),
                 auth=ctx.auth,
             )
@@ -166,7 +165,7 @@ async def load(ctx: DemoContext) -> int:
 
                 # Add control wells directly via SQL for normalization + Z-prime
                 from sqlalchemy.ext.asyncio import async_sessionmaker
-                from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+                from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
                     PlateModel, WellModel,
                 )
                 from sqlalchemy import select

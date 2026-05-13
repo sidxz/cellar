@@ -1,12 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  customInstance,
-  getApiBaseUrl,
-} from "@/shared/lib/api/custom-instance";
-import { getSentinelClient } from "@/shared/lib/auth/config";
-import { showSuccess } from "@/shared/lib/toast";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { downloadFile } from "@/shared/lib/api/download";
+import { showSuccess, showError } from "@/shared/lib/toast";
 import type { AttachableType, AttachmentResponse } from "../types";
 
 function attachmentsKey(entityType: AttachableType, entityId: string) {
@@ -44,6 +41,9 @@ export function useUploadAttachment(
       qc.invalidateQueries({ queryKey: attachmentsKey(entityType, entityId) });
       showSuccess("File uploaded");
     },
+    onError: (err: Error) => {
+      showError(err.message || "File upload failed");
+    },
   });
 }
 
@@ -62,27 +62,22 @@ export function useDeleteAttachment(
       qc.invalidateQueries({ queryKey: attachmentsKey(entityType, entityId) });
       showSuccess("File deleted");
     },
+    onError: (err: Error) => {
+      showError(err.message || "File deletion failed");
+    },
   });
 }
 
 export function useDownloadAttachment() {
-  return async (attachmentId: string, fileName: string) => {
-    const client =
-      typeof window !== "undefined" ? getSentinelClient() : null;
-    const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
-    const response = await fetch(
-      `${getApiBaseUrl()}/api/v1/attachments/${attachmentId}/download`,
-      { headers: { ...authHeaders } }
-    );
-    if (!response.ok) {
-      throw new Error(`Download failed: ${response.status}`);
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  return useMutation({
+    mutationFn: ({ attachmentId, fileName }: { attachmentId: string; fileName: string }) =>
+      downloadFile({
+        url: `/api/v1/attachments/${attachmentId}/download`,
+        method: "GET",
+        filename: fileName,
+      }),
+    onError: (err: Error) => {
+      showError(err.message || "Download failed");
+    },
+  });
 }

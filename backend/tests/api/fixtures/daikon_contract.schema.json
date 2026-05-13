@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DAIKON Published Campaign Contract",
+  "description": "JSON Schema for GET /api/v1/campaigns/{id}/published — spec §6.",
+  "type": "object",
+  "required": ["campaign", "compound_sources", "source_protocols", "channels", "results", "published_collection"],
+  "additionalProperties": false,
+  "properties": {
+    "campaign": {
+      "type": "object",
+      "required": ["id", "name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id":                          { "type": "string", "format": "uuid" },
+        "name":                        { "type": "string" },
+        "description":                 { "type": ["string", "null"] },
+        "project": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["id", "name"],
+              "additionalProperties": false,
+              "properties": {
+                "id":   { "type": "string", "format": "uuid" },
+                "name": { "type": "string" }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "status":                      { "type": "string", "enum": ["draft", "closed", "superseded"] },
+        "closed_at":                   { "type": ["string", "null"] },
+        "closed_by": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id":   { "type": "string", "format": "uuid" },
+                "name": { "type": ["string", "null"] }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "signature": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id":        { "type": "string", "format": "uuid" },
+                "signed_at": { "type": ["string", "null"] }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "supersedes_campaign_id":      { "type": ["string", "null"] },
+        "superseded_by_campaign_id":   { "type": ["string", "null"] }
+      }
+    },
+
+    "compound_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "additionalProperties": true,
+        "properties": {
+          "kind":        { "type": "string", "enum": ["manual", "collection", "saved_search", "campaign", "run"] },
+          "description": { "type": ["string", "null"] },
+          "count":       { "type": "integer" }
+        }
+      }
+    },
+
+    "source_protocols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id":      { "type": "string", "format": "uuid" },
+          "name":    { "type": "string" },
+          "version": { "type": ["integer", "number", "null"] },
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["id", "name"],
+                "properties": {
+                  "id":   { "type": "string", "format": "uuid" },
+                  "name": { "type": "string" }
+                }
+              },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+
+    "channels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule"],
+        "additionalProperties": false,
+        "properties": {
+          "id":             { "type": "string", "format": "uuid" },
+          "label":          { "type": "string" },
+          "display_order":  { "type": "integer" },
+          "protocol_ref": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "id":      { "type": "string", "format": "uuid" },
+              "name":    { "type": ["string", "null"] },
+              "version": { "type": ["integer", "number", "null"] }
+            }
+          },
+          "readout": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "id":        { "type": "string", "format": "uuid" },
+              "name":      { "type": ["string", "null"] },
+              "unit":      { "type": ["string", "null"] },
+              "data_type": { "type": ["string", "null"] }
+            }
+          },
+          "source_kind":     { "type": "string" },
+          "selection_rule":  { "type": "string" },
+          "qc_filter": {
+            "oneOf": [
+              { "type": "object" },
+              { "type": "null" }
+            ]
+          },
+          "hit_threshold": {
+            "oneOf": [
+              { "type": "object" },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["molecule", "decision", "measurements"],
+        "additionalProperties": false,
+        "properties": {
+          "molecule": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "id":               { "type": "string", "format": "uuid" },
+              "primary_id":       { "type": ["string", "null"] },
+              "name":             { "type": ["string", "null"] },
+              "structure_smiles": { "type": ["string", "null"] }
+            }
+          },
+          "representative_batch": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["id", "name"],
+                "additionalProperties": false,
+                "properties": {
+                  "id":   { "type": "string", "format": "uuid" },
+                  "name": { "type": "string" }
+                }
+              },
+              { "type": "null" }
+            ]
+          },
+          "decision":        { "type": "string", "enum": ["selected", "deferred", "rejected"] },
+          "decision_reason": { "type": ["string", "null"] },
+          "notes":           { "type": ["string", "null"] },
+          "measurements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["channel_id", "value_qualifier", "unit", "is_manual_override"],
+              "additionalProperties": false,
+              "properties": {
+                "channel_id":        { "type": "string", "format": "uuid" },
+                "value":             { "type": ["number", "integer", "null"] },
+                "value_qualifier":   { "type": "string" },
+                "unit":              { "type": "string" },
+                "hit_call":          { "type": ["string", "null"] },
+                "is_manual_override":{ "type": "boolean" },
+                "override_reason":   { "type": ["string", "null"] },
+                "test_concentration": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["value"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "value": { "type": ["number", "integer", "null"] },
+                        "unit":  { "type": ["string", "null"] }
+                      }
+                    },
+                    { "type": "null" }
+                  ]
+                },
+                "replicate_count":   { "type": ["integer", "null"] },
+                "qc_pass":           { "type": ["boolean", "null"] },
+                "contributing_run_ids": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": { "type": "string", "format": "uuid" }
+                    },
+                    { "type": "null" }
+                  ]
+                },
+                "source": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["run_id"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "run_id":            { "type": "string", "format": "uuid" },
+                        "run_date":          { "type": ["string", "null"] },
+                        "protocol_name":     { "type": ["string", "null"] },
+                        "protocol_version":  { "type": ["integer", "number", "null"] }
+                      }
+                    },
+                    { "type": "null" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "published_collection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "name", "size"],
+          "additionalProperties": false,
+          "properties": {
+            "id":   { "type": "string", "format": "uuid" },
+            "name": { "type": "string" },
+            "size": { "type": "integer" }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+
+    "pagination": {
+      "type": "object",
+      "required": ["next_cursor", "total"],
+      "additionalProperties": false,
+      "properties": {
+        "next_cursor": { "type": ["string", "null"] },
+        "total":       { "type": "integer" }
+      }
+    }
+  }
+}

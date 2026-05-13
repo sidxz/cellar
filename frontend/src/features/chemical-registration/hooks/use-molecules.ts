@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import type { PaginatedResponse } from "@/shared/types/pagination";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Molecule,
   MoleculeIdentifier,
@@ -12,8 +12,7 @@ import type {
   RegistrationResponse,
   UpdateMoleculeInput,
 } from "../types";
-
-const MOLECULES_KEY = ["molecules"];
+import { MOLECULES_KEY } from "./query-keys";
 
 const moleculeHooks = createCrudHooks<Molecule, RegisterMoleculeInput, UpdateMoleculeInput>({
   entityName: "Compound",
@@ -94,18 +93,22 @@ interface StructureSearchResponse {
   count: number;
 }
 
-export function useSearchMolecules(params: {
-  search_type: string;
-  query: string;
-  threshold?: number;
-} | undefined) {
+export function useSearchMolecules(
+  params:
+    | {
+        search_type: string;
+        query: string;
+        threshold?: number;
+        query_kind?: "smiles" | "smarts";
+      }
+    | undefined,
+) {
   const queryParams = params
     ? {
         search_type: params.search_type,
         query: params.query,
-        ...(params.threshold !== undefined
-          ? { threshold: String(params.threshold) }
-          : {}),
+        ...(params.threshold !== undefined ? { threshold: String(params.threshold) } : {}),
+        ...(params.query_kind ? { query_kind: params.query_kind } : {}),
       }
     : undefined;
 

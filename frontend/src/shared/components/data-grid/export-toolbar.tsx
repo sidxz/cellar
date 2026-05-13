@@ -1,11 +1,17 @@
 "use client";
 
-import { type RefObject, useCallback, useState } from "react";
 import type { AgGridReact } from "ag-grid-react";
-import { Download, Loader2 } from "lucide-react";
 import ExcelJS from "exceljs";
+import { ChevronDown, Download, Loader2 } from "lucide-react";
+import { type RefObject, useCallback, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 
 /**
  * After the main data worksheet is created, the enhancer can add
@@ -16,7 +22,7 @@ export type ExcelEnhancer = (
   worksheet: ExcelJS.Worksheet,
   /** Row data extracted from the grid (same order as worksheet rows) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  rows: any[]
+  rows: any[],
 ) => Promise<void>;
 
 interface ExportToolbarProps {
@@ -26,11 +32,7 @@ interface ExportToolbarProps {
   excelEnhancer?: ExcelEnhancer;
 }
 
-export function ExportToolbar({
-  gridRef,
-  filename,
-  excelEnhancer,
-}: ExportToolbarProps) {
+export function ExportToolbar({ gridRef, filename, excelEnhancer }: ExportToolbarProps) {
   const [exporting, setExporting] = useState(false);
 
   const handleCsvExport = useCallback(() => {
@@ -58,11 +60,7 @@ export function ExportToolbar({
         rawRows.push(node.data);
         const row = columns.map((col) => {
           const value = api.getCellValue({ rowNode: node, colKey: col });
-          if (
-            value !== null &&
-            value !== undefined &&
-            typeof value === "object"
-          ) {
+          if (value !== null && value !== undefined && typeof value === "object") {
             return JSON.stringify(value);
           }
           return value ?? "";
@@ -83,15 +81,17 @@ export function ExportToolbar({
         worksheet.addRow(row);
       }
 
-      // Auto-width columns
-      worksheet.columns.forEach((col, i) => {
-        const headerLen = String(headers[i] ?? "").length;
-        let maxLen = headerLen;
-        displayRows.forEach((row) => {
+      // Auto-width columns. Single pass: O(rows × columns) only walks each
+      // cell once total, instead of once per (row, column) pair.
+      const maxLens = headers.map((h) => String(h ?? "").length);
+      for (const row of displayRows) {
+        for (let i = 0; i < maxLens.length; i++) {
           const cellLen = String(row[i] ?? "").length;
-          if (cellLen > maxLen) maxLen = cellLen;
-        });
-        col.width = Math.min(Math.max(maxLen + 2, 10), 40);
+          if (cellLen > maxLens[i]) maxLens[i] = cellLen;
+        }
+      }
+      worksheet.columns.forEach((col, i) => {
+        col.width = Math.min(Math.max(maxLens[i] + 2, 10), 40);
       });
 
       // Call enhancer if provided (adds images, extra sheets, etc.)
@@ -116,24 +116,28 @@ export function ExportToolbar({
   }, [gridRef, filename, excelEnhancer]);
 
   return (
-    <div className="flex gap-2">
-      <Button variant="outline" size="sm" onClick={handleCsvExport}>
-        <Download className="h-4 w-4" />
-        CSV
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleExcelExport}
-        disabled={exporting}
-      >
-        {exporting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Download className="h-4 w-4" />
-        )}
-        Excel
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" disabled={exporting}>
+          {exporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          Export
+          <ChevronDown className="ml-1 size-3 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[10rem]">
+        <DropdownMenuItem onSelect={() => void handleExcelExport()}>
+          <span>Excel</span>
+          <span className="ml-auto text-[11px] tracking-wide text-muted-foreground">.xlsx</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => handleCsvExport()}>
+          <span>CSV</span>
+          <span className="ml-auto text-[11px] tracking-wide text-muted-foreground">.csv</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

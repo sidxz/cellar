@@ -9,16 +9,16 @@ from typing import Self
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.get_molecule_by_identifier import (
+from cellar.application.chemical_registration.get_molecule_by_identifier import (
     GetMoleculeByIdentifier,
     GetMoleculeByIdentifierQuery,
 )
-from chem_vault.domain.chemical_registration.enums import IdentifierType, MoleculeType
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
-from chem_vault.domain.shared.errors import NotFoundError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import RegistrationNumber
+from cellar.domain.chemical_registration.enums import IdentifierType, MoleculeType
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from cellar.domain.shared.errors import NotFoundError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import RegistrationNumber
 
 # ---------------------------------------------------------------------------
 # Fakes

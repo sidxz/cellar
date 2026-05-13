@@ -5,11 +5,11 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.screening_assay.data_lock_guard import DataLockGuard
-from chem_vault.domain.screening_assay.data_locking_service import DataLockingService
-from chem_vault.domain.screening_assay.enums import RunStatus
-from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.errors import ConflictError, DataLockedError, DomainError, ValidationError
+from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
+from cellar.domain.screening_assay.data_locking_service import DataLockingService
+from cellar.domain.screening_assay.enums import RunStatus
+from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.errors import ConflictError, DataLockedError, DomainError, ValidationError
 
 
 # ---------------------------------------------------------------------------

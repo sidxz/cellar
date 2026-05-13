@@ -10,6 +10,8 @@ export { CustomFieldAdmin } from "./components/custom-field-admin";
 export { CustomFieldsRenderer } from "./components/custom-fields-renderer";
 export { SaltCatalogAdmin } from "./components/salt-catalog-admin";
 export { RegistrationFormAdmin } from "./components/registration-form-admin";
+export { DataSourceAdmin } from "./components/data-source-admin";
+export { DataSourceDetail } from "./components/data-source-detail";
 
 // Hooks
 export { useOrganizations } from "./hooks/use-organizations";
@@ -18,3 +20,4 @@ export { useWorkspaceSettings } from "./hooks/use-workspace-settings";
 export { useCustomFields } from "./hooks/use-custom-fields";
 export { useSaltCatalog } from "./hooks/use-salt-catalog";
 export { useRegistrationForms } from "./hooks/use-registration-forms";
+export { useDataSources, useDataSource } from "./hooks/use-data-sources";

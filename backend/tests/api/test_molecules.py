@@ -102,8 +102,10 @@ class TestRegisterMolecule:
         )
         assert resp.status_code == 201
         data = resp.json()
-        assert len(data["molecule"]["identifiers"]) == 1
-        assert data["molecule"]["identifiers"][0]["identifier"] == "CAS-15687-27-1"
+        # The name is auto-promoted to a "custom" identifier alongside the explicit CAS.
+        identifiers = {(i["identifier"], i["identifier_type"]) for i in data["molecule"]["identifiers"]}
+        assert ("CAS-15687-27-1", "cas_number") in identifiers
+        assert ("Ibuprofen", "custom") in identifiers
 
     async def test_duplicate_inchi_key_returns_existing(
         self, client: AsyncClient, seed_org: str
@@ -200,6 +202,53 @@ class TestListMolecules:
         assert len(data2["items"]) == 1
         # IDs should be different
         assert data2["items"][0]["id"] != data["items"][0]["id"]
+
+
+class TestListMoleculesByIds:
+    async def test_bulk_by_ids_returns_matching_molecules(
+        self, client: AsyncClient, seed_org: str
+    ) -> None:
+        """GET /api/v1/molecules?ids=<csv> returns exactly the requested molecules."""
+        resp1 = await client.post(
+            "/api/v1/molecules",
+            json={"name": "Mol-BulkA", "smiles": "C", "originating_org_id": seed_org},
+        )
+        resp2 = await client.post(
+            "/api/v1/molecules",
+            json={"name": "Mol-BulkB", "smiles": "CC", "originating_org_id": seed_org},
+        )
+        # Third molecule that should NOT appear in results
+        resp3 = await client.post(
+            "/api/v1/molecules",
+            json={"name": "Mol-BulkC", "smiles": "CCC", "originating_org_id": seed_org},
+        )
+        id1 = resp1.json()["molecule"]["id"]
+        id2 = resp2.json()["molecule"]["id"]
+        id3 = resp3.json()["molecule"]["id"]
+
+        resp = await client.get("/api/v1/molecules", params={"ids": f"{id1},{id2}"})
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert "items" in data
+        returned_ids = {m["id"] for m in data["items"]}
+        assert returned_ids == {id1, id2}
+        assert id3 not in returned_ids
+        assert data["next_cursor"] is None
+
+    async def test_bulk_by_ids_workspace_scoped(self, client: AsyncClient, seed_org: str) -> None:
+        """An unknown (or wrong-workspace) id in the csv is silently omitted."""
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "Mol-Scope", "smiles": "c1ccccc1", "originating_org_id": seed_org},
+        )
+        real_id = resp.json()["molecule"]["id"]
+        fake_id = str(uuid.uuid4())
+
+        resp2 = await client.get("/api/v1/molecules", params={"ids": f"{real_id},{fake_id}"})
+        assert resp2.status_code == 200, resp2.text
+        returned_ids = {m["id"] for m in resp2.json()["items"]}
+        assert real_id in returned_ids
+        assert fake_id not in returned_ids
 
 
 class TestGetMolecule:

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -16,12 +19,36 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "../hooks/use-projects";
 import type { Project } from "../types";
 
+// ── Schema ────────────────────────────────────────────────────────────────────
+
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const defaultValues: FormValues = { name: "", description: "" };
+
+function toFormValues(project: Project): FormValues {
+  return {
+    name: project.name,
+    description: project.description ?? "",
+  };
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
 interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Pass a project to switch to edit mode. */
   project?: Project;
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function CreateProjectDialog({
   open,
@@ -32,35 +59,30 @@ export function CreateProjectDialog({
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject(project?.id ?? "");
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
 
   // Reset form when dialog opens / project changes
   useEffect(() => {
     if (open) {
-      setName(project?.name ?? "");
-      setDescription(project?.description ?? "");
+      form.reset(project ? toFormValues(project) : defaultValues);
     }
-  }, [open, project]);
-
-  const resetForm = () => {
-    setName("");
-    setDescription("");
-  };
+  }, [open, project, form]);
 
   const mutation = isEdit ? updateMutation : createMutation;
-  const canSubmit = name.trim() && !mutation.isPending;
 
-  const handleSubmit = () => {
+  const onSubmit = (values: FormValues) => {
     const payload = {
-      name: name.trim(),
-      description: description.trim() || null,
+      name: values.name.trim(),
+      description: values.description?.trim() || null,
     };
 
     mutation.mutate(payload, {
       onSuccess: () => {
         onOpenChange(false);
-        resetForm();
+        form.reset(defaultValues);
       },
     });
   };
@@ -77,48 +99,59 @@ export function CreateProjectDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label>Name</Label>
-            <Input
-              placeholder="e.g., EGFR Inhibitor Program"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && canSubmit) handleSubmit();
-              }}
-            />
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                placeholder="e.g., EGFR Inhibitor Program"
+                {...form.register("name")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !mutation.isPending) {
+                    void form.handleSubmit(onSubmit)();
+                  }
+                }}
+              />
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Description (optional)</Label>
+              <Textarea
+                placeholder="Brief description of the project goals..."
+                {...form.register("description")}
+                rows={3}
+              />
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Description (optional)</Label>
-            <Textarea
-              placeholder="Brief description of the project goals..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={mutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {mutation.isPending
-              ? isEdit
-                ? "Saving..."
-                : "Creating..."
-              : isEdit
-                ? "Save Changes"
-                : "Create Project"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting || mutation.isPending}
+            >
+              {mutation.isPending
+                ? isEdit
+                  ? "Saving..."
+                  : "Creating..."
+                : isEdit
+                  ? "Save Changes"
+                  : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

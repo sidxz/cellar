@@ -6,12 +6,12 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.events import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.events import (
     OntologySlotDefinitionCreated,
     OntologySlotDefinitionUpdated,
 )
-from chem_vault.domain.workspace_config.ontology_slot_definition import (
+from cellar.domain.workspace_config.ontology_slot_definition import (
     OntologySlotDefinition,
 )
 

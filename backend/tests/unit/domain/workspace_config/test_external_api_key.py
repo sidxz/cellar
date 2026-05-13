@@ -4,8 +4,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.external_api_key import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.external_api_key import (
     ExternalApiKey,
     ExternalApiKeyCreated,
     ExternalApiKeyUpdated,

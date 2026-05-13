@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.domain.shared.errors import DomainError, NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 from tests.helpers.assertions import (
     assert_event_emitted,
     assert_result_err,
@@ -59,7 +59,7 @@ class TestAssertResultErr:
 class TestAssertEventEmitted:
     def test_event_found(self) -> None:
         events: list[DomainEvent] = [
-            FakeEvent(aggregate_id=uuid.uuid4(), aggregate_type="molecule")
+            FakeEvent(aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4())
         ]
         result = assert_event_emitted(events, FakeEvent)
         assert isinstance(result, FakeEvent)
@@ -74,6 +74,7 @@ class TestAssertEventEmitted:
             FakeEvent(
                 aggregate_id=uuid.uuid4(),
                 aggregate_type="molecule",
+                workspace_id=uuid.uuid4(),
                 molecule_name="caffeine",
             )
         ]
@@ -82,7 +83,7 @@ class TestAssertEventEmitted:
 
     def test_field_check_fails(self) -> None:
         events: list[DomainEvent] = [
-            FakeEvent(aggregate_id=uuid.uuid4(), aggregate_type="molecule")
+            FakeEvent(aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4())
         ]
         with pytest.raises(AssertionError, match="molecule_name"):
             assert_event_emitted(events, FakeEvent, molecule_name="wrong")

@@ -7,18 +7,18 @@ from dataclasses import dataclass
 
 import pytest
 
-from chem_vault.application.audit.audit_recording_service import (
+from cellar.application.audit.audit_recording_service import (
     AuditRecordingService,
     _infer_operation_type,
 )
-from chem_vault.domain.audit_compliance.enums import (
+from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
     AuditStatus,
     OperationType,
 )
-from chem_vault.domain.audit_compliance.models import AuditEntry, AuditOperation
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.audit_compliance.models import AuditEntry, AuditOperation
+from cellar.domain.shared.events import DomainEvent
 
 
 # --- Fakes ---
@@ -176,6 +176,6 @@ class TestInferOperationType:
 
     def test_unknown_event_defaults_to_data_entry(self) -> None:
         event = DomainEvent(
-            aggregate_id=uuid.uuid4(), aggregate_type="unknown"
+            aggregate_id=uuid.uuid4(), aggregate_type="unknown", workspace_id=uuid.uuid4()
         )
         assert _infer_operation_type(event) == OperationType.DATA_ENTRY

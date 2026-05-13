@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, GitMerge, Plus } from "lucide-react";
+import { useAuthz } from "@sentinel-auth/nextjs";
+import { FolderOpen, GitMerge, Plus, User } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -23,16 +24,26 @@ interface CollectionListProps {
 
 export function CollectionList({ projectId }: CollectionListProps) {
   const router = useRouter();
-  const { data: collections, isLoading, error } = useCollections(projectId);
+  const { user } = useAuthz();
+  const { data: collections, isLoading, error } = useCollections(
+    projectId ? [projectId] : undefined,
+  );
   const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [booleanOpsOpen, setBooleanOpsOpen] = useState(false);
+  const [myOnly, setMyOnly] = useState(false);
 
   const projectLookup = useMemo(() => {
     const map = new Map<string, string>();
     projects?.forEach((p) => map.set(p.id, p.name));
     return map;
   }, [projects]);
+
+  const filteredCollections = useMemo(() => {
+    if (!collections) return undefined;
+    if (!myOnly || !user?.userId) return collections;
+    return collections.filter((c) => c.created_by === user.userId);
+  }, [collections, myOnly, user?.userId]);
 
   const columnDefs = useMemo<ColDef<Collection>[]>(
     () => [
@@ -93,6 +104,14 @@ export function CollectionList({ projectId }: CollectionListProps) {
     <div>
       {/* Toolbar */}
       <div className="mb-4 flex items-center justify-end gap-2">
+        <Button
+          variant={myOnly ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => setMyOnly((v) => !v)}
+        >
+          <User className="mr-2 h-4 w-4" />
+          My Collections
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setBooleanOpsOpen(true)}>
           <GitMerge className="mr-2 h-4 w-4" />
           Boolean Ops
@@ -104,11 +123,12 @@ export function CollectionList({ projectId }: CollectionListProps) {
       </div>
 
       <DataGrid<Collection>
-        rowData={collections}
+        rowData={filteredCollections}
         columnDefs={columnDefs}
         loading={isLoading}
-        height="400px"
+        height="500px"
         suppressFilters
+        searchPlaceholder="Filter collections..."
         onRowClick={(collection) =>
           router.push(`/collections/${collection.id}`)
         }

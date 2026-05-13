@@ -9,18 +9,18 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.cross_protocol_resolver import (
+from cellar.application.screening.cross_protocol_resolver import (
     CrossProtocolResolver,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.value_objects import QualifiedValue
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.value_objects import QualifiedValue
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

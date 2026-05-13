@@ -5,13 +5,13 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     PlateFormat,
     RunRelationshipType,
     RunStatus,
     WellType,
 )
-from chem_vault.domain.screening_assay.events import (
+from cellar.domain.screening_assay.events import (
     RunApproved,
     RunCompleted,
     RunCreated,
@@ -19,10 +19,10 @@ from chem_vault.domain.screening_assay.events import (
     RunRejected,
     RunUnlocked,
 )
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.enums import ConcentrationUnit
-from chem_vault.domain.shared.errors import ConflictError, ValidationError
-from chem_vault.domain.shared.value_objects import Barcode, Concentration
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.enums import ConcentrationUnit
+from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.value_objects import Barcode, Concentration
 
 
 # ---------------------------------------------------------------------------
@@ -648,7 +648,6 @@ class TestWell:
     def test_create_well(self) -> None:
         plate_id = uuid.uuid4()
         batch_id = uuid.uuid4()
-        conc = Concentration(value=10.0, unit=ConcentrationUnit.UM)
 
         well = Well(
             plate_id=plate_id,
@@ -656,7 +655,7 @@ class TestWell:
             column=5,
             well_type=WellType.SAMPLE,
             batch_id=batch_id,
-            concentration=conc,
+            dose=10.0,
         )
 
         assert well.plate_id == plate_id
@@ -664,7 +663,7 @@ class TestWell:
         assert well.column == 5
         assert well.well_type == WellType.SAMPLE
         assert well.batch_id == batch_id
-        assert well.concentration == conc
+        assert well.dose == 10.0
 
     def test_row_uppercased(self) -> None:
         well = Well(plate_id=uuid.uuid4(), row="a", column=1)

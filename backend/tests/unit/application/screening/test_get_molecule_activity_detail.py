@@ -10,14 +10,15 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Success
 
-from chem_vault.application.screening.get_molecule_activity_detail import (
+from cellar.application.screening.get_molecule_activity_detail import (
     GetMoleculeActivityDetail,
     MoleculeActivityDetail,
-    MoleculeActivityDetailQuery,
+    GetMoleculeActivityDetailQuery,
 )
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveClass, CurveType, ProtocolType
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import CurveClass, CurveType, ProtocolType
+from cellar.domain.shared.enums import ConcentrationUnit
+from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------
@@ -65,11 +66,13 @@ class _FakeProtocol:
         name: str,
         protocol_type: ProtocolType = ProtocolType.BIOCHEMICAL,
         target_id: uuid.UUID | None = None,
+        dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
     ) -> None:
         self.id = id
         self.name = name
         self.protocol_type = protocol_type
         self.target_id = target_id
+        self.dose_unit = dose_unit
 
 
 def _make_curve(
@@ -80,7 +83,6 @@ def _make_curve(
     batch_id: uuid.UUID | None = None,
     curve_type: CurveType = CurveType.IC50,
     fitted_value: float = 5.2,
-    fitted_unit: str = "uM",
     hill_slope: float = -1.1,
     top: float = 100.0,
     bottom: float = 0.5,
@@ -99,7 +101,6 @@ def _make_curve(
         run_id=run_id or uuid.uuid4(),
         curve_type=curve_type,
         fitted_value=fitted_value,
-        fitted_unit=fitted_unit,
         hill_slope=hill_slope,
         top=top,
         bottom=bottom,
@@ -153,7 +154,7 @@ class TestGroupedByProtocol:
         ]
 
         auth = FakeAuth(workspace_id=WS)
-        query = MoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
+        query = GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
 
         uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo)
         result = await uc(query, auth=auth)
@@ -190,6 +191,10 @@ class TestGroupedByProtocol:
             {"concentration": 0.01, "response": 95.0},
             {"concentration": 1.0, "response": 50.0},
         ]
+        condensed_points = [
+            {"x": 0.01, "y": 95.0},
+            {"x": 1.0, "y": 50.0},
+        ]
         curve = _make_curve(
             raw_data=raw_points,
             curve_class=CurveClass.PARTIAL,
@@ -206,7 +211,7 @@ class TestGroupedByProtocol:
         ]
 
         auth = FakeAuth(workspace_id=WS)
-        query = MoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
+        query = GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
 
         uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo)
         result = await uc(query, auth=auth)
@@ -228,7 +233,7 @@ class TestGroupedByProtocol:
         assert cd.num_points == 8
         assert cd.confidence_interval_low == 2.0
         assert cd.confidence_interval_high == 8.0
-        assert cd.raw_data == raw_points
+        assert cd.raw_data == condensed_points
 
 
 class TestEmptyResults:
@@ -243,7 +248,7 @@ class TestEmptyResults:
         protocol_repo = AsyncMock()
 
         auth = FakeAuth(workspace_id=WS)
-        query = MoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
+        query = GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
 
         uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo)
         result = await uc(query, auth=auth)
@@ -268,7 +273,7 @@ class TestEmptyResults:
         protocol_repo.find_by_ids.return_value = []  # No protocol found
 
         auth = FakeAuth(workspace_id=WS)
-        query = MoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
+        query = GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
 
         uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo)
         result = await uc(query, auth=auth)

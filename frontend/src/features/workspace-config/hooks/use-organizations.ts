@@ -21,12 +21,14 @@ const orgHooks = createCrudHooks<Organization, CreateOrganizationInput, UpdateOr
 export function useOrganizations(includeInactive = false) {
   return useQuery({
     queryKey: [...ORGS_KEY, { includeInactive }],
-    queryFn: () =>
-      customInstance<Organization[]>({
+    queryFn: async () => {
+      const resp = await customInstance<Organization[] | { items: Organization[] }>({
         url: "/api/v1/organizations",
         method: "GET",
         params: includeInactive ? { include_inactive: "true" } : undefined,
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
   });
 }
 

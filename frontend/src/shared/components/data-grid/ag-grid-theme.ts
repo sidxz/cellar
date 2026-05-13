@@ -4,7 +4,7 @@ import { themeQuartz } from "ag-grid-community";
  * AG Grid theme that inherits from the app's CSS custom properties.
  * Automatically follows light/dark mode via Tailwind's `.dark` class.
  */
-export const chemVaultTheme = themeQuartz.withParams({
+export const cellarTheme = themeQuartz.withParams({
   backgroundColor: "var(--background)",
   foregroundColor: "var(--foreground)",
   borderColor: "var(--border)",
@@ -15,11 +15,11 @@ export const chemVaultTheme = themeQuartz.withParams({
   selectedRowBackgroundColor: "var(--accent)",
   oddRowBackgroundColor: "transparent",
   cellTextColor: "var(--foreground)",
-  fontSize: 13,
-  headerFontSize: 13,
+  fontSize: 14,
+  headerFontSize: 14,
   rowBorder: { color: "var(--border)", style: "solid", width: 1 },
   columnBorder: false,
   wrapperBorderRadius: "var(--radius-lg)",
   wrapperBorder: { color: "var(--border)", style: "solid", width: 1 },
-  spacing: 6,
+  spacing: 4,
 });

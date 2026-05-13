@@ -27,7 +27,7 @@ if _env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-# Add backend/src to path so chem_vault imports work
+# Add backend/src to path so cellar imports work
 sys.path.insert(0, str(REPO_ROOT / "backend" / "src"))
 
 import uuid as _uuid
@@ -47,7 +47,7 @@ def _resolve_workspace_id() -> _uuid.UUID:
 
 
 async def main() -> int:
-    from chem_vault.infrastructure.di.container import create_container
+    from cellar.infrastructure.di.container import create_container
 
     ws_id = _resolve_workspace_id()
 
@@ -103,7 +103,7 @@ async def main() -> int:
         ("Saved searches", s21_saved_searches.load),
     ]
 
-    print("\n  Chem-Vault2 Demo Data Loader")
+    print("\n  Cellar Demo Data Loader")
     print("  " + "=" * 40)
     print(f"  Workspace: {ws_id}")
 

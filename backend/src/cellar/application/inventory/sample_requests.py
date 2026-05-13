@@ -1,0 +1,405 @@
+"""SampleRequest use cases — lifecycle management for compound material requests."""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+
+from returns.result import Failure, Result, Success
+
+from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.shared.command import Command
+from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.query import Query
+from cellar.application.shared.sentinel import UNSET
+from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.chemical_registration.repository import MoleculeRepository
+from cellar.domain.inventory.enums import RequestPriority
+from cellar.domain.inventory.repository import (
+    BatchRepository,
+    SampleRepository,
+    SampleRequestRepository,
+)
+from cellar.domain.inventory.sample_request import SampleRequest
+from cellar.domain.shared.enums import AmountUnit
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.value_objects import Amount
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    requester_id: uuid.UUID
+    molecule_id: uuid.UUID
+    batch_id: uuid.UUID | None = None
+    amount_value: float
+    amount_unit: str
+    purpose: str
+    priority: str = "routine"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ApproveSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+    assigned_to: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class RejectSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+    reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class FulfillSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+    sample_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CancelSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class StartPreparingSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateSampleRequestCommand(Command):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+    purpose: str | object = UNSET
+    priority: str | object = UNSET
+    amount_value: float | object = UNSET
+    amount_unit: str | object = UNSET
+
+
+# ---------------------------------------------------------------------------
+# Queries
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class GetSampleRequestQuery(Query):
+    workspace_id: uuid.UUID
+    request_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListSampleRequestsQuery(Query):
+    workspace_id: uuid.UUID
+    status: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Use Cases
+# ---------------------------------------------------------------------------
+
+
+class CreateSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+        molecule_repo: MoleculeRepository | None = None,
+        batch_repo: BatchRepository | None = None,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+        self._molecule_repo = molecule_repo
+        self._batch_repo = batch_repo
+
+    async def __call__(
+        self, input: CreateSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            # Verify molecule belongs to this workspace
+            if self._molecule_repo is not None:
+                mol = await self._molecule_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.molecule_id
+                )
+                if mol is None:
+                    return Failure(NotFoundError("Molecule", str(input.molecule_id)))
+
+            # Verify batch belongs to this workspace (if provided)
+            if input.batch_id is not None and self._batch_repo is not None:
+                batch = await self._batch_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.batch_id
+                )
+                if batch is None:
+                    return Failure(NotFoundError("Batch", str(input.batch_id)))
+
+            requested_amount = Amount(
+                value=input.amount_value,
+                unit=AmountUnit(input.amount_unit),
+            )
+            request = SampleRequest.create(
+                workspace_id=input.workspace_id,
+                requester_id=input.requester_id,
+                molecule_id=input.molecule_id,
+                batch_id=input.batch_id,
+                requested_amount=requested_amount,
+                purpose=input.purpose,
+                priority=RequestPriority(input.priority),
+            )
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
+
+
+class GetSampleRequest:
+    def __init__(self, uow: UnitOfWork, repo: SampleRequestRepository) -> None:
+        self._uow = uow
+        self._repo = repo
+
+    async def __call__(
+        self, input: GetSampleRequestQuery, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_workspace_role(auth, "viewer")
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+            return Success(request)
+
+
+class ListSampleRequests:
+    def __init__(self, uow: UnitOfWork, repo: SampleRequestRepository) -> None:
+        self._uow = uow
+        self._repo = repo
+
+    async def __call__(
+        self, input: ListSampleRequestsQuery, auth: AuthContext | None = None
+    ) -> Result[list[SampleRequest], DomainError]:
+        require_workspace_role(auth, "viewer")
+        async with self._uow:
+            requests = await self._repo.find_by_workspace(input.workspace_id, status=input.status)
+            return Success(requests)
+
+
+class ApproveSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: ApproveSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+            request.approve(assigned_to=input.assigned_to)
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
+
+
+class RejectSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: RejectSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+            request.reject(reason=input.reason)
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
+
+
+class FulfillSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+        sample_repo: SampleRepository | None = None,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+        self._sample_repo = sample_repo
+
+    async def __call__(
+        self, input: FulfillSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+
+            # Verify sample belongs to this workspace
+            if self._sample_repo is not None:
+                sample = await self._sample_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.sample_id
+                )
+                if sample is None:
+                    return Failure(NotFoundError("Sample", str(input.sample_id)))
+
+            request.fulfill(sample_id=input.sample_id)
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
+
+
+class CancelSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: CancelSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+            request.cancel()
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
+
+
+class StartPreparingSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: StartPreparingSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+            request.start_preparing()
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)
+
+
+class UpdateSampleRequest:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: SampleRequestRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: UpdateSampleRequestCommand, auth: AuthContext | None = None
+    ) -> Result[SampleRequest, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            request = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.request_id
+            )
+            if request is None:
+                return Failure(NotFoundError("SampleRequest", str(input.request_id)))
+
+            try:
+                new_amount = ...
+                if input.amount_value is not UNSET or input.amount_unit is not UNSET:
+                    new_value = (
+                        input.amount_value
+                        if input.amount_value is not UNSET
+                        else request.requested_amount.value
+                    )
+                    new_unit = (
+                        input.amount_unit
+                        if input.amount_unit is not UNSET
+                        else request.requested_amount.unit.value
+                    )
+                    new_amount = Amount(value=new_value, unit=AmountUnit(new_unit))
+
+                request.update_details(
+                    purpose=input.purpose if input.purpose is not UNSET else ...,
+                    priority=RequestPriority(input.priority)
+                    if input.priority is not UNSET
+                    else ...,
+                    requested_amount=new_amount,
+                )
+            except ValidationError as exc:
+                return Failure(exc)
+
+            await self._repo.save(request)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(request)

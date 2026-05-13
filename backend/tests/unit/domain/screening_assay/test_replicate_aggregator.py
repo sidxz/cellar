@@ -9,14 +9,14 @@ from uuid import uuid4
 
 import pytest
 
-from chem_vault.domain.screening_assay.enums import ReadoutAggregation
-from chem_vault.domain.screening_assay.readout_data import ReadoutData
-from chem_vault.domain.screening_assay.replicate_aggregator import (
+from cellar.domain.screening_assay.enums import ReadoutAggregation
+from cellar.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.screening_assay.replicate_aggregator import (
     AggregatedValue,
     ReplicateAggregator,
 )
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import QualifiedValue
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import QualifiedValue
 
 
 # ---------------------------------------------------------------------------

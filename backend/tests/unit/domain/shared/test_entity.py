@@ -3,8 +3,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from chem_vault.domain.shared.entity import AggregateRoot, Entity
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.entity import AggregateRoot, Entity
+from cellar.domain.shared.events import DomainEvent
 
 
 class TestEntity:
@@ -62,7 +62,7 @@ class TestAggregateRoot:
 
     def test_register_and_collect_events(self) -> None:
         ar = AggregateRoot()
-        event = DomainEvent(aggregate_id=ar.id, aggregate_type="Test")
+        event = DomainEvent(aggregate_id=ar.id, aggregate_type="Test", workspace_id=uuid.uuid4())
         ar.register_event(event)
         events = ar.collect_events()
         assert len(events) == 1
@@ -70,14 +70,14 @@ class TestAggregateRoot:
 
     def test_collect_returns_copy(self) -> None:
         ar = AggregateRoot()
-        ar.register_event(DomainEvent(aggregate_id=ar.id, aggregate_type="Test"))
+        ar.register_event(DomainEvent(aggregate_id=ar.id, aggregate_type="Test", workspace_id=uuid.uuid4()))
         events = ar.collect_events()
         events.clear()
         assert len(ar.collect_events()) == 1
 
     def test_clear_events(self) -> None:
         ar = AggregateRoot()
-        ar.register_event(DomainEvent(aggregate_id=ar.id, aggregate_type="Test"))
+        ar.register_event(DomainEvent(aggregate_id=ar.id, aggregate_type="Test", workspace_id=uuid.uuid4()))
         ar.clear_events()
         assert ar.collect_events() == []
 

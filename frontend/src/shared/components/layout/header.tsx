@@ -1,17 +1,13 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
-import { Separator } from "@/shared/components/ui/separator";
-import { SidebarTrigger } from "@/shared/components/ui/sidebar";
 import { Bell, Search } from "lucide-react";
 import { Breadcrumbs } from "./breadcrumbs";
 import { ThemeToggle } from "./theme-toggle";
 
 export function Header() {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-      <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-2 h-4" />
+    <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/60 px-4">
       <Breadcrumbs />
       <div className="ml-auto flex items-center gap-1">
         <Button variant="ghost" size="sm" className="hidden gap-2 text-muted-foreground md:flex">

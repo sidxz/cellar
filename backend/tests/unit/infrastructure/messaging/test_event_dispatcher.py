@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,7 +40,7 @@ class TestEventDispatcher:
 
         dispatcher.register(FakeRegisteredEvent, handler)
         event = FakeRegisteredEvent(
-            aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+            aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
         )
         await dispatcher.dispatch(event)
 
@@ -62,7 +62,7 @@ class TestEventDispatcher:
         dispatcher.register(FakeRegisteredEvent, handler_b)
 
         event = FakeRegisteredEvent(
-            aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+            aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
         )
         await dispatcher.dispatch(event)
 
@@ -80,7 +80,7 @@ class TestEventDispatcher:
 
         # Dispatch a different event type
         event = FakeMergedEvent(
-            aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+            aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
         )
         await dispatcher.dispatch(event)
 
@@ -96,7 +96,7 @@ class TestEventDispatcher:
 
         events = [
             FakeRegisteredEvent(
-                aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+                aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
             )
             for _ in range(3)
         ]
@@ -113,7 +113,7 @@ class TestEventDispatcher:
         dispatcher.register(FakeRegisteredEvent, bad_handler)
 
         event = FakeRegisteredEvent(
-            aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+            aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
         )
         with pytest.raises(ValueError, match="boom"):
             await dispatcher.dispatch(event)
@@ -135,13 +135,13 @@ class TestEventDispatcher:
 
         events: list[DomainEvent] = [
             FakeRegisteredEvent(
-                aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+                aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
             ),
             FakeMergedEvent(
-                aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+                aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
             ),
             FakeRegisteredEvent(
-                aggregate_id=uuid.uuid4(), aggregate_type="molecule"
+                aggregate_id=uuid.uuid4(), aggregate_type="molecule", workspace_id=uuid.uuid4()
             ),
         ]
         await dispatcher.dispatch_all(events)

@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { MoleculeName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { formatDate } from "@/shared/lib/format-date";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -34,28 +36,6 @@ import {
 } from "../../hooks/use-disclosures";
 import { SynthesisRouteList } from "../synthesis-route-list";
 import type { Molecule } from "../../types";
-
-// ---------------------------------------------------------------------------
-// Badge helpers
-// ---------------------------------------------------------------------------
-
-function disclosureStatusBadgeVariant(
-  status: string
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "disclosed":
-    case "merged":
-      return "default";
-    case "pending":
-    case "processing":
-      return "secondary";
-    case "conflict":
-    case "rejected":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // HistoryTab
@@ -190,17 +170,15 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                   key={d.id}
                   className="flex items-start gap-3 rounded-lg border p-3"
                 >
-                  <Badge variant={disclosureStatusBadgeVariant(d.status)}>
-                    {d.status}
-                  </Badge>
+                  <StatusBadge status={d.status} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-mono truncate">
                       {d.disclosed_smiles}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Requested {new Date(d.requested_at).toLocaleDateString()}
+                      Requested {formatDate(d.requested_at)}
                       {d.resolved_at &&
-                        ` \u2022 Resolved ${new Date(d.resolved_at).toLocaleDateString()}`}
+                        ` \u2022 Resolved ${formatDate(d.resolved_at)}`}
                     </p>
                     {d.notes && (
                       <p className="text-xs text-muted-foreground mt-1">
@@ -255,7 +233,7 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                       {m.reason}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(m.merged_at).toLocaleDateString()}
+                      {formatDate(m.merged_at)}
                       {" \u2022 "}
                       Source: <MoleculeName id={m.source_molecule_id} />
                       {" \u2192 "}

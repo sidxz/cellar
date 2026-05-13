@@ -5,12 +5,12 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.inventory.batch import Batch
-from chem_vault.domain.inventory.enums import BatchSource
-from chem_vault.domain.inventory.events import BatchCreated, BatchReassigned
-from chem_vault.domain.shared.enums import AmountUnit
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Amount, BatchNumber
+from cellar.domain.inventory.batch import Batch
+from cellar.domain.inventory.enums import BatchSource
+from cellar.domain.inventory.events import BatchCreated, BatchReassigned
+from cellar.domain.shared.enums import AmountUnit
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Amount, BatchNumber
 
 
 @pytest.fixture

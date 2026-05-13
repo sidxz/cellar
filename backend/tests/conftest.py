@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from testcontainers.postgres import PostgresContainer
 
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests.fakes.fake_auth import FakeAuth
 
 RDKIT_IMAGE = "informaticsmatters/rdkit-cartridge-debian:Release_2024_03_3"
@@ -48,9 +48,9 @@ def postgres_container() -> Iterator[PostgresContainer]:
     """Start a PostgreSQL+RDKit container once per test session."""
     with PostgresContainer(
         image=RDKIT_IMAGE,
-        username="chemvault",
-        password="chemvault",
-        dbname="chemvault",
+        username="cellar",
+        password="cellar",
+        dbname="cellar",
         driver=None,
     ) as container:
         yield container
@@ -61,7 +61,7 @@ def database_url(postgres_container: PostgresContainer) -> str:
     """Async database URL pointing at the test container."""
     host = postgres_container.get_container_host_ip()
     port = postgres_container.get_exposed_port(5432)
-    return f"postgresql+asyncpg://chemvault:chemvault@{host}:{port}/chemvault"
+    return f"postgresql+asyncpg://cellar:cellar@{host}:{port}/cellar"
 
 
 @pytest.fixture(scope="session")

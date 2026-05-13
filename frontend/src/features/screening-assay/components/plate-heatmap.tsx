@@ -1,7 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { cn } from "@/shared/lib/utils";
 import { type PlateFormat, type WellType, WELL_TYPE_LABELS } from "../types";
+import { plateDimensions } from "../lib/plate-dimensions";
+import { WELL_TYPE_COLORS as VF_WELL_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,23 +24,7 @@ interface PlateHeatmapProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PLATE_DIMENSIONS: Record<PlateFormat, { rows: number; cols: number }> = {
-  "6": { rows: 2, cols: 3 },
-  "12": { rows: 3, cols: 4 },
-  "24": { rows: 4, cols: 6 },
-  "48": { rows: 6, cols: 8 },
-  "96": { rows: 8, cols: 12 },
-  "384": { rows: 16, cols: 24 },
-  "1536": { rows: 32, cols: 48 },
-};
-
-const WELL_TYPE_COLORS: Record<WellType, string> = {
-  sample: "#3b82f6",
-  positive_control: "#22c55e",
-  negative_control: "#ef4444",
-  blank: "#6b7280",
-  reference: "#a855f7",
-};
+const WELL_TYPE_COLORS: Record<WellType, string> = VF_WELL_COLORS as Record<WellType, string>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +63,7 @@ export function PlateHeatmap({
   valueRange,
   className,
 }: PlateHeatmapProps) {
-  const dims = PLATE_DIMENSIONS[format];
+  const dims = plateDimensions(format);
   if (!dims) return null;
 
   const { rows, cols } = dims;
@@ -90,10 +77,13 @@ export function PlateHeatmap({
   const labelH = cellSize + 4;
 
   // Build well lookup map: "row,col" -> WellData
-  const wellMap = new Map<string, WellData>();
-  for (const w of wells) {
-    wellMap.set(`${w.row},${w.column}`, w);
-  }
+  const wellMap = useMemo(() => {
+    const m = new Map<string, WellData>();
+    for (const w of wells) {
+      m.set(`${w.row},${w.column}`, w);
+    }
+    return m;
+  }, [wells]);
 
   // SVG total dimensions
   const svgWidth = labelW + cols * cellSize + (cols - 1) * gap + 4;
@@ -149,7 +139,7 @@ export function PlateHeatmap({
                 const wellData = wellMap.get(wellKey);
                 const hasData = !!wellData;
 
-                let fillColor = "#374151"; // default empty (dark gray)
+                let fillColor = WELL_EMPTY_COLOR;
                 let opacity = 0.2;
                 let titleText = `${rowLabel}${ci + 1}`;
 

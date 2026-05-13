@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, AlertTriangle, Loader2, Search } from "lucide-react";
+import { Check, AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
+import { SearchInput } from "@/shared/components/search-input";
 import { Label } from "@/shared/components/ui/label";
 import {
   Table,
@@ -147,15 +148,12 @@ export function CddImportDialog({
             )}
             {protocols && protocols.length > 0 && (
               <>
-                <div className="relative shrink-0">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search protocols..."
-                    className="pl-9"
-                  />
-                </div>
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search protocols..."
+                  className="shrink-0"
+                />
                 <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
                   <Table>
                     <TableHeader>
@@ -255,7 +253,7 @@ export function CddImportDialog({
                     )}
                     {preview.warnings.length > 0 && (
                       <span>
-                        <span className="font-medium text-amber-600">
+                        <span className="font-medium text-warning">
                           {preview.warnings.length}
                         </span>{" "}
                         skipped
@@ -317,15 +315,15 @@ export function CddImportDialog({
                   {/* Warnings */}
                   {preview.warnings.length > 0 && (
                     <div className="space-y-1.5">
-                      <h4 className="text-sm font-medium text-amber-600">
+                      <h4 className="text-sm font-medium text-warning">
                         Skipped
                       </h4>
                       {preview.warnings.map((w, i) => (
                         <div
                           key={i}
-                          className="flex items-start gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-sm"
+                          className="flex items-start gap-2 rounded-md bg-warning/10 px-3 py-2 text-sm"
                         >
-                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                           <span>
                             <span className="font-medium">{w.field_name}</span>
                             <span className="text-muted-foreground">

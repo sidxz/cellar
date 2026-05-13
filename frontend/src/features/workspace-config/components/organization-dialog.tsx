@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -25,7 +28,44 @@ import {
 } from "../hooks/use-organizations";
 import { ORG_TYPE_LABELS, type Organization, type OrganizationType } from "../types";
 
+// ── Schema ────────────────────────────────────────────────────────────────────
+
 const ORG_TYPES = Object.entries(ORG_TYPE_LABELS) as [OrganizationType, string][];
+
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  org_type: z.string().min(1, "Type is required"),
+  contact_name: z.string().optional(),
+  contact_email: z.string().optional(),
+  notes: z.string().optional(),
+  is_active: z.boolean(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const defaultValues: FormValues = {
+  name: "",
+  org_type: "internal",
+  contact_name: "",
+  contact_email: "",
+  notes: "",
+  is_active: true,
+};
+
+function toFormValues(org: Organization): FormValues {
+  return {
+    name: org.name,
+    org_type: org.org_type,
+    contact_name: org.contact_name ?? "",
+    contact_email: org.contact_email ?? "",
+    notes: org.notes ?? "",
+    is_active: org.is_active,
+  };
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean;
@@ -33,51 +73,41 @@ interface Props {
   organization: Organization | null;
 }
 
-export function OrganizationDialog({ open, onOpenChange, organization }: Props) {
-  const [name, setName] = useState("");
-  const [orgType, setOrgType] = useState<OrganizationType>("internal");
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [notes, setNotes] = useState("");
-  const [isActive, setIsActive] = useState(true);
+// ── Component ─────────────────────────────────────────────────────────────────
 
+export function OrganizationDialog({ open, onOpenChange, organization }: Props) {
   const create = useCreateOrganization();
   const update = useUpdateOrganization(organization?.id ?? "");
   const isEdit = organization !== null;
 
-  useEffect(() => {
-    if (organization) {
-      setName(organization.name);
-      setOrgType(organization.org_type);
-      setContactName(organization.contact_name ?? "");
-      setContactEmail(organization.contact_email ?? "");
-      setNotes(organization.notes ?? "");
-      setIsActive(organization.is_active);
-    } else {
-      setName("");
-      setOrgType("internal");
-      setContactName("");
-      setContactEmail("");
-      setNotes("");
-      setIsActive(true);
-    }
-  }, [organization, open]);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    if (open) {
+      form.reset(organization ? toFormValues(organization) : defaultValues);
+    }
+  }, [open, organization, form]);
+
+  const onSubmit = async (values: FormValues) => {
     const data = {
-      name,
-      org_type: orgType,
-      contact_name: contactName || null,
-      contact_email: contactEmail || null,
-      notes: notes || null,
+      name: values.name,
+      org_type: values.org_type as OrganizationType,
+      contact_name: values.contact_name || null,
+      contact_email: values.contact_email || null,
+      notes: values.notes || null,
     };
     if (isEdit) {
-      await update.mutateAsync({ ...data, is_active: isActive });
+      await update.mutateAsync({ ...data, is_active: values.is_active });
     } else {
       await create.mutateAsync(data);
     }
     onOpenChange(false);
   };
+
+  const isPending = create.isPending || update.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,79 +117,98 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
             {isEdit ? "Edit Organization" : "New Organization"}
           </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="org-name">Name</Label>
-            <Input
-              id="org-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Eurofins Munich"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="org-type">Type</Label>
-            <Select value={orgType} onValueChange={(v) => setOrgType(v as OrganizationType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ORG_TYPES.map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="contact-name">Contact Name</Label>
-            <Input
-              id="contact-name"
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="contact-email">Contact Email</Label>
-            <Input
-              id="contact-email"
-              type="email"
-              value={contactEmail}
-              onChange={(e) => setContactEmail(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Input
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-
-          {isEdit && (
-            <div className="flex items-center gap-2">
-              <Switch
-                id="is-active"
-                checked={isActive}
-                onCheckedChange={setIsActive}
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="org-name">Name</Label>
+              <Input
+                id="org-name"
+                {...form.register("name")}
+                placeholder="e.g., Eurofins Munich"
               />
-              <Label htmlFor="is-active">Active</Label>
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              )}
             </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name.trim() || create.isPending || update.isPending}
-          >
-            {create.isPending || update.isPending ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+            <div className="grid gap-2">
+              <Label htmlFor="org-type">Type</Label>
+              <Controller
+                name="org_type"
+                control={form.control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ORG_TYPES.map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact-name">Contact Name</Label>
+              <Input
+                id="contact-name"
+                {...form.register("contact_name")}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact-email">Contact Email</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                {...form.register("contact_email")}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Input
+                id="notes"
+                {...form.register("notes")}
+              />
+            </div>
+
+            {isEdit && (
+              <div className="flex items-center gap-2">
+                <Controller
+                  name="is_active"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Switch
+                      id="is-active"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  )}
+                />
+                <Label htmlFor="is-active">Active</Label>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting || isPending}
+            >
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -6,11 +6,11 @@ import math
 
 import pytest
 
-from chem_vault.domain.screening_assay.formula_evaluator import (
+from cellar.domain.screening_assay.formula_evaluator import (
     FormulaEvaluator,
     FormulaValidationError,
 )
-from chem_vault.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
 
 
 # ---------------------------------------------------------------------------
@@ -192,3 +192,68 @@ class TestFormulaValidation:
         # (asteval stops at the first NameError, so we may see b or c)
         assert len(err.undefined_variables) >= 1
         assert err.undefined_variables[0] in ("b", "c")
+
+
+# ---------------------------------------------------------------------------
+# Bracket syntax for readout names with spaces — cellar extension on
+# top of asteval. `[Name With Spaces]` is preprocessed into a sanitized
+# alias before evaluation so the user can reference space-containing
+# readouts (e.g. "Raw AU") in formulas. See _expand_brackets in the
+# evaluator module.
+# ---------------------------------------------------------------------------
+
+
+class TestBracketSyntax:
+    def setup_method(self) -> None:
+        self.ev = AstevalFormulaEvaluator()
+
+    def test_bracket_resolves_against_bindings(self) -> None:
+        """`[Raw AU] * 2` with bindings={"Raw AU": 5.0} → 10.0."""
+        assert self.ev.run("[Raw AU] * 2", {"Raw AU": 5.0}) == pytest.approx(10.0)
+
+    def test_multiple_bracket_refs(self) -> None:
+        result = self.ev.run(
+            "100 * (1 - [Raw AU] / [Control Mean])",
+            {"Raw AU": 0.3, "Control Mean": 1.0},
+        )
+        assert result == pytest.approx(70.0)
+
+    def test_repeated_bracket_ref_uses_same_alias(self) -> None:
+        """`[X] + [X]` should resolve to a single binding lookup, not
+        two distinct aliases pointing at None."""
+        assert self.ev.run("[Raw AU] + [Raw AU]", {"Raw AU": 3.5}) == pytest.approx(7.0)
+
+    def test_mix_bracket_and_bare_identifiers(self) -> None:
+        result = self.ev.run(
+            "[Raw AU] / Control",
+            {"Raw AU": 0.4, "Control": 2.0},
+        )
+        assert result == pytest.approx(0.2)
+
+    def test_bracket_with_undefined_name_surfaces_user_facing_form(self) -> None:
+        """Error messages swap the alias back to `[Original Name]` so
+        chemists see what they typed, not the internal `_v0`."""
+        with pytest.raises(FormulaValidationError) as exc:
+            self.ev.run("[Missing Name] * 2", {})
+        assert "[Missing Name]" in (exc.value.undefined_variables or [""])[0]
+
+    def test_validate_accepts_bracketed_known_name(self) -> None:
+        # Should not raise — "Raw AU" is in the available list.
+        self.ev.validate("[Raw AU] * 2", ["Raw AU"])
+
+    def test_validate_rejects_bracketed_unknown_name(self) -> None:
+        with pytest.raises(FormulaValidationError) as exc:
+            self.ev.validate("[Unknown Var] * 2", ["Raw AU"])
+        assert "[Unknown Var]" in (exc.value.undefined_variables or [""])[0]
+
+    def test_empty_brackets_invalid(self) -> None:
+        """`[]` is malformed — preprocessor leaves it for asteval, which
+        treats it as an empty list literal (or syntax error in -minimal
+        mode)."""
+        with pytest.raises(FormulaValidationError):
+            self.ev.run("[] + 1", {"x": 1.0})
+
+    def test_no_bracket_formula_unchanged(self) -> None:
+        """Pre-existing space-free formulas continue to work — the
+        preprocessor is a no-op when there's no `[` in the input."""
+        assert self.ev.run("Raw * 2", {"Raw": 5.0}) == pytest.approx(10.0)

@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.workspace_config.update_workspace_settings import (
+    from cellar.application.workspace_config.update_workspace_settings import (
         UpdateWorkspaceSettings,
         UpdateWorkspaceSettingsCommand,
     )

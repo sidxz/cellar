@@ -66,9 +66,9 @@ class TestListCollections:
         await client.post("/api/v1/collections", json={"name": "Col B"})
         resp = await client.get("/api/v1/collections")
         assert resp.status_code == 200
-        assert len(resp.json()) == 2
+        assert len(resp.json()["items"]) == 2
 
-    async def test_filter_by_project_id(self, client: AsyncClient) -> None:
+    async def test_filter_by_single_project(self, client: AsyncClient) -> None:
         proj = await client.post("/api/v1/projects", json={"name": "Filter Project"})
         project_id = proj.json()["id"]
 
@@ -81,12 +81,46 @@ class TestListCollections:
         )
 
         resp = await client.get(
-            "/api/v1/collections", params={"project_id": project_id}
+            "/api/v1/collections", params={"project_ids": project_id}
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["items"]
         assert len(data) == 1
         assert data[0]["name"] == "In Project"
+
+    async def test_filter_by_multiple_projects_unions(self, client: AsyncClient) -> None:
+        # Multi-project scoping: pickers should see the union when chemists
+        # are working across two related programs.
+        proj_a = await client.post("/api/v1/projects", json={"name": "Project A"})
+        proj_b = await client.post("/api/v1/projects", json={"name": "Project B"})
+        proj_c = await client.post("/api/v1/projects", json={"name": "Project C"})
+        a_id = proj_a.json()["id"]
+        b_id = proj_b.json()["id"]
+        c_id = proj_c.json()["id"]
+
+        await client.post(
+            "/api/v1/collections",
+            json={"name": "In A", "project_id": a_id},
+        )
+        await client.post(
+            "/api/v1/collections",
+            json={"name": "In B", "project_id": b_id},
+        )
+        await client.post(
+            "/api/v1/collections",
+            json={"name": "In C (excluded)", "project_id": c_id},
+        )
+        await client.post(
+            "/api/v1/collections", json={"name": "Unscoped (excluded)"}
+        )
+
+        resp = await client.get(
+            "/api/v1/collections",
+            params=[("project_ids", a_id), ("project_ids", b_id)],
+        )
+        assert resp.status_code == 200
+        names = sorted(c["name"] for c in resp.json()["items"])
+        assert names == ["In A", "In B"]
 
 
 class TestUpdateCollection:

@@ -4,16 +4,7 @@ import { useMemo, useState } from "react";
 import { Grid3x3, Plus, Trash2 } from "lucide-react";
 import type { ColDef } from "ag-grid-community";
 import { PageHeader } from "@/shared/components/page-header";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/shared/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -134,36 +125,20 @@ export function PlateTemplateListPage() {
         plateTemplate={editTemplate}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete plate template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;.
-              Existing runs using this template will not be affected.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-              disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Delete plate template?"
+        description={`This will permanently delete "${deleteTarget?.name ?? ""}". Existing runs using this template will not be affected.`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id, {
+              onSuccess: () => setDeleteTarget(null),
+            });
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 }

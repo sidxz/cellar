@@ -11,11 +11,11 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.screening.create_target import (
+    from cellar.application.screening.create_target import (
         CreateTarget,
         CreateTargetCommand,
     )
-    from chem_vault.application.screening.get_target import (
+    from cellar.application.screening.get_target import (
         ListTargets,
         ListTargetsQuery,
     )
@@ -51,7 +51,7 @@ async def load(ctx: DemoContext) -> int:
             list_result = await list_uc(
                 ListTargetsQuery(workspace_id=WORKSPACE_ID), auth=ctx.auth
             )
-            targets = list_result.unwrap()
+            targets = list_result.unwrap().items
             match = next((t for t in targets if t.name == rec["name"]), None)
             if match is not None:
                 ctx.registry.put(key, match.id)

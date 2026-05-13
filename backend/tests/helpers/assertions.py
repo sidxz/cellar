@@ -6,8 +6,8 @@ from typing import Any, TypeVar
 
 from returns.result import Failure, Result, Success
 
-from chem_vault.domain.shared.errors import DomainError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.events import DomainEvent
 
 T = TypeVar("T")
 

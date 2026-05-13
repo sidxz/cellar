@@ -20,8 +20,8 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-RUN adduser -D -u 1001 chemvault
-USER chemvault
+RUN adduser -D -u 1001 cellar
+USER cellar
 
 EXPOSE 3000
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FlaskConical, ListPlus, Plus, Upload } from "lucide-react";
+import { Download, FlaskConical, ListPlus, Plus } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
@@ -20,20 +20,12 @@ import {
   type Molecule,
   type MoleculeType,
 } from "../types";
-import { CollectionPickerDialog } from "@/features/research-organization/components/collection-picker-dialog";
-import { MoleculeRegistrationDialog } from "./molecule-registration-dialog";
-import { BulkRegistrationDialog } from "./bulk-registration-dialog";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { CompoundSearchBar } from "./compound-search-bar";
-import { DisclosureDialog } from "./disclosure-dialog";
-import { MergeConfirmationDialog } from "./merge-confirmation-dialog";
 
 export function MoleculeList() {
   const router = useRouter();
   const { data: molecules, isLoading, error } = useMolecules();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [discloseMol, setDiscloseMol] = useState<Molecule | null>(null);
-  const [mergeMol, setMergeMol] = useState<Molecule | null>(null);
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
   const { exportSdf } = useSdfExport();
@@ -47,7 +39,7 @@ export function MoleculeList() {
       {
         headerName: "Structure",
         field: "structure",
-        width: 120,
+        width: 140,
         sortable: false,
         filter: false,
         resizable: false,
@@ -58,12 +50,12 @@ export function MoleculeList() {
           if (mol.structure_status === "disclosed" && mol.structure?.smiles) {
             return (
               <div className="py-1">
-                <StructureThumbnail smiles={mol.structure.smiles} size={80} />
+                <StructureThumbnail smiles={mol.structure.smiles} size={104} />
               </div>
             );
           }
           return (
-            <div className="flex h-[80px] w-[80px] items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+            <div className="flex h-[104px] w-[104px] items-center justify-center rounded bg-muted text-xs text-muted-foreground">
               N/A
             </div>
           );
@@ -114,7 +106,7 @@ export function MoleculeList() {
       {
         headerName: "",
         field: "id",
-        width: 160,
+        width: 110,
         sortable: false,
         filter: false,
         resizable: false,
@@ -127,18 +119,12 @@ export function MoleculeList() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setDiscloseMol(mol)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/compounds/register?disclose=${mol.id}`);
+                  }}
                 >
                   Disclose
-                </Button>
-              )}
-              {!mol.merged_into_id && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setMergeMol(mol)}
-                >
-                  Merge
                 </Button>
               )}
             </div>
@@ -165,11 +151,7 @@ export function MoleculeList() {
           <Download className="h-4 w-4" />
           Export SDF
         </Button>
-        <Button variant="outline" onClick={() => setBulkOpen(true)}>
-          <Upload className="mr-2 h-4 w-4" />
-          Bulk Upload
-        </Button>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button onClick={() => router.push("/compounds/register")}>
           <Plus className="mr-2 h-4 w-4" />
           Register Compound
         </Button>
@@ -209,31 +191,12 @@ export function MoleculeList() {
               icon={FlaskConical}
               title="No compounds registered"
               description="Register your first compound to get started."
-              action={{ label: "Register Compound", onClick: () => setDialogOpen(true), icon: Plus }}
+              action={{ label: "Register Compound", onClick: () => router.push("/compounds/register"), icon: Plus }}
             />
           }
         />
       </div>
 
-      <MoleculeRegistrationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-      />
-      <BulkRegistrationDialog open={bulkOpen} onOpenChange={setBulkOpen} />
-      {discloseMol && (
-        <DisclosureDialog
-          molecule={discloseMol}
-          open={!!discloseMol}
-          onOpenChange={(open) => !open && setDiscloseMol(null)}
-        />
-      )}
-      {mergeMol && (
-        <MergeConfirmationDialog
-          sourceMolecule={mergeMol}
-          open={!!mergeMol}
-          onOpenChange={(open) => !open && setMergeMol(null)}
-        />
-      )}
       <CollectionPickerDialog
         open={pickerMolIds.length > 0}
         onOpenChange={(open) => {

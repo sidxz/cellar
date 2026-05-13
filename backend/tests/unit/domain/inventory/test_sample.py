@@ -4,8 +4,8 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.inventory.enums import ContainerType, SampleStatus
-from chem_vault.domain.inventory.events import (
+from cellar.domain.inventory.enums import ContainerType, SampleStatus
+from cellar.domain.inventory.events import (
     LowStockDetected,
     SampleAliquoted,
     SampleCreated,
@@ -14,10 +14,10 @@ from chem_vault.domain.inventory.events import (
     SampleMoved,
     SampleQuarantined,
 )
-from chem_vault.domain.inventory.sample import Sample
-from chem_vault.domain.shared.enums import AmountUnit
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Amount, Barcode
+from cellar.domain.inventory.sample import Sample
+from cellar.domain.shared.enums import AmountUnit
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Amount, Barcode
 
 
 @pytest.fixture

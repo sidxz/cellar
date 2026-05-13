@@ -4,20 +4,21 @@ import { Fragment, useCallback, useRef, useState } from "react";
 import { cn } from "@/shared/lib/utils";
 import type { PlateFormat, WellDesignation } from "../types";
 import { WELL_DESIGNATION_LABELS } from "../types";
+import { plateDimensionsTuple, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const WELL_COLORS: Record<WellDesignation, string> = {
-  compound: "bg-blue-500",
+  compound: "bg-primary",
   positive_control: "bg-green-500",
-  negative_control: "bg-red-500",
+  negative_control: "bg-destructive",
   empty: "bg-gray-300 dark:bg-gray-700",
 };
 
 const WELL_DOT_COLORS: Record<WellDesignation, string> = {
-  compound: "bg-blue-500",
+  compound: "bg-primary",
   positive_control: "bg-green-500",
-  negative_control: "bg-red-500",
+  negative_control: "bg-destructive",
   empty: "bg-gray-400",
 };
 
@@ -27,56 +28,6 @@ const DESIGNATIONS: WellDesignation[] = [
   "negative_control",
   "empty",
 ];
-
-/** Plate dimensions: [rows, cols] */
-function plateDimensions(format: PlateFormat): [number, number] {
-  switch (format) {
-    case "6":
-      return [2, 3];
-    case "12":
-      return [3, 4];
-    case "24":
-      return [4, 6];
-    case "48":
-      return [6, 8];
-    case "96":
-      return [8, 12];
-    case "384":
-      return [16, 24];
-    case "1536":
-      return [32, 48];
-    default:
-      return [8, 12];
-  }
-}
-
-/** Row label: A-Z, then AA-AZ, BA-BZ, etc. */
-function rowLabel(index: number): string {
-  if (index < 26) return String.fromCharCode(65 + index);
-  return (
-    String.fromCharCode(65 + Math.floor(index / 26) - 1) +
-    String.fromCharCode(65 + (index % 26))
-  );
-}
-
-/** Cell size in pixels based on plate format */
-function cellSize(format: PlateFormat): number {
-  switch (format) {
-    case "6":
-    case "12":
-    case "24":
-    case "48":
-      return 28;
-    case "96":
-      return 28;
-    case "384":
-      return 18;
-    case "1536":
-      return 10;
-    default:
-      return 28;
-  }
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -95,8 +46,8 @@ export function PlateMapEditor({
     useState<WellDesignation>("compound");
   const isMouseDownRef = useRef(false);
 
-  const [rows, cols] = plateDimensions(format);
-  const size = cellSize(format);
+  const [rows, cols] = plateDimensionsTuple(format);
+  const size = plateCellSizePx(format);
   const showText = size >= 18;
 
   const setWell = useCallback(

@@ -161,7 +161,19 @@ export interface UpdateSavedSearchInput {
 
 // ─── Search types ───────────────────────────────────────────────────────────
 
-export type CriterionType = "text" | "property" | "structure" | "activity" | "collection" | "keyword_list" | "run_date" | "batch" | "project" | "selectivity" | "group" | "custom_field";
+export type CriterionType =
+  | "text"
+  | "property"
+  | "structure"
+  | "activity"
+  | "collection"
+  | "keyword_list"
+  | "run_date"
+  | "batch"
+  | "project"
+  | "selectivity"
+  | "group"
+  | "custom_field";
 export type CustomFieldMode = "text" | "numeric";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
@@ -183,22 +195,68 @@ export interface PropertyCriterion {
   max?: number;
 }
 
+export type SearchMode = "similar" | "scaffold_hop" | "fragment_in_target";
+
 export interface StructureCriterion {
   type: "structure";
-  search_type: StructureSearchType;
+  // Two-way compat: keep search_type for legacy criteria, add `kind`
+  search_type: StructureSearchType; // kept for compat — same values as kind
+  kind?: StructureSearchType; // mirrors search_type going forward
+  /** @deprecated read-only legacy field; new criteria use smiles_or_smarts. */
   smarts?: string;
   smiles?: string;
+  smiles_or_smarts?: string; // new substructure field
   threshold?: number;
   inchi_key?: string;
+  // New similarity fields:
+  mode?: SearchMode;
+  // New substructure field:
+  generalized?: boolean;
+  /** Disambiguates how the BE/cartridge interprets ``smiles_or_smarts``.
+   *  - "smiles" → cartridge's mol_from_smiles (aromaticity perception
+   *    handled cartridge-side; works for plain drawn structures)
+   *  - "smarts" → qmol_from_smarts (preserves atom lists / R-groups /
+   *    "any bond" semantics — used when Ketcher SMILES export fails)
+   *  Omitted ⇒ legacy defensive path (BE aromatizes the SMARTS). */
+  query_kind?: "smiles" | "smarts";
+}
+
+/** Per-protocol run scoping for ActivityCriterion. */
+export type RunScope =
+  | { mode: "any" }
+  | { mode: "latest" }
+  | { mode: "all" }
+  | { mode: "specific"; run_id: string }
+  | { mode: "date_range"; date_from?: string; date_to?: string }
+  | { mode: "past_n_days"; days: number };
+
+export type RunScopeMode = RunScope["mode"];
+
+/** A single where-condition on an activity criterion. Multiple conditions
+ *  on the same criterion are ANDed together. */
+export interface ActivityWhereCondition {
+  curve_type?: string;
+  readout_definition_id?: string;
+  /** Includes "between" — chemists routinely bracket potency. */
+  operator: PropertyOperator;
+  value?: number;
+  min?: number;
+  max?: number;
 }
 
 export interface ActivityCriterion {
   type: "activity";
   protocol_id: string;
+  /** Multi-where list — preferred shape. Each row ANDed with the others. */
+  where?: ActivityWhereCondition[];
+  /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
+  run_scope?: RunScope;
+  /** @deprecated legacy single-where fields. Kept for saved-search compat;
+   *  the composer normalizes them to a single-element where list. */
   readout_definition_id?: string;
   curve_type?: string;
-  operator: PropertyOperator;
-  value: number;
+  operator?: PropertyOperator;
+  value?: number;
 }
 
 export interface CollectionCriterion {
@@ -284,7 +342,15 @@ export interface SearchQuery {
   logic?: "and" | "or";
 }
 
-export type SortField = "name" | "registration_number" | "molecular_weight" | "logp" | "tpsa" | "hbd" | "hba" | "created_at";
+export type SortField =
+  | "name"
+  | "registration_number"
+  | "molecular_weight"
+  | "logp"
+  | "tpsa"
+  | "hbd"
+  | "hba"
+  | "created_at";
 export type SortDir = "asc" | "desc";
 
 export interface ExecuteSearchInput {
@@ -341,9 +407,27 @@ export interface CurveParams {
   curve_class: string | null;
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
+  /** Fit-quality warning codes (e.g. "ec50_at_bound") for compact renderers. */
+  fit_quality_warnings?: string[] | null;
 }
 
 // ─── Molecule Activity Detail (side panel) ──────────────────────────────────
+
+/** Mirrors `screening-assay`'s InterceptValue/InterceptSpec wire shape — kept
+ *  inline here to avoid a feature-cross-import for plain DTO fields. */
+export interface CurveInterceptSpec {
+  kind: "ic" | "ec";
+  level: number;
+  basis: "relative_percent" | "absolute";
+  label?: string | null;
+}
+export interface CurveInterceptValue {
+  spec: CurveInterceptSpec;
+  value: number;
+  confidence_interval_low: number | null;
+  confidence_interval_high: number | null;
+  at_bound: boolean;
+}
 
 export interface CurveDetail {
   curve_id: string;
@@ -361,6 +445,21 @@ export interface CurveDetail {
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
   raw_data: Array<{ x: number; y: number }>;
+  /** Read-only on the search-detail panel; the run-page's curator UI is
+   *  where points get excluded. Included so the shared chart can show
+   *  excluded points consistently in viewer mode. */
+  excluded_points?: Array<{
+    x?: number;
+    y?: number;
+    concentration?: number;
+    response?: number;
+    reason?: string | null;
+  }> | null;
+  /** Machine-readable fit-quality codes the chemist needs to see during
+   *  triage (e.g. "ec50_at_bound" — the IC50 is unreliable). */
+  fit_quality_warnings?: string[];
+  /** Per-spec intercepts (IC50/IC90/...) derived from the same Hill fit. */
+  intercept_values?: CurveInterceptValue[];
 }
 
 export interface ProtocolCurveGroup {

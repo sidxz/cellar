@@ -10,28 +10,15 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/shared/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import {
   useAttachments,
   useDeleteAttachment,
   useDownloadAttachment,
 } from "../hooks/use-attachments";
+import { formatDate } from "@/shared/lib/format-date";
+import { formatFileSize } from "@/shared/lib/format-number";
 import type { AttachableType, AttachmentResponse } from "../types";
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1_048_576).toFixed(1)} MB`;
-}
 
 function getMimeIcon(mimeType: string) {
   if (mimeType.startsWith("image/")) return Image;
@@ -54,7 +41,7 @@ interface AttachmentListProps {
 export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
   const { data: attachments, isLoading } = useAttachments(entityType, entityId);
   const deleteMutation = useDeleteAttachment(entityType, entityId);
-  const downloadFn = useDownloadAttachment();
+  const downloadMutation = useDownloadAttachment();
   const [deleteTarget, setDeleteTarget] = useState<AttachmentResponse | null>(
     null
   );
@@ -85,7 +72,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
                   <p className="text-sm font-medium">{att.file_name}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatFileSize(att.file_size)} &middot;{" "}
-                    {new Date(att.created_at).toLocaleDateString()}
+                    {formatDate(att.created_at)}
                   </p>
                 </div>
               </div>
@@ -93,7 +80,14 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => downloadFn(att.id, att.file_name)}
+                  aria-label={`Download ${att.file_name}`}
+                  onClick={() =>
+                    downloadMutation.mutate({
+                      attachmentId: att.id,
+                      fileName: att.file_name,
+                    })
+                  }
+                  disabled={downloadMutation.isPending}
                 >
                   <Download className="h-4 w-4" />
                 </Button>
@@ -110,34 +104,19 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
         })}
       </div>
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete file?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete{" "}
-              <strong>{deleteTarget?.file_name}</strong>. This action cannot be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id);
-                  setDeleteTarget(null);
-                }
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Delete file?"
+        description={`This will permanently delete "${deleteTarget?.file_name ?? ""}". This action cannot be undone.`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </>
   );
 }

@@ -35,7 +35,7 @@ jobs:
         with:
           version: "latest"
       - run: uv sync --dev
-      - run: uv run pytest tests/unit/ -v --cov=chem_vault --cov-report=term-missing
+      - run: uv run pytest tests/unit/ -v --cov=cellar --cov-report=term-missing
 
   backend-integration:
     name: Backend Integration Tests
@@ -50,7 +50,7 @@ jobs:
           version: "latest"
       - run: uv sync --dev
       # Testcontainers needs Docker — already available on ubuntu-latest
-      - run: uv run pytest tests/integration/ -v --cov=chem_vault --cov-report=term-missing
+      - run: uv run pytest tests/integration/ -v --cov=cellar --cov-report=term-missing
 
   frontend-lint:
     name: Frontend Lint

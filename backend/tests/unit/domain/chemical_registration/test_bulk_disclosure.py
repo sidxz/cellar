@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.bulk_disclosure import BulkDisclosure
-from chem_vault.domain.chemical_registration.enums import BulkDisclosureStatus
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.chemical_registration.bulk_disclosure import BulkDisclosure
+from cellar.domain.chemical_registration.enums import BulkDisclosureStatus
+from cellar.domain.shared.errors import ValidationError
 
 WS_ID = uuid.uuid4()
 

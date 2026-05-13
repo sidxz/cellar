@@ -4,8 +4,8 @@ import io
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import BulkRegistrationFileFormat
-from chem_vault.infrastructure.parsers.chemical_file_parser import (
+from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from cellar.infrastructure.parsers.chemical_file_parser import (
     SDFParser,
     TabularParser,
     get_parser,
@@ -182,7 +182,10 @@ class TestTabularParser:
         items = parser.parse(csv_bytes, "compounds.csv")
 
         assert len(items) == 1
-        assert items[0].name == "Compound-1"
+        # No name column → parser leaves name None. The application layer
+        # supplies a placeholder display name without promoting it as an
+        # identifier.
+        assert items[0].name is None
         assert items[0].smiles == "CC(=O)Oc1ccccc1C(=O)O"
 
     def test_parse_molecule_type(self) -> None:

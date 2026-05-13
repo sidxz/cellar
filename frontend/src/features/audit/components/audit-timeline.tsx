@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader } from "@/shared/components/ui/card";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { MemberName } from "@/shared/components/entity-name";
+import { EmptyState } from "@/shared/components/empty-state";
+import { formatDateTime } from "@/shared/lib/format-date";
 import { useAuditOperations, useAuditByEntity } from "../hooks/use-audit";
 import type { AuditOperation } from "../types";
 
@@ -56,7 +58,7 @@ function EntryRow({ fieldName, oldValue, newValue }: {
       <span className="text-muted-foreground">:</span>
       <div className="flex items-center gap-1.5 min-w-0">
         {oldValue !== null && (
-          <span className="text-red-400 line-through truncate max-w-[140px]" title={oldValue}>
+          <span className="text-destructive line-through truncate max-w-[140px]" title={oldValue}>
             {oldValue}
           </span>
         )}
@@ -103,7 +105,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Clock className="size-3" />
-            {new Date(operation.performed_at).toLocaleString()}
+            {formatDateTime(operation.performed_at)}
           </div>
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -158,7 +160,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
                   {operation.signature.reason}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                  {new Date(operation.signature.signed_at).toLocaleString()}
+                  {formatDateTime(operation.signature.signed_at)}
                 </span>
               </div>
             )}
@@ -193,16 +195,6 @@ function TimelineSkeleton() {
   );
 }
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Clock className="size-10 text-muted-foreground/50 mb-3" />
-      <p className="text-sm text-muted-foreground">No audit operations found.</p>
-    </div>
-  );
-}
 
 // ─── Timeline (data-driven) ─────────────────────────────────────────────────
 
@@ -214,7 +206,13 @@ function TimelineContent({
   isLoading: boolean;
 }) {
   if (isLoading) return <TimelineSkeleton />;
-  if (!operations || operations.length === 0) return <EmptyState />;
+  if (!operations || operations.length === 0) return (
+    <EmptyState
+      icon={Clock}
+      title="No audit operations"
+      description="No audit operations found."
+    />
+  );
 
   return (
     <div className="space-y-3">

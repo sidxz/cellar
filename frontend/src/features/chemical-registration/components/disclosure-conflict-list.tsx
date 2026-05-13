@@ -9,6 +9,7 @@ import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MoleculeName } from "@/shared/components/entity-name";
 import { useConflictDisclosures } from "../hooks/use-disclosures";
+import { formatDate } from "@/shared/lib/format-date";
 import type { DisclosureRequest } from "../types/disclosure";
 import { ResolveConflictDialog } from "./resolve-conflict-dialog";
 
@@ -46,7 +47,7 @@ export function DisclosureConflictList() {
         field: "requested_at",
         width: 120,
         valueFormatter: (p) =>
-          p.value ? new Date(p.value).toLocaleDateString() : "",
+          p.value ? formatDate(p.value) : "",
       },
       {
         headerName: "Status",
@@ -62,12 +63,13 @@ export function DisclosureConflictList() {
         sortable: false,
         filter: false,
         cellRenderer: (params: ICellRendererParams<DisclosureRequest>) => {
-          if (!params.data) return null;
+          const data = params.data;
+          if (!data) return null;
           return (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSelected(params.data!)}
+              onClick={() => setSelected(data)}
             >
               Resolve
             </Button>

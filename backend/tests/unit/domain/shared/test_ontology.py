@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.ontology import OntologyTerm
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.ontology import OntologyTerm
 
 
 class TestOntologyTermCreation:

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -27,6 +30,69 @@ import {
 } from "../hooks/use-saved-searches";
 import type { SavedSearch, SearchVisibility } from "../types";
 
+// ── Schema ────────────────────────────────────────────────────────────────────
+
+const isValidJson = (s: string) => {
+  try {
+    JSON.parse(s);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const NO_SELECTION = "__none__";
+
+const formSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    visibility: z.enum(["private", "project"]),
+    project_id: z.string(),
+    query: z
+      .string()
+      .min(1, "Query is required")
+      .refine(isValidJson, "Invalid JSON"),
+    columns: z
+      .string()
+      .optional()
+      .refine((s) => !s?.trim() || isValidJson(s), "Invalid JSON"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.visibility === "project" && data.project_id === NO_SELECTION) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select a project",
+        path: ["project_id"],
+      });
+    }
+  });
+
+type FormValues = z.infer<typeof formSchema>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function makeDefaultValues(defaultProjectId?: string): FormValues {
+  return {
+    name: "",
+    visibility: "private",
+    project_id: defaultProjectId ?? NO_SELECTION,
+    query: "",
+    columns: "",
+  };
+}
+
+function toFormValues(savedSearch: SavedSearch, defaultProjectId?: string): FormValues {
+  return {
+    name: savedSearch.name,
+    visibility: savedSearch.visibility ?? "private",
+    project_id: savedSearch.project_id ?? defaultProjectId ?? NO_SELECTION,
+    query: savedSearch.query ? JSON.stringify(savedSearch.query, null, 2) : "",
+    columns: savedSearch.columns ? JSON.stringify(savedSearch.columns, null, 2) : "",
+  };
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
 interface CreateSavedSearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,7 +102,7 @@ interface CreateSavedSearchDialogProps {
   defaultProjectId?: string;
 }
 
-const NO_SELECTION = "__none__";
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function CreateSavedSearchDialog({
   open,
@@ -50,86 +116,43 @@ export function CreateSavedSearchDialog({
 
   const { data: projects } = useProjects();
 
-  const [name, setName] = useState("");
-  const [visibility, setVisibility] = useState<SearchVisibility>("private");
-  const [projectId, setProjectId] = useState<string>(NO_SELECTION);
-  const [query, setQuery] = useState("");
-  const [columns, setColumns] = useState("");
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: makeDefaultValues(defaultProjectId),
+  });
 
   // Reset form when dialog opens / savedSearch changes
   useEffect(() => {
     if (open) {
-      setName(savedSearch?.name ?? "");
-      setVisibility(savedSearch?.visibility ?? "private");
-      setProjectId(
-        savedSearch?.project_id ?? defaultProjectId ?? NO_SELECTION
-      );
-      setQuery(
-        savedSearch?.query ? JSON.stringify(savedSearch.query, null, 2) : ""
-      );
-      setColumns(
-        savedSearch?.columns
-          ? JSON.stringify(savedSearch.columns, null, 2)
-          : ""
+      form.reset(
+        savedSearch
+          ? toFormValues(savedSearch, defaultProjectId)
+          : makeDefaultValues(defaultProjectId),
       );
     }
-  }, [open, savedSearch, defaultProjectId]);
-
-  const resetForm = () => {
-    setName("");
-    setVisibility("private");
-    setProjectId(defaultProjectId ?? NO_SELECTION);
-    setQuery("");
-    setColumns("");
-  };
+  }, [open, savedSearch, defaultProjectId, form]);
 
   const mutation = isEdit ? updateMutation : createMutation;
+  const watchedVisibility = form.watch("visibility");
 
-  const isQueryValid = (() => {
-    if (!query.trim()) return false;
-    try {
-      JSON.parse(query);
-      return true;
-    } catch {
-      return false;
-    }
-  })();
-
-  const isColumnsValid = (() => {
-    if (!columns.trim()) return true; // optional
-    try {
-      JSON.parse(columns);
-      return true;
-    } catch {
-      return false;
-    }
-  })();
-
-  const canSubmit =
-    name.trim() &&
-    isQueryValid &&
-    isColumnsValid &&
-    (visibility === "private" || projectId !== NO_SELECTION) &&
-    !mutation.isPending;
-
-  const handleSubmit = () => {
+  const onSubmit = (values: FormValues) => {
     const payload = {
-      name: name.trim(),
-      visibility,
+      name: values.name.trim(),
+      visibility: values.visibility,
       project_id:
-        visibility === "project" && projectId !== NO_SELECTION
-          ? projectId
+        values.visibility === "project" && values.project_id !== NO_SELECTION
+          ? values.project_id
           : null,
-      query: JSON.parse(query) as Record<string, unknown>,
-      columns: columns.trim()
-        ? (JSON.parse(columns) as Record<string, unknown>)
+      query: JSON.parse(values.query) as Record<string, unknown>,
+      columns: values.columns?.trim()
+        ? (JSON.parse(values.columns) as Record<string, unknown>)
         : null,
     };
 
     mutation.mutate(payload, {
       onSuccess: () => {
         onOpenChange(false);
-        resetForm();
+        form.reset(makeDefaultValues(defaultProjectId));
       },
     });
   };
@@ -148,103 +171,131 @@ export function CreateSavedSearchDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label>Name</Label>
-            <Input
-              placeholder="e.g., Active EGFR Hits"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && canSubmit) handleSubmit();
-              }}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Visibility</Label>
-            <Select
-              value={visibility}
-              onValueChange={(v) => setVisibility(v as SearchVisibility)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="private">Private</SelectItem>
-                <SelectItem value="project">Project</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {visibility === "project" && (
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Project</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_SELECTION}>Select a project</SelectItem>
-                  {projects
-                    ?.filter((p) => p.status === "active")
-                    .map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <Label>Name</Label>
+              <Input
+                placeholder="e.g., Active EGFR Hits"
+                {...form.register("name")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !mutation.isPending) {
+                    void form.handleSubmit(onSubmit)();
+                  }
+                }}
+              />
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              )}
             </div>
-          )}
 
-          <div className="grid gap-2">
-            <Label>Query</Label>
-            <Textarea
-              placeholder="Search criteria (JSON)"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              rows={4}
-              className="font-mono text-sm"
-            />
-            {query.trim() && !isQueryValid && (
-              <p className="text-xs text-destructive">Invalid JSON</p>
+            <div className="grid gap-2">
+              <Label>Visibility</Label>
+              <Controller
+                name="visibility"
+                control={form.control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="project">Project</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            {watchedVisibility === "project" && (
+              <div className="grid gap-2">
+                <Label>Project</Label>
+                <Controller
+                  name="project_id"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_SELECTION}>Select a project</SelectItem>
+                        {projects
+                          ?.filter((p) => p.status === "active")
+                          .map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {form.formState.errors.project_id && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.project_id.message}
+                  </p>
+                )}
+              </div>
             )}
+
+            <div className="grid gap-2">
+              <Label>Query</Label>
+              <Textarea
+                placeholder="Search criteria (JSON)"
+                {...form.register("query")}
+                rows={4}
+                className="font-mono text-sm"
+              />
+              {form.formState.errors.query && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.query.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Columns (optional)</Label>
+              <Textarea
+                placeholder="Column preferences (JSON)"
+                {...form.register("columns")}
+                rows={3}
+                className="font-mono text-sm"
+              />
+              {form.formState.errors.columns && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.columns.message}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Columns (optional)</Label>
-            <Textarea
-              placeholder="Column preferences (JSON)"
-              value={columns}
-              onChange={(e) => setColumns(e.target.value)}
-              rows={3}
-              className="font-mono text-sm"
-            />
-            {columns.trim() && !isColumnsValid && (
-              <p className="text-xs text-destructive">Invalid JSON</p>
-            )}
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={mutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {mutation.isPending
-              ? isEdit
-                ? "Saving..."
-                : "Creating..."
-              : isEdit
-                ? "Save Changes"
-                : "Create Saved Search"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting || mutation.isPending}
+            >
+              {mutation.isPending
+                ? isEdit
+                  ? "Saving..."
+                  : "Creating..."
+                : isEdit
+                  ? "Save Changes"
+                  : "Create Saved Search"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

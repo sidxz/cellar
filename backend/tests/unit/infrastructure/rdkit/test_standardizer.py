@@ -3,8 +3,8 @@
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.infrastructure.rdkit.errors import InvalidSmilesError
-from chem_vault.infrastructure.rdkit.standardizer import StructureStandardizer
+from cellar.infrastructure.rdkit.errors import InvalidSmilesError
+from cellar.infrastructure.rdkit.standardizer import StructureStandardizer
 
 
 @pytest.fixture
@@ -103,6 +103,85 @@ class TestSaltDetection:
         # so detected_salt should be None (ambiguous) or the pipeline
         # may simplify further — either way, no crash
         assert mol.detected_salt is None or mol.detected_salt.stoichiometry >= 1
+
+
+class TestStereoPreservation:
+    """The registration pipeline must preserve defined stereo. Enantiomers
+    produce distinct InChIKeys (business rule #3); tautomer-equivalent forms
+    that don't involve stereo still merge via standard InChI's mobile-H layer."""
+
+    @pytest.mark.parametrize(
+        "label, l_smiles, d_smiles",
+        [
+            ("alanine", "N[C@@H](C)C(=O)O", "N[C@H](C)C(=O)O"),
+            ("leucine", "N[C@@H](CC(C)C)C(=O)O", "N[C@H](CC(C)C)C(=O)O"),
+            ("ibuprofen", "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O", "CC(C)Cc1ccc(cc1)[C@H](C)C(=O)O"),
+            ("naproxen", "COc1ccc2cc([C@@H](C)C(=O)O)ccc2c1", "COc1ccc2cc([C@H](C)C(=O)O)ccc2c1"),
+        ],
+    )
+    def test_enantiomers_get_distinct_inchikeys(
+        self,
+        standardizer: StructureStandardizer,
+        label: str,
+        l_smiles: str,
+        d_smiles: str,
+    ) -> None:
+        l_result = standardizer.standardize(l_smiles)
+        d_result = standardizer.standardize(d_smiles)
+        assert isinstance(l_result, Success)
+        assert isinstance(d_result, Success)
+        assert l_result.unwrap().inchi_key != d_result.unwrap().inchi_key, (
+            f"{label} enantiomers collapsed to the same InChIKey"
+        )
+
+    def test_glucose_and_fructose_get_distinct_inchikeys(
+        self, standardizer: StructureStandardizer
+    ) -> None:
+        """Open-form D-glucose and D-fructose are different sugars; the keto/enol
+        tautomerization that connects them must NOT collapse them."""
+        glucose = standardizer.standardize("OC[C@@H](O)[C@@H](O)[C@H](O)[C@H](O)C=O")
+        fructose = standardizer.standardize("OC[C@@H](O)[C@@H](O)[C@H](O)C(=O)CO")
+        assert isinstance(glucose, Success)
+        assert isinstance(fructose, Success)
+        assert glucose.unwrap().inchi_key != fructose.unwrap().inchi_key
+
+    def test_l_alanine_preserves_stereo_in_canonical_smiles(
+        self, standardizer: StructureStandardizer
+    ) -> None:
+        result = standardizer.standardize("N[C@@H](C)C(=O)O")
+        assert isinstance(result, Success)
+        # Canonical SMILES must retain a stereo descriptor (@ or @@)
+        canonical = result.unwrap().canonical_smiles
+        assert "@" in canonical, f"stereo lost in canonical SMILES: {canonical}"
+
+
+class TestTautomerMergingStillWorks:
+    """Common tautomer pairs MUST still resolve to the same InChIKey via
+    standard InChI's mobile-H layer, even without an explicit canonicalizer step."""
+
+    @pytest.mark.parametrize(
+        "pair_name, smiles_a, smiles_b",
+        [
+            ("2-pyridone / 2-hydroxypyridine", "O=c1cccc[nH]1", "Oc1ccccn1"),
+            ("4-pyridone / 4-hydroxypyridine", "O=c1cc[nH]cc1", "Oc1ccncc1"),
+            ("imidazole 1H / 3H", "c1[nH]cnc1", "c1nc[nH]c1"),
+            ("1H / 2H tetrazole", "c1[nH]nnn1", "c1n[nH]nn1"),
+        ],
+    )
+    def test_tautomer_pair_merges(
+        self,
+        standardizer: StructureStandardizer,
+        pair_name: str,
+        smiles_a: str,
+        smiles_b: str,
+    ) -> None:
+        a = standardizer.standardize(smiles_a)
+        b = standardizer.standardize(smiles_b)
+        assert isinstance(a, Success)
+        assert isinstance(b, Success)
+        assert a.unwrap().inchi_key == b.unwrap().inchi_key, (
+            f"{pair_name} should produce the same InChIKey"
+        )
 
 
 class TestCheckMolecule:

@@ -5,16 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileUp, FlaskConical, Plus, Trash2 } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { PageHeader } from "@/shared/components/page-header";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/shared/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
@@ -26,30 +17,13 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { usePlates, useDeletePlate } from "../hooks/use-plates";
 import { RegisterPlateDialog } from "./register-plate-dialog";
 import type { RegisteredPlate, PlateStatus, PlateType } from "../types/plates";
 import { plateTypeLabels, plateStatusLabels } from "../types/plates";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
-
-function plateStatusVariant(
-  status: PlateStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "registered":
-      return "outline";
-    case "in_use":
-      return "default";
-    case "stored":
-      return "secondary";
-    case "depleted":
-    case "disposed":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 export function PlateList() {
   const router = useRouter();
@@ -116,9 +90,7 @@ export function PlateList() {
         width: 120,
         cellRenderer: (params: ICellRendererParams<RegisteredPlate>) =>
           params.value ? (
-            <Badge variant={plateStatusVariant(params.value as PlateStatus)}>
-              {plateStatusLabels[params.value as PlateStatus] ?? params.value}
-            </Badge>
+            <StatusBadge status={params.value as PlateStatus} />
           ) : null,
       },
       {
@@ -251,38 +223,20 @@ export function PlateList() {
         onOpenChange={setRegisterOpen}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Delete plate?"
+        description={`This will permanently delete plate "${deleteTarget?.barcode ?? ""}" (${deleteTarget?.plate_label ?? ""}). Well mappings will be lost.`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id, {
+              onSuccess: () => setDeleteTarget(null),
+            });
+          }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete plate?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete plate &ldquo;{deleteTarget?.barcode}&rdquo;
-              ({deleteTarget?.plate_label}). Well mappings will be lost.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-              disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 }

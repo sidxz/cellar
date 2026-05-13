@@ -6,14 +6,14 @@ import uuid
 
 import factory
 
-from chem_vault.domain.audit_compliance.enums import (
+from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
     AuditStatus,
     AuthMethod,
     OperationType,
 )
-from chem_vault.domain.audit_compliance.models import (
+from cellar.domain.audit_compliance.models import (
     AuditEntry,
     AuditOperation,
     ElectronicSignature,

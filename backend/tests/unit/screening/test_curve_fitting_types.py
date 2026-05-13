@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from chem_vault.domain.screening_assay.curve_fitting import (
+from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     FittedCurveResult,
 )
-from chem_vault.domain.screening_assay.enums import CurveClass
+from cellar.domain.screening_assay.enums import CurveClass
 
 
 def test_concentration_response_point_defaults():

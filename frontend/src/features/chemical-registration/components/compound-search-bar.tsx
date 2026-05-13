@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Search, Pencil } from "lucide-react";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
+import { StructureRenderer } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -15,19 +13,19 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { StructureRenderer } from "@/shared/components/chemistry";
-import { useMoleculeSearch, useSearchMolecules, type SearchResult } from "../hooks/use-molecules";
-import {
-  LIFECYCLE_LABELS,
-  type LifecycleStage,
-} from "../types";
+import { detectQueryKind } from "@/shared/lib/rdkit/detect-query-kind";
+import { Pencil, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { type SearchResult, useMoleculeSearch, useSearchMolecules } from "../hooks/use-molecules";
+import { LIFECYCLE_LABELS, type LifecycleStage } from "../types";
 
 type SearchType = "name_id" | "exact" | "substructure" | "similarity";
 
 const SEARCH_TYPE_LABELS: Record<SearchType, string> = {
   name_id: "By Name / ID",
   exact: "Exact (SMILES)",
-  substructure: "Substructure (SMARTS)",
+  substructure: "Substructure",
   similarity: "Similarity (Tanimoto)",
 };
 
@@ -37,21 +35,39 @@ export function CompoundSearchBar() {
   const [query, setQuery] = useState("");
   const [threshold, setThreshold] = useState("0.7");
   const [activeTextSearch, setActiveTextSearch] = useState("");
-  const [activeStructSearch, setActiveStructSearch] = useState<{
-    search_type: string;
-    query: string;
-    threshold?: number;
-  } | undefined>(undefined);
+  const [activeStructSearch, setActiveStructSearch] = useState<
+    | {
+        search_type: string;
+        query: string;
+        threshold?: number;
+        query_kind?: "smiles" | "smarts";
+      }
+    | undefined
+  >(undefined);
+  // Resolved format from the editor (or auto-detected from typed input)
+  // — sent as ?query_kind to the BE for substructure searches.
+  const [drawnQueryKind, setDrawnQueryKind] = useState<"smiles" | "smarts" | undefined>(undefined);
 
   const isTextMode = searchType === "name_id";
   const [editorOpen, setEditorOpen] = useState(false);
 
   // Text search (name/ID) uses the list endpoint with ?q=
-  const { data: textResults, isLoading: textLoading, isError: textError } = useMoleculeSearch(activeTextSearch);
+  const {
+    data: textResults,
+    isLoading: textLoading,
+    isError: textError,
+  } = useMoleculeSearch(activeTextSearch);
   // Structure search uses the dedicated search endpoint
-  const { data: structResults, isLoading: structLoading, isError: structError } = useSearchMolecules(activeStructSearch);
+  const {
+    data: structResults,
+    isLoading: structLoading,
+    isError: structError,
+  } = useSearchMolecules(activeStructSearch);
 
-  const textData: SearchResult[] | undefined = textResults?.map((m) => ({ molecule: m, similarity: null }));
+  const textData: SearchResult[] | undefined = textResults?.map((m) => ({
+    molecule: m,
+    similarity: null,
+  }));
   const results = isTextMode ? textData : structResults;
   const isLoading = isTextMode ? textLoading : structLoading;
   const isError = isTextMode ? textError : structError;
@@ -63,12 +79,18 @@ export function CompoundSearchBar() {
       setActiveTextSearch(query.trim());
       setActiveStructSearch(undefined);
     } else {
+      // For substructure: prefer the format the editor resolved to;
+      // for typed input, run the same SMARTS-only sigil heuristic the
+      // search panel uses.
+      const queryKind: "smiles" | "smarts" | undefined =
+        searchType === "substructure"
+          ? (drawnQueryKind ?? detectQueryKind(query.trim()))
+          : undefined;
       setActiveStructSearch({
         search_type: searchType,
         query: query.trim(),
-        ...(searchType === "similarity"
-          ? { threshold: parseFloat(threshold) }
-          : {}),
+        ...(searchType === "similarity" ? { threshold: Number.parseFloat(threshold) } : {}),
+        ...(queryKind ? { query_kind: queryKind } : {}),
       });
       setActiveTextSearch("");
     }
@@ -78,13 +100,8 @@ export function CompoundSearchBar() {
     <div className="space-y-4">
       <div className="flex items-end gap-3">
         <div className="grid gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">
-            Search Type
-          </label>
-          <Select
-            value={searchType}
-            onValueChange={(v) => setSearchType(v as SearchType)}
-          >
+          <label className="text-xs font-medium text-muted-foreground">Search Type</label>
+          <Select value={searchType} onValueChange={(v) => setSearchType(v as SearchType)}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
@@ -115,16 +132,19 @@ export function CompoundSearchBar() {
                   : "e.g., CC(=O)Oc1ccccc1C(=O)O"
             }
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              // Typing invalidates the draw-format hint — fall back to
+              // the heuristic on next search.
+              setDrawnQueryKind(undefined);
+            }}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
           />
         </div>
 
         {searchType === "similarity" && (
           <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              Threshold
-            </label>
+            <label className="text-xs font-medium text-muted-foreground">Threshold</label>
             <Input
               type="number"
               className="w-[80px]"
@@ -163,9 +183,7 @@ export function CompoundSearchBar() {
       )}
 
       {isError && (
-        <p className="text-sm text-destructive">
-          Search failed. Check your SMILES/SMARTS syntax.
-        </p>
+        <p className="text-sm text-destructive">Search failed. Check your SMILES/SMARTS syntax.</p>
       )}
 
       {results && (
@@ -190,7 +208,10 @@ export function CompoundSearchBar() {
                         height={160}
                       />
                     ) : (
-                      <div className="flex items-center justify-center rounded border border-dashed text-xs text-muted-foreground" style={{ width: 200, height: 160 }}>
+                      <div
+                        className="flex items-center justify-center rounded border border-dashed text-xs text-muted-foreground"
+                        style={{ width: 200, height: 160 }}
+                      >
                         Undisclosed
                       </div>
                     )}
@@ -198,15 +219,23 @@ export function CompoundSearchBar() {
                   {/* Info */}
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-medium">{r.molecule.registration_number}</span>
+                      <span className="font-mono text-sm font-medium">
+                        {r.molecule.registration_number}
+                      </span>
                       <Badge variant="outline">
-                        {LIFECYCLE_LABELS[r.molecule.lifecycle_stage as LifecycleStage] ?? r.molecule.lifecycle_stage}
+                        {LIFECYCLE_LABELS[r.molecule.lifecycle_stage as LifecycleStage] ??
+                          r.molecule.lifecycle_stage}
                       </Badge>
                       {showSimilarity && r.similarity != null && (
-                        <span className={
-                          r.similarity > 0.8 ? "text-emerald-400 font-medium text-sm" :
-                          r.similarity > 0.6 ? "text-yellow-400 text-sm" : "text-muted-foreground text-sm"
-                        }>
+                        <span
+                          className={
+                            r.similarity > 0.8
+                              ? "text-success font-medium text-sm"
+                              : r.similarity > 0.6
+                                ? "text-yellow-400 text-sm"
+                                : "text-muted-foreground text-sm"
+                          }
+                        >
                           {(r.similarity * 100).toFixed(1)}%
                         </span>
                       )}
@@ -227,8 +256,11 @@ export function CompoundSearchBar() {
           open={editorOpen}
           onOpenChange={setEditorOpen}
           initialStructure={query}
-          onApply={(s) => setQuery(s)}
-          outputFormat={searchType === "substructure" ? "smarts" : "smiles"}
+          onApply={(s, format) => {
+            setQuery(s);
+            setDrawnQueryKind(searchType === "substructure" ? format : undefined);
+          }}
+          outputFormat={searchType === "substructure" ? "auto" : "smiles"}
         />
       )}
     </div>

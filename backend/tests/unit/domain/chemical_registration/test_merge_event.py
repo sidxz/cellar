@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import MergeReason
-from chem_vault.domain.chemical_registration.merge_event import MergeEvent
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.chemical_registration.enums import MergeReason
+from cellar.domain.chemical_registration.merge_event import MergeEvent
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------

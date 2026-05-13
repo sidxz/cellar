@@ -13,12 +13,12 @@ COPY src/ src/
 COPY alembic/ alembic/
 COPY alembic.ini .
 
-RUN adduser --disabled-password --uid 1000 chemvault
-USER chemvault
+RUN adduser --disabled-password --uid 1000 cellar
+USER cellar
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-CMD [".venv/bin/uvicorn", "chem_vault.interface.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+CMD [".venv/bin/uvicorn", "cellar.interface.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]

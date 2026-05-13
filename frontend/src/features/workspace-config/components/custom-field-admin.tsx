@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { ListFilter, Plus, Trash2, Pencil } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -67,94 +70,124 @@ type TabValue = "all" | "molecule" | "batch" | "sample";
 // Field dialog (create / edit)
 // ---------------------------------------------------------------------------
 
+// ── Schema ──────────────────────────────────────────────────────────────────
+
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  label: z.string().min(1, "Label is required"),
+  data_type: z.enum(["text", "number", "date", "picklist", "file", "batch_link"]),
+  applies_to: z.enum(["molecule", "batch", "sample"]),
+  is_required: z.boolean(),
+  default_value: z.string().optional(),
+  display_order: z.number().int().min(0),
+  pick_list_values: z.array(z.string()),
+  is_active: z.boolean(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+const defaultValues: FormValues = {
+  name: "",
+  label: "",
+  data_type: "text",
+  applies_to: "molecule",
+  is_required: false,
+  default_value: "",
+  display_order: 0,
+  pick_list_values: [],
+  is_active: true,
+};
+
+function toFormValues(editing: CustomFieldDefinition): FormValues {
+  return {
+    name: editing.name,
+    label: editing.label,
+    data_type: editing.data_type,
+    applies_to: editing.applies_to,
+    is_required: editing.is_required,
+    default_value: editing.default_value != null ? String(editing.default_value) : "",
+    display_order: editing.display_order,
+    pick_list_values: editing.pick_list_values ?? [],
+    is_active: editing.is_active,
+  };
+}
+
+// ── Props ────────────────────────────────────────────────────────────────────
+
 interface FieldDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: CustomFieldDefinition | null;
 }
 
-function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
-  const [name, setName] = useState("");
-  const [label, setLabel] = useState("");
-  const [dataType, setDataType] = useState<CustomFieldDefinition["data_type"]>("text");
-  const [appliesTo, setAppliesTo] = useState<CustomFieldDefinition["applies_to"]>("molecule");
-  const [isRequired, setIsRequired] = useState(false);
-  const [defaultValue, setDefaultValue] = useState("");
-  const [displayOrder, setDisplayOrder] = useState(0);
-  const [pickListValues, setPickListValues] = useState<string[]>([]);
-  const [newPickValue, setNewPickValue] = useState("");
-  const [isActive, setIsActive] = useState(true);
+// ── Component ────────────────────────────────────────────────────────────────
 
+function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
   const isEdit = editing !== null;
   const create = useCreateCustomField();
   const update = useUpdateCustomField(editing?.id ?? "");
 
+  // Transient local state — not part of form data
+  const [newPickValue, setNewPickValue] = useState("");
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
+
   useEffect(() => {
-    if (editing) {
-      setName(editing.name);
-      setLabel(editing.label);
-      setDataType(editing.data_type);
-      setAppliesTo(editing.applies_to);
-      setIsRequired(editing.is_required);
-      setDefaultValue(editing.default_value != null ? String(editing.default_value) : "");
-      setDisplayOrder(editing.display_order);
-      setPickListValues(editing.pick_list_values ?? []);
-      setIsActive(editing.is_active);
-    } else {
-      setName("");
-      setLabel("");
-      setDataType("text");
-      setAppliesTo("molecule");
-      setIsRequired(false);
-      setDefaultValue("");
-      setDisplayOrder(0);
-      setPickListValues([]);
-      setIsActive(true);
+    if (open) {
+      form.reset(editing ? toFormValues(editing) : defaultValues);
+      setNewPickValue("");
     }
-    setNewPickValue("");
-  }, [editing, open]);
+  }, [open, editing, form]);
+
+  const watchedDataType = form.watch("data_type");
+  const pickListValues = form.watch("pick_list_values");
 
   const addPickValue = () => {
     const trimmed = newPickValue.trim();
     if (trimmed && !pickListValues.includes(trimmed)) {
-      setPickListValues([...pickListValues, trimmed]);
+      form.setValue("pick_list_values", [...pickListValues, trimmed]);
       setNewPickValue("");
     }
   };
 
   const removePickValue = (v: string) => {
-    setPickListValues(pickListValues.filter((p) => p !== v));
+    form.setValue(
+      "pick_list_values",
+      pickListValues.filter((p) => p !== v),
+    );
   };
 
-  const handleSubmit = async () => {
+  const onSubmit = async (values: FormValues) => {
     if (isEdit) {
       const data: UpdateCustomFieldInput = {
-        label,
-        is_required: isRequired,
-        display_order: displayOrder,
-        pick_list_values: dataType === "picklist" ? pickListValues : null,
-        is_active: isActive,
+        label: values.label,
+        is_required: values.is_required,
+        display_order: values.display_order,
+        pick_list_values: values.data_type === "picklist" ? values.pick_list_values : null,
+        is_active: values.is_active,
       };
-      if (defaultValue.trim()) data.default_value = defaultValue.trim();
+      if (values.default_value?.trim()) data.default_value = values.default_value.trim();
       await update.mutateAsync(data);
     } else {
       const data: CreateCustomFieldInput = {
-        name,
-        label,
-        data_type: dataType,
-        applies_to: appliesTo,
-        is_required: isRequired,
-        display_order: displayOrder,
-        pick_list_values: dataType === "picklist" ? pickListValues : null,
+        name: values.name,
+        label: values.label,
+        data_type: values.data_type,
+        applies_to: values.applies_to,
+        is_required: values.is_required,
+        display_order: values.display_order,
+        pick_list_values: values.data_type === "picklist" ? values.pick_list_values : null,
       };
-      if (defaultValue.trim()) data.default_value = defaultValue.trim();
+      if (values.default_value?.trim()) data.default_value = values.default_value.trim();
       await create.mutateAsync(data);
     }
     onOpenChange(false);
   };
 
   const isPending = create.isPending || update.isPending;
-  const canSubmit = name.trim() && label.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,186 +195,212 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Custom Field" : "New Custom Field"}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {/* Name (key) — only for create */}
-          {!isEdit && (
-            <div className="grid gap-2">
-              <Label htmlFor="cf-name">Field Name (key)</Label>
-              <Input
-                id="cf-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., ic50_shift"
-              />
-              <p className="text-xs text-muted-foreground">
-                Lowercase, no spaces. Used as the storage key.
-              </p>
-            </div>
-          )}
-
-          <div className="grid gap-2">
-            <Label htmlFor="cf-label">Display Label</Label>
-            <Input
-              id="cf-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g., IC50 Shift"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* Data type — only for create */}
-            {!isEdit ? (
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
+            {/* Name (key) — only for create */}
+            {!isEdit && (
               <div className="grid gap-2">
-                <Label>Data Type</Label>
-                <Select
-                  value={dataType}
-                  onValueChange={(v) => setDataType(v as CustomFieldDefinition["data_type"])}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(DATA_TYPE_LABELS) as [CustomFieldDefinition["data_type"], string][]).map(
-                      ([val, lbl]) => (
-                        <SelectItem key={val} value={val}>
-                          {lbl}
-                        </SelectItem>
-                      )
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                <Label>Data Type</Label>
-                <Input value={DATA_TYPE_LABELS[dataType]} disabled />
-              </div>
-            )}
-
-            {/* Applies to — only for create */}
-            {!isEdit ? (
-              <div className="grid gap-2">
-                <Label>Applies To</Label>
-                <Select
-                  value={appliesTo}
-                  onValueChange={(v) => setAppliesTo(v as CustomFieldDefinition["applies_to"])}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(APPLIES_TO_LABELS) as [CustomFieldDefinition["applies_to"], string][]).map(
-                      ([val, lbl]) => (
-                        <SelectItem key={val} value={val}>
-                          {lbl}
-                        </SelectItem>
-                      )
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                <Label>Applies To</Label>
-                <Input value={APPLIES_TO_LABELS[appliesTo]} disabled />
-              </div>
-            )}
-          </div>
-
-          {/* Picklist values */}
-          {dataType === "picklist" && (
-            <div className="grid gap-2">
-              <Label>Picklist Values</Label>
-              <div className="flex gap-2">
+                <Label htmlFor="cf-name">Field Name (key)</Label>
                 <Input
-                  value={newPickValue}
-                  onChange={(e) => setNewPickValue(e.target.value)}
-                  placeholder="Add a value..."
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addPickValue();
-                    }
-                  }}
+                  id="cf-name"
+                  {...form.register("name")}
+                  placeholder="e.g., ic50_shift"
                 />
-                <Button type="button" variant="outline" onClick={addPickValue}>
-                  Add
-                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Lowercase, no spaces. Used as the storage key.
+                </p>
+                {form.formState.errors.name && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.name.message}
+                  </p>
+                )}
               </div>
-              {pickListValues.length > 0 && (
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {pickListValues.map((v) => (
-                    <Badge key={v} variant="secondary" className="gap-1">
-                      {v}
-                      <button
-                        type="button"
-                        onClick={() => removePickValue(v)}
-                        className="ml-1 hover:text-destructive"
-                      >
-                        ×
-                      </button>
-                    </Badge>
-                  ))}
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="cf-label">Display Label</Label>
+              <Input
+                id="cf-label"
+                {...form.register("label")}
+                placeholder="e.g., IC50 Shift"
+              />
+              {form.formState.errors.label && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.label.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Data type — only for create */}
+              {!isEdit ? (
+                <div className="grid gap-2">
+                  <Label>Data Type</Label>
+                  <Controller
+                    name="data_type"
+                    control={form.control}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.entries(DATA_TYPE_LABELS) as [CustomFieldDefinition["data_type"], string][]).map(
+                            ([val, lbl]) => (
+                              <SelectItem key={val} value={val}>
+                                {lbl}
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  <Label>Data Type</Label>
+                  <Input value={DATA_TYPE_LABELS[editing!.data_type]} disabled />
+                </div>
+              )}
+
+              {/* Applies to — only for create */}
+              {!isEdit ? (
+                <div className="grid gap-2">
+                  <Label>Applies To</Label>
+                  <Controller
+                    name="applies_to"
+                    control={form.control}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.entries(APPLIES_TO_LABELS) as [CustomFieldDefinition["applies_to"], string][]).map(
+                            ([val, lbl]) => (
+                              <SelectItem key={val} value={val}>
+                                {lbl}
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  <Label>Applies To</Label>
+                  <Input value={APPLIES_TO_LABELS[editing!.applies_to]} disabled />
                 </div>
               )}
             </div>
-          )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="cf-default">Default Value</Label>
-              <Input
-                id="cf-default"
-                value={defaultValue}
-                onChange={(e) => setDefaultValue(e.target.value)}
-                placeholder="Optional"
-              />
+            {/* Picklist values */}
+            {watchedDataType === "picklist" && (
+              <div className="grid gap-2">
+                <Label>Picklist Values</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newPickValue}
+                    onChange={(e) => setNewPickValue(e.target.value)}
+                    placeholder="Add a value..."
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addPickValue();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addPickValue}>
+                    Add
+                  </Button>
+                </div>
+                {pickListValues.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {pickListValues.map((v) => (
+                      <Badge key={v} variant="secondary" className="gap-1">
+                        {v}
+                        <button
+                          type="button"
+                          onClick={() => removePickValue(v)}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="cf-default">Default Value</Label>
+                <Input
+                  id="cf-default"
+                  {...form.register("default_value")}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="cf-order">Display Order</Label>
+                <Input
+                  id="cf-order"
+                  type="number"
+                  {...form.register("display_order", { valueAsNumber: true })}
+                  min={0}
+                />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="cf-order">Display Order</Label>
-              <Input
-                id="cf-order"
-                type="number"
-                value={displayOrder}
-                onChange={(e) => setDisplayOrder(Number(e.target.value))}
-                min={0}
-              />
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label htmlFor="cf-required" className="cursor-pointer">
-              Required field
-            </Label>
-            <Switch
-              id="cf-required"
-              checked={isRequired}
-              onCheckedChange={setIsRequired}
-            />
-          </div>
-
-          {isEdit && (
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <Label htmlFor="cf-active" className="cursor-pointer">
-                Active
+              <Label htmlFor="cf-required" className="cursor-pointer">
+                Required field
               </Label>
-              <Switch
-                id="cf-active"
-                checked={isActive}
-                onCheckedChange={setIsActive}
+              <Controller
+                name="is_required"
+                control={form.control}
+                render={({ field }) => (
+                  <Switch
+                    id="cf-required"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
               />
             </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || isPending}>
-            {isPending ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+
+            {isEdit && (
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <Label htmlFor="cf-active" className="cursor-pointer">
+                  Active
+                </Label>
+                <Controller
+                  name="is_active"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Switch
+                      id="cf-active"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  )}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={form.formState.isSubmitting || isPending}>
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -450,7 +509,7 @@ function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
                 <span
                   className={
                     field.is_active
-                      ? "text-sm font-medium text-emerald-500"
+                      ? "text-sm font-medium text-success"
                       : "text-sm text-muted-foreground"
                   }
                 >

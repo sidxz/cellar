@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from chem_vault.domain.screening_assay.enums import CurveClass, CurveType
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.enums import CurveClass, CurveType
+from cellar.domain.shared.errors import ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,6 @@ def _make_curve(**kwargs) -> DoseResponseCurve:
         run_id=uuid.uuid4(),
         curve_type=CurveType.IC50,
         fitted_value=5.2,
-        fitted_unit="nM",
         hill_slope=-1.0,
         top=100.0,
         bottom=0.0,
@@ -51,7 +50,6 @@ class TestDoseResponseCurve:
 
         assert curve.curve_type == CurveType.IC50
         assert curve.fitted_value == 5.2
-        assert curve.fitted_unit == "nM"
         assert curve.hill_slope == -1.0
         assert curve.top == 100.0
         assert curve.bottom == 0.0

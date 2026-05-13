@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
@@ -17,11 +17,117 @@ import { ResultsGrid } from "./search/results-grid";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
 import { SaveSearchDialog } from "./search/save-search-dialog";
-import { CollectionPickerDialog } from "./collection-picker-dialog";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type EnrichedMolecule = Molecule & { activity?: Record<string, ActivityValue> };
+
+/** Server-side page size for compound search results. Driven by what the
+ * AG Grid viewport can comfortably render before the user scrolls; keep in
+ * sync with the cursor pagination contract on the backend. */
+const SEARCH_PAGE_SIZE = 100;
+
+// ─── Search state reducer ───────────────────────────────────────────────────
+
+interface SearchState {
+  currentQuery: SearchQuery | null;
+  protocolColumns: string[];
+  results: EnrichedMolecule[];
+  nextCursor: string | null;
+  totalCount: number | null;
+  hasSearched: boolean;
+  selectedMolecule: EnrichedMolecule | null;
+  selectedIndex: number;
+  sortBy: SortField | undefined;
+  sortDir: SortDir;
+  gridSelectedIds: Set<string>;
+}
+
+type SearchAction =
+  | { type: "reset" }
+  | {
+      type: "searchStart";
+      query: SearchQuery;
+      protocolColumns: string[];
+    }
+  | {
+      type: "searchComplete";
+      results: EnrichedMolecule[];
+      nextCursor: string | null;
+      totalCount: number | null;
+    }
+  | {
+      type: "loadMoreComplete";
+      results: EnrichedMolecule[];
+      nextCursor: string | null;
+      totalCount: number | null;
+    }
+  | { type: "setSort"; sortBy: SortField | undefined; sortDir: SortDir }
+  | { type: "setGridSelection"; ids: Set<string> }
+  | { type: "select"; molecule: EnrichedMolecule; index: number }
+  | { type: "navigate"; index: number; molecule: EnrichedMolecule | null }
+  | { type: "clearSelection" };
+
+const initialSearchState: SearchState = {
+  currentQuery: null,
+  protocolColumns: [],
+  results: [],
+  nextCursor: null,
+  totalCount: null,
+  hasSearched: false,
+  selectedMolecule: null,
+  selectedIndex: 0,
+  sortBy: undefined,
+  sortDir: "asc",
+  gridSelectedIds: new Set(),
+};
+
+function searchReducer(state: SearchState, action: SearchAction): SearchState {
+  switch (action.type) {
+    case "reset":
+      return initialSearchState;
+    case "searchStart":
+      return {
+        ...state,
+        currentQuery: action.query,
+        protocolColumns: action.protocolColumns,
+        hasSearched: true,
+        selectedMolecule: null,
+        gridSelectedIds: new Set(),
+      };
+    case "searchComplete":
+      return {
+        ...state,
+        results: action.results,
+        nextCursor: action.nextCursor,
+        totalCount: action.totalCount,
+      };
+    case "loadMoreComplete":
+      return {
+        ...state,
+        results: [...state.results, ...action.results],
+        nextCursor: action.nextCursor,
+        totalCount: action.totalCount,
+      };
+    case "setSort":
+      return { ...state, sortBy: action.sortBy, sortDir: action.sortDir };
+    case "setGridSelection":
+      return { ...state, gridSelectedIds: action.ids };
+    case "select":
+      return { ...state, selectedMolecule: action.molecule, selectedIndex: action.index };
+    case "navigate":
+      return {
+        ...state,
+        selectedIndex: action.index,
+        selectedMolecule: action.molecule,
+      };
+    case "clearSelection":
+      return { ...state, selectedMolecule: null };
+    default:
+      return state;
+  }
+}
 
 // ─── Inner component (uses useSearchParams, needs Suspense boundary) ───────
 
@@ -29,32 +135,31 @@ function SearchPageInner() {
   const searchParams = useSearchParams();
   const savedSearchId = searchParams.get("saved");
 
-  // ── Project scoping ────────────────────────────────────────────────────
+  // ── Project scoping (independent of search state) ──────────────────────
   const [projectIds, setProjectIds] = useState<string[]>([]);
 
-  // ── Search state ───────────────────────────────────────────────────────
-  const [currentQuery, setCurrentQuery] = useState<SearchQuery | null>(null);
-  const [protocolColumns, setProtocolColumns] = useState<string[]>([]);
-  const [results, setResults] = useState<EnrichedMolecule[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
-
-  // ── Detail panel ───────────────────────────────────────────────────────
-  const [selectedMolecule, setSelectedMolecule] = useState<EnrichedMolecule | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  // ── Dialogs ────────────────────────────────────────────────────────────
+  // ── Dialogs (independent of search state) ─────────────────────────────
   const [reportOpen, setReportOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [pickerMolIds, setPickerMolIds] = useState<string[]>([]);
 
-  // ── Sorting ────────────────────────────────────────────────────────────
-  const [sortBy, setSortBy] = useState<SortField | undefined>();
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  // ── Selection ──────────────────────────────────────────────────────────
-  const [gridSelectedIds, setGridSelectedIds] = useState<Set<string>>(new Set());
+  // ── Search state (collapsed into one reducer) ──────────────────────────
+  const [
+    {
+      currentQuery,
+      protocolColumns,
+      results,
+      nextCursor,
+      totalCount,
+      hasSearched,
+      selectedMolecule,
+      selectedIndex,
+      sortBy,
+      sortDir,
+      gridSelectedIds,
+    },
+    dispatch,
+  ] = useReducer(searchReducer, initialSearchState);
 
   // ── Hooks ──────────────────────────────────────────────────────────────
   const searchMutation = useExecuteSearch();
@@ -104,11 +209,7 @@ function SearchPageInner() {
   // ── handleSearch ───────────────────────────────────────────────────────
   const handleSearch = useCallback(
     (query: SearchQuery, columns: string[]) => {
-      setCurrentQuery(query);
-      setProtocolColumns(columns);
-      setHasSearched(true);
-      setSelectedMolecule(null);
-      setGridSelectedIds(new Set());
+      dispatch({ type: "searchStart", query, protocolColumns: columns });
 
       // Merge search-derived columns with report config readout selections
       const allColumns = [...new Set([...columns, ...readoutExtraColumns])];
@@ -118,12 +219,19 @@ function SearchPageInner() {
       };
 
       searchMutation.mutate(
-        { input, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+        { input, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
         {
           onSuccess: (data) => {
-            setResults(enrichItems(data));
-            setNextCursor(data.next_cursor);
-            setTotalCount(data.total_count);
+            dispatch({
+              type: "searchComplete",
+              results: enrichItems(data),
+              nextCursor: data.next_cursor,
+              totalCount: data.total_count,
+            });
+          },
+          onError: (err) => {
+            console.error("[Search] mutation failed:", err);
+            dispatch({ type: "searchComplete", results: [], nextCursor: null, totalCount: null });
           },
         },
       );
@@ -140,12 +248,15 @@ function SearchPageInner() {
     };
 
     searchMutation.mutate(
-      { input, cursor: nextCursor, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+      { input, cursor: nextCursor, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
       {
         onSuccess: (data) => {
-          setResults((prev) => [...prev, ...enrichItems(data)]);
-          setNextCursor(data.next_cursor);
-          setTotalCount(data.total_count);
+          dispatch({
+            type: "loadMoreComplete",
+            results: enrichItems(data),
+            nextCursor: data.next_cursor,
+            totalCount: data.total_count,
+          });
         },
       },
     );
@@ -160,12 +271,15 @@ function SearchPageInner() {
       ...(allColumns.length > 0 ? { protocol_columns: allColumns } : {}),
     };
     searchMutation.mutate(
-      { input, limit: 100, sort_by: sortBy, sort_dir: sortDir },
+      { input, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
       {
         onSuccess: (data) => {
-          setResults(enrichItems(data));
-          setNextCursor(data.next_cursor);
-          setTotalCount(data.total_count);
+          dispatch({
+            type: "searchComplete",
+            results: enrichItems(data),
+            nextCursor: data.next_cursor,
+            totalCount: data.total_count,
+          });
         },
       },
     );
@@ -174,8 +288,7 @@ function SearchPageInner() {
 
   // ── Load saved search from URL ─────────────────────────────────────────
   const savedSearchLoadedRef = useRef<string | null>(null);
-  const handleSearchRef = useRef(handleSearch);
-  handleSearchRef.current = handleSearch;
+  const { mutate: runSearch } = searchMutation;
 
   useEffect(() => {
     if (!savedSearchId || !savedSearches) return;
@@ -185,19 +298,41 @@ function SearchPageInner() {
     const saved = savedSearches.find((s: SavedSearch) => s.id === savedSearchId);
     if (!saved) return;
 
-    // Restore report config
     loadFromSavedSearch(saved.columns);
 
-    // Restore protocol columns from saved search
     const cols = saved.columns as { protocolColumns?: string[] } | null;
     const restoredColumns = cols?.protocolColumns ?? [];
-
-    // Execute the search — use ref to avoid handleSearch in deps
     const query = saved.query as unknown as SearchQuery;
-    if (query?.criteria) {
-      handleSearchRef.current(query, restoredColumns);
-    }
-  }, [savedSearchId, savedSearches, loadFromSavedSearch]);
+    if (!query?.criteria) return;
+
+    // Inline the search instead of going through handleSearch — its closure
+    // captures readoutExtraColumns from a render that loadFromSavedSearch
+    // above is about to invalidate, which can lose the mutation's onSuccess.
+    dispatch({ type: "searchStart", query, protocolColumns: restoredColumns });
+
+    const input = {
+      query,
+      ...(restoredColumns.length > 0 ? { protocol_columns: restoredColumns } : {}),
+    };
+
+    runSearch(
+      { input, limit: SEARCH_PAGE_SIZE },
+      {
+        onSuccess: (data) => {
+          dispatch({
+            type: "searchComplete",
+            results: enrichItems(data),
+            nextCursor: data.next_cursor,
+            totalCount: data.total_count,
+          });
+        },
+        onError: (err) => {
+          console.error("[Search] saved-search mutation failed:", err);
+          dispatch({ type: "searchComplete", results: [], nextCursor: null, totalCount: null });
+        },
+      },
+    );
+  }, [savedSearchId, savedSearches, loadFromSavedSearch, runSearch, enrichItems]);
 
   // ── SDF export ─────────────────────────────────────────────────────────
   const handleExportSdf = useCallback(() => {
@@ -216,19 +351,18 @@ function SearchPageInner() {
 
   // ── Select all / none ──────────────────────────────────────────────────
   const handleSelectAll = useCallback(() => {
-    setGridSelectedIds(new Set(results.map((m) => m.id)));
+    dispatch({ type: "setGridSelection", ids: new Set(results.map((m) => m.id)) });
   }, [results]);
 
   const handleSelectNone = useCallback(() => {
-    setGridSelectedIds(new Set());
+    dispatch({ type: "setGridSelection", ids: new Set() });
   }, []);
 
   // ── Row click -> detail panel ──────────────────────────────────────────
   const handleRowClick = useCallback(
     (molecule: EnrichedMolecule) => {
       const idx = results.findIndex((m) => m.id === molecule.id);
-      setSelectedMolecule(molecule);
-      setSelectedIndex(idx >= 0 ? idx : 0);
+      dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0 });
     },
     [results],
   );
@@ -240,8 +374,7 @@ function SearchPageInner() {
         direction === "prev"
           ? Math.max(0, selectedIndex - 1)
           : Math.min(results.length - 1, selectedIndex + 1);
-      setSelectedIndex(nextIdx);
-      setSelectedMolecule(results[nextIdx] ?? null);
+      dispatch({ type: "navigate", index: nextIdx, molecule: results[nextIdx] ?? null });
     },
     [selectedIndex, results],
   );
@@ -250,7 +383,7 @@ function SearchPageInner() {
 
   return (
     <div>
-      <div className="px-6 py-4 space-y-3">
+      <div className="space-y-2">
         {/* Search form — always visible */}
         <SearchForm
           initialQuery={currentQuery ?? undefined}
@@ -258,6 +391,7 @@ function SearchPageInner() {
           onProjectsChange={setProjectIds}
           onSearch={handleSearch}
           isLoading={searchMutation.isPending}
+          protocols={protocols ?? []}
         />
 
         {/* Results area */}
@@ -281,7 +415,7 @@ function SearchPageInner() {
               loading={searchMutation.isPending && results.length === 0}
               onRowClick={handleRowClick}
               selectedIds={gridSelectedIds}
-              onSelectionChange={setGridSelectedIds}
+              onSelectionChange={(ids) => dispatch({ type: "setGridSelection", ids })}
             />
             {nextCursor && (
               <div className="flex justify-center py-3">
@@ -296,7 +430,9 @@ function SearchPageInner() {
 
         {!hasSearched && (
           <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-            Build a query above and click Search to find compounds.
+            {/* Action-focused copy. The forecast count lives next to the
+                Search button now, so this prompt no longer contradicts it. */}
+            Press Search or ⌘↵ to load results.
           </div>
         )}
       </div>
@@ -308,7 +444,7 @@ function SearchPageInner() {
         currentIndex={selectedIndex}
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
-        onClose={() => setSelectedMolecule(null)}
+        onClose={() => dispatch({ type: "clearSelection" })}
       />
 
       <ReportCustomizer

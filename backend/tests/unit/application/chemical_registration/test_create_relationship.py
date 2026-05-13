@@ -10,16 +10,16 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.chemical_registration.create_relationship import (
+from cellar.application.chemical_registration.create_relationship import (
     CreateRelationship,
     CreateRelationshipCommand,
 )
-from chem_vault.domain.chemical_registration.enums import MoleculeType, RelationshipType
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.chemical_registration.molecule_relationship import MoleculeRelationship
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import RegistrationNumber
+from cellar.domain.chemical_registration.enums import MoleculeType, RelationshipType
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.molecule_relationship import MoleculeRelationship
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import RegistrationNumber
 from tests.fakes.fake_auth import FakeAuth
 
 # ---------------------------------------------------------------------------

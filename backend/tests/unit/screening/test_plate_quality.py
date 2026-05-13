@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chem_vault.domain.screening_assay.plate_quality import (
+from cellar.domain.screening_assay.plate_quality import (
     PlateQualityCalculator,
     PlateQualityResult,
 )
@@ -37,10 +37,19 @@ class TestPlateQualityCalculator:
         assert result.classification == "poor"
 
     def test_signal_to_background(self):
+        """S/B is the higher mean over the lower mean — always >= 1
+        regardless of which control sits higher (convention-agnostic)."""
         pos = [100.0, 100.0, 100.0, 100.0]
         neg = [10.0, 10.0, 10.0, 10.0]
         result = self.calc.compute(pos, neg)
-        assert result.signal_to_background == pytest.approx(0.1)
+        assert result.signal_to_background == pytest.approx(10.0)
+
+    def test_signal_to_background_pos_below_neg(self):
+        """Inverted convention (POS < NEG) still produces S/B >= 1."""
+        pos = [10.0, 10.0, 10.0, 10.0]
+        neg = [100.0, 100.0, 100.0, 100.0]
+        result = self.calc.compute(pos, neg)
+        assert result.signal_to_background == pytest.approx(10.0)
 
     def test_insufficient_controls(self):
         result = self.calc.compute([100.0], [10.0])

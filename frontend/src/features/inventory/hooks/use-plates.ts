@@ -12,9 +12,9 @@ import type {
   UpdatePlateInput,
   WellMapping,
 } from "../types/plates";
+import { MOLECULES_KEY } from "@/features/chemical-registration";
 
 const PLATES_KEY = ["plates"];
-const MOLECULES_KEY = ["molecules"];
 
 const plateHooks = createCrudHooks<RegisteredPlate, RegisterPlateInput, UpdatePlateInput>({
   entityName: "Plate",

@@ -1,7 +1,7 @@
 import { defineConfig } from "orval";
 
 export default defineConfig({
-  chemVault: {
+  cellar: {
     input: {
       target: "http://localhost:8000/openapi.json",
     },

@@ -22,14 +22,34 @@ export const customInstance = async <T>({
   params,
   data,
   headers,
+  signal,
 }: {
   url: string;
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  params?: Record<string, string>;
+  // biome-ignore lint/suspicious/noExplicitAny: orval generates params with mixed primitive types
+  params?: Record<string, any>;
   data?: unknown;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }): Promise<T> => {
-  const searchParams = new URLSearchParams(params);
+  // Build query string. Arrays are emitted as repeated keys (`k=a&k=b`),
+  // matching FastAPI's `list[T] = Query(...)` expectation. Scalars are
+  // stringified; null/undefined entries (and null/undefined array items)
+  // are skipped.
+  const searchParams = new URLSearchParams();
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v == null) continue;
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (item == null) continue;
+          searchParams.append(k, String(item));
+        }
+      } else {
+        searchParams.append(k, String(v));
+      }
+    }
+  }
   const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
   const client = typeof window !== "undefined" ? getSentinelClient() : null;
@@ -46,6 +66,7 @@ export const customInstance = async <T>({
   const response = await fetch(`${_baseUrl}${url}${queryString}`, {
     method,
     headers: fetchHeaders,
+    signal,
     ...(data
       ? { body: isFormData ? (data as FormData) : JSON.stringify(data) }
       : {}),

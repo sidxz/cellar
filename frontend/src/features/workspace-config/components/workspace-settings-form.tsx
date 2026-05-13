@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { MOLECULE_TYPE_LABELS } from "@/features/chemical-registration/types";
+import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
-import { PageHeader } from "@/shared/components/page-header";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -15,13 +15,38 @@ import {
 } from "@/shared/components/ui/select";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { MOLECULE_TYPE_LABELS } from "@/features/chemical-registration/types";
-import {
-  useUpdateWorkspaceSettings,
-  useWorkspaceSettings,
-} from "../hooks/use-workspace-settings";
+import { Switch } from "@/shared/components/ui/switch";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { Controller, useForm, useWatch } from "react-hook-form";
+import { z } from "zod";
+import { useUpdateWorkspaceSettings, useWorkspaceSettings } from "../hooks/use-workspace-settings";
 import type { AuditReasonPolicy, CustomFieldDefinition } from "../types";
 import { CustomFieldBuilder } from "./custom-field-builder";
+
+// ── Schema ────────────────────────────────────────────────────────────────────
+
+const schema = z.object({
+  defaultMolType: z.string(),
+  retentionDays: z.string(),
+  auditReasonPolicy: z.enum(["always", "never", "configurable"]),
+  sigRequired: z.array(z.string()),
+  formulationScheme: z.string(),
+  customFields: z.array(
+    z.object({
+      name: z.string(),
+      label: z.string(),
+      data_type: z.enum(["text", "number", "date", "select"]),
+      required: z.boolean(),
+      vocabulary_name: z.string().nullable().optional(),
+    }),
+  ),
+  createBatchOnDup: z.boolean(),
+});
+
+type FormValues = z.infer<typeof schema>;
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const AUDIT_REASON_OPTIONS: { value: AuditReasonPolicy; label: string }[] = [
   { value: "always", label: "Always require reason" },
@@ -42,32 +67,66 @@ export function WorkspaceSettingsForm() {
   const { data: settings, isLoading } = useWorkspaceSettings();
   const update = useUpdateWorkspaceSettings();
 
-  const [defaultMolType, setDefaultMolType] = useState("");
-  const [retentionDays, setRetentionDays] = useState("");
-  const [auditReasonPolicy, setAuditReasonPolicy] =
-    useState<AuditReasonPolicy>("never");
-  const [sigRequired, setSigRequired] = useState<string[]>([]);
-  const [formulationScheme, setFormulationScheme] = useState("");
-  const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
-  const [cddVaultId, setExternalVaultId] = useState("");
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    setValue,
+    formState: { isSubmitting },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      defaultMolType: "",
+      retentionDays: "",
+      auditReasonPolicy: "never",
+      sigRequired: [],
+      formulationScheme: "",
+      customFields: [],
+      createBatchOnDup: false,
+    },
+  });
 
+  // Seed from server data on load / refresh
   useEffect(() => {
     if (settings) {
-      setDefaultMolType(settings.default_molecule_type ?? "");
-      setRetentionDays(settings.audit_retention_days?.toString() ?? "");
-      setAuditReasonPolicy(
-        (settings.audit_reason_policy as AuditReasonPolicy) ?? "never"
-      );
-      setSigRequired(settings.signature_required_for ?? []);
-      setFormulationScheme(settings.formulation_number_scheme ?? "");
-      setCustomFields(
-        Array.isArray(settings.custom_field_definitions)
-          ? settings.custom_field_definitions
-          : []
-      );
-      setExternalVaultId(settings.cdd_vault_id ?? "");
+      reset({
+        defaultMolType: settings.default_molecule_type ?? "",
+        retentionDays: settings.audit_retention_days?.toString() ?? "",
+        auditReasonPolicy: (settings.audit_reason_policy as AuditReasonPolicy) ?? "never",
+        sigRequired: settings.signature_required_for ?? [],
+        formulationScheme: settings.formulation_number_scheme ?? "",
+        customFields: Array.isArray(settings.custom_field_definitions)
+          ? (settings.custom_field_definitions as CustomFieldDefinition[])
+          : [],
+        createBatchOnDup: !!settings.registration_rules?.create_batch_on_duplicate,
+      });
     }
-  }, [settings]);
+  }, [settings, reset]);
+
+  const sigRequired = useWatch({ control, name: "sigRequired" });
+
+  const toggleSigRequired = (op: string) => {
+    const next = sigRequired.includes(op)
+      ? sigRequired.filter((o) => o !== op)
+      : [...sigRequired, op];
+    setValue("sigRequired", next, { shouldDirty: true });
+  };
+
+  const onSubmit = async (values: FormValues) => {
+    await update.mutateAsync({
+      default_molecule_type: values.defaultMolType || null,
+      audit_retention_days: values.retentionDays ? Number.parseInt(values.retentionDays, 10) : null,
+      audit_reason_policy: values.auditReasonPolicy,
+      signature_required_for: values.sigRequired,
+      formulation_number_scheme: values.formulationScheme || null,
+      custom_field_definitions: values.customFields.filter((f) => f.name.trim()),
+      registration_rules: {
+        ...(settings?.registration_rules ?? {}),
+        create_batch_on_duplicate: values.createBatchOnDup,
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -78,24 +137,6 @@ export function WorkspaceSettingsForm() {
     );
   }
 
-  const handleSave = async () => {
-    await update.mutateAsync({
-      default_molecule_type: defaultMolType || null,
-      audit_retention_days: retentionDays ? parseInt(retentionDays, 10) : null,
-      audit_reason_policy: auditReasonPolicy,
-      signature_required_for: sigRequired,
-      formulation_number_scheme: formulationScheme || null,
-      cdd_vault_id: cddVaultId || null,
-      custom_field_definitions: customFields.filter((f) => f.name.trim()),
-    });
-  };
-
-  const toggleSigRequired = (op: string) => {
-    setSigRequired((prev) =>
-      prev.includes(op) ? prev.filter((o) => o !== op) : [...prev, op]
-    );
-  };
-
   return (
     <div>
       <PageHeader
@@ -103,27 +144,31 @@ export function WorkspaceSettingsForm() {
         subtitle="Configure registration rules, audit policies, and workspace-level defaults."
       />
 
-      <div className="mt-6 space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-6">
         {/* General */}
         <Card className="p-6">
           <h2 className="text-lg font-semibold">General</h2>
           <div className="mt-4 grid gap-6 max-w-lg">
             <div className="grid gap-2">
               <Label>Default Molecule Type</Label>
-              <Select value={defaultMolType} onValueChange={setDefaultMolType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select default type..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(MOLECULE_TYPE_LABELS).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="defaultMolType"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select default type..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(MOLECULE_TYPE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               <p className="text-xs text-muted-foreground">
                 Default molecule type for new registrations.
               </p>
@@ -131,14 +176,34 @@ export function WorkspaceSettingsForm() {
 
             <div className="grid gap-2">
               <Label>Formulation Number Scheme</Label>
-              <Input
-                value={formulationScheme}
-                onChange={(e) => setFormulationScheme(e.target.value)}
-                placeholder="e.g., FRM-{YYYY}-{SEQ:4}"
-              />
+              <Input {...register("formulationScheme")} placeholder="e.g., FRM-{YYYY}-{SEQ:4}" />
               <p className="text-xs text-muted-foreground">
                 Pattern for auto-generated formulation numbers.
               </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Registration */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Registration</h2>
+          <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label htmlFor="cbod">Create batch on re-registration</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  When off, registering the same compound again only merges new identifiers and
+                  synonyms — no new batch is created. Override per-import in the bulk and CDD
+                  wizards.
+                </p>
+              </div>
+              <Controller
+                name="createBatchOnDup"
+                control={control}
+                render={({ field }) => (
+                  <Switch id="cbod" checked={field.value} onCheckedChange={field.onChange} />
+                )}
+              />
             </div>
           </div>
         </Card>
@@ -147,18 +212,13 @@ export function WorkspaceSettingsForm() {
         <Card className="p-6">
           <h2 className="text-lg font-semibold">Integrations</h2>
           <div className="mt-4 grid gap-6 max-w-lg">
-            <div className="grid gap-2">
-              <Label>CDD Vault ID</Label>
-              <Input
-                value={cddVaultId}
-                onChange={(e) => setExternalVaultId(e.target.value)}
-                placeholder="e.g., 12345"
-              />
-              <p className="text-xs text-muted-foreground">
-                Numeric Vault ID from external screening platform. Required for protocol import.
-                Find it in your vault URL.
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              External data sources are managed in{" "}
+              <a href="/admin/data-sources" className="underline text-primary">
+                Data Sources
+              </a>
+              .
+            </p>
           </div>
         </Card>
 
@@ -168,40 +228,33 @@ export function WorkspaceSettingsForm() {
           <div className="mt-4 grid gap-6 max-w-lg">
             <div className="grid gap-2">
               <Label>Audit Reason Policy</Label>
-              <Select
-                value={auditReasonPolicy}
-                onValueChange={(v) =>
-                  setAuditReasonPolicy(v as AuditReasonPolicy)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AUDIT_REASON_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="auditReasonPolicy"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUDIT_REASON_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               <p className="text-xs text-muted-foreground">
-                Whether users must provide a reason for audit-tracked
-                operations.
+                Whether users must provide a reason for audit-tracked operations.
               </p>
             </div>
 
             <div className="grid gap-2">
               <Label>Audit Retention (days)</Label>
-              <Input
-                type="number"
-                value={retentionDays}
-                onChange={(e) => setRetentionDays(e.target.value)}
-                placeholder="Unlimited"
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave empty for unlimited retention.
-              </p>
+              <Input type="number" {...register("retentionDays")} placeholder="Unlimited" />
+              <p className="text-xs text-muted-foreground">Leave empty for unlimited retention.</p>
             </div>
 
             <div className="grid gap-2">
@@ -230,23 +283,26 @@ export function WorkspaceSettingsForm() {
         <Card className="p-6">
           <h2 className="text-lg font-semibold">Custom Field Definitions</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Define additional fields that appear on the compound registration
-            form. Select-type fields can reference controlled vocabularies.
+            Define additional fields that appear on the compound registration form. Select-type
+            fields can reference controlled vocabularies.
           </p>
           <Separator className="my-4" />
-          <CustomFieldBuilder
-            fields={customFields}
-            onChange={setCustomFields}
+          <Controller
+            name="customFields"
+            control={control}
+            render={({ field }) => (
+              <CustomFieldBuilder fields={field.value} onChange={field.onChange} />
+            )}
           />
         </Card>
 
         {/* Save */}
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={update.isPending}>
+          <Button type="submit" disabled={isSubmitting || update.isPending}>
             {update.isPending ? "Saving..." : "Save Settings"}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

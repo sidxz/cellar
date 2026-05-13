@@ -1,34 +1,36 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Search, RotateCcw } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Separator } from "@/shared/components/ui/separator";
+import { RotateCcw, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Protocol } from "@/features/screening-assay/types";
+import { useSearchCount } from "../../hooks/use-search-count";
 import type {
-  SearchQuery,
-  SearchCriterion,
   ActivityCriterion,
   GroupCriterion,
-  TextCriterion,
   PropertyCriterion,
+  SearchCriterion,
+  SearchQuery,
   StructureCriterion,
+  TextCriterion,
 } from "../../types";
-import { ProtocolSection, type ProtocolConjunction } from "./protocol-section";
-import { StructureSection } from "./structure-section";
-import { PropertySection } from "./property-section";
-import {
-  CollectionSection,
-  termsToCollectionCriteria,
-  collectionCriteriaToTerms,
-  type CollectionTermValue,
-} from "./collection-section";
-import { KeywordSection } from "./keyword-section";
 import {
   AdvancedFilters,
-  emptyAdvancedFilters,
   type AdvancedFiltersState,
+  emptyAdvancedFilters,
 } from "./advanced-filters";
+import {
+  CollectionSection,
+  type CollectionTermValue,
+  collectionCriteriaToTerms,
+  termsToCollectionCriteria,
+} from "./collection-section";
+import { KeywordSection } from "./keyword-section";
 import { ProjectFilter } from "./project-filter";
+import { PropertySection } from "./property-section";
+import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
+import { StructureSection } from "./structure-section";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +40,9 @@ interface SearchFormProps {
   onProjectsChange: (ids: string[]) => void;
   onSearch: (query: SearchQuery, protocolColumns: string[]) => void;
   isLoading?: boolean;
+  /** Full protocol records (with readout_definitions) — used to pick sensible
+   *  default columns when a criterion filters by protocol only. */
+  protocols: Protocol[];
 }
 
 // ─── Helpers: decompose SearchQuery into section states ─────────────────────
@@ -50,13 +55,28 @@ function decomposeQuery(query: SearchQuery | undefined) {
   let structureCriterion: StructureCriterion | null = null;
   const collectionCriteria: SearchCriterion[] = [];
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
+  // Hoisted out so saved searches that include a project criterion can
+  // re-populate the project chips at the top of the panel.
+  let projectIds: string[] = [];
 
   if (!query) {
-    return { activityCriteria, protocolConjunctions, textCriteria, propertyCriteria, structureCriterion, collectionCriteria, advanced };
+    return {
+      activityCriteria,
+      protocolConjunctions,
+      textCriteria,
+      propertyCriteria,
+      structureCriterion,
+      collectionCriteria,
+      advanced,
+      projectIds,
+    };
   }
 
   for (const c of query.criteria) {
     switch (c.type) {
+      case "project":
+        projectIds = [...c.project_ids];
+        break;
       case "activity":
         // Top-level activity criteria were ANDed
         protocolConjunctions.push(activityCriteria.length === 0 ? "and" : "and");
@@ -68,9 +88,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
         for (const gc of group.criteria) {
           if (gc.type === "activity") {
             // First item in group gets conjunction from context; rest get group logic
-            protocolConjunctions.push(
-              activityCriteria.length === 0 ? group.logic : group.logic,
-            );
+            protocolConjunctions.push(activityCriteria.length === 0 ? group.logic : group.logic);
             activityCriteria.push(gc as ActivityCriterion);
           }
         }
@@ -116,31 +134,119 @@ function decomposeQuery(query: SearchQuery | undefined) {
     structureCriterion,
     collectionCriteria,
     advanced,
+    projectIds,
   };
 }
 
 /**
  * Derive protocol column IDs from activity criteria for cross-protocol display.
  *
- * Always includes a drc: column for each protocol so the DR plot renders.
- * If the user also filtered by a readout definition, adds an rd: column
- * so the readout value appears alongside the curve.
+ * Explicit filters (curve_type or readout_definition_id) project directly to a
+ * `drc:` / `rd:` column. When a criterion filters by protocol alone, we fall
+ * back to "show what the protocol actually emits" instead of always defaulting
+ * to IC50 — see `defaultProtocolColumns` for the rules.
  */
-function deriveProtocolColumns(activityCriteria: ActivityCriterion[]): string[] {
+function deriveProtocolColumns(
+  activityCriteria: ActivityCriterion[],
+  protocols: Protocol[],
+): string[] {
   const columns: string[] = [];
+  function add(col: string) {
+    if (!columns.includes(col)) columns.push(col);
+  }
   for (const c of activityCriteria) {
     if (!c.protocol_id) continue;
-    // Always add DR curve column
-    const curveType = c.curve_type ?? "ic50";
-    const drcCol = `drc:${c.protocol_id}:${curveType}`;
-    if (!columns.includes(drcCol)) columns.push(drcCol);
-    // If a readout was selected, add readout column too
-    if (c.readout_definition_id) {
-      const rdCol = `rd:${c.protocol_id}:${c.readout_definition_id}`;
-      if (!columns.includes(rdCol)) columns.push(rdCol);
+    // Collect every (curve_type | readout) referenced by this criterion's
+    // where[] (or the legacy inline single-where shape).
+    const conds =
+      Array.isArray(c.where) && c.where.length > 0
+        ? c.where
+        : [{ curve_type: c.curve_type, readout_definition_id: c.readout_definition_id }];
+    let addedAny = false;
+    for (const cond of conds) {
+      if (cond.curve_type) {
+        add(`drc:${c.protocol_id}:${cond.curve_type}`);
+        addedAny = true;
+      }
+      if (cond.readout_definition_id) {
+        add(`rd:${c.protocol_id}:${cond.readout_definition_id}`);
+        addedAny = true;
+      }
+    }
+    // Protocol-only filter (no curve / no readout): pick defaults from the
+    // protocol's actual readout definitions so e.g. a single-dose %inhibition
+    // protocol doesn't show empty IC50 / IC50 Plot columns.
+    if (!addedAny) {
+      for (const col of defaultProtocolColumns(c.protocol_id, protocols)) {
+        add(col);
+      }
     }
   }
   return columns;
+}
+
+/**
+ * Default grid columns for a protocol-only filter.
+ *
+ * Rules (in priority order):
+ *   1. Dose-response readouts (`data_type === "dose_response"`) emit a `drc:`
+ *      column per fit, keyed by whatever curve type the readout's
+ *      `dose_response_config` declares (ic50 / ec50 / ki / …). The grid
+ *      renders each `drc:` as a separate (value, plot) pair.
+ *   2. If the protocol has no DR readouts, every numeric readout (raw or
+ *      calculated) emits an `rd:` column in `display_order`. For readouts
+ *      with `normalizations` configured (e.g. percent_inhibition, z_score)
+ *      we surface the first normalization as the default view — chemists
+ *      want "% Inhibition" in the grid, not the underlying raw signal.
+ *      Readouts without normalizations stay on the raw layer.
+ *   3. As a defensive last resort (protocol record missing or only
+ *      text/pick-list/file/date readouts), keep the legacy IC50 fallback
+ *      so a column still renders.
+ */
+function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): string[] {
+  const proto = protocols.find((p) => p.id === protocolId);
+  if (!proto) return [`drc:${protocolId}:ic50`];
+
+  const ordered = [...proto.readout_definitions].sort(
+    (a, b) => a.display_order - b.display_order,
+  );
+
+  const drcCols: string[] = [];
+  for (const rd of ordered) {
+    if (rd.data_type === "dose_response" && rd.dose_response_config?.curve_type) {
+      drcCols.push(`drc:${protocolId}:${rd.dose_response_config.curve_type}`);
+    }
+  }
+  if (drcCols.length > 0) return drcCols;
+
+  const rdCols: string[] = [];
+  for (const rd of ordered) {
+    if (rd.data_type !== "numeric") continue;
+    const primaryNorm = rd.normalizations?.find((n) => n !== "none");
+    if (primaryNorm) {
+      rdCols.push(`rd:${protocolId}:${rd.id}:${primaryNorm}`);
+    } else {
+      rdCols.push(`rd:${protocolId}:${rd.id}`);
+    }
+  }
+  if (rdCols.length > 0) return rdCols;
+
+  return [`drc:${protocolId}:ic50`];
+}
+
+// Walks the composed criteria tree looking for any similarity structure clause.
+// We surface a "ranked list, top N shown" caption when one is present, since
+// the count covers *candidates above the threshold* but the result panel only
+// shows the top-K by similarity score.
+function containsSimilarity(criteria: SearchCriterion[]): boolean {
+  for (const c of criteria) {
+    if (c.type === "structure" && c.search_type === "similarity") return true;
+    if (c.type === "group") {
+      const inner = (c as GroupCriterion).criteria;
+      if (containsSimilarity(inner)) return true;
+    }
+  }
+  return false;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -151,50 +257,89 @@ export function SearchForm({
   onProjectsChange,
   onSearch,
   isLoading,
+  protocols,
 }: SearchFormProps) {
   // Parse initial query into section states
   const initial = decomposeQuery(initialQuery);
 
-  const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(initial.activityCriteria);
+  const [activityCriteria, setActivityCriteria] = useState<ActivityCriterion[]>(
+    initial.activityCriteria,
+  );
   const [protocolConjunctions, setProtocolConjunctions] = useState<ProtocolConjunction[]>(
     initial.protocolConjunctions.length > 0
       ? initial.protocolConjunctions
-      : initial.activityCriteria.map(() => "or" as ProtocolConjunction)
+      : initial.activityCriteria.map(() => "or" as ProtocolConjunction),
   );
-  const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(initial.structureCriterion);
-  const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(initial.propertyCriteria);
+  const [structureCriterion, setStructureCriterion] = useState<StructureCriterion | null>(
+    initial.structureCriterion,
+  );
+  const [propertyCriteria, setPropertyCriteria] = useState<PropertyCriterion[]>(
+    initial.propertyCriteria,
+  );
   const [collectionTerms, setCollectionTerms] = useState<CollectionTermValue[]>(
-    collectionCriteriaToTerms(initial.collectionCriteria)
+    collectionCriteriaToTerms(initial.collectionCriteria),
   );
   const [textCriteria, setTextCriteria] = useState<TextCriterion[]>(initial.textCriteria);
   const [advanced, setAdvanced] = useState<AdvancedFiltersState>(initial.advanced);
 
-  // Re-parse when initialQuery changes externally (e.g., loading a saved search)
+  // Re-parse when initialQuery changes externally (e.g., loading a saved search).
+  // We intentionally don't depend on projectIds / onProjectsChange — re-parse
+  // is driven by saved-search loads only; current values are read inside.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
   useEffect(() => {
     const parsed = decomposeQuery(initialQuery);
     setActivityCriteria(parsed.activityCriteria);
     setProtocolConjunctions(
       parsed.protocolConjunctions.length > 0
         ? parsed.protocolConjunctions
-        : parsed.activityCriteria.map(() => "or" as ProtocolConjunction)
+        : parsed.activityCriteria.map(() => "or" as ProtocolConjunction),
     );
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);
     setCollectionTerms(collectionCriteriaToTerms(parsed.collectionCriteria));
     setTextCriteria(parsed.textCriteria);
     setAdvanced(parsed.advanced);
+    // Round-trip saved searches: a stored project criterion repopulates the
+    // chip(s) at the top of the panel so the chemist sees the same scope they
+    // saved with. Only push when it actually changed to avoid re-fetch loops.
+    if (initialQuery) {
+      const same =
+        parsed.projectIds.length === projectIds.length &&
+        parsed.projectIds.every((id, i) => id === projectIds[i]);
+      if (!same) onProjectsChange(parsed.projectIds);
+    }
   }, [initialQuery]);
 
   // Compose all section states back into a SearchQuery
   const composeCriteria = useCallback((): SearchCriterion[] => {
     const criteria: SearchCriterion[] = [];
 
+    // Project scope — the chip(s) at the top of the panel scope the result
+    // set itself, not just the picker dropdowns. Empty array means
+    // workspace-wide and is omitted entirely from the query.
+    if (projectIds.length > 0) {
+      criteria.push({ type: "project", project_ids: projectIds });
+    }
+
     // Activity — respect per-row conjunctions
+    // Prune incomplete where[] rows (field missing, value missing for non-between, etc.)
+    // so the backend never sees a half-filled condition.
+    const cleanedActivity = activityCriteria.map((c) => {
+      if (!Array.isArray(c.where)) return c;
+      const cleaned = c.where.filter((w) => {
+        if (!w.curve_type && !w.readout_definition_id) return false;
+        if (w.operator === "between") {
+          return w.min !== undefined && w.max !== undefined;
+        }
+        return w.value !== undefined && !Number.isNaN(w.value);
+      });
+      return { ...c, where: cleaned };
+    });
     // Filter to valid criteria and their matching conjunctions
-    const validIndices = activityCriteria
+    const validIndices = cleanedActivity
       .map((c, i) => (c.protocol_id ? i : -1))
       .filter((i) => i >= 0);
-    const validActivity = validIndices.map((i) => activityCriteria[i]);
+    const validActivity = validIndices.map((i) => cleanedActivity[i]);
     const validConjs = validIndices.map((i) => protocolConjunctions[i] ?? "or");
 
     if (validActivity.length === 1) {
@@ -236,10 +381,15 @@ export function SearchForm({
 
     // Structure
     if (structureCriterion) {
+      const subValue = structureCriterion.smiles_or_smarts ?? structureCriterion.smarts ?? "";
       const hasValue =
-        (structureCriterion.search_type === "substructure" && structureCriterion.smarts && structureCriterion.smarts.length > 0) ||
-        (structureCriterion.search_type === "similarity" && structureCriterion.smiles && structureCriterion.smiles.length > 0) ||
-        (structureCriterion.search_type === "exact" && structureCriterion.inchi_key && structureCriterion.inchi_key.length > 0);
+        (structureCriterion.search_type === "substructure" && subValue.length > 0) ||
+        (structureCriterion.search_type === "similarity" &&
+          structureCriterion.smiles &&
+          structureCriterion.smiles.length > 0) ||
+        (structureCriterion.search_type === "exact" &&
+          structureCriterion.inchi_key &&
+          structureCriterion.inchi_key.length > 0);
       if (hasValue) criteria.push(structureCriterion);
     }
 
@@ -284,12 +434,21 @@ export function SearchForm({
     }
 
     return criteria;
-  }, [activityCriteria, protocolConjunctions, structureCriterion, propertyCriteria, collectionTerms, textCriteria, advanced]);
+  }, [
+    projectIds,
+    activityCriteria,
+    protocolConjunctions,
+    structureCriterion,
+    propertyCriteria,
+    collectionTerms,
+    textCriteria,
+    advanced,
+  ]);
 
   function handleSearch() {
     const criteria = composeCriteria();
     const query: SearchQuery = { criteria, logic: "and" };
-    const protocolColumns = deriveProtocolColumns(activityCriteria);
+    const protocolColumns = deriveProtocolColumns(activityCriteria, protocols);
     onSearch(query, protocolColumns);
   }
 
@@ -304,63 +463,152 @@ export function SearchForm({
     onProjectsChange([]);
   }
 
-  const criteriaCount = composeCriteria().length;
+  // Compose once per render; both the filter-count display and the live
+  // count preview key off the same composed query so they never drift.
+  const composedCriteria = composeCriteria();
+  const criteriaCount = composedCriteria.length;
+  const composedQuery: SearchQuery = useMemo(
+    () => ({ criteria: composedCriteria, logic: "and" }),
+    // The composedCriteria array is rebuilt every render but its serialization
+    // is stable across no-op renders, so consumers (useSearchCount) can debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(composedCriteria)],
+  );
+
+  // Similarity searches return everything above the threshold; the panel only
+  // shows the top-K ranked. Surface that distinction so the chemist knows the
+  // raw count is bigger than what they see in the result list.
+  const isSimilarityQuery = useMemo(
+    () => containsSimilarity(composedCriteria),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(composedCriteria)],
+  );
+
+  // Skip the count when there are no criteria — the badge is hidden in that
+  // case and we don't want to fire a workspace-wide COUNT(*) on every render.
+  const countQuery = useSearchCount(composedQuery, criteriaCount > 0);
+  const totalCount = countQuery.data?.total_count;
+  const countIsFetching = countQuery.isFetching;
+
+  // ⌘/Ctrl+Enter from anywhere inside the form fires Search.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSearch();
+    }
+  }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      {/* Header: projects + actions */}
-      <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-shrink-0">
-            Projects
-          </span>
-          <ProjectFilter selectedIds={projectIds} onChange={onProjectsChange} />
+    <div
+      className="rounded-lg border border-border bg-card overflow-hidden"
+      onKeyDown={handleKeyDown}
+    >
+      <div className="p-4 pb-2">
+        {/* Header: projects only — Search/Reset moved to sticky bottom bar. */}
+        <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex-shrink-0">
+              Projects
+            </span>
+            <ProjectFilter selectedIds={projectIds} onChange={onProjectsChange} />
+          </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0 ml-4">
-          <Button variant="ghost" size="sm" onClick={handleReset}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
-          </Button>
+
+        {/* Protocols — full width */}
+        <ProtocolSection
+          criteria={activityCriteria}
+          conjunctions={protocolConjunctions}
+          projectIds={projectIds}
+          onChange={(criteria, conjs) => {
+            setActivityCriteria(criteria);
+            setProtocolConjunctions(conjs);
+          }}
+        />
+
+        <Separator className="my-3" />
+
+        {/* Structure | Properties — two columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+          <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
+          <PropertySection criteria={propertyCriteria} onChange={setPropertyCriteria} />
+        </div>
+
+        <Separator className="my-3" />
+
+        {/* Collections | Keywords — two columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+          <CollectionSection
+            terms={collectionTerms}
+            projectIds={projectIds}
+            onChange={setCollectionTerms}
+          />
+          <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
+        </div>
+
+        {/* More Filters */}
+        <div className="mt-3 pt-3 border-t border-border">
+          <AdvancedFilters state={advanced} onChange={setAdvanced} />
+        </div>
+      </div>
+
+      {/* Sticky bottom action bar — pinned within the search panel so it stays
+          reachable as the form grows. ⌘/Ctrl+Enter also fires Search. */}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-border bg-card/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleReset}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
+        </Button>
+        <div className="flex items-center gap-3">
+          {/* Forecast lives next to the action, not inside it. The button is
+              an action affordance ("click to run"); the count is metadata
+              about the composed query ("this many will come back"). Mixing
+              the two reads as "Search [these N compounds]" -- the wrong
+              semantic. We fall back to the raw filter count only when the
+              live preview hasn't returned yet. */}
+          {criteriaCount > 0 && (
+            <span
+              className={`text-xs text-muted-foreground transition-opacity ${
+                countIsFetching ? "opacity-60" : "opacity-100"
+              }`}
+              aria-live="polite"
+            >
+              {totalCount !== undefined ? (
+                <>
+                  <span
+                    className={`tabular-nums ${
+                      totalCount === 0
+                        ? "font-medium text-amber-600 dark:text-amber-500"
+                        : "text-foreground/80"
+                    }`}
+                  >
+                    {totalCount.toLocaleString()}
+                  </span>{" "}
+                  compound{totalCount === 1 ? "" : "s"} match
+                  {isSimilarityQuery && (
+                    <span className="ml-1.5 text-muted-foreground/70">
+                      · ranked, top 50 shown
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  {criteriaCount} filter{criteriaCount === 1 ? "" : "s"}
+                </>
+              )}
+            </span>
+          )}
+          <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground/60 sm:inline">
+            ⌘ ↵
+          </span>
           <Button onClick={handleSearch} disabled={isLoading} className="px-5">
             <Search className="h-4 w-4 mr-2" />
             Search
-            {criteriaCount > 0 && (
-              <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                {criteriaCount}
-              </span>
-            )}
           </Button>
         </div>
-      </div>
-
-      {/* Protocols — full width */}
-      <ProtocolSection
-        criteria={activityCriteria}
-        conjunctions={protocolConjunctions}
-        onChange={(criteria, conjs) => {
-          setActivityCriteria(criteria);
-          setProtocolConjunctions(conjs);
-        }}
-      />
-
-      <Separator className="my-3" />
-
-      {/* Structure | Properties — two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
-        <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
-        <PropertySection criteria={propertyCriteria} onChange={setPropertyCriteria} />
-      </div>
-
-      <Separator className="my-3" />
-
-      {/* Collections | Keywords — two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
-        <CollectionSection terms={collectionTerms} onChange={setCollectionTerms} />
-        <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
-      </div>
-
-      {/* More Filters */}
-      <div className="mt-3 pt-3 border-t border-border">
-        <AdvancedFilters state={advanced} onChange={setAdvanced} />
       </div>
     </div>
   );

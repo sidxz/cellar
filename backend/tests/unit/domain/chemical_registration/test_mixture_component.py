@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import ComponentRole
-from chem_vault.domain.chemical_registration.mixture_component import MixtureComponent
-from chem_vault.domain.shared.errors import ValidationError
+from cellar.domain.chemical_registration.enums import ComponentRole
+from cellar.domain.chemical_registration.mixture_component import MixtureComponent
+from cellar.domain.shared.errors import ValidationError
 
 
 class TestMixtureComponent:

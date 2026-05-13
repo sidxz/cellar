@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.plate_setup import (
+from cellar.application.screening.plate_setup import (
     CompoundAssignment,
     ParsePlateMapFile,
     ParsedPlateMap,
@@ -20,23 +20,23 @@ from chem_vault.application.screening.plate_setup import (
     SetUpRunPlateCommand,
     _DEFAULT_DOSE_SERIES,
 )
-from chem_vault.application.shared.molecule_resolver import (
+from cellar.application.shared.molecule_resolver import (
     MoleculeReference,
     MoleculeResolver,
     RefType,
     ResolvedMolecule,
     UnresolvedMolecule,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
     WellType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.run import Run
-from chem_vault.domain.shared.enums import ConcentrationUnit
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ class TestParsePlateMapFileWellLevel:
     """Test well-level CSV format: Well, Compound columns."""
 
     async def _parse(self, csv_content: str):
-        parser = ParsePlateMapFile()
+        parser = ParsePlateMapFile(TabularFileParser())
         return await parser(csv_content)
 
     @pytest.mark.asyncio
@@ -133,7 +133,8 @@ class TestParsePlateMapFileWellLevel:
         assert isinstance(result, Success)
         parsed = result.unwrap()
         assert len(parsed.assignments) == 2
-        assert parsed.row_count == 3
+        # Blank rows are filtered at the parse layer — only data rows counted.
+        assert parsed.row_count == 2
 
     @pytest.mark.asyncio
     async def test_normalizes_well_uppercase(self):
@@ -149,7 +150,7 @@ class TestParsePlateMapFileRowRange:
     """Test row-range CSV format: Compound, Start Row, End Row columns."""
 
     async def _parse(self, csv_content: str):
-        parser = ParsePlateMapFile()
+        parser = ParsePlateMapFile(TabularFileParser())
         return await parser(csv_content)
 
     @pytest.mark.asyncio
@@ -192,7 +193,7 @@ class TestParsePlateMapFileInvalid:
     """Test invalid CSV inputs."""
 
     async def _parse(self, csv_content: str):
-        parser = ParsePlateMapFile()
+        parser = ParsePlateMapFile(TabularFileParser())
         return await parser(csv_content)
 
     @pytest.mark.asyncio
@@ -341,7 +342,6 @@ class TestSetUpRunPlate:
                 ),
             ],
             concentration_series=conc_series,
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)
@@ -402,7 +402,6 @@ class TestSetUpRunPlate:
                 CompoundAssignment(molecule_ref="UnknownDrug", well_positions=["B1"]),
             ],
             concentration_series=[1000.0],
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)
@@ -512,7 +511,6 @@ class TestSetUpRunPlate:
                 ),
             ],
             concentration_series=[100.0, 50.0],  # 2 concentrations, 4 wells
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)
@@ -570,7 +568,6 @@ class TestSetUpRunPlate:
                 ),
             ],
             concentration_series=[1000.0, 333.3],
-            concentration_unit="nM",
         )
 
         result = await uc(cmd, auth=auth)

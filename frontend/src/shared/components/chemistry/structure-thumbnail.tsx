@@ -40,7 +40,16 @@ function StructureThumbnailInner({
           return;
         }
 
-        const svgStr = mol.get_svg(size, size);
+        // Render at 2x for HiDPI crispness, display at CSS size
+        const renderSize = size * 2;
+        const drawOpts = JSON.stringify({
+          width: renderSize,
+          height: renderSize,
+          bondLineWidth: 2.0,
+          minFontSize: 14,
+          addAtomIndices: false,
+        });
+        const svgStr = mol.get_svg_with_highlights(drawOpts);
         mol.delete();
 
         if (!cancelled) {
@@ -57,6 +66,7 @@ function StructureThumbnailInner({
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [smiles, size]);
 
   if (!blobUrl) {

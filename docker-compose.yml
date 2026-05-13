@@ -2,15 +2,15 @@ services:
   postgres:
     image: informaticsmatters/rdkit-cartridge-debian:Release_2024_03_3
     environment:
-      POSTGRES_USER: chemvault
-      POSTGRES_PASSWORD: chemvault
-      POSTGRES_DB: chemvault
+      POSTGRES_USER: cellar
+      POSTGRES_PASSWORD: cellar
+      POSTGRES_DB: cellar
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chemvault"]
+      test: ["CMD-SHELL", "pg_isready -U cellar"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,6 +56,26 @@ services:
     ports:
       - "8080:8080"
 
+  temporal-worker:
+    build: ./backend
+    command: [".venv/bin/python", "-m", "cellar.infrastructure.temporal.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cellar:cellar@postgres:5432/cellar
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      STORAGE_ROOT: /data/storage
+      LOG_LEVEL: DEBUG
+      INFISICAL_BASE_URL: http://infisical:8080
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+    volumes:
+      - file-storage:/data/storage
+
   backend:
     build: ./backend
     depends_on:
@@ -66,7 +86,7 @@ services:
       temporal:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql+asyncpg://chemvault:chemvault@postgres:5432/chemvault
+      DATABASE_URL: postgresql+asyncpg://cellar:cellar@postgres:5432/cellar
       REDIS_URL: redis://valkey:6379
       SENTINEL_URL: http://sentinel:9003
       TEMPORAL_ADDRESS: temporal:7233

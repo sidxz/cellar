@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { MOLECULES_KEY } from "./query-keys";
 
 export interface ProtocolActivityResponse {
   protocol_id: string;
@@ -34,8 +35,6 @@ export interface ActivitySummaryResponse {
   molecule_id: string;
   protocols: ProtocolActivityResponse[];
 }
-
-const MOLECULES_KEY = ["molecules"];
 
 export function useMoleculeActivity(moleculeId: string | undefined) {
   return useQuery({

@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  Search,
   Upload,
 } from "lucide-react";
 import type { ColDef, GridApi } from "ag-grid-community";
@@ -19,6 +18,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { SearchInput } from "@/shared/components/search-input";
 import {
   Select,
   SelectContent,
@@ -65,7 +65,7 @@ function MembershipResultDisplay({ result }: { result: MembershipResult }) {
   return (
     <div className="space-y-2 rounded-md border p-3 text-sm">
       <div className="flex items-center gap-4">
-        <span className="text-emerald-500 font-medium">
+        <span className="text-success font-medium">
           Added {result.added_count}
         </span>
         {result.already_present > 0 && (
@@ -218,15 +218,11 @@ function SearchTab({
 
   return (
     <div className="space-y-3 pt-2">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, reg number, or identifier..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      <SearchInput
+        value={searchTerm}
+        onChange={setSearchTerm}
+        placeholder="Search by name, reg number, or identifier..."
+      />
 
       <DataGrid<MoleculeSearchRow>
         rowData={rows}

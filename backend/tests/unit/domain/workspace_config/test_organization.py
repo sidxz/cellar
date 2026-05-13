@@ -4,14 +4,14 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.workspace_config.enums import OrganizationType
-from chem_vault.domain.workspace_config.events import (
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.workspace_config.enums import OrganizationType
+from cellar.domain.workspace_config.events import (
     OrganizationCreated,
     OrganizationDeactivated,
     OrganizationUpdated,
 )
-from chem_vault.domain.workspace_config.organization import Organization
+from cellar.domain.workspace_config.organization import Organization
 
 
 @pytest.fixture

@@ -1,0 +1,11 @@
+// Playwright is not yet configured in this project (no playwright.config.ts,
+// no @playwright/test dependency in package.json).
+//
+// Before this spec can be activated, run:
+//   pnpm add -D @playwright/test
+//   pnpm exec playwright install
+//   # create playwright.config.ts (baseURL, testDir, etc.)
+//
+// The intended happy-path test (create draft → add channel → close → supersede)
+// is spec'd in the Phase 9 implementation plan.  Move this file to
+// screen-campaign.spec.ts and fill in the test once Playwright is wired up.

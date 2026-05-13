@@ -11,11 +11,11 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.research_organization.create_project import (
+    from cellar.application.research_organization.create_project import (
         CreateProject,
         CreateProjectCommand,
     )
-    from chem_vault.application.research_organization.get_project import (
+    from cellar.application.research_organization.get_project import (
         ListProjects,
         ListProjectsQuery,
     )
@@ -45,7 +45,7 @@ async def load(ctx: DemoContext) -> int:
         list_uc = ctx.container[ListProjects]
         query = ListProjectsQuery(workspace_id=WORKSPACE_ID)
         all_projects_result = await list_uc(query)
-        all_projects = all_projects_result.unwrap()
+        all_projects = all_projects_result.unwrap().items
         name_to_id = {p.name: p.id for p in all_projects}
         for key, rec in data.items():
             if not ctx.registry.has(key):

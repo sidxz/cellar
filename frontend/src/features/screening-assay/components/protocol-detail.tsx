@@ -1,30 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Activity,
-  Archive,
-  Copy,
-  FlaskConical,
-  LayoutDashboard,
-  Paperclip,
-  Pencil,
-  RotateCcw,
-  Send,
-  Settings2,
-  Trash2,
-} from "lucide-react";
+import { DetailShell } from "@/shared/components/detail-shell";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import { Textarea } from "@/shared/components/ui/textarea";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/shared/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -33,18 +10,44 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { DetailShell } from "@/shared/components/detail-shell";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { Textarea } from "@/shared/components/ui/textarea";
 import {
+  Activity,
+  Archive,
+  Copy,
+  FlaskConical,
+  LayoutDashboard,
+  Lock,
+  LockOpen,
+  Paperclip,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Send,
+  Settings2,
+  Trash2,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import {
+  useDeleteProtocol,
+  useLockProtocol,
   useProtocol,
   usePublishProtocol,
   useRetireProtocol,
-  useVersionProtocol,
+  useUnlockProtocol,
   useUpdateProtocol,
-  useDeleteProtocol,
+  useVersionProtocol,
 } from "../hooks/use-protocols";
-import { CreateRunDialog } from "./create-run-dialog";
-import { OverviewTab, ActivityTab, DesignTab, RunsTab, FilesTab } from "./detail-tabs";
 import type { ProtocolStatus } from "../types";
+import { CreateRunDialog } from "./create-run-dialog";
+import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -56,24 +59,17 @@ interface ProtocolDetailProps {
 
 export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const router = useRouter();
+  const isAdmin = useAuthzHasRole("admin");
   const { data: protocol, isLoading } = useProtocol(protocolId);
   const publishMutation = usePublishProtocol();
   const retireMutation = useRetireProtocol();
   const versionMutation = useVersionProtocol();
   const updateMutation = useUpdateProtocol(protocolId);
   const deleteMutation = useDeleteProtocol();
+  const lockMutation = useLockProtocol();
+  const unlockMutation = useUnlockProtocol();
 
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.location.hash.slice(1) || "overview";
-    }
-    return "overview";
-  });
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    window.history.replaceState(null, "", `#${value}`);
-  };
+  const [activeTab, setActiveTab] = useHashTab("overview");
 
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -81,6 +77,9 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockReason, setLockReason] = useState("");
+  const [lockMode, setLockMode] = useState<"lock" | "unlock">("lock");
 
   const query = { data: protocol, isLoading };
 
@@ -91,13 +90,24 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
+        breadcrumbTrail={() => [{ label: "Protocols", href: "/assays" }]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
         actions={(p) => {
           const s = p.status as ProtocolStatus;
+          const locked = p.is_locked;
+          // While locked, hide all destructive/state-changing actions
+          // except the unlock toggle. New Run is always allowed —
+          // running an experiment doesn't mutate protocol metadata.
           return (
             <>
-              {s === "draft" && (
+              {s === "active" && (
+                <Button size="sm" onClick={() => setCreateRunOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Run
+                </Button>
+              )}
+              {s === "draft" && !locked && (
                 <>
                   <Button
                     size="sm"
@@ -115,23 +125,19 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => versionMutation.mutate(protocolId)}
+                    onClick={() => versionMutation.mutate({ id: protocolId })}
                     disabled={versionMutation.isPending}
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     {versionMutation.isPending ? "Duplicating..." : "Duplicate"}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setDeleteOpen(true)}
-                  >
+                  <Button size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => publishMutation.mutate(protocolId)}
+                    onClick={() => publishMutation.mutate({ id: protocolId })}
                     disabled={publishMutation.isPending}
                   >
                     <Send className="mr-2 h-4 w-4" />
@@ -139,12 +145,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   </Button>
                 </>
               )}
-              {s === "active" && (
+              {s === "active" && !locked && (
                 <>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => versionMutation.mutate(protocolId)}
+                    onClick={() => versionMutation.mutate({ id: protocolId })}
                     disabled={versionMutation.isPending}
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
@@ -156,7 +162,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     onClick={() =>
                       retireMutation.mutate({
                         id: protocolId,
-                        reason: "Retired by user",
+                        data: { reason: "Retired by user" },
                       })
                     }
                     disabled={retireMutation.isPending}
@@ -166,12 +172,48 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   </Button>
                 </>
               )}
+              {s !== "retired" && (
+                <Button
+                  size="sm"
+                  variant={locked ? "default" : "outline"}
+                  title={
+                    locked
+                      ? `Locked: ${p.lock_reason ?? ""}`
+                      : "Lock to freeze metadata for review / submission"
+                  }
+                  onClick={() => {
+                    setLockMode(locked ? "unlock" : "lock");
+                    setLockReason("");
+                    setLockOpen(true);
+                  }}
+                >
+                  {locked ? (
+                    <>
+                      <LockOpen className="mr-2 h-4 w-4" />
+                      Unlock
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="mr-2 h-4 w-4" />
+                      Lock
+                    </>
+                  )}
+                </Button>
+              )}
+              {isAdmin && (
+                <CascadeDeleteDialog
+                  entityType="protocol"
+                  entityId={protocolId}
+                  entityLabel={p.name}
+                  onDeleted={() => router.push("/assays")}
+                />
+              )}
             </>
           );
         }}
       >
         {(protocol) => (
-          <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList variant="line">
               <TabsTrigger value="overview">
                 <LayoutDashboard className="mr-1.5 h-4 w-4" />
@@ -199,7 +241,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <OverviewTab
                 protocol={protocol}
                 protocolId={protocolId}
-                onTabChange={handleTabChange}
+                onTabChange={setActiveTab}
               />
             </TabsContent>
             <TabsContent value="activity">
@@ -220,26 +262,73 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
       <CreateRunDialog
         protocolId={protocolId}
+        protocolControlLayouts={protocol?.control_layouts ?? null}
+        conditionDefinitions={protocol?.condition_definitions ?? []}
         open={createRunOpen}
         onOpenChange={setCreateRunOpen}
       />
+
+      {/* Lock / Unlock dialog — captures the audit-log reason. */}
+      <Dialog open={lockOpen} onOpenChange={setLockOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{lockMode === "lock" ? "Lock Protocol" : "Unlock Protocol"}</DialogTitle>
+            <DialogDescription>
+              {lockMode === "lock"
+                ? "Freeze the protocol's metadata. While locked, no edits, additions, or status changes are allowed until you unlock."
+                : "Release the freeze so the protocol can be edited again. Reason is recorded in the audit log."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label>Reason</Label>
+            <Textarea
+              placeholder={
+                lockMode === "lock"
+                  ? "e.g. FDA submission window, locked for external review"
+                  : "e.g. Review complete, resuming edits"
+              }
+              value={lockReason}
+              onChange={(e) => setLockReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLockOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const mut = lockMode === "lock" ? lockMutation : unlockMutation;
+                mut.mutate(
+                  { id: protocolId, data: { reason: lockReason.trim() } },
+                  { onSuccess: () => setLockOpen(false) },
+                );
+              }}
+              disabled={!lockReason.trim() || lockMutation.isPending || unlockMutation.isPending}
+            >
+              {lockMode === "lock"
+                ? lockMutation.isPending
+                  ? "Locking..."
+                  : "Lock"
+                : unlockMutation.isPending
+                  ? "Unlocking..."
+                  : "Unlock"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Draft Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Protocol</DialogTitle>
-            <DialogDescription>
-              Update this draft protocol&apos;s metadata.
-            </DialogDescription>
+            <DialogDescription>Update this draft protocol&apos;s metadata.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Name</Label>
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="grid gap-2">
               <Label>Description</Label>
@@ -268,7 +357,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                     description: editDescription || null,
                     category: editCategory || null,
                   },
-                  { onSuccess: () => setEditOpen(false) }
+                  { onSuccess: () => setEditOpen(false) },
                 );
               }}
               disabled={!editName.trim() || updateMutation.isPending}

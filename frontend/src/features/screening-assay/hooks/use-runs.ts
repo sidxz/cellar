@@ -138,34 +138,82 @@ export function useUpdateRun() {
   });
 }
 
-interface FitWarning {
-  molecule_name?: string | null;
-  reason: string;
-}
-
-interface FitCurvesResponse {
-  curves_fitted: number;
-  warnings?: FitWarning[];
-}
-
-export function useFitCurves() {
+export function useDeleteRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (runId: string) =>
-      customInstance<FitCurvesResponse>({
-        url: `/api/v1/runs/${runId}/fit-curves`,
+    mutationFn: (id: string) =>
+      customInstance<void>({
+        url: `/api/v1/runs/${id}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run deleted");
+    },
+  });
+}
+
+interface RecomputeResponse {
+  computed_readouts: number;
+  /** Per-compound fit failure messages from the post-recompute curve fit.
+   *  Optional for back-compat with older backend deployments. */
+  fit_warnings?: string[];
+}
+
+export interface RecomputeOverrides {
+  override_top?: boolean;
+  top_constraint?: number | null;
+  top_constraint_min?: number | null;
+  top_constraint_max?: number | null;
+  override_bottom?: boolean;
+  bottom_constraint?: number | null;
+  bottom_constraint_min?: number | null;
+  bottom_constraint_max?: number | null;
+  override_hill?: boolean;
+  hill_slope_constraint?:
+    | "unconstrained"
+    | "negative_only"
+    | "positive_only"
+    | "fixed_at_one"
+    | null;
+  hill_slope_min?: number | null;
+  hill_slope_max?: number | null;
+}
+
+export interface RecomputeRunArgs {
+  runId: string;
+  overrides?: RecomputeOverrides;
+}
+
+export function useRecomputeRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, overrides }: RecomputeRunArgs) =>
+      customInstance<RecomputeResponse>({
+        url: `/api/v1/runs/${runId}/recompute`,
         method: "POST",
+        ...(overrides ? { data: overrides } : {}),
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
+      qc.invalidateQueries({ queryKey: ["readout-data"] });
+      qc.invalidateQueries({ queryKey: ["plate-map"] });
+      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
       qc.invalidateQueries({ queryKey: ["compound-curves"] });
       qc.invalidateQueries({ queryKey: ["protocol-activity"] });
-      if (data.warnings && data.warnings.length > 0) {
-        showWarning(`Fit completed with ${data.warnings.length} warning(s)`, {
-          description: data.warnings.map((w: FitWarning) => w.reason).join("; "),
-        });
-      } else {
-        showSuccess(`Fitted ${data.curves_fitted} dose-response curves`);
+      showSuccess(
+        `Recomputed ${data.computed_readouts} readouts and refit curves`,
+      );
+      const warnings = data.fit_warnings ?? [];
+      if (warnings.length > 0) {
+        const head = warnings.slice(0, 3);
+        const rest = warnings.length - head.length;
+        const description =
+          rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
+        showWarning(
+          `${warnings.length} curve(s) had fit issues — see the chart for details.`,
+          { description },
+        );
       }
     },
   });

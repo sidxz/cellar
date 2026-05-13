@@ -5,26 +5,27 @@ from datetime import date
 
 import pytest
 
-from chem_vault.domain.inventory.enums import (
+from cellar.domain.inventory.enums import (
     FeasibilityStatus,
     RequestPriority,
     SynthesisRequestStatus,
 )
-from chem_vault.domain.inventory.events import (
+from cellar.domain.inventory.events import (
     SynthesisCompleted,
     SynthesisFailed,
     SynthesisFeasibilityFlagged,
     SynthesisRequestApproved,
     SynthesisRequestAssigned,
+    SynthesisRequestCreated,
     SynthesisRequestFulfilled,
     SynthesisRequestRejected,
     SynthesisRequested,
     SynthesisStarted,
 )
-from chem_vault.domain.inventory.synthesis_request import SynthesisRequest
-from chem_vault.domain.shared.enums import AmountUnit, AssignmentType
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Amount, SynthesisAssignment
+from cellar.domain.inventory.synthesis_request import SynthesisRequest
+from cellar.domain.shared.enums import AmountUnit, AssignmentType
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Amount, SynthesisAssignment
 
 
 @pytest.fixture
@@ -72,10 +73,14 @@ class TestSynthesisRequestCreation:
         assert req.purpose == "Lead optimization SAR study"
         assert req.is_terminal is False
 
-    def test_create_no_event_on_draft(self, ws_id):
-        """Draft creation does NOT emit events — event emitted on submit."""
+    def test_create_emits_created_event(self, ws_id):
+        """Draft creation emits SynthesisRequestCreated."""
         req = _make_request(ws_id)
-        assert len(req.collect_events()) == 0
+        events = req.collect_events()
+        assert len(events) == 1
+        assert events[0].__class__.__name__ == "SynthesisRequestCreated"
+        assert events[0].molecule_id == req.molecule_id
+        assert events[0].requested_by == req.requester_id
 
     def test_create_with_priority(self, ws_id):
         req = _make_request(ws_id, priority=RequestPriority.URGENT)
@@ -190,6 +195,7 @@ class TestFullLifecycle:
         events = req.collect_events()
         types = [type(e) for e in events]
         assert types == [
+            SynthesisRequestCreated,
             SynthesisRequested,
             SynthesisRequestApproved,
             SynthesisRequestAssigned,
@@ -209,12 +215,13 @@ class TestSubmit:
         req = _make_request(ws_id)
         req.submit()
         events = req.collect_events()
-        assert len(events) == 1
-        assert isinstance(events[0], SynthesisRequested)
-        assert events[0].molecule_id == req.molecule_id
-        assert events[0].requester_id == req.requester_id
-        assert events[0].requested_amount == 50.0
-        assert events[0].priority == "routine"
+        assert len(events) == 2
+        assert events[0].__class__.__name__ == "SynthesisRequestCreated"
+        assert isinstance(events[1], SynthesisRequested)
+        assert events[1].molecule_id == req.molecule_id
+        assert events[1].requester_id == req.requester_id
+        assert events[1].requested_amount == 50.0
+        assert events[1].priority == "routine"
 
     def test_submit_updates_timestamp(self, ws_id):
         req = _make_request(ws_id)

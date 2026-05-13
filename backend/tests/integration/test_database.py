@@ -14,19 +14,19 @@ from sqlalchemy import String, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
-from chem_vault.domain.shared.entity import AggregateRoot
-from chem_vault.domain.shared.errors import ConcurrencyConflictError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.infrastructure.persistence.sqlalchemy.base import (
+from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.shared.errors import ConcurrencyConflictError
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.persistence.sqlalchemy.base import (
     Base,
     EntityModelMixin,
     VersionMixin,
     WorkspaceIdMixin,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.base_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 # ---------------------------------------------------------------------------
 # Test-only domain aggregate, SA model, and repository
@@ -231,6 +231,7 @@ class TestUnitOfWork:
         event = _DummyCreated(
             aggregate_id=agg.id,
             aggregate_type="DummyAggregate",
+            workspace_id=agg.workspace_id,
             name="event-test",
         )
         agg.register_event(event)
@@ -254,6 +255,7 @@ class TestUnitOfWork:
         event = _DummyCreated(
             aggregate_id=agg.id,
             aggregate_type="DummyAggregate",
+            workspace_id=agg.workspace_id,
             name="rollback-test",
         )
         agg.register_event(event)

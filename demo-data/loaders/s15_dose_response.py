@@ -20,7 +20,7 @@ logger = structlog.get_logger()
 async def load(ctx: DemoContext) -> int:
     from sqlalchemy import select, func
     from sqlalchemy.ext.asyncio import async_sessionmaker
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
         DoseResponseCurveModel,
     )
 
@@ -40,15 +40,15 @@ async def load(ctx: DemoContext) -> int:
     # Fallback: generate curves directly via LmfitCurveFitter
     logger.info("dose_response.fallback_fitting")
 
-    from chem_vault.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
-    from chem_vault.domain.screening_assay.dose_response_config import DoseResponseConfig
-    from chem_vault.domain.screening_assay.dose_response_curve import DoseResponseCurve
-    from chem_vault.domain.screening_assay.enums import CurveType, HillSlopeConstraint
-    from chem_vault.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+    from cellar.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
+    from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+    from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+    from cellar.domain.screening_assay.enums import CurveType, HillSlopeConstraint
+    from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
         SQLAlchemyDoseResponseCurveRepository,
     )
-    from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+    from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
     data = ctx.data("dose_response.json")
     fitter = LmfitCurveFitter()

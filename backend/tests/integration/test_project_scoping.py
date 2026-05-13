@@ -6,18 +6,18 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.research_organization.project import Project
-from chem_vault.domain.research_organization.project_membership import (
+from cellar.domain.research_organization.project import Project
+from cellar.domain.research_organization.project_membership import (
     ProjectMember,
     ProjectRole,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (
     SQLAlchemyProjectMemberRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
     SQLAlchemyProjectRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 @pytest.mark.integration
@@ -152,7 +152,7 @@ class TestProjectMemberRepository:
 
 import sqlalchemy as sa  # noqa: E402
 
-from chem_vault.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E402
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E402
     SQLAlchemyMoleculeRepository,
 )
 
@@ -176,7 +176,7 @@ async def _insert_molecule_raw(
                 "INSERT INTO molecules (id, workspace_id, name, molecule_type, "
                 "structure_status, registration_status, synthesis_status, "
                 "lifecycle_stage, registration_number, originating_org_id, version) "
-                "VALUES (:id, :ws, :name, 'small_molecule', 'disclosed', "
+                "VALUES (:id, :ws, :name, 'small_molecule', 'undisclosed', "
                 "'approved', 'virtual', 'registered', :reg, :org, 1)"
             ),
             {"id": mol_id, "ws": ws_id, "name": f"Mol-{reg_num}", "reg": reg_num, "org": org_id},

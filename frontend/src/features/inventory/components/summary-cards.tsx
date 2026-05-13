@@ -25,7 +25,7 @@ function MetricCard({ icon, count, label, onClick }: MetricCardProps) {
   return (
     <Card
       className={`cursor-pointer transition-colors hover:bg-accent/50 ${
-        hasAlert ? "border-amber-500/50" : ""
+        hasAlert ? "border-warning/50" : ""
       }`}
       onClick={onClick}
     >
@@ -33,7 +33,7 @@ function MetricCard({ icon, count, label, onClick }: MetricCardProps) {
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
             hasAlert
-              ? "bg-amber-500/10 text-amber-500"
+              ? "bg-warning/10 text-warning"
               : "bg-muted text-muted-foreground"
           }`}
         >
@@ -42,7 +42,7 @@ function MetricCard({ icon, count, label, onClick }: MetricCardProps) {
         <div>
           <p
             className={`text-2xl font-bold leading-none ${
-              hasAlert ? "text-amber-500" : "text-foreground"
+              hasAlert ? "text-warning" : "text-foreground"
             }`}
           >
             {count}

@@ -12,21 +12,22 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from chem_vault.application.screening.import_run_readouts import (
+from cellar.application.screening.import_run_readouts import (
     ImportRunReadouts,
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
 )
-from chem_vault.domain.screening_assay.enums import (
+from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
     WellType,
 )
-from chem_vault.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from chem_vault.domain.screening_assay.run import Plate, Run, Well
-from chem_vault.domain.shared.errors import NotFoundError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +174,7 @@ def _build_use_case(
         protocol_repo=protocol_repo,
         readout_data_repo=readout_data_repo,
         batch_repo=batch_repo,
+        parser=TabularFileParser(),
     )
     return uc, uow, run_repo
 
@@ -211,7 +213,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=csv_bytes,
+            file_content=csv_bytes,
             readout_definition_id=rd_id,
         )
 
@@ -257,7 +259,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=csv_bytes,
+            file_content=csv_bytes,
             readout_definition_id=rd_id,
         )
 
@@ -284,7 +286,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=b"Well,Value\nA1,2.3\n",
+            file_content=b"Well,Value\nA1,2.3\n",
             readout_definition_id=uuid.uuid4(),
         )
 
@@ -305,7 +307,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=uuid.uuid4(),
-            csv_content=b"Well,Value\nA1,2.3\n",
+            file_content=b"Well,Value\nA1,2.3\n",
             readout_definition_id=uuid.uuid4(),
         )
 
@@ -341,7 +343,7 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=csv_bytes,
+            file_content=csv_bytes,
             # No readout_definition_id — columns resolved by name
         )
 
@@ -359,8 +361,14 @@ class TestImportRunReadouts:
         assert abs_id in rd_ids
 
     @pytest.mark.asyncio
-    async def test_viewer_role_returns_authorization_failure(self):
-        """Users with viewer role (below editor) cannot import readout data."""
+    async def test_viewer_role_raises_authorization_error(self):
+        """Users with viewer role (below editor) cannot import readout data.
+
+        ``require_editor`` raises ``AuthorizationError`` directly; the
+        FastAPI error handler converts that to a 403. Use cases must NOT
+        swallow the error into a ``Failure`` (that hides bugs in the guard
+        chain — see ``docs/backend-code-guidelines.md`` §3).
+        """
         ws_id = uuid.uuid4()
         auth = FakeAuth(workspace_id=ws_id, workspace_role="viewer")
 
@@ -376,12 +384,10 @@ class TestImportRunReadouts:
         cmd = ImportRunReadoutsCommand(
             workspace_id=ws_id,
             run_id=run.id,
-            csv_content=b"Well,Value\nA1,2.3\n",
+            file_content=b"Well,Value\nA1,2.3\n",
             readout_definition_id=rd_id,
         )
 
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        from chem_vault.domain.shared.errors import AuthorizationError
-        assert isinstance(result.failure(), AuthorizationError)
+        from cellar.domain.shared.errors import AuthorizationError
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)

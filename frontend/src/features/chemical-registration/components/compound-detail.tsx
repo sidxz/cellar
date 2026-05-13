@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -13,8 +13,10 @@ import {
   LayoutDashboard,
   Link2,
   Paperclip,
+  ShieldAlert,
   TestTubes,
 } from "lucide-react";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -42,6 +44,7 @@ import {
   HistoryTab,
   FilesTab,
   ProjectsTab,
+  AdminOperationsTab,
 } from "./detail-tabs";
 
 // ---------------------------------------------------------------------------
@@ -50,7 +53,7 @@ import {
 
 function structureStatusBadgeClass(status: StructureStatus): string {
   return status === "disclosed"
-    ? "border-emerald-500/40 text-emerald-400"
+    ? "border-success/40 text-success"
     : "border-yellow-500/40 text-yellow-400";
 }
 
@@ -65,18 +68,9 @@ interface CompoundDetailProps {
 export function CompoundDetail({ compoundId }: CompoundDetailProps) {
   const router = useRouter();
   const query = useMolecule(compoundId);
+  const isAdmin = useAuthzHasRole("admin");
 
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.location.hash.slice(1) || "overview";
-    }
-    return "overview";
-  });
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    window.history.replaceState(null, "", `#${value}`);
-  };
+  const [activeTab, setActiveTab] = useHashTab("overview");
 
   return (
     <DetailShell
@@ -133,7 +127,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             )}
 
             {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={handleTabChange}>
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList variant="line">
                 <TabsTrigger value="overview">
                   <LayoutDashboard className="mr-1.5 h-4 w-4" />
@@ -171,6 +165,12 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
                   <History className="mr-1.5 h-4 w-4" />
                   History
                 </TabsTrigger>
+                {isAdmin && !isTombstone && (
+                  <TabsTrigger value="admin">
+                    <ShieldAlert className="mr-1.5 h-4 w-4" />
+                    Admin
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="overview">
@@ -211,6 +211,12 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
               <TabsContent value="history">
                 <HistoryTab moleculeId={compoundId} molecule={mol} />
               </TabsContent>
+
+              {isAdmin && !isTombstone && (
+                <TabsContent value="admin">
+                  <AdminOperationsTab moleculeId={compoundId} />
+                </TabsContent>
+              )}
             </Tabs>
           </>
         );

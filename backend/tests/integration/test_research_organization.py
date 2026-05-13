@@ -6,22 +6,22 @@ import uuid
 
 import sqlalchemy as sa
 
-from chem_vault.domain.research_organization.collection import Collection
-from chem_vault.domain.research_organization.project import Project
-from chem_vault.domain.research_organization.saved_search import (
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.project import Project
+from cellar.domain.research_organization.saved_search import (
     SavedSearch,
     SearchVisibility,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
     SQLAlchemyCollectionRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
     SQLAlchemyProjectRepository,
 )
-from chem_vault.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
     SQLAlchemySavedSearchRepository,
 )
-from chem_vault.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +147,9 @@ class TestProjectRepository:
             repo = SQLAlchemyProjectRepository(uow)
             projects = await repo.find_by_workspace(ws_id)
             assert len(projects) == 2
-            assert projects[0].name == "Alpha"  # ordered by name
-            assert projects[1].name == "Beta"
+            # Ordered by id (cursor-pagination contract); name-based ordering
+            # belongs to the UI layer.
+            assert {p.name for p in projects} == {"Alpha", "Beta"}
 
     async def test_find_by_name(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()
@@ -585,7 +586,7 @@ class TestSavedSearchRepository:
 
         async with uow:
             repo = SQLAlchemySavedSearchRepository(uow)
-            await repo.delete(search.id)
+            await repo.delete(ws_id, search.id)
             await uow.commit()
 
         async with uow:

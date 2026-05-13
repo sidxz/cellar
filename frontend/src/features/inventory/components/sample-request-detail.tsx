@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { PriorityBadge } from "@/shared/components/status-badge";
+import { formatDateTime } from "@/shared/lib/format-date";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import {
@@ -210,7 +211,7 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
                   <div>
                     <p className="text-xs text-muted-foreground">Fulfilled At</p>
                     <p className="font-medium">
-                      {new Date(request.fulfilled_at).toLocaleString()}
+                      {formatDateTime(request.fulfilled_at)}
                     </p>
                   </div>
                 )}

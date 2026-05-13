@@ -1,0 +1,6 @@
+export const CHEM_ITEMS = [
+  "IC₅₀",       "Kinase",      "ADMET",        "Tanimoto",    "SMILES",      "Mol Wt",      "LogP",
+  "EC₅₀",       "GPCR",        "Scaffold",     "pKa",         "HBA / HBD",   "InChI",       "SAR",
+  "Ki",          "Protease",    "Pharmacophore", "tPSA",        "CLogP",       "Selectivity", "Markush",
+  "Kd",          "Ion Channel", "Substructure",  "Ro5",         "Solubility",  "MMP",         "QSAR",
+];

@@ -10,20 +10,20 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Result, Success
 
-from chem_vault.application.chemical_registration.protocols import (
+from cellar.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
     QCResultDTO,
 )
-from chem_vault.application.chemical_registration.search_molecules import (
+from cellar.application.chemical_registration.search_molecules import (
     SearchMolecules,
     SearchMoleculesQuery,
     SimilarityResult,
 )
-from chem_vault.domain.chemical_registration.enums import MoleculeType
-from chem_vault.domain.chemical_registration.molecule import Molecule
-from chem_vault.domain.shared.errors import DomainError, ValidationError
-from chem_vault.domain.shared.events import DomainEvent
-from chem_vault.domain.shared.value_objects import (
+from cellar.domain.chemical_registration.enums import MoleculeType, Stereochemistry
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.shared.errors import DomainError, ValidationError
+from cellar.domain.shared.events import DomainEvent
+from cellar.domain.shared.value_objects import (
     ChemicalStructure,
     ComputedDescriptors,
     RegistrationNumber,
@@ -113,18 +113,52 @@ class FakeMoleculeRepository:
                 return m
         return None
 
+
+class FakeMoleculeReader:
+    """Test double for the read-side ``MoleculeReader`` Protocol."""
+
+    def __init__(self, repo: "FakeMoleculeRepository") -> None:
+        self._repo = repo
+
     async def search_substructure(
-        self, workspace_id: uuid.UUID, smarts: str
+        self,
+        workspace_id: uuid.UUID,
+        query: str,
+        *,
+        kind: str | None = None,
     ) -> list[Molecule]:
         # Simplified fake: return all molecules in workspace
-        return [m for m in self._store.values() if m.workspace_id == workspace_id]
+        return [m for m in self._repo._store.values() if m.workspace_id == workspace_id]
 
     async def search_similarity(
-        self, workspace_id: uuid.UUID, smiles: str, threshold: float = 0.7
+        self,
+        workspace_id: uuid.UUID,
+        smiles: str,
+        *,
+        mode: Any = None,
+        threshold: float | None = None,
+        algorithm: str | None = None,
+        metric: Any = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[tuple[Molecule, float]]:
         return [
-            (m, 0.85) for m in self._store.values() if m.workspace_id == workspace_id
+            (m, 0.85)
+            for m in self._repo._store.values()
+            if m.workspace_id == workspace_id
         ]
+
+    async def search_by_query(
+        self, workspace_id: uuid.UUID, query: dict, **kwargs
+    ) -> list[Molecule]:
+        return [m for m in self._repo._store.values() if m.workspace_id == workspace_id]
+
+    async def count_by_query(
+        self, workspace_id: uuid.UUID, query: dict, **kwargs
+    ) -> int:
+        return sum(
+            1 for m in self._repo._store.values() if m.workspace_id == workspace_id
+        )
 
 
 class FakeStructureProcessor:
@@ -142,6 +176,7 @@ class FakeStructureProcessor:
                 descriptors=_DESCRIPTORS,
                 fingerprints={},
                 qc_result=QCResultDTO(total_penalty=0, issues=[]),
+                stereochemistry=Stereochemistry.ACHIRAL,
             )
         )
 
@@ -155,9 +190,10 @@ class FakeStructureProcessor:
 def _deps() -> dict[str, Any]:
     uow = FakeUnitOfWork()
     repo = FakeMoleculeRepository()
+    reader = FakeMoleculeReader(repo)
     processor = FakeStructureProcessor()
-    uc = SearchMolecules(uow, repo, processor)
-    return {"uc": uc, "repo": repo, "processor": processor}
+    uc = SearchMolecules(uow, repo, reader, processor)
+    return {"uc": uc, "repo": repo, "reader": reader, "processor": processor}
 
 
 # ---------------------------------------------------------------------------

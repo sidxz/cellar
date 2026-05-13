@@ -14,8 +14,8 @@ export function useAuditOperations(filters?: {
 }) {
   return useQuery({
     queryKey: [...AUDIT_KEY, filters],
-    queryFn: () =>
-      customInstance<AuditOperation[]>({
+    queryFn: async () => {
+      const resp = await customInstance<AuditOperation[] | { items: AuditOperation[] }>({
         url: "/api/v1/audit",
         method: "GET",
         params: filters
@@ -25,19 +25,23 @@ export function useAuditOperations(filters?: {
                 .map(([k, v]) => [k, String(v)]),
             )
           : undefined,
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
   });
 }
 
 export function useAuditByEntity(entityType: string, entityId: string | undefined) {
   return useQuery({
     queryKey: [...AUDIT_KEY, "entity", entityType, entityId],
-    queryFn: () =>
-      customInstance<AuditOperation[]>({
+    queryFn: async () => {
+      const resp = await customInstance<AuditOperation[] | { items: AuditOperation[] }>({
         url: "/api/v1/audit",
         method: "GET",
         params: { entity_type: entityType, entity_id: entityId! },
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
     enabled: !!entityId,
   });
 }

@@ -92,6 +92,9 @@ export interface Molecule {
   originating_org_id: string;
   identifiers: MoleculeIdentifier[];
   version: number;
+  // Set by /api/v1/search/execute on similarity-search rows; null/absent
+  // for substructure/exact/property-only searches.
+  similarity_score?: number | null;
 }
 
 export interface BatchInput {
@@ -113,6 +116,12 @@ export interface RegistrationResponse {
   is_new: boolean;
   qc_warnings: string[];
   batch?: { id: string; batch_number: string } | null;
+  batch_skipped: boolean;
+  action: string;
+  needs_merge_confirmation: boolean;
+  matched_molecule_id: string | null;
+  disclosure_id: string | null;
+  conflict_reason: string | null;
 }
 
 export interface RegisterMoleculeInput {
@@ -123,6 +132,8 @@ export interface RegisterMoleculeInput {
   originating_org_id: string;
   custom_fields?: Record<string, unknown> | null;
   batch?: BatchInput | null;
+  create_batch_on_duplicate?: boolean | null;
+  auto_approve?: boolean;
 }
 
 export interface UpdateMoleculeInput {

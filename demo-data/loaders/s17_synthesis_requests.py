@@ -11,11 +11,11 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.inventory.get_batch import (
+    from cellar.application.inventory.get_batch import (
         ListBatchesByMolecule,
         ListBatchesByMoleculeQuery,
     )
-    from chem_vault.application.inventory.synthesis_requests import (
+    from cellar.application.inventory.synthesis_requests import (
         ApproveSynthesisRequest,
         ApproveSynthesisRequestCommand,
         AssignSynthesisRequest,

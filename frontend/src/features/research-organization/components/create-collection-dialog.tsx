@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,6 +23,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { SearchableSelect } from "@/shared/components/searchable-select";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { useProjects } from "../hooks/use-projects";
 import {
@@ -27,6 +31,43 @@ import {
   useUpdateCollection,
 } from "../hooks/use-collections";
 import type { Collection } from "../types";
+
+// ── Schema ────────────────────────────────────────────────────────────────────
+
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  visibility: z.enum(["private", "shared"]),
+  // null = no project selected; stored as null in the form
+  project_id: z.string().nullable(),
+  org_id: z.string().nullable(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function makeDefaultValues(defaultProjectId?: string): FormValues {
+  return {
+    name: "",
+    description: "",
+    visibility: "private",
+    project_id: defaultProjectId ?? null,
+    org_id: null,
+  };
+}
+
+function toFormValues(collection: Collection, defaultProjectId?: string): FormValues {
+  return {
+    name: collection.name,
+    description: collection.description ?? "",
+    visibility: collection.visibility ?? "private",
+    project_id: collection.project_id ?? defaultProjectId ?? null,
+    org_id: collection.owned_by_org_id ?? null,
+  };
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface CreateCollectionDialogProps {
   open: boolean;
@@ -37,7 +78,7 @@ interface CreateCollectionDialogProps {
   defaultProjectId?: string;
 }
 
-const NO_SELECTION = "__none__";
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function CreateCollectionDialog({
   open,
@@ -52,49 +93,37 @@ export function CreateCollectionDialog({
   const { data: projects } = useProjects();
   const { data: orgs } = useOrganizations();
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [projectId, setProjectId] = useState<string>(NO_SELECTION);
-  const [orgId, setOrgId] = useState<string>(NO_SELECTION);
-  const [visibility, setVisibility] = useState<"private" | "shared">("private");
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: makeDefaultValues(defaultProjectId),
+  });
 
   // Reset form when dialog opens / collection changes
   useEffect(() => {
     if (open) {
-      setName(collection?.name ?? "");
-      setDescription(collection?.description ?? "");
-      setProjectId(
-        collection?.project_id ?? defaultProjectId ?? NO_SELECTION
+      form.reset(
+        collection
+          ? toFormValues(collection, defaultProjectId)
+          : makeDefaultValues(defaultProjectId),
       );
-      setOrgId(collection?.owned_by_org_id ?? NO_SELECTION);
-      setVisibility(collection?.visibility ?? "private");
     }
-  }, [open, collection, defaultProjectId]);
-
-  const resetForm = () => {
-    setName("");
-    setDescription("");
-    setProjectId(defaultProjectId ?? NO_SELECTION);
-    setOrgId(NO_SELECTION);
-    setVisibility("private");
-  };
+  }, [open, collection, defaultProjectId, form]);
 
   const mutation = isEdit ? updateMutation : createMutation;
-  const canSubmit = name.trim() && !mutation.isPending;
 
-  const handleSubmit = () => {
+  const onSubmit = (values: FormValues) => {
     const payload = {
-      name: name.trim(),
-      description: description.trim() || null,
-      project_id: projectId === NO_SELECTION ? null : projectId,
-      owned_by_org_id: orgId === NO_SELECTION ? null : orgId,
-      visibility,
+      name: values.name.trim(),
+      description: values.description?.trim() || null,
+      project_id: values.project_id,
+      owned_by_org_id: values.org_id,
+      visibility: values.visibility,
     };
 
     mutation.mutate(payload, {
       onSuccess: () => {
         onOpenChange(false);
-        resetForm();
+        form.reset(makeDefaultValues(defaultProjectId));
       },
     });
   };
@@ -113,100 +142,116 @@ export function CreateCollectionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label>Name</Label>
-            <Input
-              placeholder="e.g., EGFR Hit Series A"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && canSubmit) handleSubmit();
-              }}
-            />
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                placeholder="e.g., EGFR Hit Series A"
+                {...form.register("name")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !mutation.isPending) {
+                    void form.handleSubmit(onSubmit)();
+                  }
+                }}
+              />
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Description (optional)</Label>
+              <Textarea
+                placeholder="Brief description of the collection..."
+                {...form.register("description")}
+                rows={3}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Visibility</Label>
+              <Controller
+                name="visibility"
+                control={form.control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="shared">Shared</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Project (optional)</Label>
+              <Controller
+                name="project_id"
+                control={form.control}
+                render={({ field }) => (
+                  <SearchableSelect
+                    options={
+                      projects
+                        ?.filter((p) => p.status === "active")
+                        .map((p) => ({ value: p.id, label: p.name })) ?? []
+                    }
+                    value={field.value}
+                    onValueChange={(v) => field.onChange(v ?? null)}
+                    placeholder="No project"
+                    searchPlaceholder="Search projects..."
+                  />
+                )}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Organization (optional)</Label>
+              <Controller
+                name="org_id"
+                control={form.control}
+                render={({ field }) => (
+                  <SearchableSelect
+                    options={orgs?.map((o) => ({ value: o.id, label: o.name })) ?? []}
+                    value={field.value}
+                    onValueChange={(v) => field.onChange(v ?? null)}
+                    placeholder="No organization"
+                    searchPlaceholder="Search organizations..."
+                  />
+                )}
+              />
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Description (optional)</Label>
-            <Textarea
-              placeholder="Brief description of the collection..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Visibility</Label>
-            <Select
-              value={visibility}
-              onValueChange={(v) => setVisibility(v as "private" | "shared")}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={mutation.isPending}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="private">Private</SelectItem>
-                <SelectItem value="shared">Shared</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Project (optional)</Label>
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger>
-                <SelectValue placeholder="No project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SELECTION}>No project</SelectItem>
-                {projects
-                  ?.filter((p) => p.status === "active")
-                  .map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Organization (optional)</Label>
-            <Select value={orgId} onValueChange={setOrgId}>
-              <SelectTrigger>
-                <SelectValue placeholder="No organization" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SELECTION}>No organization</SelectItem>
-                {orgs?.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={mutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {mutation.isPending
-              ? isEdit
-                ? "Saving..."
-                : "Creating..."
-              : isEdit
-                ? "Save Changes"
-                : "Create Collection"}
-          </Button>
-        </DialogFooter>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting || mutation.isPending}
+            >
+              {mutation.isPending
+                ? isEdit
+                  ? "Saving..."
+                  : "Creating..."
+                : isEdit
+                  ? "Save Changes"
+                  : "Create Collection"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

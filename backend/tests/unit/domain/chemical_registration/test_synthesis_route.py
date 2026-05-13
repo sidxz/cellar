@@ -4,27 +4,27 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.chemical_registration.enums import (
+from cellar.domain.chemical_registration.enums import (
     ReagentRole,
     RouteScale,
     RouteSource,
     RouteStatus,
     RouteType,
 )
-from chem_vault.domain.chemical_registration.events import (
+from cellar.domain.chemical_registration.events import (
     ReactionStepOutcomeRecorded,
     SynthesisRouteCreated,
     SynthesisRouteDeprecated,
     SynthesisRoutePreferred,
     SynthesisRouteValidated,
 )
-from chem_vault.domain.chemical_registration.synthesis_route import (
+from cellar.domain.chemical_registration.synthesis_route import (
     ReactionReagent,
     ReactionStep,
     SynthesisRoute,
 )
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import ReactionOutcome
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import ReactionOutcome
 
 
 # ---------------------------------------------------------------------------

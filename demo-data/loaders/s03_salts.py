@@ -11,11 +11,11 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.workspace_config.create_salt_entry import (
+    from cellar.application.workspace_config.create_salt_entry import (
         CreateSaltEntry,
         CreateSaltEntryCommand,
     )
-    from chem_vault.application.workspace_config.list_salt_entries import (
+    from cellar.application.workspace_config.list_salt_entries import (
         ListSaltEntries,
         ListSaltEntriesQuery,
     )

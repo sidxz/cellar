@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Boxes, Package, MapPin, Plus, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { Boxes, Package, MapPin, Plus } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -9,7 +11,7 @@ import {
   TabsTrigger,
 } from "@/shared/components/ui/tabs";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
+import { SearchInput } from "@/shared/components/search-input";
 import { PageHeader } from "@/shared/components/page-header";
 import { SummaryCards } from "./summary-cards";
 import { GlobalBatchList } from "./batch-list";
@@ -21,7 +23,8 @@ import type { BatchGlobalParams } from "../hooks/use-batches";
 import type { SampleGlobalParams } from "../hooks/use-samples";
 
 export function InventoryDashboard() {
-  const [tab, setTab] = useState("batches");
+  const router = useRouter();
+  const [tab, setTab] = useHashTab("batches");
   const [search, setSearch] = useState("");
   const [createBatchOpen, setCreateBatchOpen] = useState(false);
   const [createSampleOpen, setCreateSampleOpen] = useState(false);
@@ -43,8 +46,8 @@ export function InventoryDashboard() {
   }, []);
 
   const handlePendingRequestsClick = useCallback(() => {
-    window.location.href = "/inventory/sample-requests?status=submitted,approved,preparing";
-  }, []);
+    router.push("/inventory/sample-requests?status=submitted,approved,preparing");
+  }, [router]);
 
   // Sync search into active tab's params
   const activeBatchParams: BatchGlobalParams = {
@@ -88,20 +91,17 @@ export function InventoryDashboard() {
       </div>
 
       {/* Search bar */}
-      <div className="relative mt-6">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search batches, samples, compounds..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            // Clear card-driven filters when user types
-            if (tab === "batches") setBatchParams({});
-            if (tab === "samples") setSampleParams({});
-          }}
-          className="pl-10"
-        />
-      </div>
+      <SearchInput
+        value={search}
+        onChange={(v) => {
+          setSearch(v);
+          // Clear card-driven filters when user types
+          if (tab === "batches") setBatchParams({});
+          if (tab === "samples") setSampleParams({});
+        }}
+        placeholder="Search batches, samples, compounds..."
+        className="mt-6"
+      />
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={(t) => { setTab(t); clearFilters(); }} className="mt-4">

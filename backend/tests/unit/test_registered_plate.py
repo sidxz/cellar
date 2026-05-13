@@ -4,18 +4,18 @@ import uuid
 
 import pytest
 
-from chem_vault.domain.inventory.enums import PlateStatus, PlateType
-from chem_vault.domain.inventory.events import (
+from cellar.domain.inventory.enums import PlateStatus, PlateType
+from cellar.domain.inventory.events import (
     PlateDisposed,
     PlateMoved,
     PlateRegistered,
     PlateStatusChanged,
     PlateWellsMapped,
 )
-from chem_vault.domain.inventory.registered_plate import RegisteredPlate
-from chem_vault.domain.screening_assay.enums import PlateFormat
-from chem_vault.domain.shared.errors import ValidationError
-from chem_vault.domain.shared.value_objects import Barcode
+from cellar.domain.inventory.registered_plate import RegisteredPlate
+from cellar.domain.screening_assay.enums import PlateFormat
+from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.value_objects import Barcode
 
 
 def _make_plate(**overrides):

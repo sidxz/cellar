@@ -1,53 +1,44 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import React, { useState, useRef, useCallback } from "react";
-import { Skeleton } from "@/shared/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import { Download, ImageIcon } from "lucide-react";
+import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
+import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
+import { Download, ImageIcon } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
+import { CurveControls } from "./curve-controls";
 import {
-  type DoseResponseCurve,
-  type CurveType,
-  type CurveClass,
-  CURVE_TYPE_LABELS,
+  PLOT_MARKER,
+  X_AXIS_FALLBACK_MAX_RATIO,
+  X_AXIS_FALLBACK_MIN_RATIO,
+  X_AXIS_FLOOR,
+  X_AXIS_MAX_RATIO,
+  X_AXIS_MIN_RATIO,
+} from "../lib/dose-response-display";
+import {
+  computeReplicateStats,
+  extractPoints,
+  generate4PLCurve,
+  isDegenerateFit,
+  rSquaredColor,
+} from "../lib/dose-response-math";
+import {
+  type CurveConstraints,
+  constraintsValid,
+  defaultConstraintsFor,
+} from "../lib/curve-constraints";
+import {
   CURVE_CLASS_LABELS,
+  CURVE_TYPE_LABELS,
+  type CurveClass,
+  type CurveType,
+  type DoseResponseConfig,
+  type DoseResponseCurve,
 } from "../types";
-import { useRefitDoseResponse, useClassifyDoseResponse } from "../hooks/use-refit-dose-response";
-
-// ─── Dynamic import — Plotly must NOT be SSR'd ─────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Plot = dynamic<any>(
-  () => import("react-plotly.js").then((mod) => mod.default as any),
-  {
-    ssr: false,
-    loading: () => <Skeleton className="h-[350px] w-full" />,
-  }
-) as React.ComponentType<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  layout: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config?: any;
-  style?: React.CSSProperties;
-  useResizeHandler?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onClick?: (event: any) => void;
-}>;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,273 +46,24 @@ interface DoseResponseChartProps {
   curves: DoseResponseCurve[];
   className?: string;
   isInteractive?: boolean;
+  /** Protocol's dose-response config for the readout being plotted. When
+   *  provided, the per-curve Fit Constraints accordion seeds its
+   *  Free/Range/Lock toggles from these values — so a user who set Top ∈
+   *  [85, 110] at the protocol level sees Range pre-selected here, instead
+   *  of a misleading "Free". Per-curve edits remain independent overrides. */
+  protocolConfig?: DoseResponseConfig | null;
+  /** Normalization of the Y readout (looked up from
+   *  ``protocol.readout_definitions`` by the parent). Used to decide
+   *  whether seeding the [85,110]/[-10,10]/[0.9,1.1] percent-scale
+   *  defaults makes sense — those bounds are only meaningful for
+   *  percent-scale readouts. Pass null/undefined to disable seeding. */
+  yReadoutNormalization?: string | null;
 }
 
-interface CurveConstraints {
-  fixTop: boolean;
-  topValue: number;
-  fixBottom: boolean;
-  bottomValue: number;
-  hillSlope: string;
-}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Generate 100-point 4PL sigmoid on log scale between min/max concentration */
-function generate4PLCurve(
-  curve: DoseResponseCurve,
-  xMin: number,
-  xMax: number
-): { x: number[]; y: number[] } {
-  const { fitted_value, hill_slope, top, bottom } = curve;
-  const logMin = Math.log10(xMin);
-  const logMax = Math.log10(xMax);
-  const xs: number[] = [];
-  const ys: number[] = [];
-
-  for (let i = 0; i <= 100; i++) {
-    const logX = logMin + (logMax - logMin) * (i / 100);
-    const x = Math.pow(10, logX);
-    const y = bottom + (top - bottom) / (1 + Math.pow(x / fitted_value, hill_slope));
-    xs.push(x);
-    ys.push(y);
-  }
-  return { x: xs, y: ys };
-}
-
-/** Extract (concentration, response) pairs from raw_data / excluded_points */
-function extractPoints(
-  points: Array<Record<string, unknown>> | null
-): { x: number[]; y: number[]; reasons: (string | null)[] } {
-  if (!points || points.length === 0) return { x: [], y: [], reasons: [] };
-  const xs: number[] = [];
-  const ys: number[] = [];
-  const reasons: (string | null)[] = [];
-  for (const pt of points) {
-    const conc = pt["concentration"] ?? pt["x"];
-    const resp = pt["response"] ?? pt["y"];
-    if (typeof conc === "number" && typeof resp === "number") {
-      xs.push(conc);
-      ys.push(resp);
-      reasons.push(typeof pt["reason"] === "string" ? pt["reason"] : null);
-    }
-  }
-  return { x: xs, y: ys, reasons };
-}
-
-/** Group points by concentration, return mean ± SD arrays for error bars */
-function computeReplicateStats(
-  x: number[],
-  y: number[]
-): {
-  meanX: number[];
-  meanY: number[];
-  sdY: number[];
-  replicateX: number[];
-  replicateY: number[];
-} {
-  if (x.length === 0) {
-    return { meanX: [], meanY: [], sdY: [], replicateX: [], replicateY: [] };
-  }
-
-  // Group by concentration (use string key to avoid float equality issues)
-  const groups = new Map<string, { conc: number; responses: number[] }>();
-  for (let i = 0; i < x.length; i++) {
-    const key = x[i].toPrecision(10);
-    if (!groups.has(key)) groups.set(key, { conc: x[i], responses: [] });
-    groups.get(key)!.responses.push(y[i]);
-  }
-
-  const meanX: number[] = [];
-  const meanY: number[] = [];
-  const sdY: number[] = [];
-  const replicateX: number[] = [];
-  const replicateY: number[] = [];
-
-  for (const { conc, responses } of groups.values()) {
-    const mean = responses.reduce((a, b) => a + b, 0) / responses.length;
-    meanX.push(conc);
-    meanY.push(mean);
-
-    if (responses.length > 1) {
-      const variance =
-        responses.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) /
-        (responses.length - 1);
-      sdY.push(Math.sqrt(variance));
-    } else {
-      sdY.push(0);
-    }
-
-    // Individual replicates for scatter layer
-    if (responses.length > 1) {
-      for (const resp of responses) {
-        replicateX.push(conc);
-        replicateY.push(resp);
-      }
-    }
-  }
-
-  return { meanX, meanY, sdY, replicateX, replicateY };
-}
-
-/** R² color class */
-function rSquaredColor(r2: number): string {
-  if (r2 >= 0.9) return "text-green-400";
-  if (r2 >= 0.8) return "text-yellow-400";
-  return "text-red-400";
-}
-
-const TRACE_COLORS = [
-  "#3b82f6",
-  "#22c55e",
-  "#f59e0b",
-  "#ef4444",
-  "#a855f7",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
-];
+const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
 
 const CURVE_CLASS_OPTIONS: CurveClass[] = ["full", "partial", "bell_shaped", "inactive"];
-
-const HILL_SLOPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "unconstrained", label: "Unconstrained" },
-  { value: "negative_only", label: "Negative only" },
-  { value: "positive_only", label: "Positive only" },
-  { value: "fixed_at_one", label: "Fixed at -1" },
-];
-
-// ─── Interactive single-curve controls ────────────────────────────────────────
-
-interface CurveControlsProps {
-  curve: DoseResponseCurve;
-  excludedIndices: Set<number>;
-  constraints: CurveConstraints;
-  onConstraintChange: (next: Partial<CurveConstraints>) => void;
-  onReset: () => void;
-  isPending: boolean;
-}
-
-function CurveControls({
-  curve,
-  excludedIndices,
-  constraints,
-  onConstraintChange,
-  onReset,
-  isPending,
-}: CurveControlsProps) {
-  const [open, setOpen] = useState(false);
-  const totalPoints = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
-  const includedCount = totalPoints - excludedIndices.size;
-
-  return (
-    <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
-      {/* Toggle header */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span>{open ? "▾" : "▸"}</span>
-          {curve.molecule_name ?? "Curve"} — Fit Constraints
-          {isPending && (
-            <span className="ml-1 h-2 w-2 rounded-full bg-blue-400 animate-pulse inline-block" />
-          )}
-        </button>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {includedCount}/{totalPoints} points
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={onReset}
-            disabled={isPending}
-          >
-            Reset
-          </Button>
-        </div>
-      </div>
-
-      {/* Collapsible constraint panel */}
-      {open && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
-          {/* Fix Top */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={`fix-top-${curve.id}`}
-                checked={constraints.fixTop}
-                onCheckedChange={(checked) =>
-                  onConstraintChange({ fixTop: checked === true })
-                }
-              />
-              <Label htmlFor={`fix-top-${curve.id}`} className="text-xs">
-                Fix Top
-              </Label>
-            </div>
-            <Input
-              type="number"
-              className="h-7 text-xs"
-              value={constraints.topValue}
-              disabled={!constraints.fixTop}
-              onChange={(e) =>
-                onConstraintChange({ topValue: parseFloat(e.target.value) || 0 })
-              }
-            />
-          </div>
-
-          {/* Fix Bottom */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={`fix-bottom-${curve.id}`}
-                checked={constraints.fixBottom}
-                onCheckedChange={(checked) =>
-                  onConstraintChange({ fixBottom: checked === true })
-                }
-              />
-              <Label htmlFor={`fix-bottom-${curve.id}`} className="text-xs">
-                Fix Bottom
-              </Label>
-            </div>
-            <Input
-              type="number"
-              className="h-7 text-xs"
-              value={constraints.bottomValue}
-              disabled={!constraints.fixBottom}
-              onChange={(e) =>
-                onConstraintChange({ bottomValue: parseFloat(e.target.value) || 0 })
-              }
-            />
-          </div>
-
-          {/* Hill Slope */}
-          <div className="space-y-1">
-            <Label className="text-xs">Hill Slope</Label>
-            <Select
-              value={constraints.hillSlope}
-              onValueChange={(v) => onConstraintChange({ hillSlope: v })}
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HILL_SLOPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Summary card with interactive curve class badge ─────────────────────────
 
@@ -334,6 +76,13 @@ interface SummaryCardProps {
   isClassifying: boolean;
 }
 
+/** Map fit-quality warning codes to user-facing labels. */
+const FIT_WARNING_LABELS: Record<string, string> = {
+  ec50_at_bound: "Hit dose-range bound — IC50 unreliable",
+  ec50_outside_dose_range: "IC50 outside tested doses",
+  low_r_squared: "Low R²",
+};
+
 function SummaryCard({
   curve,
   excludedCount,
@@ -345,11 +94,18 @@ function SummaryCard({
   const [showClassify, setShowClassify] = useState(false);
   const includedCount = totalPoints - excludedCount;
 
+  const warnings = curve.fit_quality_warnings ?? [];
+  const isExtrapolated = warnings.includes("ec50_at_bound");
+  const notFitted = isDegenerateFit(curve);
+
   return (
     <Card key={curve.id} className="py-4">
       <CardHeader className="pb-0">
-        <CardTitle className="text-sm">
-          {curve.molecule_name ?? CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
+        <CardTitle className="text-sm font-mono">
+          {curve.registration_number ??
+            curve.molecule_name ??
+            CURVE_TYPE_LABELS[curve.curve_type as CurveType] ??
+            curve.curve_type}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-2 space-y-1">
@@ -357,7 +113,39 @@ function SummaryCard({
           {CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
           {" = "}
           {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
+          {isExtrapolated && <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>}
         </p>
+        {curve.intercept_values && curve.intercept_values.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground pt-0.5">
+            {curve.intercept_values.slice(1).map((iv, idx) => {
+              const label =
+                iv.spec.label ??
+                `${iv.spec.kind.toUpperCase()}${iv.spec.level.toString().replace(/\.0$/, "")}`;
+              if (iv.at_bound || !Number.isFinite(iv.value)) {
+                return (
+                  <span
+                    key={idx}
+                    className="rounded border px-1.5 py-0.5 text-amber-600"
+                    title="Curve does not reach this response level"
+                  >
+                    {label} = at bound
+                  </span>
+                );
+              }
+              return (
+                <span key={idx} className="rounded border px-1.5 py-0.5">
+                  {label} = {Number(iv.value.toPrecision(4))} {curve.fitted_unit}
+                  {iv.confidence_interval_low != null && iv.confidence_interval_high != null && (
+                    <span className="ml-1 opacity-70">
+                      [{iv.confidence_interval_low.toPrecision(3)}–
+                      {iv.confidence_interval_high.toPrecision(3)}]
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
           <span className={cn("font-medium", rSquaredColor(curve.r_squared))}>
             R² = {curve.r_squared.toFixed(3)}
@@ -367,7 +155,8 @@ function SummaryCard({
           <span className="font-mono">Bottom = {curve.bottom.toFixed(1)}%</span>
           {curve.confidence_interval_low != null && curve.confidence_interval_high != null && (
             <span className="font-mono">
-              CI: {curve.confidence_interval_low.toPrecision(3)}–{curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
+              CI: {curve.confidence_interval_low.toPrecision(3)}–
+              {curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
             </span>
           )}
           {isInteractive && (
@@ -399,7 +188,7 @@ function SummaryCard({
                       disabled={isClassifying}
                       className={cn(
                         "flex w-full items-center px-3 py-1.5 text-xs hover:bg-accent transition-colors",
-                        curve.curve_class === cc && "font-medium text-primary"
+                        curve.curve_class === cc && "font-medium text-primary",
                       )}
                       onClick={() => {
                         onClassify(curve.id, cc);
@@ -414,6 +203,29 @@ function SummaryCard({
             </div>
           )}
         </div>
+        {(warnings.length > 0 || notFitted) && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {notFitted && (
+              <Badge
+                variant="outline"
+                className="text-xs border-muted-foreground/40 bg-muted text-muted-foreground"
+                title="The fit produced degenerate parameters (inactive or unfit)."
+              >
+                Curve not fitted (inactive or degenerate)
+              </Badge>
+            )}
+            {warnings.map((code) => (
+              <Badge
+                key={code}
+                variant="outline"
+                className="text-xs border-amber-400/60 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                title={code}
+              >
+                ⚠️ {FIT_WARNING_LABELS[code] ?? code}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -425,6 +237,8 @@ export function DoseResponseChart({
   curves,
   className,
   isInteractive = false,
+  protocolConfig = null,
+  yReadoutNormalization = null,
 }: DoseResponseChartProps) {
   // ── Interactive state ───────────────────────────────────────────────────────
   const { mutate: refit, isPending: isRefitting } = useRefitDoseResponse();
@@ -451,37 +265,54 @@ export function DoseResponseChart({
   // ref for Plotly export (downloadImage)
   const plotContainerRef = useRef<HTMLDivElement>(null);
 
+  // Seed per-curve UI from the protocol's config when provided so the
+  // accordion reflects what the protocol is actually doing — a user who
+  // set Top ∈ [85, 110] at the protocol level should see Range here, not
+  // a misleading "Free". Editing a per-curve value sends an explicit
+  // override; "Reset" clears the override and resnaps to these defaults.
+  // The [85,110]/[-10,10]/[0.9,1.1] defaults only make sense for
+  // percent-scale readouts (% inhibition / activation / control). For
+  // raw signal, Z-score, NONE, etc., we leave range fields empty so the
+  // user must explicitly choose ranges instead of inheriting bogus
+  // percent bounds.
   const getConstraints = useCallback(
     (curve: DoseResponseCurve): CurveConstraints =>
-      constraintsMap[curve.id] ?? {
-        fixTop: false,
-        topValue: curve.top,
-        fixBottom: false,
-        bottomValue: curve.bottom,
-        hillSlope: "unconstrained",
-      },
-    [constraintsMap]
+      constraintsMap[curve.id] ??
+      defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
+    [constraintsMap, protocolConfig, yReadoutNormalization],
   );
 
   const getExcluded = useCallback(
     (curveId: string): Set<number> => excludedMap[curveId] ?? new Set(),
-    [excludedMap]
+    [excludedMap],
   );
 
   const callRefit = useCallback(
     (curve: DoseResponseCurve, excluded: Set<number>, constraints: CurveConstraints) => {
+      // Send `override_<param>` so the backend treats this curve's settings
+      // as authoritative for that param (Free included). Only the values
+      // for the active mode ship — the rest go null.
       refit({
         curveId: curve.id,
         input: {
           excluded_point_indices: Array.from(excluded),
           hill_slope_constraint:
             constraints.hillSlope !== "unconstrained" ? constraints.hillSlope : null,
-          top_constraint: constraints.fixTop ? constraints.topValue : null,
-          bottom_constraint: constraints.fixBottom ? constraints.bottomValue : null,
+          override_top: true,
+          top_constraint: constraints.topMode === "lock" ? constraints.topValue : null,
+          top_constraint_min: constraints.topMode === "range" ? constraints.topMin : null,
+          top_constraint_max: constraints.topMode === "range" ? constraints.topMax : null,
+          override_bottom: true,
+          bottom_constraint: constraints.bottomMode === "lock" ? constraints.bottomValue : null,
+          bottom_constraint_min: constraints.bottomMode === "range" ? constraints.bottomMin : null,
+          bottom_constraint_max: constraints.bottomMode === "range" ? constraints.bottomMax : null,
+          override_hill: true,
+          hill_slope_min: constraints.hillCustomRange ? constraints.hillMin : null,
+          hill_slope_max: constraints.hillCustomRange ? constraints.hillMax : null,
         },
       });
     },
-    [refit]
+    [refit],
   );
 
   const handleConstraintChange = useCallback(
@@ -490,38 +321,38 @@ export function DoseResponseChart({
       const next = { ...current, ...patch };
       setConstraintsMap((prev) => ({ ...prev, [curve.id]: next }));
 
-      // debounce 500ms
       if (debounceRefs.current[curve.id]) {
         clearTimeout(debounceRefs.current[curve.id]);
       }
+      // Only fire refit when the active mode's required values are
+      // populated and consistent — otherwise we'd ship NaN/null to the
+      // backend and provoke a 500.
+      if (!constraintsValid(next)) return;
       debounceRefs.current[curve.id] = setTimeout(() => {
         callRefit(curve, getExcluded(curve.id), next);
       }, 500);
     },
-    [getConstraints, getExcluded, callRefit]
+    [getConstraints, getExcluded, callRefit],
   );
 
   const handleReset = useCallback(
     (curve: DoseResponseCurve) => {
-      const resetConstraints: CurveConstraints = {
-        fixTop: false,
-        topValue: curve.top,
-        fixBottom: false,
-        bottomValue: curve.bottom,
-        hillSlope: "unconstrained",
-      };
       setExcludedMap((prev) => ({ ...prev, [curve.id]: new Set() }));
-      setConstraintsMap((prev) => ({ ...prev, [curve.id]: resetConstraints }));
+      setConstraintsMap((prev) => ({
+        ...prev,
+        [curve.id]: defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
+      }));
+      // Reset = clear per-curve overrides, fall back to protocol's config.
       refit({ curveId: curve.id, input: { excluded_point_indices: [] } });
     },
-    [refit]
+    [refit, protocolConfig, yReadoutNormalization],
   );
 
   const handleClassify = useCallback(
     (curveId: string, curveClass: string) => {
       classify({ curveId, input: { curve_class: curveClass } });
     },
-    [classify]
+    [classify],
   );
 
   // ── Early return ────────────────────────────────────────────────────────────
@@ -534,8 +365,14 @@ export function DoseResponseChart({
   }
 
   // ── Build Plotly traces ─────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const traces: any[] = [];
+  // PlotTrace / PlotShape / PlotAnnotation: the project doesn't depend on
+  // @types/plotly.js (react-plotly.js's wrapper here uses PlotProps with
+  // Record<string, unknown>). We mirror that shape for trace/shape/annotation
+  // builders so call sites don't need `any`.
+  type PlotTrace = Record<string, unknown>;
+  type PlotShape = Record<string, unknown>;
+  type PlotAnnotation = Record<string, unknown>;
+  const traces: PlotTrace[] = [];
 
   // Track trace index → (curveId, pointIndex within included array) for click handling
   // Each included-points trace gets a traceIndex so we can map clicks back.
@@ -546,9 +383,11 @@ export function DoseResponseChart({
     const color = TRACE_COLORS[i % TRACE_COLORS.length];
     const group = `curve-${curve.id}`;
     const curveTypeLabel = CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type;
-    const label = curve.molecule_name
-      ? `${curve.molecule_name} (${curveTypeLabel})`
-      : curveTypeLabel;
+    // Prefer the canonical registration number (CV-NNNNN) for trace labels
+    // — analysts identify compounds by reg id, not free-text name. Fall back
+    // to the molecule name only when the curve carries no reg id.
+    const compoundLabel = curve.registration_number ?? curve.molecule_name ?? null;
+    const label = compoundLabel ? `${compoundLabel} (${curveTypeLabel})` : curveTypeLabel;
 
     // Merge server excluded_points back into raw_data for interactive mode:
     // In interactive mode we manage exclusions locally.
@@ -573,49 +412,63 @@ export function DoseResponseChart({
       manualExcludedY = serverIncluded.y.filter((_, idx) => localExcluded.has(idx));
       // server excluded -> split by reason
       autoExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       autoExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       manualExcludedX = [
         ...manualExcludedX,
-        ...serverExcluded.x.filter(
-          (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
-        ),
+        ...serverExcluded.x.filter((_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"),
       ];
       manualExcludedY = [
         ...manualExcludedY,
-        ...serverExcluded.y.filter(
-          (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
-        ),
+        ...serverExcluded.y.filter((_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"),
       ];
     } else {
       includedX = serverIncluded.x;
       includedY = serverIncluded.y;
       autoExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       autoExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
       );
       manualExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma",
       );
       manualExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"
+        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma",
       );
     }
 
-    const allX = [...serverIncluded.x, ...serverExcluded.x, curve.fitted_value];
-    const xMinRaw = allX.length > 0 ? Math.min(...allX) * 0.1 : curve.fitted_value * 0.01;
-    const xMin = Math.max(xMinRaw, 1e-12);
-    const xMax = allX.length > 0 ? Math.max(...allX) * 10 : curve.fitted_value * 100;
+    // Filter out NaN/non-positive values: log10 explodes on them and
+    // `fitted_value` may be NaN/0 for degenerate fits.
+    const finiteFitted = Number.isFinite(curve.fitted_value) && curve.fitted_value > 0;
+    const allX = [
+      ...serverIncluded.x,
+      ...serverExcluded.x,
+      ...(finiteFitted ? [curve.fitted_value] : []),
+    ].filter((v) => Number.isFinite(v) && v > 0);
+    let xMin: number;
+    let xMax: number;
+    if (allX.length > 0) {
+      xMin = Math.max(Math.min(...allX) * X_AXIS_MIN_RATIO, X_AXIS_FLOOR);
+      xMax = Math.max(...allX) * X_AXIS_MAX_RATIO;
+    } else if (finiteFitted) {
+      xMin = Math.max(curve.fitted_value * X_AXIS_FALLBACK_MIN_RATIO, X_AXIS_FLOOR);
+      xMax = curve.fitted_value * X_AXIS_FALLBACK_MAX_RATIO;
+    } else {
+      // No usable scale info — pick a generic µM-range default rather
+      // than feeding NaN into Plotly's log axis.
+      xMin = 0.001;
+      xMax = 1000;
+    }
 
     // Compute replicate stats for error bars
     const { meanX, meanY, sdY, replicateX, replicateY } = computeReplicateStats(
       includedX,
-      includedY
+      includedY,
     );
     const hasReplicates = replicateX.length > 0;
 
@@ -630,9 +483,9 @@ export function DoseResponseChart({
         y: replicateY,
         marker: {
           color,
-          size: 5,
+          size: PLOT_MARKER.REPLICATE_SIZE,
           symbol: "circle",
-          opacity: 0.35,
+          opacity: PLOT_MARKER.REPLICATE_OPACITY,
         },
         showlegend: false,
         hoverinfo: "skip",
@@ -655,11 +508,9 @@ export function DoseResponseChart({
         y: displayY,
         marker: {
           color,
-          size: isInteractive ? 9 : 7,
+          size: isInteractive ? PLOT_MARKER.POINT_SIZE_INTERACTIVE : PLOT_MARKER.POINT_SIZE_STATIC,
           symbol: "circle",
-          line: isInteractive
-            ? { color: "rgba(255,255,255,0.3)", width: 1 }
-            : undefined,
+          line: isInteractive ? { color: "rgba(255,255,255,0.3)", width: 1 } : undefined,
         },
         ...(hasReplicates && {
           error_y: {
@@ -689,7 +540,12 @@ export function DoseResponseChart({
         legendgroup: group,
         x: manualExcludedX,
         y: manualExcludedY,
-        marker: { color, size: 8, symbol: "x", opacity: 0.5 },
+        marker: {
+          color,
+          size: PLOT_MARKER.EXCLUDED_SIZE,
+          symbol: "x",
+          opacity: PLOT_MARKER.MANUAL_EXCLUDED_OPACITY,
+        },
         showlegend: false,
         hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to include</i><extra></extra>"
@@ -706,29 +562,43 @@ export function DoseResponseChart({
         legendgroup: group,
         x: autoExcludedX,
         y: autoExcludedY,
-        marker: { color, size: 8, symbol: "diamond", opacity: 0.45 },
+        marker: {
+          color,
+          size: PLOT_MARKER.EXCLUDED_SIZE,
+          symbol: "diamond",
+          opacity: PLOT_MARKER.AUTO_EXCLUDED_OPACITY,
+        },
         showlegend: false,
         hovertemplate:
           "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Auto-excluded (3\u03c3 outlier)</i><extra></extra>",
       });
     }
 
-    // Fitted 4PL sigmoid line (non-clickable)
-    const { x: lineX, y: lineY } = generate4PLCurve(curve, xMin, xMax);
-    traces.push({
-      type: "scatter",
-      mode: "lines",
-      name: `${label} fit`,
-      legendgroup: group,
-      x: lineX,
-      y: lineY,
-      line: { color, width: 2 },
-      showlegend: includedX.length === 0,
-      hoverinfo: "skip",
-    });
+    // Fitted 4PL sigmoid line (non-clickable). Skip for inactive / failed
+    // fits — there's no meaningful sigmoid to draw, just data points.
+    const skipFitLine = isDegenerateFit(curve);
+    if (!skipFitLine) {
+      const { x: lineX, y: lineY } = generate4PLCurve(curve, xMin, xMax);
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: `${label} fit`,
+        legendgroup: group,
+        x: lineX,
+        y: lineY,
+        line: { color, width: 2 },
+        showlegend: includedX.length === 0,
+        hoverinfo: "skip",
+      });
+    }
 
     // Confidence interval band (shaded area between CI low/high EC50 curves)
-    if (showCI && curve.confidence_interval_low && curve.confidence_interval_high) {
+    if (
+      !skipFitLine &&
+      showCI &&
+      curve.confidence_interval_low != null &&
+      curve.confidence_interval_high != null
+    ) {
       const ciLowCurve = { ...curve, fitted_value: curve.confidence_interval_low };
       const ciHighCurve = { ...curve, fitted_value: curve.confidence_interval_high };
       const { x: ciX, y: ciLowY } = generate4PLCurve(ciLowCurve, xMin, xMax);
@@ -816,64 +686,180 @@ export function DoseResponseChart({
       const constraints = getConstraints(curve);
       callRefit(curve, currentExcluded, constraints);
     },
-    [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve]
+    [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve],
   );
 
   // Build overlay shapes and annotations based on toggle state
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const shapes: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const annotations: any[] = [];
+  const shapes: PlotShape[] = [];
+  const annotations: PlotAnnotation[] = [];
   for (let i = 0; i < curves.length; i++) {
     const curve = curves[i];
     const color = TRACE_COLORS[i % TRACE_COLORS.length];
     const midY = (curve.top + curve.bottom) / 2;
     const ec50 = curve.fitted_value;
     const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
+    const degenerate = isDegenerateFit(curve);
 
-    // Cross-hair: dotted lines + marker + label at (EC50, midpoint)
-    if (showCrossHair) {
+    // Cross-hair: dotted lines + marker + label at (EC50, midpoint).
+    // Suppress for inactive/degenerate fits — the EC50 isn't meaningful.
+    if (showCrossHair && !degenerate) {
       shapes.push({
-        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: midY, y1: midY,
-        line: { color, width: 1, dash: "dot" }, opacity: 0.4,
+        type: "line",
+        xref: "paper",
+        x0: 0,
+        x1: 1,
+        yref: "y",
+        y0: midY,
+        y1: midY,
+        line: { color, width: 1, dash: "dot" },
+        opacity: 0.4,
       });
       shapes.push({
-        type: "line", xref: "x", x0: ec50, x1: ec50, yref: "paper", y0: 0, y1: 1,
-        line: { color, width: 1, dash: "dot" }, opacity: 0.4,
+        type: "line",
+        xref: "x",
+        x0: ec50,
+        x1: ec50,
+        yref: "paper",
+        y0: 0,
+        y1: 1,
+        line: { color, width: 1, dash: "dot" },
+        opacity: 0.4,
       });
       traces.push({
-        type: "scatter", mode: "markers", x: [ec50], y: [midY],
-        marker: { color: "#fbbf24", size: 10, line: { color: "#ef4444", width: 2 }, symbol: "circle" },
+        type: "scatter",
+        mode: "markers",
+        x: [ec50],
+        y: [midY],
+        marker: {
+          color: CHART_COLORS.warning,
+          size: 10,
+          line: { color: CHART_COLORS.error, width: 2 },
+          symbol: "circle",
+        },
         showlegend: false,
         hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
       });
       annotations.push({
-        x: Math.log10(ec50), y: midY, xref: "x", yref: "y",
+        x: Math.log10(ec50),
+        y: midY,
+        xref: "x",
+        yref: "y",
         text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-        showarrow: true, arrowhead: 2, arrowsize: 0.8, arrowcolor: "#ef4444",
-        ax: 0, ay: -35, font: { color: "#ef4444", size: 11 },
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 0.8,
+        arrowcolor: CHART_COLORS.error,
+        ax: 0,
+        ay: -35,
+        font: { color: CHART_COLORS.error, size: 11 },
       });
     }
 
+    // Additional intercepts (e.g. IC90 alongside the primary IC50). The first
+    // entry of intercept_values is the primary (already drawn above as the
+    // cross-hair); slice(1) gives the extras. Skip at-bound / non-finite —
+    // the curve doesn't reach that response level so a vertical line would
+    // be misleading. Different dash style ("longdash" vs the primary's "dot")
+    // keeps the primary visually distinct.
+    if (
+      showCrossHair &&
+      !degenerate &&
+      curve.intercept_values &&
+      curve.intercept_values.length > 1
+    ) {
+      for (const iv of curve.intercept_values.slice(1)) {
+        if (iv.at_bound || !Number.isFinite(iv.value)) continue;
+        const yLevel =
+          iv.spec.basis === "relative_percent"
+            ? curve.bottom + iv.spec.level * (curve.top - curve.bottom)
+            : iv.spec.level;
+        const label =
+          iv.spec.label ??
+          `${iv.spec.kind.toUpperCase()}${iv.spec.level.toString().replace(/\.0$/, "")}`;
+        shapes.push({
+          type: "line",
+          xref: "x",
+          x0: iv.value,
+          x1: iv.value,
+          yref: "paper",
+          y0: 0,
+          y1: 1,
+          line: { color, width: 1, dash: "longdash" },
+          opacity: 0.45,
+        });
+        traces.push({
+          type: "scatter",
+          mode: "markers",
+          x: [iv.value],
+          y: [yLevel],
+          marker: {
+            color,
+            size: 8,
+            line: { color: CHART_AXIS.tick, width: 1 },
+            symbol: "diamond",
+          },
+          showlegend: false,
+          hovertemplate: `${label} = ${iv.value.toPrecision(3)}${unitLabel}<extra></extra>`,
+        });
+        annotations.push({
+          x: Math.log10(iv.value),
+          y: yLevel,
+          xref: "x",
+          yref: "y",
+          text: `<b>${label}</b>`,
+          showarrow: false,
+          font: { color, size: 10 },
+          xanchor: "left",
+          yanchor: "bottom",
+          xshift: 4,
+          yshift: 2,
+        });
+      }
+    }
+
     // Plateau lines: horizontal dashed at top and bottom asymptotes
-    if (showPlateaus) {
+    if (showPlateaus && !degenerate) {
       shapes.push({
-        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.top, y1: curve.top,
-        line: { color, width: 1, dash: "dash" }, opacity: 0.3,
+        type: "line",
+        xref: "paper",
+        x0: 0,
+        x1: 1,
+        yref: "y",
+        y0: curve.top,
+        y1: curve.top,
+        line: { color, width: 1, dash: "dash" },
+        opacity: 0.3,
       });
       shapes.push({
-        type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: curve.bottom, y1: curve.bottom,
-        line: { color, width: 1, dash: "dash" }, opacity: 0.3,
+        type: "line",
+        xref: "paper",
+        x0: 0,
+        x1: 1,
+        yref: "y",
+        y0: curve.bottom,
+        y1: curve.bottom,
+        line: { color, width: 1, dash: "dash" },
+        opacity: 0.3,
       });
       annotations.push({
-        x: 1, y: curve.top, xref: "paper", yref: "y",
-        text: `Top: ${curve.top.toFixed(1)}%`, showarrow: false,
-        font: { color, size: 9 }, xanchor: "right",
+        x: 1,
+        y: curve.top,
+        xref: "paper",
+        yref: "y",
+        text: `Top: ${curve.top.toFixed(1)}%`,
+        showarrow: false,
+        font: { color, size: 9 },
+        xanchor: "right",
       });
       annotations.push({
-        x: 1, y: curve.bottom, xref: "paper", yref: "y",
-        text: `Bottom: ${curve.bottom.toFixed(1)}%`, showarrow: false,
-        font: { color, size: 9 }, xanchor: "right",
+        x: 1,
+        y: curve.bottom,
+        xref: "paper",
+        yref: "y",
+        text: `Bottom: ${curve.bottom.toFixed(1)}%`,
+        showarrow: false,
+        font: { color, size: 9 },
+        xanchor: "right",
       });
     }
   }
@@ -883,9 +869,11 @@ export function DoseResponseChart({
     autosize: true,
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
-    font: { color: "#71717a" },
+    font: { color: CHART_AXIS.tick },
     xaxis: {
-      title: { text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration" },
+      title: {
+        text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration",
+      },
       type: "log" as const,
       gridcolor: "rgba(113,113,122,0.2)",
       zerolinecolor: "rgba(113,113,122,0.3)",
@@ -898,17 +886,19 @@ export function DoseResponseChart({
     legend: {
       orientation: "h" as const,
       y: -0.2,
-      font: { color: "#71717a" },
+      font: { color: CHART_AXIS.tick },
     },
     shapes,
     annotations,
-    margin: { t: 20, b: 60, l: 60, r: 20 },
+    // Right margin gives the last X-axis tick label (e.g. "100") room
+    // before the panel edge — narrow side-panel layouts were clipping it.
+    margin: { t: 20, b: 60, l: 60, r: 32 },
     clickmode: editMode ? "event" : undefined,
     dragmode: editMode ? false : "zoom",
   };
 
   const config = {
-    displayModeBar: true,
+    displayModeBar: false,
     responsive: true,
     modeBarButtonsToRemove: ["lasso2d", "select2d"] as string[],
   };
@@ -935,7 +925,10 @@ export function DoseResponseChart({
           <>
             <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
               <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox checked={showCrossHair} onCheckedChange={(v) => setShowCrossHair(v === true)} />
+                <Checkbox
+                  checked={showCrossHair}
+                  onCheckedChange={(v) => setShowCrossHair(v === true)}
+                />
                 {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -943,7 +936,10 @@ export function DoseResponseChart({
                 95% CI band
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox checked={showPlateaus} onCheckedChange={(v) => setShowPlateaus(v === true)} />
+                <Checkbox
+                  checked={showPlateaus}
+                  onCheckedChange={(v) => setShowPlateaus(v === true)}
+                />
                 Top/Bottom
               </label>
             </div>
@@ -953,11 +949,11 @@ export function DoseResponseChart({
                 size="sm"
                 className="h-7 px-2 text-xs"
                 onClick={() => {
-                  const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
+                  const plotEl = plotContainerRef.current?.querySelector(
+                    ".js-plotly-plot",
+                  ) as HTMLElement | null;
                   if (plotEl) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const Plotly = (window as any).Plotly;
-                    Plotly?.downloadImage?.(plotEl, {
+                    getPlotlyGlobal()?.downloadImage?.(plotEl, {
                       format: "png",
                       width: 1200,
                       height: 600,
@@ -974,11 +970,11 @@ export function DoseResponseChart({
                 size="sm"
                 className="h-7 px-2 text-xs"
                 onClick={() => {
-                  const plotEl = plotContainerRef.current?.querySelector(".js-plotly-plot") as HTMLElement | null;
+                  const plotEl = plotContainerRef.current?.querySelector(
+                    ".js-plotly-plot",
+                  ) as HTMLElement | null;
                   if (plotEl) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const Plotly = (window as any).Plotly;
-                    Plotly?.downloadImage?.(plotEl, {
+                    getPlotlyGlobal()?.downloadImage?.(plotEl, {
                       format: "svg",
                       width: 1200,
                       height: 600,
@@ -995,7 +991,11 @@ export function DoseResponseChart({
         )}
       </div>
 
-      <div ref={plotContainerRef}>
+      {/* `min-w-0` lets the chart shrink inside flex/grid parents (side
+          panels, sheets) instead of forcing horizontal overflow.
+          `overflow-hidden` clips any residual canvas width Plotly's
+          resize-handler hasn't caught up with after a sheet animation. */}
+      <div ref={plotContainerRef} className="min-w-0 overflow-hidden">
         <Plot
           data={traces}
           layout={layout}
@@ -1023,11 +1023,18 @@ export function DoseResponseChart({
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Summary cards — single-curve case spans full width so the card
+          isn't stranded in a 1/3 column with 2/3 of the panel empty
+          (search-detail side panel hits this constantly). Multi-curve case
+          keeps the responsive grid for the run-page comparison view. */}
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-3",
+          curves.length > 1 && "sm:grid-cols-2 lg:grid-cols-3",
+        )}
+      >
         {curves.map((curve) => {
-          const totalPoints =
-            (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
+          const totalPoints = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
           const localExcluded = getExcluded(curve.id);
           return (
             <SummaryCard

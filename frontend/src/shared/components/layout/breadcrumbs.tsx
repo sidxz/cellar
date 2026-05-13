@@ -4,7 +4,7 @@ import { navigation } from "@/shared/lib/navigation";
 import { ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useBreadcrumbOverrides } from "./breadcrumb-context";
+import { useBreadcrumbOverrides, useBreadcrumbTrailValue } from "./breadcrumb-context";
 
 const allNavItems = navigation.flatMap((g) =>
   g.items.flatMap((i) => [i, ...(i.children ?? [])]),
@@ -16,18 +16,51 @@ const linkableHrefs = new Set(allNavItems.map((item) => item.href));
 export function Breadcrumbs() {
   const pathname = usePathname();
   const overrides = useBreadcrumbOverrides();
+  const trail = useBreadcrumbTrailValue();
   const segments = pathname.split("/").filter(Boolean);
 
+  if (segments.length === 0) {
+    return <span className="text-sm font-medium">Dashboard</span>;
+  }
+
+  // If a page declared an explicit trail, render it instead of URL-based.
+  if (trail && trail.length > 0 && trail[trail.length - 1].label) {
+    return (
+      <nav className="flex items-center gap-1 text-sm" aria-label="Breadcrumb">
+        <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Home className="size-3.5" />
+        </Link>
+        {trail.map((crumb, i) => {
+          const isLast = i === trail.length - 1;
+          return (
+            <span key={crumb.href ?? crumb.label} className="flex items-center gap-1">
+              <ChevronRight className="size-3 text-muted-foreground" />
+              {!isLast && crumb.href ? (
+                <Link
+                  href={crumb.href}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {crumb.label}
+                </Link>
+              ) : (
+                <span className={isLast ? "font-medium" : "text-muted-foreground"}>
+                  {crumb.label}
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </nav>
+    );
+  }
+
+  // Fallback: URL-based breadcrumb generation.
   function resolveLabel(href: string, segment: string): string {
     const override = overrides.get(segment);
     if (override) return override;
     const match = allNavItems.find((item) => item.href === href);
     if (match) return match.title;
     return segment.charAt(0).toUpperCase() + segment.slice(1);
-  }
-
-  if (segments.length === 0) {
-    return <span className="text-sm font-medium">Dashboard</span>;
   }
 
   return (

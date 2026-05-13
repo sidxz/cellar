@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Plus,
   Trash2,
   FlaskConical,
@@ -10,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { StructureRenderer } from "@/shared/components/chemistry";
+import { COPY_FEEDBACK_MS } from "@/shared/lib/timing";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/empty-state";
@@ -87,7 +90,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
     e.stopPropagation();
     navigator.clipboard.writeText(value);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
   };
 
   return (
@@ -105,7 +108,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
         title={`Copy ${label}`}
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5 text-emerald-400" />
+          <Check className="h-3.5 w-3.5 text-success" />
         ) : (
           <Copy className="h-3.5 w-3.5 text-muted-foreground" />
         )}
@@ -274,12 +277,14 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
+  const router = useRouter();
   const [showAddId, setShowAddId] = useState(false);
   const [newSynonym, setNewSynonym] = useState("");
   const removeMutation = useRemoveIdentifier(compoundId);
   const addMutation = useAddIdentifier(compoundId);
 
   const isDisclosed = molecule.structure_status === "disclosed";
+  const isTombstone = !!molecule.merged_into_id;
   const descriptors = molecule.descriptors;
 
   // Split identifiers into synonyms (custom type) and structured identifiers
@@ -306,6 +311,27 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Disclosure banner for undisclosed compounds */}
+      {!isDisclosed && !isTombstone && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <span className="text-sm text-amber-800 dark:text-amber-200">
+                This compound is undisclosed — no structure on file.
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/compounds/register?disclose=${molecule.id}`)}
+            >
+              Disclose Compound →
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Structure Card */}
       <Card>
         <CardHeader>

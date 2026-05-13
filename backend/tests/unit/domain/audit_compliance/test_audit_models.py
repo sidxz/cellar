@@ -5,14 +5,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from chem_vault.domain.audit_compliance.enums import (
+from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
     AuditStatus,
     AuthMethod,
     OperationType,
 )
-from chem_vault.domain.audit_compliance.models import (
+from cellar.domain.audit_compliance.models import (
     AuditEntry,
     AuditOperation,
     ElectronicSignature,

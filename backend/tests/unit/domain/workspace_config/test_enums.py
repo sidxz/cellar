@@ -1,4 +1,4 @@
-from chem_vault.domain.workspace_config.enums import FieldDataType, FieldTarget
+from cellar.domain.workspace_config.enums import FieldDataType, FieldTarget
 
 
 class TestFieldDataType:

@@ -21,20 +21,20 @@ logger = structlog.get_logger()
 
 
 async def load(ctx: DemoContext) -> int:
-    from chem_vault.application.screening.bulk_create_readout_data import (
+    from cellar.application.screening.bulk_create_readout_data import (
         BulkCreateReadoutData,
         BulkCreateReadoutDataCommand,
         ReadoutDataItem,
     )
-    from chem_vault.application.screening.get_protocol import (
+    from cellar.application.screening.get_protocol import (
         GetProtocol,
         GetProtocolQuery,
     )
-    from chem_vault.application.screening.get_run import GetRun, GetRunQuery
-    from chem_vault.application.screening.readout_calculation_engine import (
+    from cellar.application.screening.get_run import GetRun, GetRunQuery
+    from cellar.application.screening.readout_calculation_engine import (
         ReadoutCalculationEngine,
     )
-    from chem_vault.domain.screening_assay.enums import RunStatus
+    from cellar.domain.screening_assay.enums import RunStatus
 
     data = ctx.data("readout_config.json")
     get_protocol_uc = ctx.container[GetProtocol]
@@ -125,7 +125,7 @@ async def _load_dose_response_run(
     % Inhibition from Hill equation, create ReadoutDataItem with well_id set.
     Then trigger the ReadoutCalculationEngine to normalize + auto-fit curves.
     """
-    from chem_vault.application.screening.bulk_create_readout_data import (
+    from cellar.application.screening.bulk_create_readout_data import (
         BulkCreateReadoutDataCommand,
         ReadoutDataItem,
     )
@@ -160,9 +160,9 @@ async def _load_dose_response_run(
     items = []
 
     # Create readout data for control wells (molecule_id/batch_id NULL — migration 005)
-    from chem_vault.domain.screening_assay.enums import WellType
+    from cellar.domain.screening_assay.enums import WellType
     from sqlalchemy.ext.asyncio import async_sessionmaker
-    from chem_vault.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
         ReadoutDataModel, WellModel, PlateModel,
     )
     from sqlalchemy import select
@@ -197,7 +197,7 @@ async def _load_dose_response_run(
             logger.info("readout.controls_created", run_key=run_key, count=len(ctrl_wells))
 
     for well in run.wells:
-        if well.batch_id is None or well.concentration is None:
+        if well.batch_id is None or well.dose is None:
             continue
 
         mol_key = batch_to_mol_key.get(well.batch_id)
@@ -218,7 +218,7 @@ async def _load_dose_response_run(
         if batch_id is None:
             continue
 
-        conc = well.concentration.value  # in nM
+        conc = well.dose  # in nM (Protocol.dose_unit)
 
         # Hill equation: % Inhibition = bottom + (top - bottom) / (1 + (IC50/conc)^hill_slope)
         # At conc >> IC50: response -> top (high inhibition)
@@ -272,11 +272,12 @@ async def _load_dose_response_run(
             error=str(engine_result.failure()),
         )
     else:
-        computed = engine_result.unwrap()
+        outcome = engine_result.unwrap()
         logger.info(
             "readout.engine_done",
             run_key=run_key,
-            computed_count=len(computed),
+            computed_count=len(outcome.computed_readouts),
+            fit_warnings=len(outcome.fit_warnings),
         )
 
     # Also load extra single-point readouts (e.g. Selectivity Index for COX-2)
@@ -314,7 +315,7 @@ async def _build_extra_readout_items(
     seed: int,
 ) -> list:
     """Build single-point readout items for non-Hill readouts (e.g. Selectivity Index)."""
-    from chem_vault.application.screening.bulk_create_readout_data import ReadoutDataItem
+    from cellar.application.screening.bulk_create_readout_data import ReadoutDataItem
 
     items = []
     rng = random.Random(seed)
@@ -358,7 +359,7 @@ async def _load_single_point_run(
     seed: int,
 ) -> int:
     """Generate molecule-level single-point readout data (original approach)."""
-    from chem_vault.application.screening.bulk_create_readout_data import (
+    from cellar.application.screening.bulk_create_readout_data import (
         BulkCreateReadoutDataCommand,
         ReadoutDataItem,
     )

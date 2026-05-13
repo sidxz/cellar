@@ -4,8 +4,8 @@ import pytest
 import httpx
 import respx
 
-from chem_vault.infrastructure.cdd.client import CddVaultClient
-from chem_vault.application.cdd_import.errors import (
+from cellar.infrastructure.cdd.client import CddVaultClient
+from cellar.application.cdd_import.errors import (
     CddAuthError,
     CddConnectionError,
     CddNotFoundError,
