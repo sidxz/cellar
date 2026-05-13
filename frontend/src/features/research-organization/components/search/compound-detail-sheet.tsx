@@ -1,11 +1,11 @@
 "use client";
 
 import type { Molecule } from "@/features/chemical-registration/types";
-import { LIFECYCLE_LABELS, type LifecycleStage } from "@/features/chemical-registration/types";
+import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
 import type { CurveClass, CurveType, DoseResponseCurve } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
-import { Badge } from "@/shared/components/ui/badge";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/shared/components/ui/sheet";
@@ -136,27 +136,6 @@ function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardP
   );
 }
 
-// ─── Lifecycle badge variant mapping ──────────────────────────────────────
-
-function lifecycleBadgeVariant(
-  stage: LifecycleStage,
-): "default" | "secondary" | "success" | "warning" | "destructive" | "outline" {
-  switch (stage) {
-    case "hit":
-    case "lead":
-      return "success";
-    case "preclinical_candidate":
-    case "development_candidate":
-      return "default";
-    case "deprioritized":
-      return "warning";
-    case "archived":
-      return "destructive";
-    default:
-      return "secondary";
-  }
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────
 
 export function CompoundDetailSheet({
@@ -278,9 +257,10 @@ export function CompoundDetailSheet({
                   )}
                 </div>
 
-                <Badge variant={lifecycleBadgeVariant(molecule.lifecycle_stage)}>
-                  {LIFECYCLE_LABELS[molecule.lifecycle_stage] ?? molecule.lifecycle_stage}
-                </Badge>
+                <StatusBadge
+                  status={molecule.lifecycle_stage}
+                  label={LIFECYCLE_LABELS[molecule.lifecycle_stage]}
+                />
               </div>
             </div>
 

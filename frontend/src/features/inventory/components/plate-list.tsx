@@ -26,30 +26,13 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { usePlates, useDeletePlate } from "../hooks/use-plates";
 import { RegisterPlateDialog } from "./register-plate-dialog";
 import type { RegisteredPlate, PlateStatus, PlateType } from "../types/plates";
 import { plateTypeLabels, plateStatusLabels } from "../types/plates";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
-
-function plateStatusVariant(
-  status: PlateStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "registered":
-      return "outline";
-    case "in_use":
-      return "default";
-    case "stored":
-      return "secondary";
-    case "depleted":
-    case "disposed":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 export function PlateList() {
   const router = useRouter();
@@ -116,9 +99,7 @@ export function PlateList() {
         width: 120,
         cellRenderer: (params: ICellRendererParams<RegisteredPlate>) =>
           params.value ? (
-            <Badge variant={plateStatusVariant(params.value as PlateStatus)}>
-              {plateStatusLabels[params.value as PlateStatus] ?? params.value}
-            </Badge>
+            <StatusBadge status={params.value as PlateStatus} />
           ) : null,
       },
       {

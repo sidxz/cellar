@@ -26,10 +26,11 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { DetailShell } from "@/shared/components/detail-shell";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { usePlate, usePlateChildren, useChangeStatus, useDerivePlate } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, WellMapping } from "../types/plates";
-import { plateTypeLabels, plateStatusLabels } from "../types/plates";
+import { plateTypeLabels } from "../types/plates";
 import { WellMappingDialog } from "./well-mapping-dialog";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
@@ -72,28 +73,6 @@ function ResolvedParentPlate({ id }: { id: string | null }) {
       {parent ? parent.barcode : "View parent"}
     </Link>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Badge helpers
-// ---------------------------------------------------------------------------
-
-function plateStatusVariant(
-  status: PlateStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "registered":
-      return "outline";
-    case "in_use":
-      return "default";
-    case "stored":
-      return "secondary";
-    case "depleted":
-    case "disposed":
-      return "destructive";
-    default:
-      return "outline";
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -259,9 +238,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           return (
             <>
       <div className="flex flex-wrap items-center gap-2 -mt-3">
-        <Badge variant={plateStatusVariant(plate.status as PlateStatus)}>
-          {plateStatusLabels[plate.status as PlateStatus] ?? plate.status}
-        </Badge>
+        <StatusBadge status={plate.status} />
         <Badge variant="outline">
           {plateTypeLabels[plate.plate_type as PlateType] ?? plate.plate_type}
         </Badge>
@@ -361,9 +338,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                   <span className="text-sm text-muted-foreground">
                     {child.plate_label}
                   </span>
-                  <Badge variant={plateStatusVariant(child.status as PlateStatus)} className="ml-auto">
-                    {plateStatusLabels[child.status as PlateStatus] ?? child.status}
-                  </Badge>
+                  <StatusBadge status={child.status} className="ml-auto" />
                 </li>
               ))}
             </ul>

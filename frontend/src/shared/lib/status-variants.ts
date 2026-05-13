@@ -35,6 +35,8 @@ const STATUS_CATEGORIES: Record<string, StatusCategory> = {
 
   // Active / in-use
   in_use: "active",
+  preclinical_candidate: "active",
+  development_candidate: "active",
 
   // Success end-states
   stored: "success",
