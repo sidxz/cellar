@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
+import { formatFileSize } from "@/shared/lib/format-number";
 import type { BulkInput } from "../../types/registration-wizard";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -762,7 +763,7 @@ function BulkInputForm() {
             <div>
               <p className="text-sm font-medium">{bulkInput.file.name}</p>
               <p className="text-xs text-muted-foreground">
-                {(bulkInput.file.size / 1024).toFixed(1)} KB
+                {formatFileSize(bulkInput.file.size)}
                 <span className="ml-2 uppercase">{bulkInput.fileFormat}</span>
               </p>
             </div>

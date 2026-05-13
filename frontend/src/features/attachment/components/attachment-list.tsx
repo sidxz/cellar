@@ -26,13 +26,8 @@ import {
   useDownloadAttachment,
 } from "../hooks/use-attachments";
 import { formatDate } from "@/shared/lib/format-date";
+import { formatFileSize } from "@/shared/lib/format-number";
 import type { AttachableType, AttachmentResponse } from "../types";
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1_048_576).toFixed(1)} MB`;
-}
 
 function getMimeIcon(mimeType: string) {
   if (mimeType.startsWith("image/")) return Image;
