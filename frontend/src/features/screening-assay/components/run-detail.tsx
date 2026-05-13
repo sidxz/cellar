@@ -58,6 +58,7 @@ import {
   useRecomputeRun,
   useDeleteRun,
 } from "../hooks/use-runs";
+import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
 import { useProtocol } from "../hooks/use-protocols";
 import {
   PLATE_FORMAT_LABELS,
@@ -101,77 +102,36 @@ export function RunDetail({ runId }: RunDetailProps) {
   // surface; "inherit" means the protocol's setting carries through
   // unchanged for that param. Override values are applied for THIS recompute
   // pass only and are not persisted.
-  type RecomputeMode = "inherit" | "free" | "range" | "lock";
   const [recomputePopoverOpen, setRecomputePopoverOpen] = useState(false);
-  const [recomputeTopMode, setRecomputeTopMode] =
-    useState<RecomputeMode>("inherit");
-  const [recomputeTop, setRecomputeTop] = useState("");
-  const [recomputeTopMin, setRecomputeTopMin] = useState("");
-  const [recomputeTopMax, setRecomputeTopMax] = useState("");
-  const [recomputeBottomMode, setRecomputeBottomMode] =
-    useState<RecomputeMode>("inherit");
-  const [recomputeBottom, setRecomputeBottom] = useState("");
-  const [recomputeBottomMin, setRecomputeBottomMin] = useState("");
-  const [recomputeBottomMax, setRecomputeBottomMax] = useState("");
-  const [recomputeHillMode, setRecomputeHillMode] = useState<
-    "inherit" | "enum" | "range"
-  >("inherit");
-  const [recomputeHillEnum, setRecomputeHillEnum] = useState<
-    "unconstrained" | "negative_only" | "positive_only" | "fixed_at_one"
-  >("unconstrained");
-  const [recomputeHillMin, setRecomputeHillMin] = useState("");
-  const [recomputeHillMax, setRecomputeHillMax] = useState("");
+  const {
+    overrides: recomputeOverrides,
+    updateOverride,
+    clearOverrides: clearRecomputeOverrides,
+    buildPayload: buildRecomputePayload,
+  } = useRecomputeOverrides();
 
-  const clearRecomputeOverrides = () => {
-    setRecomputeTopMode("inherit");
-    setRecomputeTop("");
-    setRecomputeTopMin("");
-    setRecomputeTopMax("");
-    setRecomputeBottomMode("inherit");
-    setRecomputeBottom("");
-    setRecomputeBottomMin("");
-    setRecomputeBottomMax("");
-    setRecomputeHillMode("inherit");
-    setRecomputeHillEnum("unconstrained");
-    setRecomputeHillMin("");
-    setRecomputeHillMax("");
-  };
+  const {
+    topMode: recomputeTopMode,
+    top: recomputeTop,
+    topMin: recomputeTopMin,
+    topMax: recomputeTopMax,
+    bottomMode: recomputeBottomMode,
+    bottom: recomputeBottom,
+    bottomMin: recomputeBottomMin,
+    bottomMax: recomputeBottomMax,
+    hillMode: recomputeHillMode,
+    hillEnum: recomputeHillEnum,
+    hillMin: recomputeHillMin,
+    hillMax: recomputeHillMax,
+  } = recomputeOverrides;
 
   const handleRecompute = (withOverrides: boolean) => {
     if (!withOverrides) {
       recomputeMutation.mutate({ runId });
       return;
     }
-    const parseOrNull = (s: string) => (s !== "" ? parseFloat(s) : null);
-    const overrides = {
-      override_top: recomputeTopMode !== "inherit",
-      top_constraint:
-        recomputeTopMode === "lock" ? parseOrNull(recomputeTop) : null,
-      top_constraint_min:
-        recomputeTopMode === "range" ? parseOrNull(recomputeTopMin) : null,
-      top_constraint_max:
-        recomputeTopMode === "range" ? parseOrNull(recomputeTopMax) : null,
-      override_bottom: recomputeBottomMode !== "inherit",
-      bottom_constraint:
-        recomputeBottomMode === "lock" ? parseOrNull(recomputeBottom) : null,
-      bottom_constraint_min:
-        recomputeBottomMode === "range"
-          ? parseOrNull(recomputeBottomMin)
-          : null,
-      bottom_constraint_max:
-        recomputeBottomMode === "range"
-          ? parseOrNull(recomputeBottomMax)
-          : null,
-      override_hill: recomputeHillMode !== "inherit",
-      hill_slope_constraint:
-        recomputeHillMode === "enum" ? recomputeHillEnum : null,
-      hill_slope_min:
-        recomputeHillMode === "range" ? parseOrNull(recomputeHillMin) : null,
-      hill_slope_max:
-        recomputeHillMode === "range" ? parseOrNull(recomputeHillMax) : null,
-    };
     recomputeMutation.mutate(
-      { runId, overrides },
+      { runId, overrides: buildRecomputePayload() },
       {
         onSuccess: () => {
           setRecomputePopoverOpen(false);
@@ -364,7 +324,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                           <Label className="text-xs font-medium">Top</Label>
                           <RecomputeModeToggle
                             mode={recomputeTopMode}
-                            onChange={setRecomputeTopMode}
+                            onChange={(v) => updateOverride("topMode", v)}
                             idPrefix="rec-top"
                           />
                         </div>
@@ -375,7 +335,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                             placeholder="e.g., 100"
                             value={recomputeTop}
                             onChange={(e) =>
-                              setRecomputeTop(e.target.value)
+                              updateOverride("top", e.target.value)
                             }
                           />
                         )}
@@ -387,7 +347,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                               placeholder="85"
                               value={recomputeTopMin}
                               onChange={(e) =>
-                                setRecomputeTopMin(e.target.value)
+                                updateOverride("topMin", e.target.value)
                               }
                             />
                             <span className="text-xs text-muted-foreground">
@@ -399,7 +359,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                               placeholder="110"
                               value={recomputeTopMax}
                               onChange={(e) =>
-                                setRecomputeTopMax(e.target.value)
+                                updateOverride("topMax", e.target.value)
                               }
                             />
                           </div>
@@ -412,7 +372,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                           <Label className="text-xs font-medium">Bottom</Label>
                           <RecomputeModeToggle
                             mode={recomputeBottomMode}
-                            onChange={setRecomputeBottomMode}
+                            onChange={(v) => updateOverride("bottomMode", v)}
                             idPrefix="rec-bot"
                           />
                         </div>
@@ -423,7 +383,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                             placeholder="e.g., 0"
                             value={recomputeBottom}
                             onChange={(e) =>
-                              setRecomputeBottom(e.target.value)
+                              updateOverride("bottom", e.target.value)
                             }
                           />
                         )}
@@ -435,7 +395,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                               placeholder="-10"
                               value={recomputeBottomMin}
                               onChange={(e) =>
-                                setRecomputeBottomMin(e.target.value)
+                                updateOverride("bottomMin", e.target.value)
                               }
                             />
                             <span className="text-xs text-muted-foreground">
@@ -447,7 +407,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                               placeholder="10"
                               value={recomputeBottomMax}
                               onChange={(e) =>
-                                setRecomputeBottomMax(e.target.value)
+                                updateOverride("bottomMax", e.target.value)
                               }
                             />
                           </div>
@@ -463,7 +423,8 @@ export function RunDetail({ runId }: RunDetailProps) {
                           <Select
                             value={recomputeHillMode}
                             onValueChange={(v) =>
-                              setRecomputeHillMode(
+                              updateOverride(
+                                "hillMode",
                                 v as "inherit" | "enum" | "range",
                               )
                             }
@@ -488,7 +449,8 @@ export function RunDetail({ runId }: RunDetailProps) {
                           <Select
                             value={recomputeHillEnum}
                             onValueChange={(v) =>
-                              setRecomputeHillEnum(
+                              updateOverride(
+                                "hillEnum",
                                 v as
                                   | "unconstrained"
                                   | "negative_only"
@@ -525,7 +487,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                               placeholder="0.9"
                               value={recomputeHillMin}
                               onChange={(e) =>
-                                setRecomputeHillMin(e.target.value)
+                                updateOverride("hillMin", e.target.value)
                               }
                             />
                             <span className="text-xs text-muted-foreground">
@@ -538,7 +500,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                               placeholder="1.1"
                               value={recomputeHillMax}
                               onChange={(e) =>
-                                setRecomputeHillMax(e.target.value)
+                                updateOverride("hillMax", e.target.value)
                               }
                             />
                           </div>
