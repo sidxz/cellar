@@ -183,19 +183,34 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
-### 2026-05-12 — Campaign UI search-style redesign through Phase 5 on `fe2`
+### 2026-05-13 — Frontend cleanup (review punch list) on `fe2`
 
-**Spec:** `docs/superpowers/specs/2026-05-12-campaign-search-style-redesign.md`
-**Plan:** `docs/superpowers/plans/2026-05-12-campaign-search-style-redesign.md`
+**Plan:** `docs/superpowers/plans/2026-05-12-frontend-cleanup.md`
 
-**Shipped:**
-- Phase 1: `POST /api/v1/dose-response/curves:batch` (+ `find_by_ids` repo method)
-- Phases 2-4: V2 single-column layout replaces the legacy 3-pane shell — `HeaderStrip` + `SourcesSection` + `ChannelsSection` + `CampaignFilterBar` + `CampaignToolbar` + `ResultsGridV2` (inline DR plots + row expansion + decision popover from chip)
-- Deleted: `CompoundListPane`, `SourcesSummaryCard`, `DecisionPanel`, `ChannelStrip`, legacy `ResultsGrid`
-- Extracted: `OverrideModal`, `ChannelPopoverForm`, `ManualAddDialog` as shared components
-- Closed/superseded campaigns use the same layout with `readOnly={true}` (source-protocols + published-collection cards surfaced as a small details row; supersede + download wired through `HeaderStrip`)
-- Phase 5: customize-report sheet + per-campaign report-config Zustand store + project-scoped pickers (collection / campaign / runs dialogs).
+**Shipped (49 commits, 113 files touched, 4a089392..93ced7a2):**
+- Phase 1 — Shared primitives: `useDebounce`, `useHashTab`, `formatDate`/`formatDateTime`/`formatRelativeDate`, `formatFileSize`, `SearchInput`; extended `status-variants` (in_use/stored/merged/conflict/preclinical_candidate/development_candidate)
+- Phase 2 — Sweeps: SearchInput at 7 callsites; useDebounce ×2; StatusBadge collapsing 4 local switches; date utilities across 18 files; formatFileSize ×2; ConfirmDeleteDialog at 5 delete callsites; useHashTab unifying tab state on 5 detail pages + inventory-dashboard
+- Phase 3 — Cross-feature boundaries: `MOLECULES_KEY`, `CampaignList`, `CurveSnapshot`, `DoseResponseSparkline`, `CurveClassBadge`, `useProtocolSummaries` now exported via each feature's `index.ts`; 6 internal-path imports fixed
+- Phase 4 — screen-campaign realignment: `hooks/` separated from `lib/`; `useCampaignsByProject` → `useCampaigns(projectId?)`; `useMoleculesByIds` moved to chemical-registration; raw `AgGridReact` callsites routed through `DataGrid` (DataGrid extended with `ColGroupDef` support + `clearSelectionToken` prop); `campaign-builder.tsx` loading/error states aligned with `DetailShell`
+- Phase 5 — Antipattern fixes: server-state-sync effect dropped in registration wizard; state-sync effects in `molecule-selector`/`override-modal`/`add-from-runs-dialog` replaced with derived values; `window.location.href`/`window.location.hash` replaced with `useRouter`/`useHashTab`; search-page 11 useStates collapsed into a reducer; CSS group-hover replaces per-cell `useState(hover)` in results-grid; `audit-timeline` uses shared `EmptyState`
+- Phase 6 — God-module decomp:
+  - `design-tab.tsx` 2080→756 (-64%) + extracted use-readout-definition-form hook, readout-definition-dialog, condition-definition-dialog, design-tab-protocol-card
+  - `search-query-builder.tsx` 1554→285 (-82%) + extracted search-query-config + 4 criterion-row files (simple/resource/structure/advanced)
+  - `synthesis-request-detail.tsx` 1191→519 (-56%) + extracted use-synthesis-request-actions hook + synthesis-request-dialogs
+  - `activity-tab.tsx` 1021→658, `run-dr-results.tsx` 757→443 (extracted columns/transforms/use-activity-tab)
+  - `dose-response-chart.tsx` 1549→1054 (extracted math/constraints/controls)
+  - `run-import-wizard.tsx` 1291→960 (extracted run-import-mapping + use-run-import-wizard hook)
+  - `run-detail.tsx` 836→776 (extracted use-recompute-overrides hook)
+- Phase 7 — RHF + Zod form migration: 12 dialogs migrated to react-hook-form + zod (create-project, create-collection, organization, create-saved-search, registration-form-admin, ontology-slot-admin, custom-field-admin, api-key-admin, workspace-settings-form, data-source-detail, create-run-dialog, create-protocol-dialog)
+- Phase 8 — Promoted `CollectionPickerDialog` to shared with `simple?: boolean` prop (deleted both per-feature copies); `MoleculeThumbnail` kept (legitimate size/null-handling wrapper)
 
-**Next:** Phase 6 — Playwright happy-path smoke (deferred to a separate session). Browser smoke pending.
+**Verification:** `pnpm exec tsc --noEmit` clean. `pnpm test` 106/106 pass. `pnpm lint` 753 pre-existing errors (–3 net from baseline, no new errors introduced). Branch is local; not pushed.
+
+**Deferred to next session:**
+- Browser smoke: dialogs (12 migrated), all detail-page tabs (hash links), Add-from-runs flow (state derivation refactor), inventory-dashboard navigation, search-page reducer
+- Task 35 — Orval regen + remove `as unknown as` casts (5 sites) — needs backend OpenAPI to expose `curve_snapshot` field and proper `recommended_hit_criteria` typing first
+- Optional follow-ups noted by sub-agents: extract `SummaryCard` from `dose-response-chart` (~890 lines after), extract step sub-components from `run-import-wizard` (~600 lines after), split `readout-definition-dialog.tsx` (904 lines) — none essential, all clean wins if pursued
+
+**Next:** Browser smoke-test on the 12 form migrations and the major decomps (Phase 6+7 surfaces). Then push `fe2` and merge.
 
 Long-lived state (current branch, what's shipped, what's next, operational backlog) lives in `~/.claude` memory — see `MEMORY.md` for the index.
