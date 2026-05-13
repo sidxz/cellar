@@ -1,14 +1,17 @@
 """ImportRunFile — long-format run file import with preview/import gate.
 
-Two use cases:
+Two flows:
 
-- ``PreviewRunFile`` (read-only): parse the uploaded file, suggest a column
-  mapping, dry-resolve batch references, summarize plates and controls,
-  scan for conflicts against existing run state, and stash the parsed
-  table + raw bytes in a short-lived in-memory store keyed by
-  ``preview_id``. The wizard surfaces the result for user confirmation.
+- **Preview / repreview** (read-only): ``PreviewRunFile`` parses the
+  upload, auto-guesses a column mapping, dry-resolves batch + compound
+  references, summarizes plates and controls, and scans for conflicts
+  against existing run state. The parsed table + raw bytes are stashed
+  in a short-lived in-memory store keyed by ``preview_id``. The wizard
+  surfaces the result for user confirmation. ``RepreviewRunFile`` re-runs
+  the same resolution against the cached preview using a chemist-refined
+  column mapping — no re-upload required.
 
-- ``ImportRunFile`` (write): consume a ``preview_id`` plus the
+- **Import** (write): ``ImportRunFile`` consumes a ``preview_id`` plus the
   user-confirmed ``ColumnMapping``. Re-runs the conflict scan as the
   source of truth, then writes only the non-conflicting plates, wells,
   and readouts. Conflicts are returned for reporting; nothing existing
@@ -17,17 +20,29 @@ Two use cases:
 
 The preview store is in-memory only — preview payloads expire after 60s
 and are deleted on first consume (idempotency on the import side).
+
+Helpers live in sibling modules to keep this file focused on the import
+orchestration:
+
+- ``preview_run_file`` — ``PreviewRunFile`` + ``RepreviewRunFile`` use cases.
+- ``import_run_file_preview_store`` — ``_StoredPreview``, ``PreviewStore``,
+  ``InMemoryPreviewStore``, ``_guess_content_type``.
+- ``import_run_file_dtos`` — Command / query / result dataclasses.
+- ``import_run_file_mapper`` — row → resolver-index helpers.
+- ``import_run_file_validator`` — control-layout validation rules.
+- ``import_plan`` — conflict-scan dataclasses + the scan function itself.
+
+All public names — both use cases, both DTO groups, the store, and the
+import-plan conflict types — are re-exported from this module so the
+original import path (``cellar.application.screening.import_run_file``)
+remains the single canonical entry point for callers.
 """
 
 from __future__ import annotations
 
-import time
 import uuid
-from collections.abc import Iterable
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Protocol, runtime_checkable
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.attachment.upload_attachment import (
@@ -35,11 +50,30 @@ from cellar.application.attachment.upload_attachment import (
     UploadAttachmentCommand,
 )
 from cellar.application.auth import AuthContext, require_editor
-from cellar.application.screening.compound_ref_resolver import (
-    AmbiguousCompound,
-    BatchSummary,
-    CompoundCandidate,
-    resolve_rows,
+from cellar.application.screening.compound_ref_resolver import resolve_rows
+from cellar.application.screening.import_run_file_dtos import (
+    AmbiguousCompoundDTO,
+    BatchOption,
+    ImportRunFileCommand,
+    ImportRunFileResult,
+    PlatePreview,
+    PreviewRunFileQuery,
+    PreviewRunFileResult,
+    RepreviewRunFileQuery,
+)
+from cellar.application.screening.import_run_file_mapper import (
+    _build_batch_lookup,
+    _build_compound_index,
+)
+from cellar.application.screening.import_run_file_preview_store import (
+    InMemoryPreviewStore,
+    PreviewStore,
+    _guess_content_type,
+    _StoredPreview,
+)
+from cellar.application.screening.import_run_file_validator import (
+    _load_templates_by_format,
+    _validate_controls_required,
 )
 
 # Re-exported here so existing callers `from import_run_file import WellConflict`
@@ -56,36 +90,20 @@ from cellar.application.screening.import_plan import (  # noqa: F401
 )
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
-    HeaderSuggestion,
-    LongFormatRow,
     NormalizedTable,
     ReadoutColumn,
-    ReadoutDefRef,
-    SuggestedMapping,
-    infer_mapping,
     normalize,
 )
+from cellar.application.screening.preview_run_file import PreviewRunFile, RepreviewRunFile
 from cellar.application.screening.readout_calculation_engine import (
     ReadoutCalculationEngine,
 )
-from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
-from cellar.application.shared.parsers import (
-    ParsedTable,
-    TabularParseError,
-    TabularParser,
-)
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
-from cellar.domain.screening_assay.enums import (
-    ReadoutDataType,
-    ReadoutNormalization,
-    WellType,
-)
-from cellar.domain.screening_assay.plate_template import PlateTemplate
-from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
+from cellar.domain.screening_assay.enums import ReadoutDataType
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.repository import (
     PlateTemplateRepository,
@@ -93,7 +111,6 @@ from cellar.domain.screening_assay.repository import (
     ReadoutDataRepository,
     RunRepository,
 )
-from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.errors import (
     ConflictError,
     DomainError,
@@ -101,576 +118,28 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 
-# Hard cap from the plan: sync-only MVP.
-_MAX_ROWS = 50_000
-
-
-# ---------------------------------------------------------------------------
-# Preview store
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class _StoredPreview:
-    """Cached parsed file + raw bytes bound to a preview_id.
-
-    Raw bytes are kept so the importer can persist the original upload
-    as a Run attachment after a successful write — the Files tab is
-    the canonical audit log of what was uploaded for the run.
-    """
-
-    workspace_id: uuid.UUID
-    run_id: uuid.UUID
-    table: ParsedTable
-    raw_bytes: bytes
-    filename: str
-    content_type: str
-    expires_at: float
-
-
-@runtime_checkable
-class PreviewStore(Protocol):
-    """Short-lived store for parsed preview tables."""
-
-    def save(self, key: uuid.UUID, payload: _StoredPreview) -> None: ...
-    def consume(self, key: uuid.UUID) -> _StoredPreview | None: ...
-    def peek(self, key: uuid.UUID) -> _StoredPreview | None: ...
-
-
-class InMemoryPreviewStore:
-    """In-process preview store with TTL eviction. Single-process only."""
-
-    def __init__(self, ttl_seconds: float = 60.0, *, clock=time.monotonic) -> None:
-        self._items: dict[uuid.UUID, _StoredPreview] = {}
-        self._ttl = ttl_seconds
-        self._clock = clock
-
-    @property
-    def ttl_seconds(self) -> float:
-        return self._ttl
-
-    def save(self, key: uuid.UUID, payload: _StoredPreview) -> None:
-        self._items[key] = payload
-
-    def consume(self, key: uuid.UUID) -> _StoredPreview | None:
-        self._evict_expired()
-        return self._items.pop(key, None)
-
-    def peek(self, key: uuid.UUID) -> _StoredPreview | None:
-        """Return the cached payload without removing it.
-
-        Used by ``RepreviewRunFile`` so the chemist can refine the column
-        mapping in the wizard's mapping step and re-run resolution
-        without re-uploading the file.
-        """
-        self._evict_expired()
-        return self._items.get(key)
-
-    def _evict_expired(self) -> None:
-        now = self._clock()
-        stale = [k for k, v in self._items.items() if v.expires_at <= now]
-        for k in stale:
-            del self._items[k]
-
-
-# ---------------------------------------------------------------------------
-# DTOs
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True, kw_only=True)
-class PreviewRunFileQuery(Command):
-    workspace_id: uuid.UUID
-    run_id: uuid.UUID
-    file_content: bytes
-    filename: str = ""
-    content_type: str = ""
-
-
-@dataclass(frozen=True)
-class PlatePreview:
-    plate_name: str
-    plate_format: str
-    well_count: int
-    sample_count: int
-    blank_count: int
-
-
-@dataclass(frozen=True)
-class BatchOption:
-    """One option offered to the chemist when disambiguating a compound."""
-
-    batch_id: uuid.UUID
-    batch_number: str
-    salt_form: str | None
-    purity: float | None
-    created_at: datetime
-
-
-@dataclass(frozen=True)
-class AmbiguousCompoundDTO:
-    """One molecule that needs the chemist to pick a batch.
-
-    The picker UI renders one row per ``AmbiguousCompoundDTO``; the
-    chemist's choice flows back as ``compound_batch_overrides`` on the
-    import command.
-    """
-
-    compound_ref: str
-    molecule_id: uuid.UUID
-    molecule_name: str
-    batch_options: tuple[BatchOption, ...]
-    affected_row_count: int
-
-
-@dataclass(frozen=True)
-class PreviewRunFileResult:
-    preview_id: uuid.UUID
-    headers: tuple[str, ...]
-    suggestions: tuple[HeaderSuggestion, ...]
-    sample_rows: tuple[dict[str, str], ...]
-    plates: tuple[PlatePreview, ...]
-    matched_batches: int
-    unmatched_batches: tuple[str, ...]
-    total_rows: int
-    expires_in_seconds: int
-    validation_errors: tuple[str, ...] = ()
-    will_create_plates: int = 0
-    will_create_wells: int = 0
-    will_create_readouts: int = 0
-    will_skip_wells: tuple[WellConflict, ...] = ()
-    will_skip_readouts: tuple[ReadoutConflict, ...] = ()
-    matched_compounds: int = 0
-    unmatched_compound_refs: tuple[str, ...] = ()
-    ambiguous_compounds: tuple[AmbiguousCompoundDTO, ...] = ()
-    row_conflicts: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
-class RepreviewRunFileQuery(Command):
-    """Re-run resolution against a cached preview using a refined mapping.
-
-    Fired when the chemist edits the column-role assignments in the
-    wizard's mapping step (e.g. switches a column from Batch Ref to
-    Compound Ref) and the preview panel needs to reflect the new
-    resolution outcome before they commit the import.
-    """
-
-    workspace_id: uuid.UUID
-    run_id: uuid.UUID
-    preview_id: uuid.UUID
-    mapping: ColumnMapping
-
-
-@dataclass(frozen=True, kw_only=True)
-class ImportRunFileCommand(Command):
-    workspace_id: uuid.UUID
-    run_id: uuid.UUID
-    preview_id: uuid.UUID
-    mapping: ColumnMapping
-    # User's per-molecule batch picks from the disambiguation panel.
-    # ``molecule_id → batch_id``. Empty when no disambiguation was needed.
-    compound_batch_overrides: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
-
-
-@dataclass
-class ImportRunFileResult:
-    rows_total: int = 0
-    plates_created: int = 0
-    wells_created: int = 0
-    readouts_created: int = 0
-    unmatched_batches: list[str] = field(default_factory=list)
-    unmatched_compound_refs: list[str] = field(default_factory=list)
-    controls_from_template: int = 0
-    controls_unclassified: int = 0
-    skipped_rows: int = 0
-    conflicts_well_metadata: list[WellConflict] = field(default_factory=list)
-    conflicts_readout: list[ReadoutConflict] = field(default_factory=list)
-    attachment_id: uuid.UUID | None = None
-    # Non-fatal warnings. ``compute_warning`` covers normalization /
-    # aggregation failures (e.g. missing controls). ``attachment_warning``
-    # covers attachment persistence failures — the import itself still
-    # succeeded.
-    compute_warning: str | None = None
-    attachment_warning: str | None = None
-    # Per-compound dose-response fit warnings surfaced from the calc engine.
-    fit_warnings: list[str] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# PreviewRunFile use case
-# ---------------------------------------------------------------------------
-
-
-class PreviewRunFile:
-    """Parse + suggest mapping + dry-resolve batches + scan conflicts."""
-
-    def __init__(
-        self,
-        uow: UnitOfWork,
-        run_repo: RunRepository,
-        readout_data_repo: ReadoutDataRepository,
-        batch_repo: BatchRepository,
-        molecule_repo: MoleculeRepository,
-        preview_store: PreviewStore,
-        protocol_repo: ProtocolRepository,
-        plate_template_repo: PlateTemplateRepository,
-        parser: TabularParser,
-    ) -> None:
-        self._uow = uow
-        self._run_repo = run_repo
-        self._readout_data_repo = readout_data_repo
-        self._batch_repo = batch_repo
-        self._molecule_repo = molecule_repo
-        self._store = preview_store
-        self._protocol_repo = protocol_repo
-        self._plate_template_repo = plate_template_repo
-        self._parser = parser
-
-    async def __call__(
-        self,
-        input: PreviewRunFileQuery,
-        auth: AuthContext | None = None,
-    ) -> Result[PreviewRunFileResult, DomainError]:
-        require_editor(auth)
-
-        async with self._uow:
-            return await self._execute(input)
-
-    async def _execute(
-        self, input: PreviewRunFileQuery
-    ) -> Result[PreviewRunFileResult, DomainError]:
-        run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
-        if run is None:
-            return Failure(NotFoundError("Run", str(input.run_id)))
-
-        try:
-            table = self._parser.parse(input.file_content, input.filename)
-        except TabularParseError as exc:
-            return Failure(ValidationError(f"File parse error: {exc}"))
-
-        if table.row_count > _MAX_ROWS:
-            return Failure(
-                ValidationError(
-                    f"File has {table.row_count} rows; sync import limit is {_MAX_ROWS}"
-                )
-            )
-
-        # Load the protocol first so its readout-definition catalog can
-        # feed into infer_mapping. Headers whose name matches a defined
-        # readout (e.g. a Text readout named "Scientist") are then
-        # suggested as role=readout / confidence=high with the def id
-        # attached — no FE-side upgrade or auto-binding needed.
-        protocol = await self._protocol_repo.find_by_id_in_workspace(
-            input.workspace_id, run.protocol_id
-        )
-        readout_def_refs: tuple[ReadoutDefRef, ...] = (
-            tuple(
-                ReadoutDefRef(
-                    id=rd.id,
-                    name=rd.name,
-                    data_type=rd.data_type.value,
-                )
-                for rd in protocol.readout_definitions
-            )
-            if protocol is not None
-            else ()
-        )
-
-        suggested = infer_mapping(table, readout_defs=readout_def_refs)
-        guessed = _build_guess_mapping(suggested)
-
-        plates: tuple[PlatePreview, ...] = ()
-        matched_batches = 0
-        unmatched_set: set[str] = set()
-        unmatched_compound_set: frozenset[str] = frozenset()
-        ambiguous_dto: tuple[AmbiguousCompoundDTO, ...] = ()
-        row_conflict_strings: tuple[str, ...] = ()
-        matched_compounds = 0
-        validation_errors: list[str] = []
-        will_create_plates = 0
-        will_create_wells = 0
-        will_create_readouts = 0
-        well_conflicts: list[WellConflict] = []
-        readout_conflicts: list[ReadoutConflict] = []
-
-        if guessed is not None:
-            normalized = normalize(table, guessed)
-            if isinstance(normalized, Success):
-                norm: NormalizedTable = normalized.unwrap()
-                plates = _summarize_plates(norm.rows, norm.plate_formats)
-
-                # Build both indexes, then run the resolver. Dry-run only
-                # — no overrides at preview time.
-                batch_index = await _build_batch_lookup(
-                    norm.rows, input.workspace_id, self._batch_repo
-                )
-                compound_index = await _build_compound_index(
-                    norm.rows,
-                    input.workspace_id,
-                    self._molecule_repo,
-                    self._batch_repo,
-                )
-                resolutions = resolve_rows(
-                    norm.rows,
-                    batch_index=batch_index,
-                    compound_index=compound_index,
-                )
-                # `matched_batches` is *distinct* batch refs that
-                # resolved (matches the original `_resolve_batches`
-                # contract — the wire format documents it as a count
-                # of unique refs, not rows).
-                matched_batches = len(batch_index)
-                unmatched_set = set(resolutions.unmatched_batch_refs)
-                unmatched_compound_set = resolutions.unmatched_compound_refs
-                matched_compounds = resolutions.matched_compound_count
-                ambiguous_dto = tuple(
-                    _to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds
-                )
-                row_conflict_strings = tuple(
-                    f"{c.plate_name} {c.well_label}: {c.reason}" for c in resolutions.row_conflicts
-                )
-
-                if protocol is not None:
-                    templates_by_format = await _load_templates_by_format(
-                        protocol,
-                        norm.plate_formats,
-                        input.workspace_id,
-                        self._plate_template_repo,
-                    )
-                    validation_errors = _validate_controls_required(
-                        protocol, norm.plate_formats, templates_by_format
-                    )
-
-                    # Conflict scan against existing run state. Uses a
-                    # best-guess readout-def binding (each readout column
-                    # maps to a fresh UUID in the guessed mapping, which
-                    # is fine for plate/well-level counts; the readout
-                    # cell-level scan is approximate at preview time and
-                    # gets re-run authoritatively at import time once the
-                    # user has bound real readout-def IDs).
-                    existing_readouts = await self._readout_data_repo.find_by_run(
-                        input.workspace_id, run.id
-                    )
-                    plan = _scan_conflicts(
-                        norm,
-                        run,
-                        existing_readouts,
-                        templates_by_format,
-                        resolutions=resolutions,
-                    )
-                    will_create_plates = plan.create_plate_count
-                    will_create_wells = plan.create_well_count
-                    will_create_readouts = plan.create_readout_count
-                    well_conflicts = plan.well_conflicts
-                    readout_conflicts = plan.readout_conflicts
-
-        preview_id = uuid.uuid4()
-        ttl = getattr(self._store, "ttl_seconds", 60.0)
-        self._store.save(
-            preview_id,
-            _StoredPreview(
-                workspace_id=input.workspace_id,
-                run_id=input.run_id,
-                table=table,
-                raw_bytes=input.file_content,
-                filename=input.filename,
-                content_type=input.content_type or _guess_content_type(input.filename),
-                expires_at=time.monotonic() + ttl,
-            ),
-        )
-
-        sample = tuple({h: (r.get(h) or "") for h in table.headers} for r in table.rows[:5])
-
-        return Success(
-            PreviewRunFileResult(
-                preview_id=preview_id,
-                headers=tuple(table.headers),
-                suggestions=suggested.suggestions,
-                sample_rows=sample,
-                plates=plates,
-                matched_batches=matched_batches,
-                unmatched_batches=tuple(sorted(unmatched_set)),
-                total_rows=table.row_count,
-                expires_in_seconds=int(ttl),
-                validation_errors=tuple(validation_errors),
-                will_create_plates=will_create_plates,
-                will_create_wells=will_create_wells,
-                will_create_readouts=will_create_readouts,
-                will_skip_wells=tuple(well_conflicts),
-                will_skip_readouts=tuple(readout_conflicts),
-                matched_compounds=matched_compounds,
-                unmatched_compound_refs=tuple(sorted(unmatched_compound_set)),
-                ambiguous_compounds=ambiguous_dto,
-                row_conflicts=row_conflict_strings,
-            )
-        )
-
-
-# ---------------------------------------------------------------------------
-# RepreviewRunFile use case
-# ---------------------------------------------------------------------------
-
-
-class RepreviewRunFile:
-    """Re-run resolution against a cached preview using a user mapping.
-
-    The initial ``PreviewRunFile`` runs with an auto-guessed mapping —
-    fine for showing the chemist what we *think* the columns are, but
-    stale once they hand-correct any role assignment. This use case
-    consumes the existing ``preview_id`` (without invalidating it),
-    re-normalizes with the chemist-confirmed mapping, re-resolves
-    batches + compounds, and returns the same DTO shape so the wizard
-    can swap the panel data in place.
-    """
-
-    def __init__(
-        self,
-        uow: UnitOfWork,
-        run_repo: RunRepository,
-        readout_data_repo: ReadoutDataRepository,
-        batch_repo: BatchRepository,
-        molecule_repo: MoleculeRepository,
-        preview_store: PreviewStore,
-        protocol_repo: ProtocolRepository,
-        plate_template_repo: PlateTemplateRepository,
-    ) -> None:
-        self._uow = uow
-        self._run_repo = run_repo
-        self._readout_data_repo = readout_data_repo
-        self._batch_repo = batch_repo
-        self._molecule_repo = molecule_repo
-        self._store = preview_store
-        self._protocol_repo = protocol_repo
-        self._plate_template_repo = plate_template_repo
-
-    async def __call__(
-        self,
-        input: RepreviewRunFileQuery,
-        auth: AuthContext | None = None,
-    ) -> Result[PreviewRunFileResult, DomainError]:
-        require_editor(auth)
-
-        async with self._uow:
-            return await self._execute(input)
-
-    async def _execute(
-        self, input: RepreviewRunFileQuery
-    ) -> Result[PreviewRunFileResult, DomainError]:
-        cached = self._store.peek(input.preview_id)
-        if cached is None:
-            return Failure(NotFoundError("Preview", str(input.preview_id)))
-        if cached.workspace_id != input.workspace_id or cached.run_id != input.run_id:
-            return Failure(ValidationError("preview_id does not match this workspace + run"))
-
-        run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
-        if run is None:
-            return Failure(NotFoundError("Run", str(input.run_id)))
-
-        protocol = await self._protocol_repo.find_by_id_in_workspace(
-            input.workspace_id, run.protocol_id
-        )
-        readout_def_refs: tuple[ReadoutDefRef, ...] = (
-            tuple(
-                ReadoutDefRef(
-                    id=rd.id,
-                    name=rd.name,
-                    data_type=rd.data_type.value,
-                )
-                for rd in protocol.readout_definitions
-            )
-            if protocol is not None
-            else ()
-        )
-
-        # Re-run header inference for the response (so the wizard can
-        # still display confidence badges) but use the user-supplied
-        # mapping for normalization.
-        suggested = infer_mapping(cached.table, readout_defs=readout_def_refs)
-
-        normalized = normalize(cached.table, input.mapping)
-        if isinstance(normalized, Failure):
-            return normalized
-        norm: NormalizedTable = normalized.unwrap()
-
-        plates = _summarize_plates(norm.rows, norm.plate_formats)
-        batch_index = await _build_batch_lookup(norm.rows, input.workspace_id, self._batch_repo)
-        compound_index = await _build_compound_index(
-            norm.rows,
-            input.workspace_id,
-            self._molecule_repo,
-            self._batch_repo,
-        )
-        resolutions = resolve_rows(
-            norm.rows, batch_index=batch_index, compound_index=compound_index
-        )
-
-        validation_errors: list[str] = []
-        will_create_plates = 0
-        will_create_wells = 0
-        will_create_readouts = 0
-        well_conflicts: list[WellConflict] = []
-        readout_conflicts: list[ReadoutConflict] = []
-
-        if protocol is not None:
-            templates_by_format = await _load_templates_by_format(
-                protocol,
-                norm.plate_formats,
-                input.workspace_id,
-                self._plate_template_repo,
-            )
-            validation_errors = _validate_controls_required(
-                protocol, norm.plate_formats, templates_by_format
-            )
-            existing_readouts = await self._readout_data_repo.find_by_run(
-                input.workspace_id, run.id
-            )
-            plan = _scan_conflicts(
-                norm,
-                run,
-                existing_readouts,
-                templates_by_format,
-                resolutions=resolutions,
-            )
-            will_create_plates = plan.create_plate_count
-            will_create_wells = plan.create_well_count
-            will_create_readouts = plan.create_readout_count
-            well_conflicts = plan.well_conflicts
-            readout_conflicts = plan.readout_conflicts
-
-        ambiguous_dto = tuple(_to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds)
-        row_conflict_strings = tuple(
-            f"{c.plate_name} {c.well_label}: {c.reason}" for c in resolutions.row_conflicts
-        )
-
-        sample = tuple(
-            {h: (r.get(h) or "") for h in cached.table.headers} for r in cached.table.rows[:5]
-        )
-        ttl = getattr(self._store, "ttl_seconds", 60.0)
-
-        return Success(
-            PreviewRunFileResult(
-                preview_id=input.preview_id,
-                headers=tuple(cached.table.headers),
-                suggestions=suggested.suggestions,
-                sample_rows=sample,
-                plates=plates,
-                matched_batches=len(batch_index),
-                unmatched_batches=tuple(sorted(resolutions.unmatched_batch_refs)),
-                total_rows=cached.table.row_count,
-                expires_in_seconds=int(ttl),
-                validation_errors=tuple(validation_errors),
-                will_create_plates=will_create_plates,
-                will_create_wells=will_create_wells,
-                will_create_readouts=will_create_readouts,
-                will_skip_wells=tuple(well_conflicts),
-                will_skip_readouts=tuple(readout_conflicts),
-                matched_compounds=resolutions.matched_compound_count,
-                unmatched_compound_refs=tuple(sorted(resolutions.unmatched_compound_refs)),
-                ambiguous_compounds=ambiguous_dto,
-                row_conflicts=row_conflict_strings,
-            )
-        )
+# Public surface. Re-exported so callers using the original
+# `cellar.application.screening.import_run_file` import path keep
+# working unchanged after the structural refactor.
+__all__ = [
+    "AmbiguousCompoundDTO",
+    "BatchOption",
+    "ImportRunFile",
+    "ImportRunFileCommand",
+    "ImportRunFileResult",
+    "InMemoryPreviewStore",
+    "PlatePreview",
+    "PreviewRunFile",
+    "PreviewRunFileQuery",
+    "PreviewRunFileResult",
+    "PreviewStore",
+    "ReadoutConflict",
+    "RepreviewRunFile",
+    "RepreviewRunFileQuery",
+    "WellConflict",
+]
+
+_log = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -987,8 +456,16 @@ class ImportRunFile:
         )
         try:
             attach_result = await self._upload_attachment(upload_cmd, auth=auth)
-        except Exception as exc:  # noqa: BLE001 — attachment is best-effort
+        except Exception as exc:
             result.attachment_warning = f"attachment failed: {exc}"
+            _log.warning(
+                "run_import.attachment_failed",
+                run_id=str(cmd.run_id),
+                workspace_id=str(cmd.workspace_id),
+                file_name=upload_cmd.file_name,
+                error=str(exc),
+                exc_info=True,
+            )
             return
         if isinstance(attach_result, Failure):
             result.attachment_warning = str(attach_result.failure())
@@ -996,252 +473,16 @@ class ImportRunFile:
             result.attachment_id = attach_result.unwrap().id
 
 
-# ---------------------------------------------------------------------------
-# Conflict scanning helpers — see import_plan.py
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Helpers (parser + batch resolution + control layouts)
-# ---------------------------------------------------------------------------
-
-
-_CONTENT_TYPE_BY_EXT: dict[str, str] = {
-    ".csv": "text/csv",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".xls": "application/vnd.ms-excel",
-    ".tsv": "text/tab-separated-values",
-}
-
-
-def _guess_content_type(filename: str) -> str:
-    if not filename:
-        return "application/octet-stream"
-    lower = filename.lower()
-    for ext, ct in _CONTENT_TYPE_BY_EXT.items():
-        if lower.endswith(ext):
-            return ct
-    return "application/octet-stream"
-
-
-def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
-    """Build a best-guess ColumnMapping from a SuggestedMapping.
-
-    Used by the preview phase only — readout columns get throwaway UUIDs
-    because preview cannot bind to real readout-definition ids.
-    """
-    well_header = suggested.first("well")
-    if well_header is None:
-        return None
-
-    readouts = suggested.by_role("readout")
-    return ColumnMapping(
-        well=well_header,
-        plate_name=suggested.first("plate_name"),
-        concentration=suggested.first("concentration"),
-        batch_ref=suggested.first("batch_ref"),
-        compound_ref=suggested.first("compound_ref"),
-        readout_columns=tuple(
-            ReadoutColumn(header=s.header, readout_definition_id=uuid.uuid4()) for s in readouts
-        ),
-    )
-
-
-def _to_ambiguous_dto(amb: AmbiguousCompound) -> AmbiguousCompoundDTO:
-    return AmbiguousCompoundDTO(
-        compound_ref=amb.compound_ref,
-        molecule_id=amb.molecule_id,
-        molecule_name=amb.molecule_name,
-        batch_options=tuple(
-            BatchOption(
-                batch_id=b.batch_id,
-                batch_number=b.batch_number,
-                salt_form=b.salt_form,
-                purity=b.purity,
-                created_at=b.created_at,
-            )
-            for b in amb.batch_options
-        ),
-        affected_row_count=amb.affected_row_count,
-    )
-
-
-def _summarize_plates(
-    rows: Iterable[LongFormatRow],
-    plate_formats: dict[str, PlateFormat],
-) -> tuple[PlatePreview, ...]:
-    by_plate: dict[str, list[LongFormatRow]] = {}
-    for r in rows:
-        by_plate.setdefault(r.plate_name, []).append(r)
-
-    out: list[PlatePreview] = []
-    for plate, plate_rows in sorted(by_plate.items()):
-        out.append(
-            PlatePreview(
-                plate_name=plate,
-                plate_format=plate_formats.get(plate, PlateFormat.F96).value,
-                well_count=len(plate_rows),
-                sample_count=sum(1 for r in plate_rows if r.batch_ref),
-                blank_count=sum(1 for r in plate_rows if not r.batch_ref),
-            )
-        )
-    return tuple(out)
-
-
-async def _build_batch_lookup(
-    rows: Iterable[LongFormatRow],
-    workspace_id: uuid.UUID,
-    batch_repo: BatchRepository,
-) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
-    """Resolve every distinct ``batch_ref`` to ``(batch_id, molecule_id)``.
-
-    Strict batch-number lookup. Compound-level resolution is the
-    Compound Ref role's job; this helper used to do hidden compound-name
-    fallback via ``<name>-<seq>``, but that fallback was retired when
-    Compound Ref shipped.
-    """
-    out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
-    seen: set[str] = set()
-    for r in rows:
-        if not r.batch_ref or r.batch_ref in seen:
-            continue
-        seen.add(r.batch_ref)
-        batch = await batch_repo.find_by_batch_number(workspace_id, r.batch_ref)
-        if batch is not None:
-            out[r.batch_ref] = (batch.id, batch.molecule_id)
-    return out
-
-
-async def _build_compound_index(
-    rows: Iterable[LongFormatRow],
-    workspace_id: uuid.UUID,
-    molecule_repo: MoleculeRepository,
-    batch_repo: BatchRepository,
-) -> dict[str, CompoundCandidate]:
-    """Resolve every distinct ``compound_ref`` to a ``CompoundCandidate``.
-
-    One ``find_by_identifier`` per distinct compound_ref + one
-    ``find_by_molecule`` per distinct molecule_id (so re-listed compounds
-    don't re-fetch). Identifiers that resolve to no molecule are simply
-    omitted; the resolver then surfaces them as ``unmatched_compound_refs``.
-    """
-    out: dict[str, CompoundCandidate] = {}
-    seen_refs: set[str] = set()
-    batches_by_molecule: dict[uuid.UUID, tuple[BatchSummary, ...]] = {}
-    for r in rows:
-        if not r.compound_ref or r.compound_ref in seen_refs:
-            continue
-        seen_refs.add(r.compound_ref)
-        molecule = await molecule_repo.find_by_identifier(workspace_id, r.compound_ref)
-        if molecule is None:
-            continue
-        cached = batches_by_molecule.get(molecule.id)
-        if cached is None:
-            batches = await batch_repo.find_by_molecule(workspace_id, molecule.id)
-            cached = tuple(
-                BatchSummary(
-                    batch_id=b.id,
-                    batch_number=b.batch_number.value,
-                    salt_form=b.salt_name,
-                    purity=b.purity,
-                    created_at=b.created_at,
-                )
-                for b in batches
-            )
-            batches_by_molecule[molecule.id] = cached
-        out[r.compound_ref] = CompoundCandidate(
-            molecule_id=molecule.id,
-            molecule_name=molecule.name,
-            batches=cached,
-        )
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Control-layout helpers
-# ---------------------------------------------------------------------------
-
-
-_DESIGNATION_TO_WELL_TYPE: dict[str, WellType] = {
-    "compound": WellType.SAMPLE,
-    "positive_control": WellType.POSITIVE_CONTROL,
-    "negative_control": WellType.NEGATIVE_CONTROL,
-    "blank": WellType.BLANK,
-}
-
-
-def _build_template_lookup(
-    protocol: AssayProtocol,
-    plate_formats: dict[str, PlateFormat],
-    templates_by_id: dict[uuid.UUID, PlateTemplate],
-) -> dict[PlateFormat, dict[str, WellType]]:
-    out: dict[PlateFormat, dict[str, WellType]] = {}
-    for fmt in set(plate_formats.values()):
-        tmpl_id = protocol.control_layouts.get(fmt.value)
-        if tmpl_id is None:
-            continue
-        tmpl = templates_by_id.get(tmpl_id)
-        if tmpl is None:
-            continue
-        per_well: dict[str, WellType] = {}
-        for well_key, designation in (tmpl.template_map or {}).items():
-            wt = _DESIGNATION_TO_WELL_TYPE.get(str(designation))
-            if wt is not None:
-                per_well[str(well_key)] = wt
-        out[fmt] = per_well
-    return out
-
-
-async def _load_templates_by_format(
-    protocol: AssayProtocol,
-    plate_formats: dict[str, PlateFormat],
-    workspace_id: uuid.UUID,
-    plate_template_repo: PlateTemplateRepository,
-) -> dict[PlateFormat, dict[str, WellType]]:
-    used_fmts = set(plate_formats.values())
-    templates_by_id: dict[uuid.UUID, PlateTemplate] = {}
-    for fmt in used_fmts:
-        tmpl_id = protocol.control_layouts.get(fmt.value)
-        if tmpl_id is None or tmpl_id in templates_by_id:
-            continue
-        tmpl = await plate_template_repo.find_by_id_in_workspace(workspace_id, tmpl_id)
-        if tmpl is not None:
-            templates_by_id[tmpl_id] = tmpl
-    return _build_template_lookup(protocol, plate_formats, templates_by_id)
-
-
-def _normalization_requires_controls(rd_normalization: ReadoutNormalization) -> bool:
-    return rd_normalization in (
-        ReadoutNormalization.PERCENT_INHIBITION,
-        ReadoutNormalization.PERCENT_ACTIVATION,
-        ReadoutNormalization.PERCENT_CONTROL,
-        ReadoutNormalization.Z_SCORE,
-    )
-
-
-def _validate_controls_required(
-    protocol: AssayProtocol,
-    plate_formats: dict[str, PlateFormat],
-    templates: dict[PlateFormat, dict[str, WellType]],
-) -> list[str]:
-    needs_controls = any(
-        _normalization_requires_controls(n)
-        for rd in protocol.readout_definitions
-        for n in rd.normalizations
-    )
-    if not needs_controls:
-        return []
-    errors: list[str] = []
-    seen_formats: set[PlateFormat] = set()
-    for fmt in plate_formats.values():
-        if fmt in seen_formats:
-            continue
-        seen_formats.add(fmt)
-        per_well = templates.get(fmt)
-        if not per_well:
-            errors.append(
-                f"Protocol uses control-based normalization but no Control Layout "
-                f"is configured for {fmt.value}-well plates. Configure one on the "
-                f"protocol's Design tab."
-            )
-    return errors
+# Suppress unused-import warnings for re-exports that exist solely to
+# preserve the original public surface of this module. The names are
+# part of ``__all__`` above.
+_ = (
+    _guess_content_type,
+    AmbiguousCompoundDTO,
+    BatchOption,
+    PlatePreview,
+    PreviewRunFileQuery,
+    PreviewRunFileResult,
+    RepreviewRunFileQuery,
+    InMemoryPreviewStore,
+)

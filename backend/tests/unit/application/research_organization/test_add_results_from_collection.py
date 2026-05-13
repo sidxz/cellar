@@ -255,7 +255,5 @@ class TestAddResultsFromCollection:
             campaign_id=campaign.id,
             collection_id=uuid.uuid4(),
         )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)

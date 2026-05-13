@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_workspace_role
@@ -12,6 +13,8 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import CddPlateImportRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
+
+_log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -73,18 +76,19 @@ class GetCddPlateImportStatusFromDb:
 
 
 class SyncFailedCddPlateImport:
-    """Update a crashed plate import's DB record to FAILED.
+    """Internal helper: update a crashed plate import's DB record to FAILED.
 
-    Called when the status endpoint detects the Temporal workflow is
-    terminated but the DB aggregate is still in a non-terminal state.
-    Best-effort -- swallows errors so it never breaks the status response.
+    Not a public use case — wired through DI only so the runtime-status
+    use case can call it. No auth guard, no Result. Best-effort: swallows
+    errors so it never breaks the status response. Use ``run()`` rather
+    than ``__call__`` so it doesn't appear in route registrations.
     """
 
     def __init__(self, uow: UnitOfWork, repo: CddPlateImportRepository) -> None:
         self._uow = uow
         self._repo = repo
 
-    async def __call__(
+    async def run(
         self,
         workspace_id: uuid.UUID,
         import_id: str,
@@ -101,5 +105,11 @@ class SyncFailedCddPlateImport:
                 imp.fail("Workflow crashed (detected by status poll)")
                 await self._repo.save(imp)
                 await self._uow.commit()
-        except Exception:
-            pass  # Best-effort
+        except Exception as exc:
+            _log.warning(
+                "cdd_plate_import.sync_failed_status_write_failed",
+                import_id=import_id,
+                workspace_id=str(workspace_id),
+                error=str(exc),
+                exc_info=True,
+            )

@@ -204,7 +204,7 @@ class TestListGetCampaign:
 
         resp = await client.get(f"/api/v1/campaigns?project_id={project_id}")
         assert resp.status_code == 200
-        names = {c["name"] for c in resp.json()}
+        names = {c["name"] for c in resp.json()["items"]}
         assert "CampA" in names
         assert "CampB" in names
 

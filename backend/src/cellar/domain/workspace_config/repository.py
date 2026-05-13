@@ -22,7 +22,6 @@ from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 class OrganizationRepository(Protocol):
     """Repository for Organization aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> Organization | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Organization | None: ...
@@ -30,7 +29,12 @@ class OrganizationRepository(Protocol):
     async def save(self, aggregate: Organization) -> None: ...
 
     async def find_by_workspace(
-        self, workspace_id: uuid.UUID, *, include_inactive: bool = False
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Organization]: ...
 
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> Organization | None: ...
@@ -52,7 +56,6 @@ class WorkspaceSettingsRepository(Protocol):
 class ControlledVocabularyRepository(Protocol):
     """Repository for ControlledVocabulary aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> ControlledVocabulary | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> ControlledVocabulary | None: ...
@@ -72,7 +75,6 @@ class ControlledVocabularyRepository(Protocol):
 class CustomFieldDefinitionRepository(Protocol):
     """Repository for CustomFieldDefinition aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> CustomFieldDefinition | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> CustomFieldDefinition | None: ...
@@ -94,7 +96,6 @@ class CustomFieldDefinitionRepository(Protocol):
 class SaltEntryRepository(Protocol):
     """Repository for SaltEntry aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> SaltEntry | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> SaltEntry | None: ...
@@ -116,7 +117,6 @@ class SaltEntryRepository(Protocol):
 class RegistrationFormRepository(Protocol):
     """Repository for RegistrationForm aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> RegistrationForm | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> RegistrationForm | None: ...
@@ -137,7 +137,6 @@ class RegistrationFormRepository(Protocol):
 class ExternalApiKeyRepository(Protocol):
     """Repository for ExternalApiKey aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> ExternalApiKey | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> ExternalApiKey | None: ...
@@ -157,7 +156,6 @@ class ExternalApiKeyRepository(Protocol):
 class OntologySlotDefinitionRepository(Protocol):
     """Repository for OntologySlotDefinition aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> OntologySlotDefinition | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> OntologySlotDefinition | None: ...
@@ -177,7 +175,6 @@ class OntologySlotDefinitionRepository(Protocol):
 class ProtocolFormRepository(Protocol):
     """Repository for ProtocolForm aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> ProtocolForm | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> ProtocolForm | None: ...
@@ -193,14 +190,19 @@ class ProtocolFormRepository(Protocol):
 class DataSourceRepository(Protocol):
     """Repository for DataSource aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> DataSource | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> DataSource | None: ...
 
     async def save(self, aggregate: DataSource) -> None: ...
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[DataSource]: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[DataSource]: ...
 
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> DataSource | None: ...
 

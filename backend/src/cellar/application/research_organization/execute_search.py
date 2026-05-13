@@ -11,7 +11,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_same_workspace
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
-from cellar.application.shared.pagination import EnrichedPageResult, PageResult
+from cellar.application.shared.pagination import EnrichedPageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule

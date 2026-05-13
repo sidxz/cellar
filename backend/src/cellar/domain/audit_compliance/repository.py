@@ -19,10 +19,6 @@ class AuditRepository(Protocol):
         """Persist an audit operation with its entries and optional signature."""
         ...
 
-    async def find_by_id(self, id: uuid.UUID) -> AuditOperation | None:
-        """Retrieve an audit operation by ID."""
-        ...
-
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> AuditOperation | None:
@@ -42,7 +38,8 @@ class AuditRepository(Protocol):
         entity_type: str | None = None,
         entity_id: uuid.UUID | None = None,
         user_id: uuid.UUID | None = None,
-        limit: int = 50,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[AuditOperation]:
         """Retrieve audit operations with optional filters."""
         ...

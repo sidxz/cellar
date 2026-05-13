@@ -100,6 +100,8 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         workspace_id: uuid.UUID,
         *,
         project_ids: list[uuid.UUID] | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Collection]:
         # Subquery for molecule counts
         count_sq = (
@@ -118,7 +120,11 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         )
         if project_ids:
             stmt = stmt.where(CollectionModel.project_id.in_(project_ids))
-        stmt = stmt.order_by(CollectionModel.name)
+        if cursor_id is not None:
+            stmt = stmt.where(CollectionModel.id > cursor_id)
+        stmt = stmt.order_by(CollectionModel.id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
 
         result = await self._session.execute(stmt)
         collections = []

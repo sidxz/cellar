@@ -30,17 +30,16 @@ def _auth(workspace_id, role="admin"):
 @pytest.mark.asyncio
 async def test_non_admin_blocked():
     uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={}, cascade_service=MagicMock())
-    result = await uc(
-        AdminHardDeleteCommand(
-            workspace_id=uuid.uuid4(),
-            entity_type="vocabulary",
-            entity_id=uuid.uuid4(),
-            reason="x",
-        ),
-        auth=_auth(uuid.uuid4(), role="editor"),
-    )
-    assert isinstance(result, Failure)
-    assert isinstance(result.failure(), AuthorizationError)
+    with pytest.raises(AuthorizationError):
+        await uc(
+            AdminHardDeleteCommand(
+                workspace_id=uuid.uuid4(),
+                entity_type="vocabulary",
+                entity_id=uuid.uuid4(),
+                reason="x",
+            ),
+            auth=_auth(uuid.uuid4(), role="editor"),
+        )
 
 
 @pytest.mark.asyncio

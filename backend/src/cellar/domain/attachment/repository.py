@@ -13,7 +13,6 @@ from cellar.domain.attachment.enums import AttachableType
 class AttachmentRepository(Protocol):
     """Repository interface for Attachment aggregate."""
 
-    async def find_by_id(self, id: uuid.UUID) -> Attachment | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Attachment | None: ...

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
@@ -20,7 +20,6 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.events import CollectionMembersChanged
 from cellar.domain.research_organization.repository import CollectionRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
-
 
 # ---------------------------------------------------------------------------
 # Result DTO

@@ -25,7 +25,7 @@ class UnitOfWork(Protocol):
     def is_active(self) -> bool: ...
 
     @property
-    def session(self) -> "AsyncSession":
+    def session(self) -> AsyncSession:
         """The active SQLAlchemy session.
 
         Accessible within an ``async with uow:`` block.  Infrastructure

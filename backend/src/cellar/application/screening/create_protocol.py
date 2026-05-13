@@ -24,10 +24,10 @@ from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
 )
 from cellar.domain.screening_assay.protocol import (
+    RESERVED_READOUT_NAMES,
     ConditionDefinition,
     Protocol,
     ReadoutDefinition,
-    RESERVED_READOUT_NAMES,
     is_reserved_readout_name,
 )
 from cellar.domain.screening_assay.repository import ProtocolRepository

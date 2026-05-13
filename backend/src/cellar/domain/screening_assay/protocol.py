@@ -19,7 +19,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
 )
 from cellar.domain.shared.enums import ConcentrationUnit
-from cellar.domain.screening_assay.hit_criterion import (
+from cellar.domain.shared.hit_criterion import (
     HitCriterion,
     validate_hit_criteria,
 )

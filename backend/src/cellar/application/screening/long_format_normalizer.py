@@ -23,14 +23,14 @@ import re
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.shared.parsers import ParsedTable
 from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.errors import DomainError, ValidationError
-from cellar.application.shared.parsers import ParsedTable
 
 # ---------------------------------------------------------------------------
 # Roles + confidence

@@ -29,6 +29,8 @@ import type {
   GetProjectScopeStatsApiV1ProjectsStatsGet200,
   GetProjectScopeStatsApiV1ProjectsStatsGetParams,
   HTTPValidationError,
+  ListProjectsApiV1ProjectsGetParams,
+  PaginatedResponseProjectResponse,
   ProjectMemberResponse,
   ProjectResponse,
   UpdateMemberRoleBody,
@@ -44,13 +46,14 @@ import { customInstance } from '.././custom-instance';
  * @summary List Projects
  */
 export const listProjectsApiV1ProjectsGet = (
-    
+    params?: ListProjectsApiV1ProjectsGetParams,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<ProjectResponse[]>(
-      {url: `/api/v1/projects`, method: 'GET', signal
+      return customInstance<PaginatedResponseProjectResponse>(
+      {url: `/api/v1/projects`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -58,23 +61,23 @@ export const listProjectsApiV1ProjectsGet = (
 
 
 
-export const getListProjectsApiV1ProjectsGetQueryKey = () => {
+export const getListProjectsApiV1ProjectsGetQueryKey = (params?: ListProjectsApiV1ProjectsGetParams,) => {
     return [
-    `/api/v1/projects`
+    `/api/v1/projects`, ...(params ? [params]: [])
     ] as const;
     }
 
     
-export const getListProjectsApiV1ProjectsGetQueryOptions = <TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>>, }
+export const getListProjectsApiV1ProjectsGetQueryOptions = <TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = HTTPValidationError>(params?: ListProjectsApiV1ProjectsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListProjectsApiV1ProjectsGetQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListProjectsApiV1ProjectsGetQueryKey(params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>> = ({ signal }) => listProjectsApiV1ProjectsGet(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>> = ({ signal }) => listProjectsApiV1ProjectsGet(params, signal);
 
       
 
@@ -84,11 +87,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListProjectsApiV1ProjectsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>>
-export type ListProjectsApiV1ProjectsGetQueryError = unknown
+export type ListProjectsApiV1ProjectsGetQueryError = HTTPValidationError
 
 
-export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>> & Pick<
+export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListProjectsApiV1ProjectsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>,
           TError,
@@ -97,8 +100,8 @@ export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeo
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>> & Pick<
+export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = HTTPValidationError>(
+ params?: ListProjectsApiV1ProjectsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>,
           TError,
@@ -107,20 +110,20 @@ export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeo
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>>, }
+export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = HTTPValidationError>(
+ params?: ListProjectsApiV1ProjectsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List Projects
  */
 
-export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>>, }
+export function useListProjectsApiV1ProjectsGet<TData = Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError = HTTPValidationError>(
+ params?: ListProjectsApiV1ProjectsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectsApiV1ProjectsGet>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListProjectsApiV1ProjectsGetQueryOptions(options)
+  const queryOptions = getListProjectsApiV1ProjectsGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

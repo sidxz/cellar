@@ -121,9 +121,10 @@ class SQLAlchemyAuditRepository:
         entity_type: str | None = None,
         entity_id: uuid.UUID | None = None,
         user_id: uuid.UUID | None = None,
-        limit: int = 50,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[AuditOperation]:
-        """Retrieve audit operations with optional filters, ordered by started_at DESC."""
+        """Retrieve audit operations with optional filters, ordered by id for stable cursor paging."""
         stmt = (
             select(AuditOperationModel)
             .where(AuditOperationModel.workspace_id == workspace_id)
@@ -138,7 +139,11 @@ class SQLAlchemyAuditRepository:
             stmt = stmt.where(AuditOperationModel.entity_id == entity_id)
         if user_id is not None:
             stmt = stmt.where(AuditOperationModel.user_id == user_id)
-        stmt = stmt.order_by(AuditOperationModel.started_at.desc()).limit(limit)
+        if cursor_id is not None:
+            stmt = stmt.where(AuditOperationModel.id > cursor_id)
+        stmt = stmt.order_by(AuditOperationModel.id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         async with self._session_factory() as session:
             result = await session.execute(stmt)
             return [self._to_domain(m) for m in result.scalars().all()]

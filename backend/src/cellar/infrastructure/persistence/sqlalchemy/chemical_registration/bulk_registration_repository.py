@@ -15,6 +15,7 @@ from cellar.domain.chemical_registration.enums import (
     BulkRegistrationFileFormat,
     BulkRegistrationStatus,
 )
+from cellar.domain.shared.errors import AuthorizationError
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -89,6 +90,12 @@ class SQLAlchemyBulkRegistrationRepository(
         await super().save(aggregate)
         pending = aggregate.collect_pending_items()
         if pending:
+            # Defence-in-depth: every child item must belong to the parent's workspace.
+            for item in pending:
+                if item.workspace_id != aggregate.workspace_id:
+                    raise AuthorizationError(
+                        "BulkRegistrationItem workspace_id does not match parent"
+                    )
             await self.insert_items(pending)
 
     # ------------------------------------------------------------------

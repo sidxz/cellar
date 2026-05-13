@@ -25,6 +25,7 @@ from cellar.interface.dependencies import (
     UpdateBatchDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["batches"])
 
@@ -188,7 +189,6 @@ async def update_batch(
     auth: AuthDep,
     uc: UpdateBatchDep,
 ) -> BatchResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateBatchCommand(
         workspace_id=auth.workspace_id,

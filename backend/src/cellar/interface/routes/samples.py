@@ -37,6 +37,7 @@ from cellar.interface.dependencies import (
     MoveSampleDep,
     QuarantineSampleDep,
 )
+from cellar.domain.inventory.sample import Sample
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["samples"])
@@ -57,7 +58,7 @@ class SampleResponse(BaseModel):
     low_stock_threshold: float | None = None
 
     @classmethod
-    def from_domain(cls, s) -> SampleResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, s: Sample) -> SampleResponse:
         return cls(
             id=s.id,
             workspace_id=s.workspace_id,

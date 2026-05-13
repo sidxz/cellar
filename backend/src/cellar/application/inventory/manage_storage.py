@@ -10,6 +10,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_workspace_role
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.enums import StorageLocationType
@@ -81,6 +82,8 @@ class CreateStorageLocation:
 @dataclass(frozen=True, kw_only=True)
 class ListStorageLocationsQuery(Query):
     workspace_id: uuid.UUID
+    cursor_id: uuid.UUID | None = None
+    limit: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -96,11 +99,23 @@ class ListStorageLocations:
 
     async def __call__(
         self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
-    ) -> Result[list[StorageLocation], DomainError]:
+    ) -> Result[PageResult[StorageLocation], DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
-            locations = await self._repo.find_by_workspace(input.workspace_id)
-            return Success(locations)
+            effective_limit = input.limit
+            fetch_limit = effective_limit + 1 if effective_limit is not None else None
+            locations = await self._repo.find_by_workspace(
+                input.workspace_id,
+                cursor_id=input.cursor_id,
+                limit=fetch_limit,
+            )
+
+            next_cursor: str | None = None
+            if effective_limit is not None and len(locations) > effective_limit:
+                locations = locations[:effective_limit]
+                next_cursor = str(locations[-1].id)
+
+            return Success(PageResult(items=locations, next_cursor=next_cursor))
 
 
 class GetStorageLocationChildren:

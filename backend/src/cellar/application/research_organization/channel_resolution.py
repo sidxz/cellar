@@ -38,7 +38,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 
 # Placeholder unit used for ND cells when no candidate is available to
 # contribute one. The domain forbids empty units; this keeps invariants
@@ -102,7 +102,7 @@ class ChannelResolutionQuery(Protocol):
         run_ids: list[uuid.UUID],
         protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
-        source_kind: "ChannelSourceKind",
+        source_kind: ChannelSourceKind,
         normalization_applied: str | None = None,
     ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
         """Per-molecule candidates restricted to a specific set of runs.

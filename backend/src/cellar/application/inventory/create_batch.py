@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.enums import BatchSource
@@ -20,9 +22,7 @@ from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.enums import AmountUnit, ConcentrationUnit
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.value_objects import Amount, Concentration
-from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.workspace_config.enums import FieldTarget
-from returns.pipeline import is_successful
 
 
 @dataclass(frozen=True, kw_only=True)

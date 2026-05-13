@@ -19,7 +19,7 @@ class TestListProjects:
     async def test_empty_list(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/projects")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
     async def test_list_after_create(self, client: AsyncClient) -> None:
         await client.post(
@@ -28,7 +28,7 @@ class TestListProjects:
         )
         resp = await client.get("/api/v1/projects")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["items"]
         assert len(data) == 1
         assert data[0]["name"] == "Kinase Screening"
 

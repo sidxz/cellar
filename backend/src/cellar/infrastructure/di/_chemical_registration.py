@@ -56,6 +56,7 @@ from cellar.application.chemical_registration.list_disclosures_by_workspace impo
     ListDisclosuresByWorkspace,
 )
 from cellar.application.chemical_registration.list_molecules import ListMolecules
+from cellar.application.chemical_registration.list_molecules_by_ids import ListMoleculesByIds
 from cellar.application.chemical_registration.list_relationships import ListRelationships
 from cellar.application.chemical_registration.merge_impact_reader import MergeImpactReader
 from cellar.application.chemical_registration.merge_service import MergeService
@@ -233,6 +234,7 @@ def register_chemical_registration(container: Container) -> None:
     container.define(UpdateMolecule, _update_molecule)
     container.define(GetMolecule, _mol_query(GetMolecule))
     container.define(ListMolecules, _mol_query(ListMolecules))
+    container.define(ListMoleculesByIds, _mol_query(ListMoleculesByIds))
     container.define(GetMoleculeByIdentifier, _mol_query(GetMoleculeByIdentifier))
     container.define(AddIdentifier, _mol_cmd_no_proc(AddIdentifier))
     container.define(RemoveIdentifier, _mol_cmd_no_proc(RemoveIdentifier))

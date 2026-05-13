@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
@@ -24,6 +25,8 @@ class ListDisclosuresQuery(Query):
 
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
+    cursor_id: uuid.UUID | None = None
+    limit: int | None = None
 
 
 class ListDisclosures:
@@ -44,7 +47,7 @@ class ListDisclosures:
 
     async def __call__(
         self, input: ListDisclosuresQuery, auth: AuthContext | None = None
-    ) -> Result[list[DisclosureRequest], DomainError]:
+    ) -> Result[PageResult[DisclosureRequest], DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
             # Workspace isolation: verify molecule belongs to caller's workspace
@@ -53,7 +56,20 @@ class ListDisclosures:
             )
             if molecule is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
+
+            effective_limit = input.limit
+            fetch_limit = effective_limit + 1 if effective_limit is not None else None
+
             disclosures = await self._disclosure_repo.find_by_molecule(
-                input.workspace_id, input.molecule_id
+                input.workspace_id,
+                input.molecule_id,
+                cursor_id=input.cursor_id,
+                limit=fetch_limit,
             )
-            return Success(disclosures)
+
+            next_cursor: str | None = None
+            if effective_limit is not None and len(disclosures) > effective_limit:
+                disclosures = disclosures[:effective_limit]
+                next_cursor = str(disclosures[-1].id)
+
+            return Success(PageResult(items=disclosures, next_cursor=next_cursor))

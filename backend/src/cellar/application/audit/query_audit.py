@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.domain.audit_compliance.models import AuditOperation
 from cellar.domain.audit_compliance.repository import AuditRepository
@@ -25,7 +26,8 @@ class ListAuditOperationsQuery(Query):
     entity_type: str | None = None
     entity_id: uuid.UUID | None = None
     user_id: uuid.UUID | None = None
-    limit: int = 50
+    cursor_id: uuid.UUID | None = None
+    limit: int | None = None
 
 
 class ListAuditOperations:
@@ -36,16 +38,25 @@ class ListAuditOperations:
 
     async def __call__(
         self, input: ListAuditOperationsQuery, auth: AuthContext | None = None
-    ) -> Result[list[AuditOperation], DomainError]:
+    ) -> Result[PageResult[AuditOperation], DomainError]:
         require_workspace_role(auth, "viewer")
+        effective_limit = input.limit
+        fetch_limit = effective_limit + 1 if effective_limit is not None else None
         operations = await self._repo.find_all(
             input.workspace_id,
             entity_type=input.entity_type,
             entity_id=input.entity_id,
             user_id=input.user_id,
-            limit=input.limit,
+            cursor_id=input.cursor_id,
+            limit=fetch_limit,
         )
-        return Success(operations)
+
+        next_cursor: str | None = None
+        if effective_limit is not None and len(operations) > effective_limit:
+            operations = operations[:effective_limit]
+            next_cursor = str(operations[-1].id)
+
+        return Success(PageResult(items=operations, next_cursor=next_cursor))
 
 
 @dataclass(frozen=True, kw_only=True)

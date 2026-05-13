@@ -5,7 +5,7 @@ No I/O. No domain imports except enums and VOs needed for type mapping.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
@@ -21,13 +21,13 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.protocol import is_reserved_readout_name
 
 __all__ = [
-    "CddProtocolSummary",
-    "MappedReadout",
-    "MappedCondition",
-    "MappingWarning",
     "CddProtocolMappingResult",
-    "map_cdd_protocol_list",
+    "CddProtocolSummary",
+    "MappedCondition",
+    "MappedReadout",
+    "MappingWarning",
     "map_cdd_protocol",
+    "map_cdd_protocol_list",
 ]
 
 

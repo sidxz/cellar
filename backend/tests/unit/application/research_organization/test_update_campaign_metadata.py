@@ -225,10 +225,8 @@ class TestUpdateCampaignMetadata:
             campaign_id=uuid.uuid4(),
             name="Blocked",
         )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
         repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio

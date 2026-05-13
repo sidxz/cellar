@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Callable, Sequence
 
 from returns.result import Failure, Result, Success
 
@@ -38,7 +38,6 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.enums import AuditAction, OperationType
 from cellar.domain.audit_compliance.models import AuditEntry
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     ConflictError,
     DomainError,
     NotFoundError,
@@ -108,10 +107,7 @@ class AdminHardDelete:
         input: AdminHardDeleteCommand,
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
-        try:
-            require_admin(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_admin(auth)
 
         if not (input.reason or "").strip():
             return Failure(ValidationError("reason is required"))

@@ -27,7 +27,6 @@ from cellar.domain.research_organization.repository import (
 )
 from cellar.domain.research_organization.source_ref import CollectionRef
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -83,10 +82,7 @@ class AddResultsFromCollection:
         input: AddResultsFromCollectionCommand,
         auth: AuthContext | None = None,
     ) -> Result[AddResultsOutcome, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(

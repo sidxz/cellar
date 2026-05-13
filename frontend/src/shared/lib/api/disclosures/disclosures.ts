@@ -28,6 +28,8 @@ import type {
   DisclosureRequestResponse,
   HTTPValidationError,
   ListDisclosuresApiV1DisclosuresGetParams,
+  ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams,
+  PaginatedResponseDisclosureRequestResponse,
   RejectDisclosureBody,
   ResolveConflictBody,
   SubmitDisclosureBody
@@ -112,7 +114,7 @@ export const listDisclosuresApiV1DisclosuresGet = (
 ) => {
       
       
-      return customInstance<DisclosureRequestResponse[]>(
+      return customInstance<PaginatedResponseDisclosureRequestResponse>(
       {url: `/api/v1/disclosures`, method: 'GET',
         params, signal
     },
@@ -293,12 +295,14 @@ export function useGetDisclosureApiV1DisclosuresDisclosureIdGet<TData = Awaited<
  */
 export const listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet = (
     moleculeId: string,
+    params?: ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<DisclosureRequestResponse[]>(
-      {url: `/api/v1/disclosures/by-molecule/${moleculeId}`, method: 'GET', signal
+      return customInstance<PaginatedResponseDisclosureRequestResponse>(
+      {url: `/api/v1/disclosures/by-molecule/${moleculeId}`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -306,23 +310,25 @@ export const listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet =
 
 
 
-export const getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryKey = (moleculeId?: string,) => {
+export const getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryKey = (moleculeId?: string,
+    params?: ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams,) => {
     return [
-    `/api/v1/disclosures/by-molecule/${moleculeId}`
+    `/api/v1/disclosures/by-molecule/${moleculeId}`, ...(params ? [params]: [])
     ] as const;
     }
 
     
-export const getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryOptions = <TData = Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError = HTTPValidationError>(moleculeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>>, }
+export const getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryOptions = <TData = Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError = HTTPValidationError>(moleculeId: string,
+    params?: ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryKey(moleculeId);
+  const queryKey =  queryOptions?.queryKey ?? getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryKey(moleculeId,params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>> = ({ signal }) => listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet(moleculeId, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>> = ({ signal }) => listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet(moleculeId,params, signal);
 
       
 
@@ -336,7 +342,8 @@ export type ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQue
 
 
 export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet<TData = Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError = HTTPValidationError>(
- moleculeId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>> & Pick<
+ moleculeId: string,
+    params: undefined |  ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>,
           TError,
@@ -346,7 +353,8 @@ export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeI
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet<TData = Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError = HTTPValidationError>(
- moleculeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>> & Pick<
+ moleculeId: string,
+    params?: ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>,
           TError,
@@ -356,7 +364,8 @@ export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeI
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet<TData = Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError = HTTPValidationError>(
- moleculeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>>, }
+ moleculeId: string,
+    params?: ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -364,11 +373,12 @@ export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeI
  */
 
 export function useListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet<TData = Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError = HTTPValidationError>(
- moleculeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>>, }
+ moleculeId: string,
+    params?: ListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGet>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryOptions(moleculeId,options)
+  const queryOptions = getListDisclosuresForMoleculeApiV1DisclosuresByMoleculeMoleculeIdGetQueryOptions(moleculeId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

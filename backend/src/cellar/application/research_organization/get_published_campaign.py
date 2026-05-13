@@ -24,21 +24,19 @@ from cellar.domain.chemical_registration.repository import (
     MoleculeRepository,
 )
 from cellar.domain.inventory.repository import BatchRepository
-from cellar.domain.research_organization.source_ref import ManualRef, SourceRef
 from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.repository import (
     CampaignRepository,
     CollectionRepository,
     ProjectRepository,
 )
+from cellar.domain.research_organization.source_ref import ManualRef
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Cursor helpers — offset encoded as decimal string
@@ -109,10 +107,7 @@ class GetPublishedCampaign:
     ) -> Result[dict[str, Any], DomainError]:
         # Step 1 — auth guard (lowest available: editor).
         # TODO viewer-level auth: replace with require_viewer(auth) once that guard exists.
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             return await self._execute(input)
@@ -192,16 +187,12 @@ class GetPublishedCampaign:
         molecules = await self._molecule_repo.find_by_ids(input.workspace_id, mol_ids)
         mol_lookup: dict[uuid.UUID, Any] = {m.id: m for m in molecules}
 
-        # Step 8 — bulk-load batches for this page (iterate find_by_id — no bulk helper).
+        # Step 8 — bulk-load batches for this page (workspace-scoped).
         batch_ids = list(
             {r.representative_batch_id for r in page if r.representative_batch_id is not None}
         )
-        batch_lookup: dict[uuid.UUID, Any] = {}
-        for bid in batch_ids:
-            # TODO bulk lookup: add find_by_ids to BatchRepository when available.
-            b = await self._batch_repo.find_by_id(bid)
-            if b is not None:
-                batch_lookup[bid] = b
+        batches = await self._batch_repo.find_by_ids(input.workspace_id, batch_ids)
+        batch_lookup: dict[uuid.UUID, Any] = {b.id: b for b in batches}
 
         # Step 9 — build pagination envelope.
         pagination: dict[str, Any] | None = None

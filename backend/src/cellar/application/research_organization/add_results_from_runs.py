@@ -44,7 +44,6 @@ from cellar.application.research_organization.preview_run_import import (
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
@@ -55,13 +54,11 @@ from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
-    ValueQualifier,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -136,10 +133,7 @@ class AddResultsFromRuns:
         input: AddResultsFromRunsCommand,
         auth: AuthContext | None = None,
     ) -> Result[AddFromRunsOutcome, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(
@@ -211,7 +205,7 @@ class AddResultsFromRuns:
 
             # Step 2 — fetch candidates per channel
             cells_by_mol_channel: dict[
-                tuple[uuid.UUID, uuid.UUID], "_CellData"
+                tuple[uuid.UUID, uuid.UUID], _CellData
             ] = {}  # (molecule_id, channel_id) -> cell data
             active_channel_ids: set[uuid.UUID] = set()
 
@@ -259,7 +253,7 @@ class AddResultsFromRuns:
                     )
 
             # Step 3 — group cells by molecule, decide is_hit
-            cells_by_mol: dict[uuid.UUID, dict[uuid.UUID, "_CellData"]] = {}
+            cells_by_mol: dict[uuid.UUID, dict[uuid.UUID, _CellData]] = {}
             for (mol_id, ch_id), cell in cells_by_mol_channel.items():
                 cells_by_mol.setdefault(mol_id, {})[ch_id] = cell
 

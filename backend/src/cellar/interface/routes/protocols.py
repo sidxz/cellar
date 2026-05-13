@@ -1,4 +1,4 @@
-"""Protocol and Target API routes."""
+"""Protocol API routes."""
 
 from __future__ import annotations
 
@@ -20,8 +20,6 @@ from cellar.application.screening.lock_protocol import (
     UnlockProtocol,
     UnlockProtocolCommand,
 )
-from cellar.application.screening.create_target import CreateTarget, CreateTargetCommand
-from cellar.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
 from cellar.application.screening.get_protocol import (
     GetProtocol,
     GetProtocolQuery,
@@ -30,12 +28,6 @@ from cellar.application.screening.get_protocol import (
 )
 from cellar.application.screening.list_protocol_summaries import (
     ListProtocolSummariesQuery,
-)
-from cellar.application.screening.get_target import (
-    GetTarget,
-    GetTargetQuery,
-    ListTargets,
-    ListTargetsQuery,
 )
 from cellar.application.screening.manage_protocol import (
     AddProtocolToProject,
@@ -84,7 +76,6 @@ from cellar.application.screening.manage_readout_definitions import (
     UpdateReadoutDefinitionCommand,
     _UNSET as _RD_UNSET,
 )
-from cellar.application.screening.update_target import UpdateTarget, UpdateTargetCommand
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
     UpdateConditionDefinitionDep,
@@ -94,15 +85,11 @@ from cellar.interface.dependencies import (
     AuthDep,
     ConditionGroupingServiceDep,
     CreateProtocolDep,
-    CreateTargetDep,
     DeleteProtocolDep,
-    DeleteTargetDep,
     GetProtocolDep,
-    GetTargetDep,
     ListProtocolsByProjectDep,
     ListProtocolsDep,
     ListProtocolSummariesDep,
-    ListTargetsDep,
     LockProtocolDep,
     PublishProtocolDep,
     RemoveConditionDefinitionDep,
@@ -115,10 +102,12 @@ from cellar.interface.dependencies import (
     SetControlLayoutDep,
     SetOntologyAnnotationDep,
     UpdateProtocolDep,
-    UpdateTargetDep,
     VersionProtocolDep,
 )
+from cellar.domain.screening_assay.protocol import Protocol
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1")
 
@@ -188,9 +177,9 @@ class ProtocolResponse(BaseModel):
     locked_at: datetime | None = None
 
     @classmethod
-    def from_domain(  # type: ignore[no-untyped-def]
+    def from_domain(
         cls,
-        p,
+        p: Protocol,
         *,
         project_ids: list[uuid.UUID] | None = None,
     ) -> ProtocolResponse:
@@ -295,34 +284,6 @@ class ConditionGroupsResponse(BaseModel):
     groups: list[ConditionGroupResponse]
 
 
-class TargetResponse(BaseModel):
-    id: uuid.UUID
-    workspace_id: uuid.UUID
-    name: str
-    target_type: str
-    organism: str | None = None
-    gene_name: str | None = None
-    uniprot_id: str | None = None
-    ncbi_gene_id: str | None = None
-    description: str | None = None
-    target_class: str | None = None
-
-    @classmethod
-    def from_domain(cls, t) -> TargetResponse:  # type: ignore[no-untyped-def]
-        return cls(
-            id=t.id,
-            workspace_id=t.workspace_id,
-            name=t.name,
-            target_type=t.target_type.value,
-            organism=t.organism,
-            gene_name=t.gene_name,
-            uniprot_id=t.uniprot_id,
-            ncbi_gene_id=t.ncbi_gene_id,
-            description=t.description,
-            target_class=t.target_class,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
@@ -379,30 +340,6 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     display_order: int | None = None
     pick_list_values: list[dict | str] | None = None
     dose_response_config: dict | None = None
-
-
-class CreateTargetRequest(BaseModel):
-    name: str
-    target_type: str
-    organism: str | None = None
-    gene_name: str | None = None
-    uniprot_id: str | None = None
-    ncbi_gene_id: str | None = None
-    description: str | None = None
-    target_class: str | None = None
-    sequence: str | None = None
-
-
-class UpdateTargetRequest(BaseModel):
-    name: str | None = None
-    target_type: str | None = None
-    organism: str | None = None
-    gene_name: str | None = None
-    uniprot_id: str | None = None
-    ncbi_gene_id: str | None = None
-    description: str | None = None
-    target_class: str | None = None
-    sequence: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -485,23 +422,45 @@ async def list_protocol_summaries(
     ]
 
 
-@router.get("/protocols", response_model=list[ProtocolResponse], tags=["protocols"])
+@router.get("/protocols", response_model=PaginatedResponse[ProtocolResponse], tags=["protocols"])
 async def list_protocols(
     auth: AuthDep,
     uc: ListProtocolsDep,
     uc_by_project: ListProtocolsByProjectDep,
     project_id: uuid.UUID | None = Query(default=None),
-) -> list[ProtocolResponse]:
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[ProtocolResponse]:
+    parsed_cursor = parse_cursor(cursor)
+    clamped_limit = clamp_limit(limit)
     if project_id is not None:
         result = await uc_by_project(
-            ListProtocolsByProjectQuery(workspace_id=auth.workspace_id, project_id=project_id),
+            ListProtocolsByProjectQuery(
+                workspace_id=auth.workspace_id,
+                project_id=project_id,
+                cursor_id=parsed_cursor,
+                limit=clamped_limit,
+            ),
             auth=auth,
         )
-        protocols = result_to_response(result)
-        return [ProtocolResponse.from_domain(p) for p in protocols]
-    result = await uc(ListProtocolsQuery(workspace_id=auth.workspace_id), auth=auth)
-    protocols = result_to_response(result)
-    return [ProtocolResponse.from_domain(p) for p in protocols]
+        page = result_to_response(result)
+        return PaginatedResponse(
+            items=[ProtocolResponse.from_domain(p) for p in page.items],
+            next_cursor=page.next_cursor,
+        )
+    result = await uc(
+        ListProtocolsQuery(
+            workspace_id=auth.workspace_id,
+            cursor_id=parsed_cursor,
+            limit=clamped_limit,
+        ),
+        auth=auth,
+    )
+    page = result_to_response(result)
+    return PaginatedResponse(
+        items=[ProtocolResponse.from_domain(p) for p in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])
@@ -637,7 +596,6 @@ async def update_protocol(
     uc: UpdateProtocolDep,
 ) -> ProtocolResponse:
     """Update a DRAFT protocol's metadata."""
-    from cellar.application.shared.sentinel import UNSET
 
     # ``name`` and ``pos_control_signal`` are typed as ``str | None`` on the
     # command — None means "leave unchanged". The other fields are nullable
@@ -1075,87 +1033,3 @@ async def get_condition_groups(
     )
 
 
-# ---------------------------------------------------------------------------
-# Target routes
-# ---------------------------------------------------------------------------
-
-
-@router.post("/targets", response_model=TargetResponse, status_code=201, tags=["targets"])
-async def create_target(
-    auth: AuthDep,
-    body: CreateTargetRequest,
-    uc: CreateTargetDep,
-) -> TargetResponse:
-    cmd = CreateTargetCommand(
-        workspace_id=auth.workspace_id,
-        name=body.name,
-        target_type=body.target_type,
-        organism=body.organism,
-        gene_name=body.gene_name,
-        uniprot_id=body.uniprot_id,
-        ncbi_gene_id=body.ncbi_gene_id,
-        description=body.description,
-        target_class=body.target_class,
-        sequence=body.sequence,
-    )
-    result = await uc(cmd, auth=auth)
-    return TargetResponse.from_domain(result_to_response(result))
-
-
-@router.get("/targets", response_model=list[TargetResponse], tags=["targets"])
-async def list_targets(
-    auth: AuthDep,
-    uc: ListTargetsDep,
-) -> list[TargetResponse]:
-    result = await uc(ListTargetsQuery(workspace_id=auth.workspace_id), auth=auth)
-    targets = result_to_response(result)
-    return [TargetResponse.from_domain(t) for t in targets]
-
-
-@router.get("/targets/{target_id}", response_model=TargetResponse, tags=["targets"])
-async def get_target(
-    target_id: uuid.UUID,
-    auth: AuthDep,
-    uc: GetTargetDep,
-) -> TargetResponse:
-    result = await uc(
-        GetTargetQuery(workspace_id=auth.workspace_id, target_id=target_id),
-        auth=auth,
-    )
-    return TargetResponse.from_domain(result_to_response(result))
-
-
-@router.patch("/targets/{target_id}", response_model=TargetResponse, tags=["targets"])
-async def update_target(
-    target_id: uuid.UUID,
-    body: UpdateTargetRequest,
-    auth: AuthDep,
-    uc: UpdateTargetDep,
-) -> TargetResponse:
-    from cellar.application.shared.sentinel import UNSET
-
-    cmd = UpdateTargetCommand(
-        workspace_id=auth.workspace_id,
-        target_id=target_id,
-        name=body.name if "name" in body.model_fields_set else UNSET,
-        target_type=body.target_type if "target_type" in body.model_fields_set else UNSET,
-        organism=body.organism if "organism" in body.model_fields_set else UNSET,
-        gene_name=body.gene_name if "gene_name" in body.model_fields_set else UNSET,
-        uniprot_id=body.uniprot_id if "uniprot_id" in body.model_fields_set else UNSET,
-        ncbi_gene_id=body.ncbi_gene_id if "ncbi_gene_id" in body.model_fields_set else UNSET,
-        description=body.description if "description" in body.model_fields_set else UNSET,
-        target_class=body.target_class if "target_class" in body.model_fields_set else UNSET,
-        sequence=body.sequence if "sequence" in body.model_fields_set else UNSET,
-    )
-    result = await uc(cmd, auth=auth)
-    return TargetResponse.from_domain(result_to_response(result))
-
-
-@router.delete("/targets/{target_id}", status_code=204, tags=["targets"])
-async def delete_target(
-    target_id: uuid.UUID,
-    auth: AuthDep,
-    uc: DeleteTargetDep,
-) -> None:
-    cmd = DeleteTargetCommand(workspace_id=auth.workspace_id, target_id=target_id)
-    result_to_response(await uc(cmd, auth=auth))

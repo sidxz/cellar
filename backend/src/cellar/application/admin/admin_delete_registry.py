@@ -11,8 +11,9 @@ the service-locator anti-pattern that previously lived in ``repo_resolver``.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping, Protocol
+from typing import Protocol
 
 
 class AdminDeletableRepo(Protocol):

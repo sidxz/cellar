@@ -15,8 +15,8 @@ from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError, NotFoundError
 from cellar.domain.workspace_config.registration_form import RegistrationForm
-from cellar.domain.workspace_config.value_objects import FieldOverride
 from cellar.domain.workspace_config.repository import RegistrationFormRepository
+from cellar.domain.workspace_config.value_objects import FieldOverride
 
 
 @dataclass(frozen=True, kw_only=True)

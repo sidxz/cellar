@@ -1,5 +1,6 @@
 # application/admin/cascade_preview.py
 from __future__ import annotations
+
 import uuid
 from dataclasses import dataclass
 
@@ -13,7 +14,6 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.cascade import CascadeNode
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
 )
@@ -36,10 +36,7 @@ class CascadePreview:
         input: CascadePreviewQuery,
         auth: AuthContext | None = None,
     ) -> Result[CascadeNode, DomainError]:
-        try:
-            require_admin(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_admin(auth)
         if input.entity_type not in TIER2_ENTITY_TYPES:
             return Failure(NotFoundError("entity_type", input.entity_type))
         entry = get_entry(input.entity_type)

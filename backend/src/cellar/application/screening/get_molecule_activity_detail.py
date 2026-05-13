@@ -15,16 +15,15 @@ from typing import Any
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace
+from cellar.application.screening import _condense_raw_data
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from cellar.application.screening import _condense_raw_data
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
 )
 from cellar.domain.shared.errors import DomainError
-
 
 # ---------------------------------------------------------------------------
 # Query DTO

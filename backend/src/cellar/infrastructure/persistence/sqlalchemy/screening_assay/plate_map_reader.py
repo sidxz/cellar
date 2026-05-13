@@ -82,7 +82,10 @@ class SQLAlchemyPlateMapReader:
             if batch_ids:
                 batch_stmt = select(
                     BatchModel.id, BatchModel.molecule_id, BatchModel.batch_number
-                ).where(BatchModel.id.in_(batch_ids))
+                ).where(
+                    BatchModel.workspace_id == workspace_id,
+                    BatchModel.id.in_(batch_ids),
+                )
                 batch_rows = await session.execute(batch_stmt)
                 for bid, mol_id, bnum in batch_rows:
                     batch_to_mol[bid] = mol_id
@@ -94,7 +97,10 @@ class SQLAlchemyPlateMapReader:
                         MoleculeModel.id,
                         MoleculeModel.name,
                         MoleculeModel.smiles,
-                    ).where(MoleculeModel.id.in_(mol_ids))
+                    ).where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.id.in_(mol_ids),
+                    )
                     mol_rows = await session.execute(mol_stmt)
                     for mid, name, smiles in mol_rows:
                         mol_names[mid] = name
@@ -105,6 +111,7 @@ class SQLAlchemyPlateMapReader:
                         MoleculeIdentifierModel.identifier,
                         MoleculeIdentifierModel.identifier_type,
                     ).where(
+                        MoleculeIdentifierModel.workspace_id == workspace_id,
                         MoleculeIdentifierModel.molecule_id.in_(mol_ids),
                         MoleculeIdentifierModel.identifier_type.in_(_ALIAS_TYPES),
                     )

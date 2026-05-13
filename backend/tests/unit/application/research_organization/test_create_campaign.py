@@ -76,8 +76,6 @@ class TestCreateCampaign:
             created_by=auth.user_id,
             supersedes_campaign_id=None,
         )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
         campaign_repo.save.assert_not_awaited()

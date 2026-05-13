@@ -86,3 +86,31 @@ def result_to_response(
             return value
         case Failure(error):
             raise error
+
+
+def result_or_default(result: Result[Any, DomainError], default: Any) -> Any:
+    """Unwrap on Success, return the supplied default on Failure.
+
+    Use for best-effort enrichment paths where a failure is non-fatal and
+    must not bubble out as an HTTP error.
+    """
+    match result:
+        case Success(value):
+            return value
+        case _:
+            return default
+
+
+def result_value_or_error(
+    result: Result[Any, DomainError],
+) -> tuple[Any, str | None]:
+    """Return ``(value, None)`` on Success and ``(None, message)`` on Failure.
+
+    Use in batch endpoints that aggregate per-row outcomes (where a single
+    failure should not fail the whole request).
+    """
+    match result:
+        case Success(value):
+            return value, None
+        case Failure(error):
+            return None, getattr(error, "message", str(error))

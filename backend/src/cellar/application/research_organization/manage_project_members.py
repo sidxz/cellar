@@ -31,7 +31,6 @@ from cellar.domain.research_organization.repository import (
 )
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
-
 # ---------------------------------------------------------------------------
 # AddProjectMember
 # ---------------------------------------------------------------------------

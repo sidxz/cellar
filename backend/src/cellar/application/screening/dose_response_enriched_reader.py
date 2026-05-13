@@ -30,7 +30,9 @@ class DoseResponseEnrichedReader(Protocol):
     """Application-layer protocol for enriched dose-response read-model queries."""
 
     async def resolve_molecules(
-        self, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, MoleculeDisplayInfo]: ...
 
-    async def resolve_batch_numbers(self, batch_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]: ...
+    async def resolve_batch_numbers(
+        self, workspace_id: uuid.UUID, batch_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]: ...

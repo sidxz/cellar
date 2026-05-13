@@ -39,6 +39,7 @@ from cellar.interface.dependencies import (
     UpdateOntologySlotDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["ontology"])
 
@@ -195,7 +196,6 @@ async def update_ontology_slot(
     auth: AuthDep,
     use_case: UpdateOntologySlotDep,
 ) -> OntologySlotResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd_fields: dict[str, Any] = {
         "workspace_id": auth.workspace_id,

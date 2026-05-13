@@ -11,6 +11,7 @@ from cellar.application.auth import AuthContext, require_editor, require_workspa
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.enums import (
     FeasibilityStatus,
@@ -20,10 +21,8 @@ from cellar.domain.inventory.enums import (
 from cellar.domain.inventory.repository import BatchRepository, SynthesisRequestRepository
 from cellar.domain.inventory.synthesis_request import SynthesisRequest
 from cellar.domain.shared.enums import AmountUnit, AssignmentType
-from cellar.application.shared.sentinel import UNSET
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import Amount, SynthesisAssignment
-
 
 # ---------------------------------------------------------------------------
 # Commands

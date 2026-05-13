@@ -42,9 +42,6 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
 from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
@@ -57,10 +54,9 @@ from cellar.domain.research_organization.repository import (
     CampaignRepository,
     CollectionRepository,
 )
-from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -112,10 +108,7 @@ class CloseCampaign:
         input: CloseCampaignCommand,
         auth: AuthContext | None = None,
     ) -> Result[Campaign, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(
@@ -182,38 +175,13 @@ class CloseCampaign:
                 )
 
             # Step 6 — repair ND placeholder units ("-") on non-override measurements.
-            # Build a lookup: readout_definition_id -> ReadoutDefinition from loaded protocols.
-            readout_map: dict[uuid.UUID, ReadoutDefinition] = {}
-            for p in protocols:
-                for rd in p.readout_definitions:
-                    readout_map[rd.id] = rd
-
-            for result in results:
-                for channel in channels:
-                    measurement = result.find_measurement(channel.id)
-                    if measurement is None or measurement.is_manual_override:
-                        continue
-                    if measurement.unit == "-":
-                        rd = readout_map.get(channel.readout_definition_id)
-                        if rd is not None and rd.unit and rd.unit.strip():
-                            repaired = CampaignMeasurement(
-                                id=measurement.id,
-                                result_id=measurement.result_id,
-                                channel_id=measurement.channel_id,
-                                value=measurement.value,
-                                value_qualifier=measurement.value_qualifier,
-                                unit=rd.unit.strip(),
-                                protocol_name_snapshot=measurement.protocol_name_snapshot,
-                                protocol_version_snapshot=measurement.protocol_version_snapshot,
-                                hit_call=measurement.hit_call,
-                                is_manual_override=measurement.is_manual_override,
-                                source_run_id=measurement.source_run_id,
-                                source_curve_id=measurement.source_curve_id,
-                                source_readout_id=measurement.source_readout_id,
-                                run_date_snapshot=measurement.run_date_snapshot,
-                            )
-                            result.remove_measurement_for_channel(channel.id)
-                            result.add_measurement(repaired)
+            readout_unit_by_channel: dict[uuid.UUID, str] = {}
+            readout_def_by_id = {rd.id: rd for p in protocols for rd in p.readout_definitions}
+            for channel in channels:
+                rd = readout_def_by_id.get(channel.readout_definition_id)
+                if rd is not None and rd.unit:
+                    readout_unit_by_channel[channel.id] = rd.unit
+            campaign.repair_placeholder_units(readout_unit_by_channel)
 
             # Step 7a — validate close prerequisites (domain method enforces ≥1 result + ≥1 channel).
             if not campaign.results:

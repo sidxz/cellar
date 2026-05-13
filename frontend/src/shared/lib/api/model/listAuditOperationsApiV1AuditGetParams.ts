@@ -9,9 +9,6 @@ export type ListAuditOperationsApiV1AuditGetParams = {
 entity_type?: string | null;
 entity_id?: string | null;
 user_id?: string | null;
-/**
- * @minimum 1
- * @maximum 200
- */
-limit?: number;
+cursor?: string | null;
+limit?: number | null;
 };

@@ -61,8 +61,8 @@ class ListReadoutDataEnriched:
             mol_ids = list({rd.molecule_id for rd in data if rd.molecule_id})
             batch_ids = list({rd.batch_id for rd in data if rd.batch_id})
 
-            mol_info = await self._reader.resolve_molecules(mol_ids)
-            batch_map = await self._reader.resolve_batch_numbers(batch_ids)
+            mol_info = await self._reader.resolve_molecules(input.workspace_id, mol_ids)
+            batch_map = await self._reader.resolve_batch_numbers(input.workspace_id, batch_ids)
 
             return Success(
                 [

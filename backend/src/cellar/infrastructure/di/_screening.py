@@ -43,6 +43,9 @@ from cellar.application.screening.dose_response_enriched_reader import (
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
+from cellar.application.screening.get_dose_response_curves_batch import (
+    GetDoseResponseCurvesBatch,
+)
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
@@ -458,6 +461,7 @@ def register_screening(container: Container) -> None:
 
     container.define(CreateDoseResponseCurve, _dose_response_create)
     container.define(ListDoseResponseByRun, _dose_response_query(ListDoseResponseByRun))
+    container.define(GetDoseResponseCurvesBatch, _dose_response_query(GetDoseResponseCurvesBatch))
 
     container.define(
         DoseResponseEnrichedReader,

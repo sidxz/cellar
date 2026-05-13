@@ -11,6 +11,7 @@ import uuid
 from typing import Any
 
 from cellar.application.screening import _condense_raw_data
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
@@ -18,7 +19,6 @@ from cellar.domain.screening_assay.activity_types import (
     CurveParams,
     ProtocolActivitySummary,
 )
-from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,

@@ -164,6 +164,7 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.samples import router as sample_router
     from cellar.interface.routes.storage import router as storage_router
     from cellar.interface.routes.protocols import router as protocol_router
+    from cellar.interface.routes.targets import router as target_router
     from cellar.interface.routes.runs import router as run_router
     from cellar.interface.routes.readout_data import router as readout_data_router
     from cellar.interface.routes.audit import router as audit_router
@@ -188,6 +189,7 @@ def create_app() -> FastAPI:
     app.include_router(sample_router)
     app.include_router(storage_router)
     app.include_router(protocol_router)
+    app.include_router(target_router)
     app.include_router(run_router)
     app.include_router(readout_data_router)
     from cellar.interface.routes.dose_response_curves import router as drc_batch_router
@@ -209,11 +211,23 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.collections import router as collection_router
     from cellar.interface.routes.saved_searches import router as saved_search_router
     from cellar.interface.routes.campaigns import router as campaign_router
+    from cellar.interface.routes.campaigns_channels import (
+        router as campaign_channels_router,
+    )
+    from cellar.interface.routes.campaigns_publishing import (
+        router as campaign_publishing_router,
+    )
+    from cellar.interface.routes.campaigns_results import (
+        router as campaign_results_router,
+    )
 
     app.include_router(project_router)
     app.include_router(collection_router)
     app.include_router(saved_search_router)
     app.include_router(campaign_router)
+    app.include_router(campaign_channels_router)
+    app.include_router(campaign_results_router)
+    app.include_router(campaign_publishing_router)
 
     from cellar.interface.routes.search import router as search_router
     from cellar.interface.routes.search_algorithms import router as search_algorithms_router

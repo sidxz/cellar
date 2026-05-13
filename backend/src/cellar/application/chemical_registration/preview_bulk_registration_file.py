@@ -18,7 +18,6 @@ from cellar.application.shared.query import Query
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.domain.shared.errors import DomainError, ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Application port — implemented by infrastructure parser
 # ---------------------------------------------------------------------------

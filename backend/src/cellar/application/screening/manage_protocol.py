@@ -16,15 +16,16 @@ from cellar.application.auth import (
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import PosControlSignal, ProtocolStatus
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.protocol_versioning_service import ProtocolVersioningService
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
+from cellar.domain.shared.hit_criterion import HitCriterion
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -226,6 +227,8 @@ class DeleteProtocolCommand(Command):
 class ListProtocolsByProjectQuery(Query):
     workspace_id: uuid.UUID
     project_id: uuid.UUID
+    cursor_id: uuid.UUID | None = None
+    limit: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -291,11 +294,24 @@ class ListProtocolsByProject:
         self,
         input: ListProtocolsByProjectQuery,
         auth: AuthContext | None = None,
-    ) -> Result[list[Protocol], DomainError]:
+    ) -> Result[PageResult[Protocol], DomainError]:
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
-            protocols = await self._repo.find_by_project(input.workspace_id, input.project_id)
-            return Success(protocols)
+            effective_limit = input.limit
+            fetch_limit = effective_limit + 1 if effective_limit is not None else None
+            protocols = await self._repo.find_by_project(
+                input.workspace_id,
+                input.project_id,
+                cursor_id=input.cursor_id,
+                limit=fetch_limit,
+            )
+
+            next_cursor: str | None = None
+            if effective_limit is not None and len(protocols) > effective_limit:
+                protocols = protocols[:effective_limit]
+                next_cursor = str(protocols[-1].id)
+
+            return Success(PageResult(items=protocols, next_cursor=next_cursor))
 
 
 class AddProtocolToProject:

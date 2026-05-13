@@ -6,12 +6,18 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.chemical_registration.protocols import (
+    DetectedSaltDTO,
+    StructureProcessorProtocol,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
 from cellar.domain.chemical_registration.enums import MoleculeType, RegistrationAction
 from cellar.domain.chemical_registration.molecule import Molecule
@@ -20,14 +26,8 @@ from cellar.domain.chemical_registration.repository import (
     DisclosureRequestRepository,
     MoleculeRepository,
 )
-from cellar.application.chemical_registration.protocols import (
-    DetectedSaltDTO,
-    StructureProcessorProtocol,
-)
-from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.shared.errors import ConflictError, DomainError, ValidationError
 from cellar.domain.workspace_config.enums import FieldTarget
-from returns.pipeline import is_successful
 
 if TYPE_CHECKING:
     from cellar.application.chemical_registration.disclosure_service import DisclosureService
@@ -413,7 +413,7 @@ class RegisterMolecule:
                 if matched_id is None:
                     matched_id = owner_id
                 elif owner_id != matched_id:
-                    return Failure(ConflictError(f"Identifiers map to different molecules"))
+                    return Failure(ConflictError("Identifiers map to different molecules"))
 
             if matched_id is not None:
                 matched_molecule = await self._repo.find_by_id_in_workspace(

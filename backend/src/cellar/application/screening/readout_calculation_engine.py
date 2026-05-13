@@ -29,7 +29,6 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import (
     ReadoutAggregation,
-    ReadoutNormalization,
     WellType,
 )
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
@@ -59,7 +58,7 @@ class ComputeRunResult:
     so callers can surface them instead of silently swallowing them.
     """
 
-    computed_readouts: list["ReadoutData"]
+    computed_readouts: list[ReadoutData]
     fit_warnings: list[str] = field(default_factory=list)
 
 

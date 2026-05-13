@@ -41,12 +41,22 @@ class SQLAlchemyTargetRepository:
             return None
         return self._to_domain(model)
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Target]:
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Target]:
         stmt = (
             select(TargetModel)
             .where(TargetModel.workspace_id == workspace_id)
-            .order_by(TargetModel.name)
+            .order_by(TargetModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(TargetModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 

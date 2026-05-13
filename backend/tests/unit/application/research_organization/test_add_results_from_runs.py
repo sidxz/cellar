@@ -35,7 +35,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.errors import AuthorizationError, ValidationError
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
@@ -141,10 +141,8 @@ class TestAddResultsFromRuns:
             run_ids=[uuid.uuid4()],
             channel_configs=[],
         )
-        out = await uc(cmd, auth=auth)
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
-
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
     @pytest.mark.asyncio
     async def test_locked_campaign_returns_validation_failure(self) -> None:
         auth = fake_auth()

@@ -11,8 +11,8 @@ from cellar.application.auth import AuthContext, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
-from cellar.domain.workspace_config.salt_entry import SaltEntry
 from cellar.domain.workspace_config.repository import SaltEntryRepository
+from cellar.domain.workspace_config.salt_entry import SaltEntry
 
 
 @dataclass(frozen=True, kw_only=True)

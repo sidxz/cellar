@@ -12,7 +12,7 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     PosControlSignal,
@@ -74,13 +74,23 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             return None
         return self._to_domain_tracked(model)
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Protocol]:
-        """List all protocols in a workspace, newest first."""
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Protocol]:
+        """List protocols in a workspace, ordered by id for stable cursor paging."""
         stmt = (
             select(ProtocolModel)
             .where(ProtocolModel.workspace_id == workspace_id)
-            .order_by(ProtocolModel.created_at.desc())
+            .order_by(ProtocolModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(ProtocolModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
@@ -159,9 +169,14 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         await self._session.execute(stmt)
 
     async def find_by_project(
-        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Protocol]:
-        """Return all protocols linked to a project, newest first."""
+        """Return protocols linked to a project, ordered by id for stable cursor paging."""
         subq = select(protocol_projects.c.protocol_id).where(
             protocol_projects.c.project_id == project_id
         )
@@ -171,8 +186,12 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 ProtocolModel.workspace_id == workspace_id,
                 ProtocolModel.id.in_(subq),
             )
-            .order_by(ProtocolModel.created_at.desc())
+            .order_by(ProtocolModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(ProtocolModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 

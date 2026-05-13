@@ -28,8 +28,10 @@ from cellar.application.inventory.sample_requests import (
     UpdateSampleRequest,
     UpdateSampleRequestCommand,
 )
+from cellar.domain.inventory.sample_request import SampleRequest
 from cellar.interface.dependencies import AuthDep, _get_use_case
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["sample-requests"])
 
@@ -56,7 +58,7 @@ class SampleRequestResponse(BaseModel):
     fulfilled_at: str | None = None
 
     @classmethod
-    def from_domain(cls, r) -> SampleRequestResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r: SampleRequest) -> SampleRequestResponse:
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -194,7 +196,6 @@ async def update_sample_request(
     auth: AuthDep,
     uc: UpdateSampleRequestDep,
 ) -> SampleRequestResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateSampleRequestCommand(
         workspace_id=auth.workspace_id,

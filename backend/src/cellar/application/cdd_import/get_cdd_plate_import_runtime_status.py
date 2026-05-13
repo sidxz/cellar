@@ -78,7 +78,7 @@ class GetCddPlateImportRuntimeStatus:
             return await self._fallback_to_db(input, auth)
 
         if progress.status == "failed":
-            await self._sync_failed(input.workspace_id, progress.import_id)
+            await self._sync_failed.run(input.workspace_id, progress.import_id)
 
         return Success(
             CddPlateImportStatusView(

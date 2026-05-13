@@ -56,12 +56,21 @@ class SQLAlchemyOrganizationRepository(SQLAlchemyRepository[Organization, Organi
         model.is_active = aggregate.is_active
 
     async def find_by_workspace(
-        self, workspace_id: uuid.UUID, *, include_inactive: bool = False
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Organization]:
         stmt = select(OrganizationModel).where(OrganizationModel.workspace_id == workspace_id)
         if not include_inactive:
             stmt = stmt.where(OrganizationModel.is_active.is_(True))
-        stmt = stmt.order_by(OrganizationModel.name)
+        if cursor_id is not None:
+            stmt = stmt.where(OrganizationModel.id > cursor_id)
+        stmt = stmt.order_by(OrganizationModel.id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
 

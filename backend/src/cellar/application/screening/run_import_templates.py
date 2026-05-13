@@ -22,7 +22,6 @@ from cellar.domain.screening_assay.repository import RunImportTemplateRepository
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-
 # ---------------------------------------------------------------------------
 # Commands / Queries
 # ---------------------------------------------------------------------------

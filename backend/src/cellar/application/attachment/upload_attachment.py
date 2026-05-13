@@ -8,16 +8,16 @@ from pathlib import PurePosixPath
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.attachment.storage import StorageClient
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
+from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.attachment import Attachment
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.attachment.repository import AttachmentRepository
-from cellar.application.attachment.storage import StorageClient
-from cellar.domain.shared.errors import DomainError, ValidationError
-from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.domain.attachment.validation import validate_extension, validate_file_size
+from cellar.domain.shared.errors import DomainError, ValidationError
 
 
 @dataclass(frozen=True, kw_only=True)

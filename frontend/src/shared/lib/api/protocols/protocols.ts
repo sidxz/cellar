@@ -33,6 +33,7 @@ import type {
   ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
   ListProtocolsApiV1ProtocolsGetParams,
   LockProtocolRequest,
+  PaginatedResponseProtocolResponse,
   ProtocolResponse,
   ProtocolSummaryResponse,
   RetireRequest,
@@ -121,7 +122,7 @@ export const listProtocolsApiV1ProtocolsGet = (
 ) => {
       
       
-      return customInstance<ProtocolResponse[]>(
+      return customInstance<PaginatedResponseProtocolResponse>(
       {url: `/api/v1/protocols`, method: 'GET',
         params, signal
     },

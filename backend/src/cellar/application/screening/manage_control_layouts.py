@@ -16,7 +16,6 @@ from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import PlateTemplateRepository, ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------

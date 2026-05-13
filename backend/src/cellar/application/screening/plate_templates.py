@@ -19,7 +19,6 @@ from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.repository import PlateTemplateRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 
-
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------

@@ -91,7 +91,7 @@ class TestAdminHardDelete:
             params={"entity_type": "vocabulary", "entity_id": vid},
         )
         assert audit_resp.status_code == 200
-        ops = audit_resp.json()
+        ops = audit_resp.json()["items"]
 
         hard_deletes = [
             op for op in ops if op["operation_type"] == "admin_hard_delete"

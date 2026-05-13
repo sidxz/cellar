@@ -25,6 +25,8 @@ from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationItem,
     BulkRegistrationOutcome,
     BulkRegistrationService,
+)
+from cellar.application.chemical_registration.bulk_registration_service import (
     StartBulkRegistrationCommand as SyncStartBulkRegistrationCommand,
 )
 from cellar.application.chemical_registration.preview_bulk_registration_file import (

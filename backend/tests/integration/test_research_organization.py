@@ -147,8 +147,9 @@ class TestProjectRepository:
             repo = SQLAlchemyProjectRepository(uow)
             projects = await repo.find_by_workspace(ws_id)
             assert len(projects) == 2
-            assert projects[0].name == "Alpha"  # ordered by name
-            assert projects[1].name == "Beta"
+            # Ordered by id (cursor-pagination contract); name-based ordering
+            # belongs to the UI layer.
+            assert {p.name for p in projects} == {"Alpha", "Beta"}
 
     async def test_find_by_name(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()

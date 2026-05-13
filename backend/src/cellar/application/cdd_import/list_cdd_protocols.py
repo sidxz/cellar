@@ -9,6 +9,7 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.cdd_import._check_config import check_cdd_configured
+from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from cellar.application.cdd_import.gateway import CddProtocolGateway
 from cellar.application.cdd_import.mapper import (
     CddProtocolSummary,
@@ -19,7 +20,6 @@ from cellar.application.workspace_config.get_data_source_for_import import (
     GetDataSourceForImport,
 )
 from cellar.domain.shared.errors import DomainError, ValidationError
-from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)

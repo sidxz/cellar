@@ -52,7 +52,9 @@ from cellar.interface.dependencies import (
     UnlockRunDep,
     UpdateRunDep,
 )
+from cellar.domain.screening_assay.run import Run
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["runs"])
 
@@ -86,7 +88,7 @@ class RunResponse(BaseModel):
     conditions: dict[str, Any] | None = None
 
     @classmethod
-    def from_domain(cls, r, *, molecule_count: int = 0) -> RunResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r: Run, *, molecule_count: int = 0) -> RunResponse:
         plate_barcodes = [p.barcode.value for p in r.plates if getattr(p, "barcode", None)]
         return cls(
             id=r.id,
@@ -217,7 +219,6 @@ async def update_run(
     auth: AuthDep,
     uc: UpdateRunDep,
 ) -> RunResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateRunCommand(
         workspace_id=auth.workspace_id,

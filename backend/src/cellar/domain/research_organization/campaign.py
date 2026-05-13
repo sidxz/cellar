@@ -184,6 +184,37 @@ class Campaign(AggregateRoot):
             self.updated_at = datetime.now(UTC)
         return added, skipped
 
+    # ----- maintenance helpers -----
+
+    def repair_placeholder_units(
+        self,
+        readout_unit_by_channel: dict[uuid.UUID, str],
+    ) -> None:
+        """Replace ``"-"`` placeholder units on non-override measurements.
+
+        Used at close-time after re-resolution: if the resolver wrote a
+        placeholder unit ("-") because the upstream source didn't carry
+        one, swap in the protocol's readout-definition unit. Manual
+        overrides are left alone.
+
+        Parameters
+        ----------
+        readout_unit_by_channel
+            Channel id -> resolved unit string. Channels with no mapping or
+            an empty/whitespace unit are skipped.
+        """
+        for result in self.results:
+            for channel in self.channels:
+                measurement = result.find_measurement(channel.id)
+                if measurement is None or measurement.is_manual_override:
+                    continue
+                if measurement.unit != "-":
+                    continue
+                unit = readout_unit_by_channel.get(channel.id)
+                if not unit or not unit.strip():
+                    continue
+                measurement.unit = unit.strip()
+
     # ----- close / publish / supersede -----
 
     def close(

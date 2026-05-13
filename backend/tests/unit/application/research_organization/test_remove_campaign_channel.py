@@ -176,7 +176,5 @@ class TestRemoveCampaignChannel:
             campaign_id=campaign.id,
             channel_id=channel.id,
         )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)

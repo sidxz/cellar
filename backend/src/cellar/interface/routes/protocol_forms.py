@@ -34,6 +34,7 @@ from cellar.interface.dependencies import (
     UpdateProtocolFormDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1/protocol-forms", tags=["protocol-forms"])
 
@@ -127,7 +128,6 @@ async def update_protocol_form(
     auth: AuthDep,
     use_case: UpdateProtocolFormDep,
 ) -> ProtocolFormResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd_fields: dict[str, Any] = {
         "workspace_id": auth.workspace_id,

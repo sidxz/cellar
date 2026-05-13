@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from returns.result import Failure, Result, Success
+from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
@@ -19,7 +19,6 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
 )
 
@@ -61,10 +60,7 @@ class CreateCampaign:
         input: CreateCampaignCommand,
         auth: AuthContext | None = None,
     ) -> Result[Campaign, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             campaign = Campaign.create(

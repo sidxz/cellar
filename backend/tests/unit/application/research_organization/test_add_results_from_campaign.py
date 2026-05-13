@@ -288,7 +288,5 @@ class TestAddResultsFromCampaign:
             source_campaign_id=uuid.uuid4(),
             decision_filter=[CampaignDecision.SELECTED],
         )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)

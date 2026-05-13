@@ -322,11 +322,8 @@ class TestRefreshFromSources:
             workspace_id=auth.workspace_id,
             campaign_id=uuid.uuid4(),
         )
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
-
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
     @pytest.mark.asyncio
     async def test_re_resolve_preserves_measurement_id(self) -> None:
         """Re-resolved measurement inherits the old measurement's id to avoid DELETE+INSERT."""

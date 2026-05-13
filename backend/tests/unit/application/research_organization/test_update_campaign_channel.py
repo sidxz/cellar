@@ -26,7 +26,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -344,10 +344,8 @@ class TestUpdateCampaignChannel:
             channel_id=channel.id,
             label="X",
         )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
 
     @pytest.mark.asyncio
     async def test_re_resolve_preserves_measurement_id(self) -> None:

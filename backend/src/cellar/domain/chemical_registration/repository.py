@@ -23,7 +23,6 @@ from cellar.domain.shared.value_objects import RegistrationNumber
 class MoleculeRepository(Protocol):
     """Repository for Molecule aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> Molecule | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Molecule | None: ...
@@ -77,7 +76,6 @@ class MoleculeRepository(Protocol):
 class MoleculeRelationshipRepository(Protocol):
     """Repository for MoleculeRelationship entities."""
 
-    async def find_by_id(self, id: uuid.UUID) -> MoleculeRelationship | None: ...
 
     async def find_by_source(
         self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID
@@ -96,18 +94,27 @@ class MoleculeRelationshipRepository(Protocol):
 class DisclosureRequestRepository(Protocol):
     """Repository for DisclosureRequest aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> DisclosureRequest | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> DisclosureRequest | None: ...
     async def find_by_molecule(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        molecule_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[DisclosureRequest]: ...
     async def find_by_bulk_disclosure(
         self, workspace_id: uuid.UUID, bulk_disclosure_id: uuid.UUID
     ) -> list[DisclosureRequest]: ...
     async def find_by_workspace(
-        self, workspace_id: uuid.UUID, *, status: str | None = None
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[DisclosureRequest]: ...
     async def save(self, aggregate: DisclosureRequest) -> None: ...
 
@@ -116,7 +123,6 @@ class DisclosureRequestRepository(Protocol):
 class BulkDisclosureRepository(Protocol):
     """Repository for BulkDisclosure aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> BulkDisclosure | None: ...
     async def save(self, aggregate: BulkDisclosure) -> None: ...
 
 
@@ -124,7 +130,6 @@ class BulkDisclosureRepository(Protocol):
 class MergeEventRepository(Protocol):
     """Repository for MergeEvent entities (insert-only, no versioning)."""
 
-    async def find_by_id(self, id: uuid.UUID) -> MergeEvent | None: ...
     async def find_by_source(
         self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID
     ) -> list[MergeEvent]: ...
@@ -145,7 +150,6 @@ class BulkRegistrationRepository(Protocol):
     pending per-row items collected via BulkRegistration.record_item(...).
     """
 
-    async def find_by_id(self, id: uuid.UUID) -> BulkRegistration | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> BulkRegistration | None: ...
@@ -163,7 +167,6 @@ class BulkRegistrationRepository(Protocol):
 class CddMoleculeImportRepository(Protocol):
     """Repository for CddMoleculeImport aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> CddMoleculeImport | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> CddMoleculeImport | None: ...
@@ -178,7 +181,6 @@ class CddMoleculeImportRepository(Protocol):
 class SynthesisRouteRepository(Protocol):
     """Repository for SynthesisRoute aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> SynthesisRoute | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> SynthesisRoute | None: ...

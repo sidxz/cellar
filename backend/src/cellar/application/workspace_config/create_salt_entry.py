@@ -12,8 +12,8 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import ConflictError, DomainError
-from cellar.domain.workspace_config.salt_entry import SaltEntry
 from cellar.domain.workspace_config.repository import SaltEntryRepository
+from cellar.domain.workspace_config.salt_entry import SaltEntry
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -7,12 +7,12 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from lagom import Container
 from pydantic import BaseModel
 
 from cellar.application.inventory.preview_shipment_import import (
     ImportRow,
     PreviewShipmentImport,
+    PreviewShipmentImportQuery,
 )
 from cellar.application.inventory.shipments import (
     AddShipmentItem,
@@ -37,8 +37,10 @@ from cellar.application.inventory.shipments import (
     UpdateShipment,
     UpdateShipmentCommand,
 )
-from cellar.interface.dependencies import AuthDep, _get_use_case, get_container
+from cellar.domain.inventory.shipment import Shipment, ShipmentItem
+from cellar.interface.dependencies import AuthDep, _get_use_case
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["shipments"])
 
@@ -55,7 +57,7 @@ class ShipmentItemResponse(BaseModel):
     amount_unit: str
 
     @classmethod
-    def from_domain(cls, i) -> ShipmentItemResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, i: ShipmentItem) -> ShipmentItemResponse:
         return cls(
             id=i.id,
             sample_id=i.sample_id,
@@ -80,7 +82,7 @@ class ShipmentResponse(BaseModel):
     items: list[ShipmentItemResponse]
 
     @classmethod
-    def from_domain(cls, s) -> ShipmentResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, s: Shipment) -> ShipmentResponse:
         return cls(
             id=s.id,
             workspace_id=s.workspace_id,
@@ -112,7 +114,7 @@ class ShipmentSummaryResponse(BaseModel):
     item_count: int
 
     @classmethod
-    def from_domain(cls, s) -> ShipmentSummaryResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, s: Shipment) -> ShipmentSummaryResponse:
         return cls(
             id=s.id,
             workspace_id=s.workspace_id,
@@ -237,13 +239,7 @@ UpdateShipmentDep = Annotated[UpdateShipment, Depends(_get_use_case(UpdateShipme
 DeleteShipmentDep = Annotated[DeleteShipment, Depends(_get_use_case(DeleteShipment))]
 
 
-def _get_preview_import(
-    container: Annotated[Container, Depends(get_container)],
-) -> PreviewShipmentImport:
-    return container[PreviewShipmentImport]
-
-
-PreviewImportDep = Annotated[PreviewShipmentImport, Depends(_get_preview_import)]
+PreviewImportDep = Annotated[PreviewShipmentImport, Depends(_get_use_case(PreviewShipmentImport))]
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +296,15 @@ async def preview_shipment_import(
         ImportRow(compound=r.compound, batch=r.batch, sample=r.sample, amount=r.amount)
         for r in body.rows
     ]
-    result = await uc(auth.workspace_id, import_rows, auth=auth)
+    result = result_to_response(
+        await uc(
+            PreviewShipmentImportQuery(
+                workspace_id=auth.workspace_id,
+                rows=import_rows,
+            ),
+            auth=auth,
+        )
+    )
     return ImportPreviewResponse(
         rows=[
             ResolvedRowResponse(
@@ -358,7 +362,6 @@ async def update_shipment(
     auth: AuthDep,
     uc: UpdateShipmentDep,
 ) -> ShipmentResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateShipmentCommand(
         workspace_id=auth.workspace_id,

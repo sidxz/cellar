@@ -309,8 +309,6 @@ class TestSupersedeCampaign:
 
         uc, campaign_repo, _ = _make_use_case(old_campaign=old, new_campaign=new)
         cmd = _make_command(ws_id, old.id, new.id)
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
         campaign_repo.save.assert_not_awaited()

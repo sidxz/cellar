@@ -19,6 +19,7 @@ from cellar.interface.dependencies import (
     ListAuditOperationsDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
 
 router = APIRouter(prefix="/api/v1/audit", tags=["audit"])
 
@@ -82,24 +83,29 @@ class AuditOperationResponse(BaseModel):
         )
 
 
-@router.get("", response_model=list[AuditOperationResponse])
+@router.get("", response_model=PaginatedResponse[AuditOperationResponse])
 async def list_audit_operations(
     auth: AuthDep,
     use_case: ListAuditOperationsDep,
     entity_type: str | None = Query(default=None),
     entity_id: uuid.UUID | None = Query(default=None),
     user_id: uuid.UUID | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-) -> list[AuditOperationResponse]:
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[AuditOperationResponse]:
     query = ListAuditOperationsQuery(
         workspace_id=auth.workspace_id,
         entity_type=entity_type,
         entity_id=entity_id,
         user_id=user_id,
-        limit=limit,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
     )
-    operations = result_to_response(await use_case(query, auth=auth))
-    return [AuditOperationResponse.from_domain(op) for op in operations]
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[AuditOperationResponse.from_domain(op) for op in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/{operation_id}", response_model=AuditOperationResponse)

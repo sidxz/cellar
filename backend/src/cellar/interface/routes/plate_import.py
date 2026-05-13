@@ -3,32 +3,33 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, UploadFile
-from lagom import Container
+import structlog
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
 
 from cellar.application.inventory.import_plate_data import (
     ImportExecutionResult,
-    ImportFileCache,
-    ImportPlateDataService,
     ImportPreview,
     ValidationResult,
     auto_match_template,
     preview_import_file,
 )
 from cellar.application.inventory.import_templates import (
-    CreateImportTemplate,
     CreateImportTemplateCommand,
-    DeleteImportTemplate,
     DeleteImportTemplateCommand,
-    ListImportTemplates,
     ListImportTemplatesQuery,
 )
 from cellar.domain.inventory.import_template import ImportTemplate
-from cellar.interface.dependencies import AuthDep, get_container
-from cellar.interface.error_handlers import result_to_response
+from cellar.interface.dependencies import (
+    AuthDep,
+    CreateImportTemplateDep,
+    DeleteImportTemplateDep,
+    ImportFileCacheDep,
+    ImportPlateDataServiceDep,
+    ListImportTemplatesDep,
+)
+from cellar.interface.error_handlers import result_or_default, result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["plate-import"])
 
@@ -113,41 +114,6 @@ class CreateImportTemplateBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Use-case / service dependencies
-# ---------------------------------------------------------------------------
-
-
-def _import_file_cache(
-    c: Annotated[Container, Depends(get_container)],
-) -> ImportFileCache:
-    return c[ImportFileCache]
-
-
-def _import_plate_data_service(
-    c: Annotated[Container, Depends(get_container)],
-) -> ImportPlateDataService:
-    return c[ImportPlateDataService]
-
-
-def _create_import_template(
-    c: Annotated[Container, Depends(get_container)],
-) -> CreateImportTemplate:
-    return c[CreateImportTemplate]
-
-
-def _list_import_templates(
-    c: Annotated[Container, Depends(get_container)],
-) -> ListImportTemplates:
-    return c[ListImportTemplates]
-
-
-def _delete_import_template(
-    c: Annotated[Container, Depends(get_container)],
-) -> DeleteImportTemplate:
-    return c[DeleteImportTemplate]
-
-
-# ---------------------------------------------------------------------------
 # Import pipeline endpoints
 # ---------------------------------------------------------------------------
 
@@ -155,9 +121,9 @@ def _delete_import_template(
 @router.post("/plates/import/preview", response_model=ImportPreviewResponse)
 async def preview_import(
     auth: AuthDep,
+    list_uc: ListImportTemplatesDep,
+    cache: ImportFileCacheDep,
     file: UploadFile = File(...),
-    list_uc: Annotated[ListImportTemplates, Depends(_list_import_templates)] = ...,
-    cache: Annotated[ImportFileCache, Depends(_import_file_cache)] = ...,
 ) -> ImportPreviewResponse:
     content = await file.read()
     preview: ImportPreview = result_to_response(
@@ -166,22 +132,19 @@ async def preview_import(
         )
     )
 
-    # Auto-match against saved templates using header similarity
+    # Auto-match against saved templates using header similarity (best-effort).
     suggested_id: str | None = None
     suggested_name: str | None = None
     try:
-        templates_result = await list_uc(ListImportTemplatesQuery(workspace_id=auth.workspace_id))
-        from returns.result import Success
-
-        if isinstance(templates_result, Success):
-            templates: list[ImportTemplate] = templates_result.unwrap()
-            suggested_id, suggested_name = auto_match_template(preview.headers, templates)
+        templates: list[ImportTemplate] = result_or_default(
+            await list_uc(ListImportTemplatesQuery(workspace_id=auth.workspace_id)),
+            default=[],
+        )
+        suggested_id, suggested_name = auto_match_template(preview.headers, templates)
     except Exception as exc:  # noqa: BLE001 — best-effort suggestion path
         # Auto-matching is purely a UX hint; we log and continue rather than
         # silently swallowing so a misconfigured DI / DB issue is visible
         # in operator logs without breaking the preview response.
-        import structlog
-
         structlog.get_logger(__name__).warning(
             "plate_import.auto_match_failed",
             error=str(exc),
@@ -203,13 +166,14 @@ async def preview_import(
 async def validate_import(
     body: ValidateImportBody,
     auth: AuthDep,
-    service: Annotated[ImportPlateDataService, Depends(_import_plate_data_service)],
+    service: ImportPlateDataServiceDep,
 ) -> ValidationResultResponse:
     result: ValidationResult = result_to_response(
         await service.validate(
             file_id=body.file_id,
             column_mappings=body.column_mappings,
             workspace_id=auth.workspace_id,
+            auth=auth,
         )
     )
 
@@ -229,7 +193,7 @@ async def validate_import(
 async def execute_import_data(
     body: ExecuteImportBody,
     auth: AuthDep,
-    service: Annotated[ImportPlateDataService, Depends(_import_plate_data_service)],
+    service: ImportPlateDataServiceDep,
 ) -> ExecuteImportResponse:
     result: ImportExecutionResult = result_to_response(
         await service.execute(
@@ -257,7 +221,7 @@ async def execute_import_data(
 @router.get("/import-templates", response_model=list[ImportTemplateResponse])
 async def list_import_templates(
     auth: AuthDep,
-    uc: Annotated[ListImportTemplates, Depends(_list_import_templates)],
+    uc: ListImportTemplatesDep,
 ) -> list[ImportTemplateResponse]:
     templates = result_to_response(
         await uc(ListImportTemplatesQuery(workspace_id=auth.workspace_id), auth=auth)
@@ -269,7 +233,7 @@ async def list_import_templates(
 async def create_import_template(
     body: CreateImportTemplateBody,
     auth: AuthDep,
-    uc: Annotated[CreateImportTemplate, Depends(_create_import_template)],
+    uc: CreateImportTemplateDep,
 ) -> ImportTemplateResponse:
     template = result_to_response(
         await uc(
@@ -291,7 +255,7 @@ async def create_import_template(
 async def delete_import_template(
     template_id: uuid.UUID,
     auth: AuthDep,
-    uc: Annotated[DeleteImportTemplate, Depends(_delete_import_template)],
+    uc: DeleteImportTemplateDep,
 ) -> None:
     result_to_response(
         await uc(

@@ -472,7 +472,7 @@ class TestProtocolVersioningNewFields:
         """Hit criteria are tuned QC gates; new versions inherit them so
         the screener doesn't have to re-tune from scratch on every
         version."""
-        from cellar.domain.screening_assay.hit_criterion import HitCriterion
+        from cellar.domain.shared.hit_criterion import HitCriterion
         from cellar.domain.screening_assay.protocol_versioning_service import (
             ProtocolVersioningService,
         )

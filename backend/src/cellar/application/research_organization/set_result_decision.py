@@ -21,7 +21,6 @@ from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.enums import CampaignDecision, CampaignStatus
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -31,9 +30,9 @@ from cellar.domain.shared.errors import (
 class _Unset:
     """Singleton sentinel meaning "caller did not supply this field"."""
 
-    _instance: "_Unset | None" = None
+    _instance: _Unset | None = None
 
-    def __new__(cls) -> "_Unset":
+    def __new__(cls) -> _Unset:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -53,7 +52,7 @@ class SetResultDecisionCommand(Command):
     decision: CampaignDecision
     reason: str | None = None
     # UNSET means "don't touch"; None means "clear the notes"
-    notes: "str | None | _Unset" = UNSET  # type: ignore[assignment]
+    notes: str | None | _Unset = UNSET  # type: ignore[assignment]
 
 
 class SetResultDecision:
@@ -85,10 +84,7 @@ class SetResultDecision:
         input: SetResultDecisionCommand,
         auth: AuthContext | None = None,
     ) -> Result[Campaign, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(

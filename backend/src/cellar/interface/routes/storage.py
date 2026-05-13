@@ -31,7 +31,10 @@ from cellar.interface.dependencies import (
     ListStorageLocationsDep,
     UpdateStorageLocationDep,
 )
+from cellar.domain.inventory.storage_location import StorageLocation
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1/storage-locations", tags=["storage"])
 
@@ -54,7 +57,7 @@ class StorageLocationResponse(BaseModel):
     capacity: int | None = None
 
     @classmethod
-    def from_domain(cls, loc) -> StorageLocationResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, loc: StorageLocation) -> StorageLocationResponse:
         return cls(
             id=loc.id,
             workspace_id=loc.workspace_id,
@@ -115,17 +118,23 @@ async def create_storage_location(
     return StorageLocationResponse.from_domain(result_to_response(result))
 
 
-@router.get("", response_model=list[StorageLocationResponse])
+@router.get("", response_model=PaginatedResponse[StorageLocationResponse])
 async def list_storage_locations(
     auth: AuthDep,
     uc: ListStorageLocationsDep,
-) -> list[StorageLocationResponse]:
-    result = await uc(
-        ListStorageLocationsQuery(workspace_id=auth.workspace_id),
-        auth=auth,
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[StorageLocationResponse]:
+    query = ListStorageLocationsQuery(
+        workspace_id=auth.workspace_id,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
     )
-    locations = result_to_response(result)
-    return [StorageLocationResponse.from_domain(loc) for loc in locations]
+    page = result_to_response(await uc(query, auth=auth))
+    return PaginatedResponse(
+        items=[StorageLocationResponse.from_domain(loc) for loc in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/{location_id}/children", response_model=list[StorageLocationResponse])
@@ -149,7 +158,6 @@ async def update_storage_location(
     auth: AuthDep,
     uc: UpdateStorageLocationDep,
 ) -> StorageLocationResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateStorageLocationCommand(
         workspace_id=auth.workspace_id,

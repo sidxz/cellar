@@ -368,10 +368,8 @@ class TestOverrideResultCell:
             value_qualifier=ValueQualifier.EQ,
             unit="uM",
         )
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
         campaign_repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio

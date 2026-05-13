@@ -22,6 +22,7 @@ from cellar.interface.dependencies import (
     UpdateOrganizationDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
 
 router = APIRouter(prefix="/api/v1/organizations", tags=["organizations"])
 
@@ -70,17 +71,25 @@ class UpdateOrganizationBody(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-@router.get("", response_model=list[OrganizationResponse])
+@router.get("", response_model=PaginatedResponse[OrganizationResponse])
 async def list_organizations(
     auth: AuthDep,
     use_case: ListOrganizationsDep,
     include_inactive: bool = False,
-) -> list[OrganizationResponse]:
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[OrganizationResponse]:
     query = ListOrganizationsQuery(
-        workspace_id=auth.workspace_id, include_inactive=include_inactive
+        workspace_id=auth.workspace_id,
+        include_inactive=include_inactive,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
     )
-    orgs = result_to_response(await use_case(query, auth=auth))
-    return [OrganizationResponse.from_domain(o) for o in orgs]
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[OrganizationResponse.from_domain(o) for o in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)

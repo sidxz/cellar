@@ -66,7 +66,7 @@ class TestListCollections:
         await client.post("/api/v1/collections", json={"name": "Col B"})
         resp = await client.get("/api/v1/collections")
         assert resp.status_code == 200
-        assert len(resp.json()) == 2
+        assert len(resp.json()["items"]) == 2
 
     async def test_filter_by_single_project(self, client: AsyncClient) -> None:
         proj = await client.post("/api/v1/projects", json={"name": "Filter Project"})
@@ -84,7 +84,7 @@ class TestListCollections:
             "/api/v1/collections", params={"project_ids": project_id}
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["items"]
         assert len(data) == 1
         assert data[0]["name"] == "In Project"
 
@@ -119,7 +119,7 @@ class TestListCollections:
             params=[("project_ids", a_id), ("project_ids", b_id)],
         )
         assert resp.status_code == 200
-        names = sorted(c["name"] for c in resp.json())
+        names = sorted(c["name"] for c in resp.json()["items"])
         assert names == ["In A", "In B"]
 
 

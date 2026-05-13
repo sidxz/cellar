@@ -19,7 +19,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 
 
 class _FakeQuery:

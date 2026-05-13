@@ -30,7 +30,7 @@ class SQLAlchemyReadoutDataEnrichedReader:
         self._session_factory = session_factory
 
     async def resolve_molecule_registration_numbers(
-        self, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
         if not molecule_ids:
             return {}
@@ -38,14 +38,15 @@ class SQLAlchemyReadoutDataEnrichedReader:
             rows = (
                 await session.execute(
                     select(MoleculeModel.id, MoleculeModel.registration_number).where(
-                        MoleculeModel.id.in_(molecule_ids)
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.id.in_(molecule_ids),
                     )
                 )
             ).all()
             return {r.id: r.registration_number for r in rows}
 
     async def resolve_molecules(
-        self, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, MoleculeDisplayRow]:
         if not molecule_ids:
             return {}
@@ -56,7 +57,10 @@ class SQLAlchemyReadoutDataEnrichedReader:
                         MoleculeModel.id,
                         MoleculeModel.registration_number,
                         MoleculeModel.name,
-                    ).where(MoleculeModel.id.in_(molecule_ids))
+                    ).where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.id.in_(molecule_ids),
+                    )
                 )
             ).all()
             ident_rows = (
@@ -65,7 +69,10 @@ class SQLAlchemyReadoutDataEnrichedReader:
                         MoleculeIdentifierModel.molecule_id,
                         MoleculeIdentifierModel.identifier,
                         MoleculeIdentifierModel.identifier_type,
-                    ).where(MoleculeIdentifierModel.molecule_id.in_(molecule_ids))
+                    ).where(
+                        MoleculeIdentifierModel.workspace_id == workspace_id,
+                        MoleculeIdentifierModel.molecule_id.in_(molecule_ids),
+                    )
                 )
             ).all()
 
@@ -83,14 +90,17 @@ class SQLAlchemyReadoutDataEnrichedReader:
             for mid, reg, name in mol_rows
         }
 
-    async def resolve_batch_numbers(self, batch_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    async def resolve_batch_numbers(
+        self, workspace_id: uuid.UUID, batch_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
         if not batch_ids:
             return {}
         async with self._session_factory() as session:
             rows = (
                 await session.execute(
                     select(BatchModel.id, BatchModel.batch_number).where(
-                        BatchModel.id.in_(batch_ids)
+                        BatchModel.workspace_id == workspace_id,
+                        BatchModel.id.in_(batch_ids),
                     )
                 )
             ).all()

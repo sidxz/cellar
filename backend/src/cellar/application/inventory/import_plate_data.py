@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.auth import require_editor, require_workspace_role
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.import_template import ImportTemplate
 from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
@@ -243,8 +244,10 @@ class ImportPlateDataService:
         file_id: str,
         column_mappings: dict[str, str],
         workspace_id: uuid.UUID,
+        auth: AuthContext | None = None,
     ) -> Result[ValidationResult, DomainError]:
         """Validate column mappings against cached data rows."""
+        require_workspace_role(auth, "viewer")
         cached = self._cache.get(workspace_id, file_id)
         if cached is None:
             return Failure(
@@ -324,6 +327,7 @@ class ImportPlateDataService:
         - Extract readout values from mapped columns
         - If protocol_id provided: auto-create Run if needed, then BulkCreateReadoutData
         """
+        require_editor(auth)
         cached = self._cache.get(workspace_id, file_id)
         if cached is None:
             return Failure(

@@ -13,9 +13,7 @@ from dataclasses import dataclass, field
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
-from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.chemical_registration.protocols import (
-    DetectedSaltDTO,
     StructureProcessorProtocol,
 )
 from cellar.application.chemical_registration.register_molecule import (
@@ -24,6 +22,7 @@ from cellar.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
     RegistrationOutcome,
 )
+from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from cellar.application.shared.command import Command

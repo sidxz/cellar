@@ -41,6 +41,8 @@ from cellar.interface.dependencies import (
     ReadoutCalculationEngineDep,
     RefitDoseResponseCurveDep,
 )
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["readout-data"])
@@ -70,9 +72,9 @@ class ReadoutDataResponse(BaseModel):
     is_computed: bool = False
 
     @classmethod
-    def from_domain(  # type: ignore[no-untyped-def]
+    def from_domain(
         cls,
-        rd,
+        rd: ReadoutData,
         registration_number: str | None = None,
         molecule_name: str | None = None,
         synonyms: list[str] | None = None,
@@ -148,7 +150,7 @@ class DoseResponseCurveResponse(BaseModel):
     @classmethod
     def from_domain(
         cls,
-        c,  # type: ignore[no-untyped-def]
+        c: DoseResponseCurve,
         *,
         registration_number: str | None = None,
         molecule_name: str | None = None,

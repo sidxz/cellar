@@ -51,8 +51,15 @@ export function createCrudHooks<
   ) {
     return useQuery({
       queryKey: params ? [...queryKey, params] : queryKey,
-      queryFn: () =>
-        customInstance<TEntity[]>({ url: baseUrl, method: "GET", params }),
+      queryFn: async () => {
+        // Endpoints migrated to cursor pagination return PaginatedResponse;
+        // older ones still return a bare list. Accept both at runtime so
+        // call sites don't need to know which shape they get.
+        const resp = await customInstance<
+          TEntity[] | { items: TEntity[] }
+        >({ url: baseUrl, method: "GET", params });
+        return Array.isArray(resp) ? resp : resp.items;
+      },
       ...options,
     });
   }

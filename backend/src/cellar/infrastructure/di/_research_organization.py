@@ -98,7 +98,12 @@ from cellar.application.research_organization.close_campaign import CloseCampaig
 from cellar.application.research_organization.create_campaign import (
     CreateCampaign as CreateCampaignUC,
 )
+from cellar.application.research_organization.campaign_scientist_reader import (
+    CampaignScientistReader,
+)
+from cellar.application.research_organization.get_campaign import GetCampaign
 from cellar.application.research_organization.get_published_campaign import GetPublishedCampaign
+from cellar.application.research_organization.list_campaigns import ListCampaigns
 from cellar.application.research_organization.override_result_cell import OverrideResultCell
 from cellar.application.research_organization.recompute_channel import RecomputeChannel
 from cellar.application.research_organization.refresh_campaign_from_sources import (
@@ -124,6 +129,9 @@ from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_scientist_reader import (
+    SQLAlchemyCampaignScientistReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
     SQLAlchemyChannelResolutionQuery,
@@ -527,6 +535,22 @@ def register_research_organization(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
+    def _list_campaigns(c: Container) -> ListCampaigns:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListCampaigns(uow=uow, campaign_repo=SQLAlchemyCampaignRepository(uow))
+
+    def _campaign_scientist_reader(c: Container) -> CampaignScientistReader:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SQLAlchemyCampaignScientistReader(uow)
+
+    def _get_campaign(c: Container) -> GetCampaign:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            scientist_reader=SQLAlchemyCampaignScientistReader(uow),
+        )
+
     container.define(CreateCampaignUC, _create_campaign)
     container.define(AddResultsFromCollectionUC, _add_results_from_collection)
     container.define(AddResultsFromCampaignUC, _add_results_from_campaign)
@@ -546,6 +570,9 @@ def register_research_organization(container: Container) -> None:
     container.define(CloseCampaign, _close_campaign)
     container.define(SupersedeCampaignUC, _supersede)
     container.define(GetPublishedCampaign, _get_published)
+    container.define(CampaignScientistReader, _campaign_scientist_reader)
+    container.define(ListCampaigns, _list_campaigns)
+    container.define(GetCampaign, _get_campaign)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

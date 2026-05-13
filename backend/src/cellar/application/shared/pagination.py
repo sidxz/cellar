@@ -11,10 +11,10 @@ from cellar.domain.shared.pagination import EnrichedPageResult, PageResult
 
 # Re-export domain types so existing application-layer imports continue to work.
 __all__ = [
-    "EnrichedPageResult",
-    "PageResult",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
+    "EnrichedPageResult",
+    "PageResult",
     "clamp_limit",
     "parse_cursor",
 ]

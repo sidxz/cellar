@@ -32,6 +32,7 @@ import type {
   ListCollectionMoleculesApiV1CollectionsCollectionIdMoleculesGetParams,
   ListCollectionsApiV1CollectionsGetParams,
   MembershipResultResponse,
+  PaginatedResponseCollectionResponse,
   RemoveMoleculesBody,
   RemoveMoleculesFromCollectionApiV1CollectionsCollectionIdMoleculesDelete200,
   UpdateCollectionBody
@@ -51,7 +52,7 @@ export const listCollectionsApiV1CollectionsGet = (
 ) => {
       
       
-      return customInstance<CollectionResponse[]>(
+      return customInstance<PaginatedResponseCollectionResponse>(
       {url: `/api/v1/collections`, method: 'GET',
         params, signal
     },

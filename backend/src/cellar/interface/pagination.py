@@ -1,11 +1,32 @@
-"""Cursor-based pagination utilities for API endpoints."""
+"""Cursor-based pagination utilities for API endpoints.
+
+Constants and helpers (``DEFAULT_PAGE_SIZE``, ``MAX_PAGE_SIZE``,
+``parse_cursor``, ``clamp_limit``) are re-exported from
+``cellar.application.shared.pagination`` so the API layer and application
+layer agree on a single source of truth. The Pydantic response wrapper
+``PaginatedResponse`` is API-specific and stays here.
+"""
 
 from __future__ import annotations
 
-import uuid
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel
+
+from cellar.application.shared.pagination import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    clamp_limit,
+    parse_cursor,
+)
+
+__all__ = [
+    "DEFAULT_PAGE_SIZE",
+    "MAX_PAGE_SIZE",
+    "PaginatedResponse",
+    "clamp_limit",
+    "parse_cursor",
+]
 
 T = TypeVar("T")
 
@@ -23,24 +44,3 @@ class PaginatedResponse(BaseModel, Generic[T]):
     items: list[T]
     next_cursor: str | None = None
     total_count: int | None = None
-
-
-DEFAULT_PAGE_SIZE = 50
-MAX_PAGE_SIZE = 200
-
-
-def parse_cursor(cursor: str | None) -> uuid.UUID | None:
-    """Parse a cursor string into a UUID, or return ``None``."""
-    if cursor is None:
-        return None
-    try:
-        return uuid.UUID(cursor)
-    except ValueError:
-        return None
-
-
-def clamp_limit(limit: int | None) -> int:
-    """Clamp a requested page size to [1, MAX_PAGE_SIZE], defaulting to DEFAULT_PAGE_SIZE."""
-    if limit is None:
-        return DEFAULT_PAGE_SIZE
-    return max(1, min(limit, MAX_PAGE_SIZE))

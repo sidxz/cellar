@@ -40,6 +40,7 @@ import type {
   HTTPValidationError,
   ListCampaignsApiV1CampaignsGetParams,
   OverrideCellRequest,
+  PaginatedResponseCampaignResponse,
   PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet200,
   PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams,
   PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost200,
@@ -130,7 +131,7 @@ export const listCampaignsApiV1CampaignsGet = (
 ) => {
       
       
-      return customInstance<CampaignResponse[]>(
+      return customInstance<PaginatedResponseCampaignResponse>(
       {url: `/api/v1/campaigns`, method: 'GET',
         params, signal
     },

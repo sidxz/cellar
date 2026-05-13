@@ -43,6 +43,7 @@ from cellar.interface.dependencies import (
     UpdateProjectMemberRoleDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
@@ -81,14 +82,23 @@ class UpdateProjectBody(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-@router.get("", response_model=list[ProjectResponse])
+@router.get("", response_model=PaginatedResponse[ProjectResponse])
 async def list_projects(
     auth: AuthDep,
     use_case: ListProjectsDep,
-) -> list[ProjectResponse]:
-    query = ListProjectsQuery(workspace_id=auth.workspace_id)
-    projects = result_to_response(await use_case(query, auth=auth))
-    return [ProjectResponse.from_domain(p) for p in projects]
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[ProjectResponse]:
+    query = ListProjectsQuery(
+        workspace_id=auth.workspace_id,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
+    )
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[ProjectResponse.from_domain(p) for p in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 class ProjectScopeStatsResponse(BaseModel):

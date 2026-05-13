@@ -11,7 +11,6 @@ from cellar.application.auth import AuthContext, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.domain.shared.errors import DomainError, ValidationError
 
-
 MAX_SMILES_PER_REQUEST = 200
 
 

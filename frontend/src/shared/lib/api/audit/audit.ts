@@ -22,7 +22,8 @@ import type {
 import type {
   AuditOperationResponse,
   HTTPValidationError,
-  ListAuditOperationsApiV1AuditGetParams
+  ListAuditOperationsApiV1AuditGetParams,
+  PaginatedResponseAuditOperationResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -39,7 +40,7 @@ export const listAuditOperationsApiV1AuditGet = (
 ) => {
       
       
-      return customInstance<AuditOperationResponse[]>(
+      return customInstance<PaginatedResponseAuditOperationResponse>(
       {url: `/api/v1/audit`, method: 'GET',
         params, signal
     },

@@ -5,20 +5,20 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.chemical_registration.enums import LifecycleStage
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.chemical_registration.repository import MoleculeRepository
-from cellar.application.shared.sentinel import UNSET
-from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.workspace_config.enums import FieldTarget
-from returns.pipeline import is_successful
 
 
 @dataclass(frozen=True, kw_only=True)

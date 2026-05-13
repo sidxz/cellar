@@ -30,13 +30,12 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
+from cellar.domain.shared.hit_criterion import HitCriterion
 
 
 class _Unset:
@@ -101,10 +100,7 @@ class UpdateCampaignChannel:
         input: UpdateCampaignChannelCommand,
         auth: AuthContext | None = None,
     ) -> Result[Campaign, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(

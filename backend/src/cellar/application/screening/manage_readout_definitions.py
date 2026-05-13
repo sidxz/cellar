@@ -24,7 +24,6 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------

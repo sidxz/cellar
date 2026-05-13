@@ -11,9 +11,10 @@ from cellar.application.auth import AuthContext, require_editor, require_workspa
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.inventory.enums import RequestPriority, SampleRequestStatus
 from cellar.domain.chemical_registration.repository import MoleculeRepository
+from cellar.domain.inventory.enums import RequestPriority
 from cellar.domain.inventory.repository import (
     BatchRepository,
     SampleRepository,
@@ -21,10 +22,8 @@ from cellar.domain.inventory.repository import (
 )
 from cellar.domain.inventory.sample_request import SampleRequest
 from cellar.domain.shared.enums import AmountUnit
-from cellar.application.shared.sentinel import UNSET
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import Amount
-
 
 # ---------------------------------------------------------------------------
 # Commands

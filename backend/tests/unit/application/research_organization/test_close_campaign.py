@@ -616,11 +616,8 @@ class TestCloseCampaign:
 
         uc, campaign_repo, _, _, _ = _make_use_case(campaign)
         cmd = _make_command(auth.workspace_id, campaign.id)
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
-
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)
     # ------------------------------------------------------------------
     # 12. Deduplication: two channels sharing one protocol_id → 1 source_protocol
     # ------------------------------------------------------------------

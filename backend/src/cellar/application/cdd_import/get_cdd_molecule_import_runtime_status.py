@@ -93,7 +93,7 @@ class GetCddMoleculeImportRuntimeStatus:
         # runtime says the execution is terminal. Bring the DB into line so
         # subsequent polls don't loop.
         if progress.status == "failed":
-            await self._sync_failed(input.workspace_id, progress.import_id)
+            await self._sync_failed.run(input.workspace_id, progress.import_id)
 
         return Success(
             CddMoleculeImportStatusView(

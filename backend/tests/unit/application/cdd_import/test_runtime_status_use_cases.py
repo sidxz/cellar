@@ -79,7 +79,7 @@ class _FakeSyncFailed:
     def __init__(self) -> None:
         self.calls: list[tuple[uuid.UUID, str]] = []
 
-    async def __call__(self, workspace_id: uuid.UUID, import_id: str) -> None:
+    async def run(self, workspace_id: uuid.UUID, import_id: str) -> None:
         self.calls.append((workspace_id, import_id))
 
 

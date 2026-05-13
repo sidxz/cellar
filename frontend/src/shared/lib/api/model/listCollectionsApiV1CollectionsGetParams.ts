@@ -7,4 +7,6 @@
 
 export type ListCollectionsApiV1CollectionsGetParams = {
 project_ids?: string[] | null;
+cursor?: string | null;
+limit?: number | null;
 };

@@ -42,6 +42,8 @@ from cellar.interface.dependencies import (
     UpdateDataSourceDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1/data-sources", tags=["data-sources"])
 
@@ -122,14 +124,23 @@ class UpdateDataSourceBody(BaseModel):
 # ======================================================================
 
 
-@router.get("", response_model=list[DataSourceResponse])
+@router.get("", response_model=PaginatedResponse[DataSourceResponse])
 async def list_data_sources(
     auth: AuthDep,
     use_case: ListDataSourcesDep,
-) -> list[DataSourceResponse]:
-    query = ListDataSourcesQuery(workspace_id=auth.workspace_id)
-    sources = result_to_response(await use_case(query, auth=auth))
-    return [DataSourceResponse.from_domain(ds) for ds in sources]
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[DataSourceResponse]:
+    query = ListDataSourcesQuery(
+        workspace_id=auth.workspace_id,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
+    )
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[DataSourceResponse.from_domain(ds) for ds in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.post("", response_model=DataSourceResponse, status_code=201)
@@ -177,7 +188,6 @@ async def update_data_source(
     auth: AuthDep,
     use_case: UpdateDataSourceDep,
 ) -> DataSourceResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd_fields: dict[str, Any] = {
         "workspace_id": auth.workspace_id,

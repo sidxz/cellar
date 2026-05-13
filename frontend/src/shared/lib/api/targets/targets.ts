@@ -26,103 +26,13 @@ import type {
 import type {
   CreateTargetRequest,
   HTTPValidationError,
+  ListTargetsApiV1TargetsGetParams,
+  PaginatedResponseTargetResponse,
   TargetResponse,
   UpdateTargetRequest
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
-
-
-
-
-/**
- * @summary List Targets
- */
-export const listTargetsApiV1TargetsGet = (
-    
- signal?: AbortSignal
-) => {
-      
-      
-      return customInstance<TargetResponse[]>(
-      {url: `/api/v1/targets`, method: 'GET', signal
-    },
-      );
-    }
-  
-
-
-
-export const getListTargetsApiV1TargetsGetQueryKey = () => {
-    return [
-    `/api/v1/targets`
-    ] as const;
-    }
-
-    
-export const getListTargetsApiV1TargetsGetQueryOptions = <TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>>, }
-) => {
-
-const {query: queryOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListTargetsApiV1TargetsGetQueryKey();
-
-  
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>> = ({ signal }) => listTargetsApiV1TargetsGet(signal);
-
-      
-
-      
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListTargetsApiV1TargetsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>>
-export type ListTargetsApiV1TargetsGetQueryError = unknown
-
-
-export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>,
-          TError,
-          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>,
-          TError,
-          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>>, }
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary List Targets
- */
-
-export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>>, }
- , queryClient?: QueryClient 
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListTargetsApiV1TargetsGetQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = queryOptions.queryKey ;
-
-  return query;
-}
 
 
 
@@ -192,6 +102,99 @@ export const useCreateTargetApiV1TargetsPost = <TError = HTTPValidationError,
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * @summary List Targets
+ */
+export const listTargetsApiV1TargetsGet = (
+    params?: ListTargetsApiV1TargetsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PaginatedResponseTargetResponse>(
+      {url: `/api/v1/targets`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getListTargetsApiV1TargetsGetQueryKey = (params?: ListTargetsApiV1TargetsGetParams,) => {
+    return [
+    `/api/v1/targets`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getListTargetsApiV1TargetsGetQueryOptions = <TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = HTTPValidationError>(params?: ListTargetsApiV1TargetsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTargetsApiV1TargetsGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>> = ({ signal }) => listTargetsApiV1TargetsGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListTargetsApiV1TargetsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>>
+export type ListTargetsApiV1TargetsGetQueryError = HTTPValidationError
+
+
+export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListTargetsApiV1TargetsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = HTTPValidationError>(
+ params?: ListTargetsApiV1TargetsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = HTTPValidationError>(
+ params?: ListTargetsApiV1TargetsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Targets
+ */
+
+export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError = HTTPValidationError>(
+ params?: ListTargetsApiV1TargetsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTargetsApiV1TargetsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListTargetsApiV1TargetsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * @summary Get Target
  */
 export const getTargetApiV1TargetsTargetIdGet = (

@@ -15,6 +15,11 @@ from cellar.application.shared.molecule_resolver import (
     MoleculeResolver,
     RefType,
 )
+from cellar.application.shared.parsers import (
+    ParsedTable,
+    TabularParseError,
+    TabularParser,
+)
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import ReadoutDataType, WellType
@@ -25,11 +30,6 @@ from cellar.domain.shared.errors import (
     DomainError,
     NotFoundError,
     ValidationError,
-)
-from cellar.application.shared.parsers import (
-    ParsedTable,
-    TabularParseError,
-    TabularParser,
 )
 
 # ---------------------------------------------------------------------------

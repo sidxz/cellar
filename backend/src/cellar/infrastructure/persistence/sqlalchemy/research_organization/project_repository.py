@@ -59,12 +59,22 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
         model.archived_by = aggregate.archived_by
         model.archived_at = aggregate.archived_at
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Project]:
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Project]:
         stmt = (
             select(ProjectModel)
             .where(ProjectModel.workspace_id == workspace_id)
-            .order_by(ProjectModel.name)
+            .order_by(ProjectModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(ProjectModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
 

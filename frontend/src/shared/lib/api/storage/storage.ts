@@ -26,103 +26,13 @@ import type {
 import type {
   CreateStorageLocationRequest,
   HTTPValidationError,
+  ListStorageLocationsApiV1StorageLocationsGetParams,
+  PaginatedResponseStorageLocationResponse,
   StorageLocationResponse,
   UpdateStorageLocationRequest
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
-
-
-
-
-/**
- * @summary List Storage Locations
- */
-export const listStorageLocationsApiV1StorageLocationsGet = (
-    
- signal?: AbortSignal
-) => {
-      
-      
-      return customInstance<StorageLocationResponse[]>(
-      {url: `/api/v1/storage-locations`, method: 'GET', signal
-    },
-      );
-    }
-  
-
-
-
-export const getListStorageLocationsApiV1StorageLocationsGetQueryKey = () => {
-    return [
-    `/api/v1/storage-locations`
-    ] as const;
-    }
-
-    
-export const getListStorageLocationsApiV1StorageLocationsGetQueryOptions = <TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>>, }
-) => {
-
-const {query: queryOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListStorageLocationsApiV1StorageLocationsGetQueryKey();
-
-  
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>> = ({ signal }) => listStorageLocationsApiV1StorageLocationsGet(signal);
-
-      
-
-      
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListStorageLocationsApiV1StorageLocationsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>>
-export type ListStorageLocationsApiV1StorageLocationsGetQueryError = unknown
-
-
-export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>,
-          TError,
-          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>,
-          TError,
-          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>
-        > , 'initialData'
-      >, }
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>>, }
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary List Storage Locations
- */
-
-export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>>, }
- , queryClient?: QueryClient 
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListStorageLocationsApiV1StorageLocationsGetQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = queryOptions.queryKey ;
-
-  return query;
-}
 
 
 
@@ -192,6 +102,99 @@ export const useCreateStorageLocationApiV1StorageLocationsPost = <TError = HTTPV
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * @summary List Storage Locations
+ */
+export const listStorageLocationsApiV1StorageLocationsGet = (
+    params?: ListStorageLocationsApiV1StorageLocationsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PaginatedResponseStorageLocationResponse>(
+      {url: `/api/v1/storage-locations`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getListStorageLocationsApiV1StorageLocationsGetQueryKey = (params?: ListStorageLocationsApiV1StorageLocationsGetParams,) => {
+    return [
+    `/api/v1/storage-locations`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getListStorageLocationsApiV1StorageLocationsGetQueryOptions = <TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = HTTPValidationError>(params?: ListStorageLocationsApiV1StorageLocationsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStorageLocationsApiV1StorageLocationsGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>> = ({ signal }) => listStorageLocationsApiV1StorageLocationsGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListStorageLocationsApiV1StorageLocationsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>>
+export type ListStorageLocationsApiV1StorageLocationsGetQueryError = HTTPValidationError
+
+
+export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListStorageLocationsApiV1StorageLocationsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = HTTPValidationError>(
+ params?: ListStorageLocationsApiV1StorageLocationsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = HTTPValidationError>(
+ params?: ListStorageLocationsApiV1StorageLocationsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Storage Locations
+ */
+
+export function useListStorageLocationsApiV1StorageLocationsGet<TData = Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError = HTTPValidationError>(
+ params?: ListStorageLocationsApiV1StorageLocationsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStorageLocationsApiV1StorageLocationsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListStorageLocationsApiV1StorageLocationsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * @summary Get Children
  */
 export const getChildrenApiV1StorageLocationsLocationIdChildrenGet = (

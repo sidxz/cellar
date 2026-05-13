@@ -22,7 +22,6 @@ from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.enums import CampaignDecision, CampaignStatus
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -78,10 +77,7 @@ class BulkSetResultDecisions:
         input: BulkSetResultDecisionsCommand,
         auth: AuthContext | None = None,
     ) -> Result[BulkSetResultDecisionsOutcome, DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
 
         if not input.result_ids:
             return Failure(ValidationError("result_ids must not be empty"))

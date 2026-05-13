@@ -23,12 +23,22 @@ class SQLAlchemyStorageLocationRepository(
 ):
     model_class = StorageLocationModel
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[StorageLocation]:
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[StorageLocation]:
         stmt = (
             select(StorageLocationModel)
             .where(StorageLocationModel.workspace_id == workspace_id)
-            .order_by(StorageLocationModel.name)
+            .order_by(StorageLocationModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(StorageLocationModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 

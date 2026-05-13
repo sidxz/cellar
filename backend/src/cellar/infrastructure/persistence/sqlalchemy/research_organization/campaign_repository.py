@@ -22,7 +22,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SourceRef
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -329,7 +329,12 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
     # ------------------------------------------------------------------
 
     async def find_by_project(
-        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Campaign]:
         stmt = (
             select(CampaignModel)
@@ -337,17 +342,31 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                 CampaignModel.workspace_id == workspace_id,
                 CampaignModel.project_id == project_id,
             )
-            .order_by(CampaignModel.created_at.desc())
+            .order_by(CampaignModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(CampaignModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Campaign]:
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Campaign]:
         stmt = (
             select(CampaignModel)
             .where(CampaignModel.workspace_id == workspace_id)
-            .order_by(CampaignModel.created_at.desc())
+            .order_by(CampaignModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(CampaignModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 

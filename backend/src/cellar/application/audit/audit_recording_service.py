@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from cellar.domain.audit_compliance.enums import (
     ActorType,
@@ -20,13 +20,6 @@ from cellar.domain.audit_compliance.enums import (
 from cellar.domain.audit_compliance.models import AuditEntry, AuditOperation
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.shared.events import DomainEvent
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from cellar.infrastructure.persistence.sqlalchemy.audit.audit_repository import (
-        SQLAlchemyAuditRepository,
-    )
 
 
 class AuditRecordingService:

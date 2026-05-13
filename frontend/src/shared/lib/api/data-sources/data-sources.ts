@@ -28,6 +28,8 @@ import type {
   DataSourceResponse,
   EntityMappingResponse,
   HTTPValidationError,
+  ListDataSourcesApiV1DataSourcesGetParams,
+  PaginatedResponseDataSourceResponse,
   UpdateDataSourceBody
 } from '.././model';
 
@@ -40,13 +42,14 @@ import { customInstance } from '.././custom-instance';
  * @summary List Data Sources
  */
 export const listDataSourcesApiV1DataSourcesGet = (
-    
+    params?: ListDataSourcesApiV1DataSourcesGetParams,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<DataSourceResponse[]>(
-      {url: `/api/v1/data-sources`, method: 'GET', signal
+      return customInstance<PaginatedResponseDataSourceResponse>(
+      {url: `/api/v1/data-sources`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -54,23 +57,23 @@ export const listDataSourcesApiV1DataSourcesGet = (
 
 
 
-export const getListDataSourcesApiV1DataSourcesGetQueryKey = () => {
+export const getListDataSourcesApiV1DataSourcesGetQueryKey = (params?: ListDataSourcesApiV1DataSourcesGetParams,) => {
     return [
-    `/api/v1/data-sources`
+    `/api/v1/data-sources`, ...(params ? [params]: [])
     ] as const;
     }
 
     
-export const getListDataSourcesApiV1DataSourcesGetQueryOptions = <TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>>, }
+export const getListDataSourcesApiV1DataSourcesGetQueryOptions = <TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = HTTPValidationError>(params?: ListDataSourcesApiV1DataSourcesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListDataSourcesApiV1DataSourcesGetQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListDataSourcesApiV1DataSourcesGetQueryKey(params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>> = ({ signal }) => listDataSourcesApiV1DataSourcesGet(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>> = ({ signal }) => listDataSourcesApiV1DataSourcesGet(params, signal);
 
       
 
@@ -80,11 +83,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListDataSourcesApiV1DataSourcesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>>
-export type ListDataSourcesApiV1DataSourcesGetQueryError = unknown
+export type ListDataSourcesApiV1DataSourcesGetQueryError = HTTPValidationError
 
 
-export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>> & Pick<
+export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListDataSourcesApiV1DataSourcesGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>,
           TError,
@@ -93,8 +96,8 @@ export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>> & Pick<
+export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = HTTPValidationError>(
+ params?: ListDataSourcesApiV1DataSourcesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>,
           TError,
@@ -103,20 +106,20 @@ export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>>, }
+export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = HTTPValidationError>(
+ params?: ListDataSourcesApiV1DataSourcesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List Data Sources
  */
 
-export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>>, }
+export function useListDataSourcesApiV1DataSourcesGet<TData = Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError = HTTPValidationError>(
+ params?: ListDataSourcesApiV1DataSourcesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDataSourcesApiV1DataSourcesGet>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListDataSourcesApiV1DataSourcesGetQueryOptions(options)
+  const queryOptions = getListDataSourcesApiV1DataSourcesGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

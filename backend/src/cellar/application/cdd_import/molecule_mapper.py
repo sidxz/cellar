@@ -17,8 +17,8 @@ from typing import Any
 from cellar.domain.workspace_config.data_source import EntityMapping
 
 __all__ = [
-    "MappedMolecule",
     "MappedBatch",
+    "MappedMolecule",
     "MoleculeMapWarning",
     "map_cdd_molecules",
 ]

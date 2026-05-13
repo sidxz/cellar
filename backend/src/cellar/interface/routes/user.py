@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.user.get_preferences import GetPreferencesQuery
 from cellar.application.user.update_preferences import UpdatePreferencesCommand
 from cellar.interface.dependencies import (
@@ -52,7 +53,6 @@ async def update_preferences(
     auth: AuthDep,
     use_case: UpdatePreferencesDep,
 ) -> PreferencesResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     # Distinguish "field omitted" from "field explicitly set to null"
     dsc = (

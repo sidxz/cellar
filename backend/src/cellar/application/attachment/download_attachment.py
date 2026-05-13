@@ -7,12 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.attachment.storage import StorageClient
 from cellar.application.auth import AuthContext, require_same_workspace
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.attachment import Attachment
 from cellar.domain.attachment.repository import AttachmentRepository
-from cellar.application.attachment.storage import StorageClient
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 

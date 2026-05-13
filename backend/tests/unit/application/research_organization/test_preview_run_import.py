@@ -28,7 +28,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
@@ -221,10 +221,8 @@ class TestPreviewRunImport:
             run_ids=[uuid.uuid4()],
             channel_configs=[],
         )
-        out = await uc(q, auth=auth)
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
-
+        with pytest.raises(AuthorizationError):
+            await uc(q, auth=auth)
     @pytest.mark.asyncio
     async def test_single_run_single_channel_no_threshold_no_hits(self) -> None:
         """No hit_threshold -> no active filter -> is_hit=False for everyone."""

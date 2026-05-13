@@ -30,6 +30,17 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchM
 class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     model_class = BatchModel
 
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> list[Batch]:
+        """Bulk-fetch batches by IDs, scoped to workspace."""
+        if not ids:
+            return []
+        stmt = select(BatchModel).where(
+            BatchModel.workspace_id == workspace_id,
+            BatchModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
     async def find_by_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[Batch]:

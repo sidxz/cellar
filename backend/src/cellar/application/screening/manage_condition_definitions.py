@@ -16,7 +16,6 @@ from cellar.domain.screening_assay.protocol import ConditionDefinition, Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------

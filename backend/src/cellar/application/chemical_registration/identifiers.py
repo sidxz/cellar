@@ -17,7 +17,6 @@ from cellar.domain.chemical_registration.molecule_identifier import MoleculeIden
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Commands / Queries
 # ---------------------------------------------------------------------------

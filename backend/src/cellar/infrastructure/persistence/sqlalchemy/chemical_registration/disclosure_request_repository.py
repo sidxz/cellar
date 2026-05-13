@@ -107,12 +107,25 @@ class SQLAlchemyDisclosureRequestRepository(
     # ------------------------------------------------------------------
 
     async def find_by_molecule(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        molecule_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[DisclosureRequest]:
-        stmt = select(DisclosureRequestModel).where(
-            DisclosureRequestModel.workspace_id == workspace_id,
-            DisclosureRequestModel.molecule_id == molecule_id,
+        stmt = (
+            select(DisclosureRequestModel)
+            .where(
+                DisclosureRequestModel.workspace_id == workspace_id,
+                DisclosureRequestModel.molecule_id == molecule_id,
+            )
+            .order_by(DisclosureRequestModel.id)
         )
+        if cursor_id is not None:
+            stmt = stmt.where(DisclosureRequestModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
 
@@ -127,12 +140,23 @@ class SQLAlchemyDisclosureRequestRepository(
         return [self._to_domain_tracked(m) for m in result.scalars()]
 
     async def find_by_workspace(
-        self, workspace_id: uuid.UUID, *, status: str | None = None
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[DisclosureRequest]:
-        stmt = select(DisclosureRequestModel).where(
-            DisclosureRequestModel.workspace_id == workspace_id
+        stmt = (
+            select(DisclosureRequestModel)
+            .where(DisclosureRequestModel.workspace_id == workspace_id)
+            .order_by(DisclosureRequestModel.id)
         )
         if status:
             stmt = stmt.where(DisclosureRequestModel.status == status)
+        if cursor_id is not None:
+            stmt = stmt.where(DisclosureRequestModel.id > cursor_id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]

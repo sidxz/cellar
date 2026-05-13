@@ -72,8 +72,10 @@ class ListDoseResponseEnriched:
             mol_ids = list({c.molecule_id for c in curves})
             batch_ids = list({c.batch_id for c in curves})
 
-            mol_info = await self._reader.resolve_molecules(mol_ids)
-            batch_numbers = await self._reader.resolve_batch_numbers(batch_ids)
+            mol_info = await self._reader.resolve_molecules(input.workspace_id, mol_ids)
+            batch_numbers = await self._reader.resolve_batch_numbers(
+                input.workspace_id, batch_ids
+            )
 
             run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             dose_unit = "uM"

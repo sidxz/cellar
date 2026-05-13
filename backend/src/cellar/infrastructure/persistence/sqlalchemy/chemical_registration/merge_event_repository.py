@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cellar.domain.chemical_registration.enums import MergeReason
 from cellar.domain.chemical_registration.merge_event import MergeEvent
+from cellar.domain.shared.errors import AuthorizationError
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_models import (
     MergeEventModel,
 )
@@ -129,4 +130,7 @@ class SQLAlchemyMergeEventRepository:
         return [self._to_domain(m) for m in result.scalars()]
 
     async def save(self, entity: MergeEvent) -> None:
+        existing = await self._session.get(MergeEventModel, entity.id)
+        if existing is not None and existing.workspace_id != entity.workspace_id:
+            raise AuthorizationError("Cannot update MergeEvent from a different workspace")
         self._session.add(self._to_model(entity))

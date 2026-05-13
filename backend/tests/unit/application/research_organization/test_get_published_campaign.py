@@ -218,11 +218,11 @@ def _build_use_case(
 
     batch_repo = AsyncMock()
     if batch_lookup is not None:
-        async def _find_by_id(bid):
-            return batch_lookup.get(bid)
-        batch_repo.find_by_id = AsyncMock(side_effect=_find_by_id)
+        async def _find_by_ids(ws_id, ids):
+            return [batch_lookup[bid] for bid in ids if bid in batch_lookup]
+        batch_repo.find_by_ids = AsyncMock(side_effect=_find_by_ids)
     else:
-        batch_repo.find_by_id = AsyncMock(return_value=None)
+        batch_repo.find_by_ids = AsyncMock(return_value=[])
 
     # Mock UoW — acts as a no-op async context manager for unit tests.
     uow = AsyncMock()
@@ -546,11 +546,8 @@ class TestGetPublishedCampaign:
 
         uc, _ = _build_use_case(campaign)
         q = _make_query(auth.workspace_id, campaign.id)
-        out = await uc(q, auth=auth)
-
-        assert isinstance(out, Failure)
-        assert isinstance(out.failure(), AuthorizationError)
-
+        with pytest.raises(AuthorizationError):
+            await uc(q, auth=auth)
     # ------------------------------------------------------------------
     # 12. Superseded campaign is also publishable
     # ------------------------------------------------------------------

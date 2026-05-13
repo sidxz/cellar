@@ -36,6 +36,7 @@ from cellar.interface.dependencies import (
     UpdateCollectionDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
 
 router = APIRouter(prefix="/api/v1/collections", tags=["collections"])
 
@@ -117,18 +118,25 @@ class MembershipResultResponse(BaseModel):
     unresolved: list[UnresolvedMoleculeResponse]
 
 
-@router.get("", response_model=list[CollectionResponse])
+@router.get("", response_model=PaginatedResponse[CollectionResponse])
 async def list_collections(
     auth: AuthDep,
     use_case: ListCollectionsDep,
     project_ids: list[uuid.UUID] | None = Query(default=None),
-) -> list[CollectionResponse]:
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[CollectionResponse]:
     query = ListCollectionsQuery(
         workspace_id=auth.workspace_id,
         project_ids=tuple(project_ids) if project_ids else None,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
     )
-    collections = result_to_response(await use_case(query, auth=auth))
-    return [CollectionResponse.from_domain(c) for c in collections]
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[CollectionResponse.from_domain(c) for c in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.post("/compose", response_model=CollectionResponse, status_code=201)

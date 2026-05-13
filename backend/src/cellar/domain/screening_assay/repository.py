@@ -20,7 +20,6 @@ from cellar.domain.screening_assay.target import Target
 class ProtocolRepository(Protocol):
     """Repository for AssayProtocol aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> AssayProtocol | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> AssayProtocol | None: ...
@@ -31,14 +30,27 @@ class ProtocolRepository(Protocol):
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> AssayProtocol | None: ...
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[AssayProtocol]: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[AssayProtocol]: ...
     async def add_to_project(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, project_id: uuid.UUID
     ) -> None: ...
     async def remove_from_project(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, project_id: uuid.UUID
     ) -> None: ...
-    async def find_by_project(self, workspace_id: uuid.UUID, project_id: uuid.UUID) -> list: ...
+    async def find_by_project(
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list: ...
     async def find_protocol_ids_in_projects(
         self, workspace_id: uuid.UUID, project_ids: list[uuid.UUID]
     ) -> set[uuid.UUID]:
@@ -60,8 +72,13 @@ class ProtocolRepository(Protocol):
 class TargetRepository(Protocol):
     """Repository for Target entities."""
 
-    async def find_by_id(self, id: uuid.UUID) -> Target | None: ...
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Target]: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Target]: ...
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
@@ -70,7 +87,6 @@ class TargetRepository(Protocol):
 class PlateTemplateRepository(Protocol):
     """Repository for PlateTemplate entities."""
 
-    async def find_by_id(self, id: uuid.UUID) -> PlateTemplate | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> PlateTemplate | None: ...
@@ -87,7 +103,6 @@ class RunRepository(Protocol):
     Also satisfies ``RunLockChecker`` protocol via ``is_locked()``.
     """
 
-    async def find_by_id(self, id: uuid.UUID) -> Run | None: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Run | None: ...
@@ -109,7 +124,6 @@ class RunRepository(Protocol):
 class ReadoutDataRepository(Protocol):
     """Repository for ReadoutData entities."""
 
-    async def find_by_id(self, id: uuid.UUID) -> ReadoutData | None: ...
     async def find_by_run(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[ReadoutData]: ...
@@ -154,7 +168,6 @@ class CompoundFlagRepository(Protocol):
 class DoseResponseCurveRepository(Protocol):
     """Repository for DoseResponseCurve entities."""
 
-    async def find_by_id(self, id: uuid.UUID) -> DoseResponseCurve | None: ...
     async def find_by_run(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[DoseResponseCurve]: ...

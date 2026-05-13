@@ -28,6 +28,7 @@ import type {
   HTTPValidationError,
   ListOrganizationsApiV1OrganizationsGetParams,
   OrganizationResponse,
+  PaginatedResponseOrganizationResponse,
   UpdateOrganizationBody
 } from '.././model';
 
@@ -45,7 +46,7 @@ export const listOrganizationsApiV1OrganizationsGet = (
 ) => {
       
       
-      return customInstance<OrganizationResponse[]>(
+      return customInstance<PaginatedResponseOrganizationResponse>(
       {url: `/api/v1/organizations`, method: 'GET',
         params, signal
     },

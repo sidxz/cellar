@@ -25,7 +25,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -279,7 +279,5 @@ class TestAddCampaignChannel:
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(auth.workspace_id, campaign.id)
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), AuthorizationError)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=auth)

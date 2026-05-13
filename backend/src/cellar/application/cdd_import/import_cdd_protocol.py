@@ -9,10 +9,15 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.cdd_import._check_config import check_cdd_configured
+from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from cellar.application.cdd_import.gateway import CddProtocolGateway
 from cellar.application.cdd_import.mapper import map_cdd_protocol
 from cellar.application.shared.command import Command
+from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.workspace_config.get_data_source_for_import import (
+    GetDataSourceForImport,
+)
 from cellar.domain.screening_assay.enums import ProtocolType
 from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
@@ -26,11 +31,6 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from cellar.application.workspace_config.get_data_source_for_import import (
-    GetDataSourceForImport,
-)
-from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
-from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cellar.domain.chemical_registration.enums import RelationshipType
 from cellar.domain.chemical_registration.molecule_relationship import MoleculeRelationship
+from cellar.domain.shared.errors import AuthorizationError
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeRelationshipModel,
 )
@@ -92,6 +93,11 @@ class SQLAlchemyMoleculeRelationshipRepository:
         return [self._to_domain(m) for m in result.scalars()]
 
     async def save(self, entity: MoleculeRelationship) -> None:
+        existing = await self._session.get(MoleculeRelationshipModel, entity.id)
+        if existing is not None and existing.workspace_id != entity.workspace_id:
+            raise AuthorizationError(
+                "Cannot update MoleculeRelationship from a different workspace"
+            )
         model = self._to_model(entity)
         self._session.add(model)
         await self._session.flush()

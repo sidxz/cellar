@@ -32,8 +32,10 @@ from cellar.application.chemical_registration.synthesis_routes import (
     ValidateSynthesisRoute,
     ValidateSynthesisRouteCommand,
 )
+from cellar.domain.chemical_registration.synthesis_route import ReactionStep, SynthesisRoute
 from cellar.interface.dependencies import AuthDep, _get_use_case
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["synthesis-routes"])
 
@@ -71,7 +73,7 @@ class StepResponse(BaseModel):
     notes: str | None = None
 
     @classmethod
-    def from_domain(cls, s) -> StepResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, s: ReactionStep) -> StepResponse:
         conditions_dict = None
         if s.conditions:
             conditions_dict = {
@@ -139,7 +141,7 @@ class SynthesisRouteResponse(BaseModel):
     steps: list[StepResponse]
 
     @classmethod
-    def from_domain(cls, r) -> SynthesisRouteResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r: SynthesisRoute) -> SynthesisRouteResponse:
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -173,7 +175,7 @@ class SynthesisRouteSummaryResponse(BaseModel):
     source: str
 
     @classmethod
-    def from_domain(cls, r) -> SynthesisRouteSummaryResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r: SynthesisRoute) -> SynthesisRouteSummaryResponse:
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -324,7 +326,6 @@ async def update_synthesis_route(
     auth: AuthDep,
     uc: UpdateSynthesisRouteDep,
 ) -> SynthesisRouteResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateSynthesisRouteCommand(
         workspace_id=auth.workspace_id,

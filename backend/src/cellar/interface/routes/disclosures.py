@@ -31,6 +31,7 @@ from cellar.interface.dependencies import (
     ResolveDisclosureConflictDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
 
 router = APIRouter(prefix="/api/v1/disclosures", tags=["disclosures"])
 
@@ -142,16 +143,26 @@ async def submit_disclosure(
     )
 
 
-@router.get("", response_model=list[DisclosureRequestResponse])
+@router.get("", response_model=PaginatedResponse[DisclosureRequestResponse])
 async def list_disclosures(
     auth: AuthDep,
     use_case: ListDisclosuresByWorkspaceDep,
     status: str | None = None,
-) -> list[DisclosureRequestResponse]:
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[DisclosureRequestResponse]:
     """List all disclosure requests in workspace, optionally filtered by status."""
-    query = ListDisclosuresByWorkspaceQuery(workspace_id=auth.workspace_id, status=status)
-    disclosures = result_to_response(await use_case(query, auth=auth))
-    return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
+    query = ListDisclosuresByWorkspaceQuery(
+        workspace_id=auth.workspace_id,
+        status=status,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
+    )
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[DisclosureRequestResponse.from_domain(dr) for dr in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/{disclosure_id}", response_model=DisclosureRequestResponse)
@@ -167,16 +178,26 @@ async def get_disclosure(
 
 @router.get(
     "/by-molecule/{molecule_id}",
-    response_model=list[DisclosureRequestResponse],
+    response_model=PaginatedResponse[DisclosureRequestResponse],
 )
 async def list_disclosures_for_molecule(
     molecule_id: uuid.UUID,
     auth: AuthDep,
     use_case: ListDisclosuresDep,
-) -> list[DisclosureRequestResponse]:
-    query = ListDisclosuresQuery(workspace_id=auth.workspace_id, molecule_id=molecule_id)
-    disclosures = result_to_response(await use_case(query, auth=auth))
-    return [DisclosureRequestResponse.from_domain(dr) for dr in disclosures]
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedResponse[DisclosureRequestResponse]:
+    query = ListDisclosuresQuery(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
+    )
+    page = result_to_response(await use_case(query, auth=auth))
+    return PaginatedResponse(
+        items=[DisclosureRequestResponse.from_domain(dr) for dr in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.patch(

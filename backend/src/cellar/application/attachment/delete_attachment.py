@@ -8,12 +8,12 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.attachment.storage import StorageClient
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.repository import AttachmentRepository
-from cellar.application.attachment.storage import StorageClient
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 logger = logging.getLogger(__name__)

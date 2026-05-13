@@ -12,11 +12,11 @@ import uuid
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from cellar.application.screening import _condense_raw_data
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
-    SQLAlchemyDoseResponseCurveRepository,
+from cellar.application.screening.get_dose_response_curves_batch import (
+    GetDoseResponseCurvesBatchQuery,
 )
-from cellar.interface.dependencies import AuthDep, UoWDep
+from cellar.interface.dependencies import AuthDep, GetDoseResponseCurvesBatchDep
+from cellar.interface.error_handlers import result_to_response
 from cellar.interface.routes.readout_data import DoseResponseCurveResponse
 
 router = APIRouter(prefix="/api/v1/dose-response", tags=["dose-response"])
@@ -34,7 +34,7 @@ class BatchCurvesResponse(BaseModel):
 async def get_curves_batch(
     body: BatchCurvesRequest,
     auth: AuthDep,
-    uow: UoWDep,
+    uc: GetDoseResponseCurvesBatchDep,
 ) -> BatchCurvesResponse:
     """Look up dose-response curves by id, scoped to the caller's workspace.
 
@@ -49,14 +49,10 @@ async def get_curves_batch(
     /api/v1/protocols/{protocol_id}/compounds/{molecule_id}/dose-response``
     endpoint if you need identity fields populated.
     """
-    repo = SQLAlchemyDoseResponseCurveRepository(uow)
-    async with uow:
-        curves = await repo.find_by_ids(auth.workspace_id, body.curve_ids)
-    responses = []
-    for c in curves:
-        r = DoseResponseCurveResponse.from_domain(c)
-        # Standardize raw_data to [{x, y}] for the FE sparkline.
-        if r.raw_data:
-            r.raw_data = _condense_raw_data(r.raw_data)
-        responses.append(r)
-    return BatchCurvesResponse(curves=responses)
+    query = GetDoseResponseCurvesBatchQuery(
+        workspace_id=auth.workspace_id, curve_ids=body.curve_ids
+    )
+    curves = result_to_response(await uc(query, auth=auth))
+    return BatchCurvesResponse(
+        curves=[DoseResponseCurveResponse.from_domain(c) for c in curves]
+    )

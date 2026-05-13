@@ -5,11 +5,15 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+from returns.result import Result, Success
+
 from cellar.application.auth import AuthContext, require_workspace_role
 from cellar.application.shared.amount_parser import parse_amount
+from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository, SampleRepository
+from cellar.domain.shared.errors import DomainError
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,12 @@ class ImportPreviewResult:
     error_count: int
 
 
+@dataclass(frozen=True, kw_only=True)
+class PreviewShipmentImportQuery(Query):
+    workspace_id: uuid.UUID
+    rows: list[ImportRow]
+
+
 class PreviewShipmentImport:
     def __init__(
         self,
@@ -73,17 +83,16 @@ class PreviewShipmentImport:
 
     async def __call__(
         self,
-        workspace_id: uuid.UUID,
-        rows: list[ImportRow],
+        input: PreviewShipmentImportQuery,
         auth: AuthContext | None = None,
-    ) -> ImportPreviewResult:
+    ) -> Result[ImportPreviewResult, DomainError]:
         require_workspace_role(auth, "viewer")
         results: list[ResolvedRow] = []
 
         async with self._uow:
-            for i, row in enumerate(rows):
+            for i, row in enumerate(input.rows):
                 resolved = ResolvedRow(row_number=i + 1, status="valid", original=row)
-                await self._resolve_row(workspace_id, row, resolved)
+                await self._resolve_row(input.workspace_id, row, resolved)
 
                 # Determine status
                 if resolved.errors:
@@ -99,12 +108,14 @@ class PreviewShipmentImport:
         corrected_count = sum(1 for r in results if r.status == "corrected")
         error_count = sum(1 for r in results if r.status == "error")
 
-        return ImportPreviewResult(
-            rows=results,
-            total=len(results),
-            valid_count=valid_count,
-            corrected_count=corrected_count,
-            error_count=error_count,
+        return Success(
+            ImportPreviewResult(
+                rows=results,
+                total=len(results),
+                valid_count=valid_count,
+                corrected_count=corrected_count,
+                error_count=error_count,
+            )
         )
 
     async def _resolve_row(

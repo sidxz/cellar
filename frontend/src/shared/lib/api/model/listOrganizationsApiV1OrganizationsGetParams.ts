@@ -7,4 +7,6 @@
 
 export type ListOrganizationsApiV1OrganizationsGetParams = {
 include_inactive?: boolean;
+cursor?: string | null;
+limit?: number | null;
 };

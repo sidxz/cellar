@@ -20,7 +20,6 @@ from cellar.domain.research_organization.saved_search import SavedSearch
 class ProjectRepository(Protocol):
     """Repository for Project aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> Project | None: ...
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -28,7 +27,13 @@ class ProjectRepository(Protocol):
 
     async def save(self, aggregate: Project) -> None: ...
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Project]: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Project]: ...
 
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> Project | None: ...
 
@@ -44,7 +49,6 @@ class CollectionRepository(Protocol):
     Membership (molecule join table) is managed here, not in the aggregate.
     """
 
-    async def find_by_id(self, id: uuid.UUID) -> Collection | None: ...
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -59,6 +63,8 @@ class CollectionRepository(Protocol):
         workspace_id: uuid.UUID,
         *,
         project_ids: list[uuid.UUID] | None = None,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Collection]: ...
 
     async def add_molecules(
@@ -103,7 +109,6 @@ class CollectionRepository(Protocol):
 class SavedSearchRepository(Protocol):
     """Repository for SavedSearch aggregates."""
 
-    async def find_by_id(self, id: uuid.UUID) -> SavedSearch | None: ...
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -166,7 +171,6 @@ class CampaignRepository(Protocol):
     CampaignLockChecker Protocol structurally.
     """
 
-    async def find_by_id(self, id: uuid.UUID) -> Campaign | None: ...
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -177,9 +181,20 @@ class CampaignRepository(Protocol):
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
     async def find_by_project(
-        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
     ) -> list[Campaign]: ...
 
-    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[Campaign]: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...

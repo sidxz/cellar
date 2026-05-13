@@ -17,8 +17,10 @@ class Repository(Protocol[T]):
     Concrete implementations live in the infrastructure layer.
     Raises ``NotFoundError`` on missing entities and
     ``ConcurrencyConflictError`` on version mismatches.
-    """
 
-    async def find_by_id(self, id: uuid.UUID) -> T | None: ...
+    Concrete Protocols (e.g. ``MoleculeRepository``) advertise the
+    ``find_by_id_in_workspace`` shape so application code cannot ask for a
+    cross-tenant unscoped lookup by accident.
+    """
 
     async def save(self, aggregate: T) -> None: ...

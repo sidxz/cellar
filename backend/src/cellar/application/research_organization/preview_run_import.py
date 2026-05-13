@@ -39,15 +39,13 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.screening_assay.hit_criterion import HitCriterion
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-
+from cellar.domain.shared.hit_criterion import HitCriterion
 
 # ---------------------------------------------------------------------------
 # Inputs
@@ -217,10 +215,7 @@ class PreviewRunImport:
         input: PreviewRunImportQuery,
         auth: AuthContext | None = None,
     ) -> Result[dict[str, Any], DomainError]:
-        try:
-            require_editor(auth)
-        except AuthorizationError as e:
-            return Failure(e)
+        require_editor(auth)
         async with self._uow:
             return await self._execute(input)
 

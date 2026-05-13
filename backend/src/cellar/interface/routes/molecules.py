@@ -19,6 +19,9 @@ from cellar.application.chemical_registration.identifiers import (
     RemoveIdentifierCommand,
 )
 from cellar.application.chemical_registration.list_molecules import ListMoleculesQuery
+from cellar.application.chemical_registration.list_molecules_by_ids import (
+    ListMoleculesByIdsQuery,
+)
 from cellar.application.chemical_registration.get_molecule_by_identifier import (
     GetMoleculeByIdentifierQuery,
 )
@@ -40,9 +43,6 @@ from cellar.application.research_organization.manage_molecule_projects import (
 from cellar.application.research_organization.get_collections_for_molecule import (
     ListCollectionsForMoleculeQuery,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
-    SQLAlchemyMoleculeRepository,
-)
 from cellar.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
@@ -54,6 +54,7 @@ from cellar.interface.dependencies import (
     ListCollectionsForMoleculeDep,
     ListIdentifiersDep,
     ListMoleculeProjectsDep,
+    ListMoleculesByIdsDep,
     ListMoleculesDep,
     MoleculeActivityServiceDep,
     PlateReadModelServiceDep,
@@ -62,7 +63,6 @@ from cellar.interface.dependencies import (
     SaltMatcherUoWDep,
     SearchMoleculesDep,
     UpdateMoleculeDep,
-    UoWDep,
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import (
@@ -471,7 +471,7 @@ async def register_molecule(
 async def list_molecules(
     auth: AuthDep,
     use_case: ListMoleculesDep,
-    uow: UoWDep,
+    by_ids_use_case: ListMoleculesByIdsDep,
     molecule_type: str | None = None,
     lifecycle_stage: str | None = None,
     structure_status: str | None = None,
@@ -483,9 +483,10 @@ async def list_molecules(
     # Bulk-by-ids shortcut: when ?ids=<csv> is provided, skip normal pagination.
     if ids is not None:
         parsed_ids = [uuid.UUID(x.strip()) for x in ids.split(",") if x.strip()]
-        repo = SQLAlchemyMoleculeRepository(uow)
-        async with uow:
-            molecules = await repo.find_by_ids(auth.workspace_id, parsed_ids)
+        by_ids_query = ListMoleculesByIdsQuery(
+            workspace_id=auth.workspace_id, ids=parsed_ids
+        )
+        molecules = result_to_response(await by_ids_use_case(by_ids_query, auth=auth))
         return PaginatedResponse(
             items=[MoleculeResponse.from_domain(m) for m in molecules],
             next_cursor=None,

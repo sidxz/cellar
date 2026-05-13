@@ -40,8 +40,10 @@ from cellar.application.inventory.synthesis_requests import (
     UpdateSynthesisRequest,
     UpdateSynthesisRequestCommand,
 )
+from cellar.domain.inventory.synthesis_request import SynthesisRequest
 from cellar.interface.dependencies import AuthDep, _get_use_case
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["synthesis-requests"])
 
@@ -83,7 +85,7 @@ class SynthesisRequestResponse(BaseModel):
     parent_request_id: uuid.UUID | None = None
 
     @classmethod
-    def from_domain(cls, r) -> SynthesisRequestResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r: SynthesisRequest) -> SynthesisRequestResponse:
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -134,7 +136,7 @@ class SynthesisRequestSummaryResponse(BaseModel):
     target_purity: float | None = None
 
     @classmethod
-    def from_domain(cls, r) -> SynthesisRequestSummaryResponse:  # type: ignore[no-untyped-def]
+    def from_domain(cls, r: SynthesisRequest) -> SynthesisRequestSummaryResponse:
         return cls(
             id=r.id,
             workspace_id=r.workspace_id,
@@ -312,7 +314,6 @@ async def update_synthesis_request(
     auth: AuthDep,
     uc: UpdateSynthesisRequestDep,
 ) -> SynthesisRequestResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd = UpdateSynthesisRequestCommand(
         workspace_id=auth.workspace_id,

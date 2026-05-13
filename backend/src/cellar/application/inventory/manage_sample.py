@@ -15,7 +15,6 @@ from cellar.domain.inventory.repository import SampleRepository, StorageLocation
 from cellar.domain.inventory.sample import Sample
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------

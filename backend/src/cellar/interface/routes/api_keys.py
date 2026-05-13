@@ -34,6 +34,7 @@ from cellar.interface.dependencies import (
     UpdateExternalApiKeyDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1/api-keys", tags=["api-keys"])
 
@@ -114,7 +115,6 @@ async def update_api_key(
     auth: AuthDep,
     use_case: UpdateExternalApiKeyDep,
 ) -> ExternalApiKeyResponse:
-    from cellar.application.shared.sentinel import UNSET
 
     cmd_fields: dict[str, Any] = {
         "workspace_id": auth.workspace_id,

@@ -18,7 +18,6 @@ from cellar.domain.screening_assay.repository import (
 )
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Data transfer objects
 # ---------------------------------------------------------------------------

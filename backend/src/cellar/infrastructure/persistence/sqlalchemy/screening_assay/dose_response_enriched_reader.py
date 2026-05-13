@@ -26,7 +26,7 @@ class SQLAlchemyDoseResponseEnrichedReader:
         self._session_factory = session_factory
 
     async def resolve_molecules(
-        self, molecule_ids: list[uuid.UUID]
+        self, workspace_id: uuid.UUID, molecule_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, MoleculeDisplayInfo]:
         if not molecule_ids:
             return {}
@@ -38,7 +38,10 @@ class SQLAlchemyDoseResponseEnrichedReader:
                         MoleculeModel.registration_number,
                         MoleculeModel.name,
                         MoleculeModel.smiles,
-                    ).where(MoleculeModel.id.in_(molecule_ids))
+                    ).where(
+                        MoleculeModel.workspace_id == workspace_id,
+                        MoleculeModel.id.in_(molecule_ids),
+                    )
                 )
             ).all()
             ident_rows = (
@@ -47,7 +50,10 @@ class SQLAlchemyDoseResponseEnrichedReader:
                         MoleculeIdentifierModel.molecule_id,
                         MoleculeIdentifierModel.identifier,
                         MoleculeIdentifierModel.identifier_type,
-                    ).where(MoleculeIdentifierModel.molecule_id.in_(molecule_ids))
+                    ).where(
+                        MoleculeIdentifierModel.workspace_id == workspace_id,
+                        MoleculeIdentifierModel.molecule_id.in_(molecule_ids),
+                    )
                 )
             ).all()
 
@@ -68,14 +74,17 @@ class SQLAlchemyDoseResponseEnrichedReader:
             for mid, reg, name, smiles in mol_rows
         }
 
-    async def resolve_batch_numbers(self, batch_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    async def resolve_batch_numbers(
+        self, workspace_id: uuid.UUID, batch_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
         if not batch_ids:
             return {}
         async with self._session_factory() as session:
             rows = (
                 await session.execute(
                     select(BatchModel.id, BatchModel.batch_number).where(
-                        BatchModel.id.in_(batch_ids)
+                        BatchModel.workspace_id == workspace_id,
+                        BatchModel.id.in_(batch_ids),
                     )
                 )
             ).all()

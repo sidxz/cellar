@@ -11,7 +11,6 @@ import uuid
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from pydantic import BaseModel
-from returns.result import Failure
 
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationItemResult,
@@ -45,7 +44,7 @@ from cellar.interface.dependencies import (
     RejectDisclosureDep,
     StartBulkRegistrationDep,
 )
-from cellar.interface.error_handlers import result_to_response
+from cellar.interface.error_handlers import result_to_response, result_value_or_error
 
 router = APIRouter(prefix="/api/v1/bulk-registrations", tags=["bulk-registration"])
 
@@ -253,27 +252,27 @@ async def confirm_merges(
 
     for decision in body.decisions:
         if decision.action == "confirm":
-            result = await confirm_uc(
-                ConfirmDisclosureCommand(
-                    workspace_id=auth.workspace_id,
-                    disclosure_id=decision.disclosure_id,
-                    confirmed_by=auth.user_id,
-                ),
-                auth=auth,
+            outcome, error_message = result_value_or_error(
+                await confirm_uc(
+                    ConfirmDisclosureCommand(
+                        workspace_id=auth.workspace_id,
+                        disclosure_id=decision.disclosure_id,
+                        confirmed_by=auth.user_id,
+                    ),
+                    auth=auth,
+                )
             )
-            if isinstance(result, Failure):
-                error = result.failure()
+            if error_message is not None:
                 results.append(
                     MergeDecisionResult(
                         disclosure_id=decision.disclosure_id,
                         action=decision.action,
                         success=False,
-                        error=getattr(error, "message", str(error)),
+                        error=error_message,
                     )
                 )
                 error_count += 1
             else:
-                outcome = result.unwrap()
                 results.append(
                     MergeDecisionResult(
                         disclosure_id=decision.disclosure_id,
@@ -285,23 +284,24 @@ async def confirm_merges(
                 confirmed_count += 1
 
         elif decision.action == "reject":
-            result = await reject_uc(
-                RejectDisclosureCommand(
-                    workspace_id=auth.workspace_id,
-                    disclosure_id=decision.disclosure_id,
-                    reason=decision.reason,
-                    rejected_by=auth.user_id,
-                ),
-                auth=auth,
+            _, error_message = result_value_or_error(
+                await reject_uc(
+                    RejectDisclosureCommand(
+                        workspace_id=auth.workspace_id,
+                        disclosure_id=decision.disclosure_id,
+                        reason=decision.reason,
+                        rejected_by=auth.user_id,
+                    ),
+                    auth=auth,
+                )
             )
-            if isinstance(result, Failure):
-                error = result.failure()
+            if error_message is not None:
                 results.append(
                     MergeDecisionResult(
                         disclosure_id=decision.disclosure_id,
                         action=decision.action,
                         success=False,
-                        error=getattr(error, "message", str(error)),
+                        error=error_message,
                     )
                 )
                 error_count += 1

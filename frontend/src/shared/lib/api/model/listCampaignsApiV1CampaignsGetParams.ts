@@ -7,4 +7,6 @@
 
 export type ListCampaignsApiV1CampaignsGetParams = {
 project_id?: string | null;
+cursor?: string | null;
+limit?: number | null;
 };

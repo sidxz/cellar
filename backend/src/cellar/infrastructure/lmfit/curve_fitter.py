@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 import lmfit
 import numpy as np
+import structlog
 from returns.result import Failure, Result, Success
 
 import math
@@ -42,6 +43,8 @@ from cellar.domain.shared.errors import DomainError, ValidationError
 if TYPE_CHECKING:
     from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 
+
+_log = structlog.get_logger(__name__)
 
 _MIN_FITTING_POINTS = 4
 
@@ -306,9 +309,13 @@ class LmfitCurveFitter:
                             log_concentrations = clean_log_c
                             responses = clean_responses
                             concentrations = 10.0**clean_log_c
-                    except Exception:
+                    except Exception as exc:  # noqa: BLE001 — second-pass is opportunistic
                         # Second-pass failed — keep first-pass results as-is.
-                        pass
+                        _log.warning(
+                            "curve_fitter.second_pass_failed",
+                            error=str(exc),
+                            exc_info=True,
+                        )
 
         # ──────────────────────────────────────────────────────────────────
         # Fit quality warnings — compute first so CI logic can consult them

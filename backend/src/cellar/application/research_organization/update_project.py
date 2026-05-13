@@ -11,8 +11,8 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
-from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.application.shared.sentinel import UNSET
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.project import Project
 from cellar.domain.research_organization.repository import ProjectRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError

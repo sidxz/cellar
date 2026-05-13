@@ -30,6 +30,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.readout_data import ReadoutData
@@ -41,8 +42,6 @@ from cellar.domain.screening_assay.repository import (
 from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
-from cellar.application.shared.parsers import TabularParseError, TabularParser
-
 
 # ---------------------------------------------------------------------------
 # Command / Result
@@ -106,8 +105,15 @@ class ImportRunReadouts:
     ) -> Result[ImportRunReadoutsResult, DomainError]:
         require_editor(auth)
 
+        events: list = []
         async with self._uow:
-            return await self._execute(input)
+            result = await self._execute(input)
+            if isinstance(result, Success):
+                events = await self._uow.commit()
+
+        if self._dispatcher and events:
+            await self._dispatcher.dispatch_all(events)
+        return result
 
     # ------------------------------------------------------------------
     # Internal
@@ -248,8 +254,4 @@ class ImportRunReadouts:
         if entities:
             await self._readout_data_repo.save_bulk(entities)
 
-        events = await self._uow.commit()
-
-        if self._dispatcher and events:
-            await self._dispatcher.dispatch_all(events)
         return Success(result)
