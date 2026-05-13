@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import {
   useDeleteProtocol,
   useLockProtocol,
@@ -68,17 +69,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const lockMutation = useLockProtocol();
   const unlockMutation = useUnlockProtocol();
 
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.location.hash.slice(1) || "overview";
-    }
-    return "overview";
-  });
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    window.history.replaceState(null, "", `#${value}`);
-  };
+  const [activeTab, setActiveTab] = useHashTab("overview");
 
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -222,7 +213,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         }}
       >
         {(protocol) => (
-          <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList variant="line">
               <TabsTrigger value="overview">
                 <LayoutDashboard className="mr-1.5 h-4 w-4" />
@@ -250,7 +241,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <OverviewTab
                 protocol={protocol}
                 protocolId={protocolId}
-                onTabChange={handleTabChange}
+                onTabChange={setActiveTab}
               />
             </TabsContent>
             <TabsContent value="activity">

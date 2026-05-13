@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
 import {
   AlertDialog,
@@ -44,6 +45,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
   const query = useProject(projectId);
   const archiveMutation = useArchiveProject();
 
+  const [tab, setTab] = useHashTab("overview");
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [addProtocolOpen, setAddProtocolOpen] = useState(false);
@@ -81,7 +83,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
         }
       >
         {(project) => (
-          <Tabs defaultValue="overview">
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList variant="line">
               <TabsTrigger value="overview">
                 <FolderKanban className="mr-1.5 size-4" />

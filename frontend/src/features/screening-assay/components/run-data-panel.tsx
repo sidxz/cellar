@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { cn } from "@/shared/lib/utils";
 import { Paperclip, Pencil, Upload } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { type ZPrimeQuality, classifyZPrime, readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
@@ -32,7 +33,7 @@ const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }>
   poor: { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" },
 };
 
-const VALID_TABS = ["readout", "plate-map", "heat-map", "dose-response", "qc", "files"];
+
 
 // ─── QC Metrics Panel (inline) ────────────────────────────────────────────────
 
@@ -175,27 +176,11 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const doseUnit = plateMap?.dose_unit ?? "uM";
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
 
-  const [activeTab, setActiveTab] = useState("readout");
-
-  // Sync from URL hash on mount + hash changes
-  useEffect(() => {
-    const syncHash = () => {
-      const tab = window.location.hash.replace("#", "");
-      if (VALID_TABS.includes(tab)) setActiveTab(tab);
-    };
-    syncHash();
-    window.addEventListener("hashchange", syncHash);
-    return () => window.removeEventListener("hashchange", syncHash);
-  }, []);
-
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-    window.history.replaceState(null, "", `#${value}`);
-  }, []);
+  const [activeTab, setActiveTab] = useHashTab("readout");
 
   return (
     <>
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
           <TabsTrigger value="plate-map">Plate Map</TabsTrigger>
@@ -260,7 +245,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                     <button
                       type="button"
                       className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => handleTabChange("readout")}
+                      onClick={() => setActiveTab("readout")}
                     >
                       Import on the Readout Data tab
                     </button>
@@ -278,7 +263,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                     <button
                       type="button"
                       className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => handleTabChange("readout")}
+                      onClick={() => setActiveTab("readout")}
                     >
                       Import on the Readout Data tab
                     </button>{" "}

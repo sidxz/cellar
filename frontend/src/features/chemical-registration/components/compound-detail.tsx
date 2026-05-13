@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -70,17 +70,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
   const query = useMolecule(compoundId);
   const isAdmin = useAuthzHasRole("admin");
 
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.location.hash.slice(1) || "overview";
-    }
-    return "overview";
-  });
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    window.history.replaceState(null, "", `#${value}`);
-  };
+  const [activeTab, setActiveTab] = useHashTab("overview");
 
   return (
     <DetailShell
@@ -137,7 +127,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
             )}
 
             {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={handleTabChange}>
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList variant="line">
                 <TabsTrigger value="overview">
                   <LayoutDashboard className="mr-1.5 h-4 w-4" />
