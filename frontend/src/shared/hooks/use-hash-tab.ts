@@ -11,9 +11,13 @@ export function useHashTab(defaultTab: string): [string, (tab: string) => void] 
   const [tab, setTabState] = useState<string>(() => readHash() || defaultTab);
 
   useEffect(() => {
+    setTabState((prev) => {
+      const next = readHash() || defaultTab;
+      return prev === next ? prev : next;
+    });
     const onHashChange = () => {
       const next = readHash() || defaultTab;
-      setTabState(next);
+      setTabState((prev) => (prev === next ? prev : next));
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);

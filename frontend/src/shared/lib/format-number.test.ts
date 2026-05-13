@@ -17,4 +17,16 @@ describe("formatFileSize", () => {
   it("formats gigabytes", () => {
     expect(formatFileSize(2 * 1024 ** 3)).toBe("2.0 GB");
   });
+
+  it("returns — for NaN", () => {
+    expect(formatFileSize(Number.NaN)).toBe("—");
+  });
+
+  it("returns — for Infinity", () => {
+    expect(formatFileSize(Number.POSITIVE_INFINITY)).toBe("—");
+  });
+
+  it("returns — for negative values", () => {
+    expect(formatFileSize(-1)).toBe("—");
+  });
 });

@@ -12,10 +12,7 @@
  * `(1245).toPrecision(3) === "1.25e+3"`), which is the wrong default for a
  * chemist scanning a column of µM values.
  */
-export function formatMeasurementValue(
-  value: number | null | undefined,
-  sigFigs = 3,
-): string {
+export function formatMeasurementValue(value: number | null | undefined, sigFigs = 3): string {
   if (value == null || !Number.isFinite(value)) return "—";
   if (value === 0) return "0";
 
@@ -43,6 +40,7 @@ export function formatMeasurementValue(
 }
 
 export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
