@@ -246,6 +246,52 @@ def _collect_normalizations_by_input_id(
     return by_input
 
 
+def _flatten_int_ids(obj: Any) -> list[int]:
+    """Recursively collect every int found in a nested CDD outputs object."""
+    if isinstance(obj, int) and not isinstance(obj, bool):
+        return [obj]
+    if isinstance(obj, dict):
+        out: list[int] = []
+        for v in obj.values():
+            out.extend(_flatten_int_ids(v))
+        return out
+    if isinstance(obj, list):
+        out2: list[int] = []
+        for v in obj:
+            out2.extend(_flatten_int_ids(v))
+        return out2
+    return []
+
+
+def _build_normalization_output_index(
+    calculations: list[dict[str, Any]],
+) -> dict[int, tuple[int, ReadoutNormalization]]:
+    """Map output_readout_id → (input_readout_id, formula) for normalization calcs.
+
+    Cellar collapses CDD's normalization-style calculations into a
+    ``normalizations`` set on the input readout, so the calc *outputs* (e.g.
+    "% Inhibition", "Z score") are skipped from the imported readout list.
+    When a dose-response calculation references one of those output ids as
+    its ``response_readout_definition``, we have to redirect that reference
+    onto the surviving input readout and record which normalization layer
+    the DR fit actually consumes — otherwise the synthesized DR readout
+    points at a name that doesn't exist in the imported protocol.
+    """
+    out_index: dict[int, tuple[int, ReadoutNormalization]] = {}
+    for calc in calculations:
+        norm = _NORMALIZATION_CALC_CLASSES.get(calc.get("class") or "")
+        if norm is None:
+            continue
+        inputs = calc.get("inputs", {}) or {}
+        input_id = inputs.get("input_readout_definition")
+        if not isinstance(input_id, int):
+            continue
+        outputs = calc.get("outputs", {}) or {}
+        for out_id in _flatten_int_ids(outputs):
+            out_index[out_id] = (input_id, norm)
+    return out_index
+
+
 def _build_dose_response_readouts(
     calculations: list[dict[str, Any]],
     rd_by_id: dict[int, dict[str, Any]],
@@ -263,7 +309,16 @@ def _build_dose_response_readouts(
     readout name. The X axis is always `None` — cellar stores doses on
     `well.dose` (per protocol-design contract), so the 4PL fitter sources X
     from the well, not from a separate dose readout.
+
+    When ``response_readout_definition`` is the *output* of a normalization
+    calc (e.g. CDD's "% Inhibition" derived from a raw signal), cellar
+    skips that output and lifts the formula onto the raw input's
+    ``normalizations`` set. The DR config has to follow: it points at the
+    surviving input readout and records ``y_normalization`` so the 4PL
+    fitter consumes the normalized layer rather than the raw layer.
     """
+    norm_output_index = _build_normalization_output_index(calculations)
+
     dr_readouts: list[MappedReadout] = []
     order = start_order
 
@@ -277,7 +332,16 @@ def _build_dose_response_readouts(
         # Resolve input readout names
         dose_id = inputs.get("dose_readout_definition")
         response_id = inputs.get("response_readout_definition")
-        response_rd = rd_by_id.get(response_id, {}) if response_id else {}
+
+        # If response_readout_definition points at a calc-output (e.g. CDD's
+        # "% Inhibition"), redirect to the upstream input readout that
+        # actually survives the import and tag the layer the fit consumes.
+        y_normalization: ReadoutNormalization | None = None
+        if isinstance(response_id, int) and response_id in norm_output_index:
+            upstream_id, y_normalization = norm_output_index[response_id]
+            response_rd = rd_by_id.get(upstream_id, {})
+        else:
+            response_rd = rd_by_id.get(response_id, {}) if response_id else {}
 
         # CDD's dose readout (referenced by `dose_id`) is the dose column —
         # cellar stores that on `well.dose`, so x_readout_name=None
@@ -312,6 +376,7 @@ def _build_dose_response_readouts(
                     curve_type=CurveType.IC50,
                     x_readout_name=x_name,
                     y_readout_name=y_name,
+                    y_normalization=y_normalization,
                     hill_slope_constraint=HillSlopeConstraint.UNCONSTRAINED,
                     normalization_scope=NormalizationScope.PER_PLATE,
                 ),

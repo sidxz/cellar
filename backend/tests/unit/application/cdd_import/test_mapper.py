@@ -322,6 +322,73 @@ class TestMapCddProtocol:
             "normalizations set"
         )
 
+    def test_dr_response_pointing_at_calc_output_redirects_to_input_with_y_normalization(self):
+        """When a DR calc's response_readout_definition is the *output* of a
+        normalization calc (e.g. "% Inhibition" derived from a raw signal),
+        cellar skips that output and lifts the formula onto the raw input.
+        The synthesized DR config must point at the *input* readout name
+        (which still exists post-import) and record y_normalization so the
+        4PL fitter consumes the normalized layer.
+
+        This was the production bug: a CDD-imported "NadD-Sumo dose response"
+        protocol stored y_readout_name='% inhibition' referencing a row that
+        was skipped from the imported protocol, so every PUT
+        /readout-definitions/{id} returned 422 with "Dose-response Y-axis
+        readout '% inhibition' not found among existing readout definitions"."""
+        proto = {
+            "id": 1,
+            "name": "NadD-Sumo",
+            "readout_definitions": [
+                {"id": 100, "name": "raw AU", "data_type": "Number", "unit_label": "AU"},
+                # Calc output — skipped from cellar's readout list, formula
+                # lifted onto "raw AU".normalizations.
+                {
+                    "id": 101,
+                    "name": "% inhibition",
+                    "data_type": "Number",
+                    "unit_label": "%",
+                },
+                {"id": 200, "name": "Conc", "data_type": "Number", "unit_label": "uM"},
+                {"id": 102, "name": "IC50", "data_type": "Number", "unit_label": "uM"},
+            ],
+            "calculations": [
+                {
+                    "id": 1,
+                    "class": "percent inhibition calculation",
+                    "inputs": {"input_readout_definition": 100},
+                    "outputs": {"output_readout_definition": 101},
+                },
+                {
+                    "id": 2,
+                    "class": "dose response calculation",
+                    "inputs": {
+                        "response_readout_definition": 101,  # points at the calc output
+                        "dose_readout_definition": 200,
+                    },
+                    "outputs": {"intercept_readout_definitions": [[102]]},
+                },
+            ],
+        }
+        result = map_cdd_protocol(proto)
+        names = [r.name for r in result.readouts]
+        # "% inhibition" is skipped (calc output); "Conc" is skipped (dose column).
+        assert names == ["raw AU", "IC50"]
+
+        dr = next(r for r in result.readouts if r.name == "IC50")
+        assert dr.dose_response_config is not None
+        assert dr.dose_response_config.y_readout_name == "raw AU", (
+            "y_readout_name must redirect onto the surviving input readout "
+            "when the CDD response_readout_definition is itself a calc output"
+        )
+        assert (
+            dr.dose_response_config.y_normalization
+            == ReadoutNormalization.PERCENT_INHIBITION
+        ), "y_normalization must record the lifted formula layer"
+
+        # And the input readout itself has the normalization lifted.
+        raw = next(r for r in result.readouts if r.name == "raw AU")
+        assert ReadoutNormalization.PERCENT_INHIBITION in raw.normalizations
+
     def test_multiple_calcs_on_same_input_combine_into_one_normalizations_set(self):
         """The NadD-Sumo HTS shape (CDD 73684): a single Raw Data readout
         feeds both percent-inhibition and z-score calculations. Both

@@ -41,7 +41,9 @@ import {
   type Protocol,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
+  READOUT_NORMALIZATION_LABELS,
   type ReadoutDataType,
+  type ReadoutNormalization,
 } from "../../types";
 import { FormulaInput } from "../formula-input";
 import { InterceptsEditor } from "../intercepts-editor";
@@ -104,6 +106,8 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
     drXReadout,
     setDrXReadout,
     drYReadout,
+    drYNormalization,
+    setDrYNormalization,
     drHillConstraint,
     setDrHillConstraint,
     drNormalizationScope,
@@ -159,6 +163,14 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
   const candidates = protocol.readout_definitions
     .filter((rd) => rd.data_type === "numeric" && rd.id !== excludeId)
     .map((rd) => rd.name);
+
+  /** Normalization layers the selected Y readout emits — drives the Y Layer
+   *  picker. Empty list means only the raw layer is available (no picker shown). */
+  const yReadoutNormalizations: ReadoutNormalization[] = (() => {
+    const y = protocol.readout_definitions.find((rd) => rd.name === drYReadout);
+    if (!y) return [];
+    return (y.normalizations ?? []).filter((n) => n !== "none") as ReadoutNormalization[];
+  })();
 
   const xIsAdvanced = drXReadout !== WELL_CONC_X;
 
@@ -231,6 +243,35 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
           </Select>
         </div>
       </div>
+      {yReadoutNormalizations.length > 0 && (
+        <div className="grid gap-1 max-w-sm">
+          <Label className="text-xs">Y Layer</Label>
+          <Select
+            value={drYNormalization ?? "__raw__"}
+            onValueChange={(v) =>
+              setDrYNormalization(v === "__raw__" ? null : (v as ReadoutNormalization))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__raw__">Raw signal</SelectItem>
+              {yReadoutNormalizations.map((n) => (
+                <SelectItem key={n} value={n}>
+                  {READOUT_NORMALIZATION_LABELS[n] ?? n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Which layer of <span className="font-mono">{drYReadout}</span> the curve fits.
+            Pick the normalized layer (e.g. % Inhibition) when the raw column is the unprocessed
+            signal — required for CDD-imported protocols where the % column is a derived layer
+            of a raw measurement.
+          </p>
+        </div>
+      )}
       <Collapsible defaultOpen={xIsAdvanced}>
         <CollapsibleTrigger className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
           <span aria-hidden>▸</span>

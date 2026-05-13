@@ -67,6 +67,8 @@ export interface ReadoutDefinitionFormReturn {
   setDrXReadout: (v: string) => void;
   drYReadout: string;
   setDrYReadout: (v: string) => void;
+  drYNormalization: ReadoutNormalization | null;
+  setDrYNormalization: (v: ReadoutNormalization | null) => void;
   drHillConstraint: HillSlopeConstraint;
   setDrHillConstraint: (v: HillSlopeConstraint) => void;
   drNormalizationScope: NormalizationScope;
@@ -158,6 +160,11 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
   const [drCurveType, setDrCurveType] = useState<CurveType>("ic50");
   const [drXReadout, setDrXReadout] = useState<string>(WELL_CONC_X);
   const [drYReadout, setDrYReadout] = useState("");
+  // null = fit the raw layer (rows where is_computed=false). Otherwise the
+  // chosen normalization formula must be in the Y readout's normalizations set
+  // — the backend cross-validates and silently dropping this on round-trip
+  // would degrade CDD-imported DR readouts to fitting the raw signal.
+  const [drYNormalization, setDrYNormalization] = useState<ReadoutNormalization | null>(null);
   const [drHillConstraint, setDrHillConstraint] = useState<HillSlopeConstraint>("unconstrained");
   const [drNormalizationScope, setDrNormalizationScope] = useState<NormalizationScope>("per_plate");
   const [drActivityThreshold, setDrActivityThreshold] = useState("");
@@ -200,6 +207,7 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
     setDrCurveType("ic50");
     setDrXReadout(WELL_CONC_X);
     setDrYReadout("");
+    setDrYNormalization(null);
     setDrHillConstraint("unconstrained");
     setDrNormalizationScope("per_plate");
     setDrActivityThreshold("");
@@ -263,6 +271,7 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
       setDrCurveType(cfg.curve_type);
       setDrXReadout(cfg.x_readout_name ?? WELL_CONC_X);
       setDrYReadout(cfg.y_readout_name);
+      setDrYNormalization(cfg.y_normalization ?? null);
       setDrHillConstraint(cfg.hill_slope_constraint);
       setDrNormalizationScope(cfg.normalization_scope);
       setDrActivityThreshold(cfg.activity_threshold != null ? String(cfg.activity_threshold) : "");
@@ -347,6 +356,7 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
       curve_type: drCurveType,
       x_readout_name: drXReadout === WELL_CONC_X ? null : drXReadout,
       y_readout_name: drYReadout,
+      y_normalization: drYNormalization,
       hill_slope_constraint: drHillConstraint,
       normalization_scope: drNormalizationScope,
       activity_threshold: parseOrNull(drActivityThreshold),
@@ -388,6 +398,10 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
   // explicit choices.
   const handleDrYReadoutChange = (newY: string, protocol: Protocol) => {
     setDrYReadout(newY);
+    // Different Y readout — its normalizations set may not include the
+    // previously-picked layer. Reset to null (raw) so the form stays
+    // consistent; the user can re-pick a layer in the picker below.
+    setDrYNormalization(null);
     const suggested = suggestedRangesForY(newY, protocol);
     if (!suggested) return;
     let injected = false;
@@ -511,6 +525,8 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
     setDrXReadout,
     drYReadout,
     setDrYReadout,
+    drYNormalization,
+    setDrYNormalization,
     drHillConstraint,
     setDrHillConstraint,
     drNormalizationScope,
