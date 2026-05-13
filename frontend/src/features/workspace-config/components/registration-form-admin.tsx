@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -186,6 +189,31 @@ function FieldOverridesEditor({
 // Form dialog (create / edit)
 // ---------------------------------------------------------------------------
 
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  applies_to: z.enum(["molecule", "batch"]),
+  is_default: z.boolean(),
+  field_overrides: z.array(z.custom<FieldOverride>()),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+const defaultValues: FormValues = {
+  name: "",
+  applies_to: "molecule",
+  is_default: false,
+  field_overrides: [],
+};
+
+function toFormValues(editing: RegistrationForm): FormValues {
+  return {
+    name: editing.name,
+    applies_to: editing.applies_to,
+    is_default: editing.is_default,
+    field_overrides: editing.field_overrides ?? [],
+  };
+}
+
 interface FormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -193,43 +221,35 @@ interface FormDialogProps {
 }
 
 function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
-  const [name, setName] = useState("");
-  const [appliesTo, setAppliesTo] = useState<"molecule" | "batch">("molecule");
-  const [isDefault, setIsDefault] = useState(false);
-  const [fieldOverrides, setFieldOverrides] = useState<FieldOverride[]>([]);
-
   const isEdit = editing !== null;
   const create = useCreateRegistrationForm();
   const update = useUpdateRegistrationForm(editing?.id ?? "");
 
-  useEffect(() => {
-    if (editing) {
-      setName(editing.name);
-      setAppliesTo(editing.applies_to);
-      setIsDefault(editing.is_default);
-      setFieldOverrides(editing.field_overrides ?? []);
-    } else {
-      setName("");
-      setAppliesTo("molecule");
-      setIsDefault(false);
-      setFieldOverrides([]);
-    }
-  }, [editing, open]);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    if (open) {
+      form.reset(editing ? toFormValues(editing) : defaultValues);
+    }
+  }, [open, editing, form]);
+
+  const onSubmit = async (values: FormValues) => {
     if (isEdit) {
       const data: UpdateRegistrationFormInput = {
-        name: name.trim(),
-        is_default: isDefault,
-        field_overrides: fieldOverrides,
+        name: values.name.trim(),
+        is_default: values.is_default,
+        field_overrides: values.field_overrides,
       };
       await update.mutateAsync(data);
     } else {
       const data: CreateRegistrationFormInput = {
-        name: name.trim(),
-        applies_to: appliesTo,
-        is_default: isDefault,
-        field_overrides: fieldOverrides,
+        name: values.name.trim(),
+        applies_to: values.applies_to,
+        is_default: values.is_default,
+        field_overrides: values.field_overrides,
       };
       await create.mutateAsync(data);
     }
@@ -237,7 +257,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
   };
 
   const isPending = create.isPending || update.isPending;
-  const canSubmit = name.trim().length > 0;
+  const watchedAppliesTo = form.watch("applies_to");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -248,85 +268,104 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="rf-name">Form Name</Label>
-            <Input
-              id="rf-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Standard Molecule Registration"
-            />
-          </div>
-
-          {/* Applies to — only for create */}
-          {!isEdit ? (
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Applies To</Label>
-              <Select
-                value={appliesTo}
-                onValueChange={(v) =>
-                  setAppliesTo(v as "molecule" | "batch")
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="molecule">Molecule</SelectItem>
-                  <SelectItem value="batch">Batch</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="grid gap-2">
-              <Label>Applies To</Label>
+              <Label htmlFor="rf-name">Form Name</Label>
               <Input
-                value={appliesTo === "molecule" ? "Molecule" : "Batch"}
-                disabled
+                id="rf-name"
+                {...form.register("name")}
+                placeholder="e.g., Standard Molecule Registration"
+              />
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              )}
+            </div>
+
+            {/* Applies to — only for create */}
+            {!isEdit ? (
+              <div className="grid gap-2">
+                <Label>Applies To</Label>
+                <Controller
+                  name="applies_to"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="molecule">Molecule</SelectItem>
+                        <SelectItem value="batch">Batch</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>Applies To</Label>
+                <Input
+                  value={editing!.applies_to === "molecule" ? "Molecule" : "Batch"}
+                  disabled
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div>
+                <Label htmlFor="rf-default" className="cursor-pointer">
+                  Set as default form
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Default form is pre-selected in the registration dialog.
+                </p>
+              </div>
+              <Controller
+                name="is_default"
+                control={form.control}
+                render={({ field }) => (
+                  <Switch
+                    id="rf-default"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
               />
             </div>
-          )}
 
-          <div className="flex items-center justify-between rounded-md border px-3 py-2">
-            <div>
-              <Label htmlFor="rf-default" className="cursor-pointer">
-                Set as default form
-              </Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Default form is pre-selected in the registration dialog.
+            {/* Field overrides */}
+            <div className="grid gap-2">
+              <Label>Field Overrides</Label>
+              <p className="text-xs text-muted-foreground">
+                Override required/default/locked behaviour for individual custom
+                fields when this form is selected.
               </p>
+              <Controller
+                name="field_overrides"
+                control={form.control}
+                render={({ field }) => (
+                  <FieldOverridesEditor
+                    appliesTo={isEdit ? editing!.applies_to : watchedAppliesTo}
+                    overrides={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
             </div>
-            <Switch
-              id="rf-default"
-              checked={isDefault}
-              onCheckedChange={setIsDefault}
-            />
           </div>
 
-          {/* Field overrides */}
-          <div className="grid gap-2">
-            <Label>Field Overrides</Label>
-            <p className="text-xs text-muted-foreground">
-              Override required/default/locked behaviour for individual custom
-              fields when this form is selected.
-            </p>
-            <FieldOverridesEditor
-              appliesTo={isEdit ? editing!.applies_to : appliesTo}
-              overrides={fieldOverrides}
-              onChange={setFieldOverrides}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || isPending}>
-            {isPending ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={form.formState.isSubmitting || isPending}>
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -464,6 +503,8 @@ function FormsTable({ forms, onEdit, onDelete }: FormsTableProps) {
 // ---------------------------------------------------------------------------
 // RegistrationFormAdmin — main component
 // ---------------------------------------------------------------------------
+
+import { useState } from "react";
 
 export function RegistrationFormAdmin() {
   const [dialogOpen, setDialogOpen] = useState(false);
