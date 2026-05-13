@@ -107,7 +107,9 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
   // — Step 1 state —
   const [protocolId, setProtocolId] = useState<string | null>(null);
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
-  const [channelConfigs, setChannelConfigs] = useState<ChannelConfigUI[]>([]);
+  // Only user-edited overrides live in state; the full channel config list is
+  // derived below via useMemo so there is no effect feedback loop.
+  const [userEditedConfigs, setUserEditedConfigs] = useState<Map<string, ChannelConfigUI>>(new Map());
 
   // — Global toggles —
   const [filterMode, setFilterMode] = useState<"any" | "all">("all");
@@ -130,19 +132,15 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
     { query: { enabled: !!protocolId } },
   );
 
-  // Auto-derive channel configs from selected runs + protocol readouts
-  useEffect(() => {
-    if (!protocolDetail || selectedRunIds.size === 0) {
-      setChannelConfigs([]);
-      return;
-    }
-    const existing = new Map(
-      channelConfigs.map((c) => [c.readout_definition_id, c] as const),
-    );
-    const next: ChannelConfigUI[] = protocolDetail.readout_definitions
+  // Derive the full channel config list from protocol readouts, merging any
+  // user edits stored in `userEditedConfigs`. Pure derivation — no effects or
+  // feedback loops because user edits live in a separate map.
+  const channelConfigs = useMemo<ChannelConfigUI[]>(() => {
+    if (!protocolDetail || selectedRunIds.size === 0) return [];
+    return protocolDetail.readout_definitions
       .filter((rd) => rd.data_type !== "text")  // text-only readouts aren't filterable
       .map((rd) => {
-        const prior = existing.get(rd.id);
+        const prior = userEditedConfigs.get(rd.id);
         if (prior) return prior;
         // Auto-pick source kind: dose-response readouts come from the curves
         // table (fitted IC50/EC50/etc.), not the per-well ReadoutData.
@@ -161,12 +159,12 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
           { name: rd.name, data_type: rd.data_type },
         );
         const hasThreshold = defaults.hit_operator !== "";
-        const result: ChannelConfigUI = {
+        return {
           protocol_id: protocolDetail.id,
           readout_definition_id: rd.id,
           label: `${rd.name}${labelSuffix}`,
           source_kind: isDoseResponse ? "dose_response_curve" : "readout_data",
-          selection_rule: "latest_approved_run",
+          selection_rule: "latest_approved_run" as const,
           hit_operator: defaults.hit_operator,
           hit_value: defaults.hit_value,
           hit_value_low: defaults.hit_value_low,
@@ -179,12 +177,8 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
           allowed_curve_classes: defaults.allowed_curve_classes,
           normalization_applied: primaryNorm,
         };
-        return result;
       });
-    setChannelConfigs(next);
-  // We intentionally don't list channelConfigs in deps — it'd cause a feedback loop
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [protocolDetail?.id, selectedRunIds.size, protocolDetail?.readout_definitions.length]);
+  }, [protocolDetail, selectedRunIds.size, userEditedConfigs]);
 
   // — Mutations —
   const previewMutation =
@@ -270,7 +264,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
     setStep("configure");
     setProtocolId(null);
     setSelectedRunIds(new Set());
-    setChannelConfigs([]);
+    setUserEditedConfigs(new Map());
     setFilterMode("all");
     setScope("hits_only");
     setDefaultDecision("selected");
@@ -348,6 +342,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             onProtocolChange={(id) => {
               setProtocolId(id);
               setSelectedRunIds(new Set());
+              setUserEditedConfigs(new Map());
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
@@ -362,11 +357,15 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             onApprovedOnlyChange={setApprovedOnly}
             channelConfigs={channelConfigs}
             protocolDetail={protocolDetail}
-            onChannelConfigChange={(idx, patch) =>
-              setChannelConfigs((prev) =>
-                prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
-              )
-            }
+            onChannelConfigChange={(idx, patch) => {
+              const cfg = channelConfigs[idx];
+              if (!cfg) return;
+              setUserEditedConfigs((prev) => {
+                const next = new Map(prev);
+                next.set(cfg.readout_definition_id, { ...cfg, ...patch });
+                return next;
+              });
+            }}
             filterMode={filterMode}
             onFilterModeChange={setFilterMode}
             scope={scope}

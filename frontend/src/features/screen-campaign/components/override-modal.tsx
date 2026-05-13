@@ -8,7 +8,7 @@
  * the value differs from the auto-resolved one).
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/shared/components/ui/badge";
@@ -88,15 +88,16 @@ export function OverrideModal({
 
   const isPlaceholderQualifier = qualifier === "nd" || qualifier === "excluded";
 
-  // B7: when qualifier flips to ND/excluded, clear value + unit; backend
-  // accepts empty unit for these qualifiers and forces value to null.
-  useEffect(() => {
-    if (isPlaceholderQualifier) {
+  const handleQualifierChange = (v: string) => {
+    setQualifier(v);
+    // B7: when qualifier flips to ND/excluded, clear value + unit on the
+    // same gesture — avoids a reactive side-effect after the render.
+    if (v === "nd" || v === "excluded") {
       setValue("");
       setUnit("");
       setHitCall("none");
     }
-  }, [isPlaceholderQualifier]);
+  };
 
   // B8: reason is required when the override changes the auto-resolved value.
   const valueDiffersFromAuto = (() => {
@@ -178,7 +179,7 @@ export function OverrideModal({
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1">
               <Label>Qualifier</Label>
-              <Select value={qualifier} onValueChange={setQualifier}>
+              <Select value={qualifier} onValueChange={handleQualifierChange}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[
