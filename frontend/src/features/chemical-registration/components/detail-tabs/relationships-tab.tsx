@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Link2, Plus, Trash2, Search } from "lucide-react";
+import { Link2, Plus, Trash2 } from "lucide-react";
+import { SearchInput } from "@/shared/components/search-input";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -14,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
   Select,
@@ -239,18 +239,14 @@ function AddRelationshipDialog({
           {/* Target molecule search */}
           <div className="space-y-2">
             <Label>Target Compound</Label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or reg number..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setTargetId("");
-                }}
-                className="pl-8"
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={(v) => {
+                setSearchQuery(v);
+                setTargetId("");
+              }}
+              placeholder="Search by name or reg number..."
+            />
             {searching && <Skeleton className="h-8 w-full" />}
             {filtered && filtered.length > 0 && !targetId && (
               <div className="max-h-40 overflow-y-auto rounded-md border">

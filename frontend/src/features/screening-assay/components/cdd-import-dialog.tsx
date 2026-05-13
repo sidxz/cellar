@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, AlertTriangle, Loader2, Search } from "lucide-react";
+import { Check, AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
+import { SearchInput } from "@/shared/components/search-input";
 import { Label } from "@/shared/components/ui/label";
 import {
   Table,
@@ -147,15 +148,12 @@ export function CddImportDialog({
             )}
             {protocols && protocols.length > 0 && (
               <>
-                <div className="relative shrink-0">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search protocols..."
-                    className="pl-9"
-                  />
-                </div>
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search protocols..."
+                  className="shrink-0"
+                />
                 <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
                   <Table>
                     <TableHeader>

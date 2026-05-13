@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, TestTubes } from "lucide-react";
+import { TestTubes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Input } from "@/shared/components/ui/input";
+import { SearchInput } from "@/shared/components/search-input";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -81,15 +81,12 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
     <div className="space-y-3">
       {/* Search + Project filter */}
       <div className="flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search protocols..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search protocols..."
+          className="max-w-sm flex-1"
+        />
         {!projectId && projects && projects.length > 0 && (
           <>
           <span className="shrink-0 text-sm text-muted-foreground">

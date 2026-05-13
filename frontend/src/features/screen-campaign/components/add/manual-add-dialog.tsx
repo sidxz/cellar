@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { SearchInput } from "@/shared/components/search-input";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -20,7 +20,6 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
 
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import { useAddResultRowApiV1CampaignsCampaignIdResultsPost } from "@/shared/lib/api/campaigns/campaigns";
@@ -70,16 +69,12 @@ export function ManualAddDialog({ open, onOpenChange, campaignId }: ManualAddDia
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Search by name or reg number..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            autoFocus
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name or reg number..."
+          autoFocus
+        />
 
         <div className="max-h-52 overflow-y-auto border rounded divide-y text-sm">
           {search.length < 2 && (

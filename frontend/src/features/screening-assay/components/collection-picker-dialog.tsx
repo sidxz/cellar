@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FolderPlus, Search } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
+import { SearchInput } from "@/shared/components/search-input";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { useCollections } from "@/features/research-organization/hooks/use-collections";
 import { useAddMolecules } from "@/features/research-organization/hooks/use-collection-molecules";
@@ -68,15 +68,11 @@ export function CollectionPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search collections..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search collections..."
+        />
 
         <ScrollArea className="h-[240px]">
           <div className="space-y-1">
