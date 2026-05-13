@@ -19,12 +19,14 @@ const DISCLOSURES_KEY = ["disclosures"];
 export function useDisclosures(status?: string) {
   return useQuery({
     queryKey: [...DISCLOSURES_KEY, { status }],
-    queryFn: () =>
-      customInstance<DisclosureRequest[]>({
+    queryFn: async () => {
+      const resp = await customInstance<DisclosureRequest[] | { items: DisclosureRequest[] }>({
         url: "/api/v1/disclosures",
         method: "GET",
         params: status ? { status } : undefined,
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
   });
 }
 
@@ -35,11 +37,13 @@ export function useConflictDisclosures() {
 export function useDisclosuresForMolecule(moleculeId: string | undefined) {
   return useQuery({
     queryKey: [...DISCLOSURES_KEY, "by-molecule", moleculeId],
-    queryFn: () =>
-      customInstance<DisclosureRequest[]>({
+    queryFn: async () => {
+      const resp = await customInstance<DisclosureRequest[] | { items: DisclosureRequest[] }>({
         url: `/api/v1/disclosures/by-molecule/${moleculeId}`,
         method: "GET",
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
     enabled: !!moleculeId,
   });
 }

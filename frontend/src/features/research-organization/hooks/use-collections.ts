@@ -30,12 +30,14 @@ export function useCollections(projectIds?: string[], options?: { includeAll?: b
   const scope = !includeAll && projectIds && projectIds.length > 0 ? [...projectIds].sort() : null;
   return useQuery({
     queryKey: scope ? [...COLLECTIONS_KEY, { projectIds: scope }] : COLLECTIONS_KEY,
-    queryFn: () =>
-      customInstance<Collection[]>({
+    queryFn: async () => {
+      const resp = await customInstance<Collection[] | { items: Collection[] }>({
         url: "/api/v1/collections",
         method: "GET",
         ...(scope ? { params: { project_ids: scope } } : {}),
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
   });
 }
 

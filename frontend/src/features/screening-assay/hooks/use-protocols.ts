@@ -28,12 +28,14 @@ const protocolHooks = createCrudHooks<
 export function useProtocols(projectId?: string) {
   return useQuery({
     queryKey: projectId ? [...PROTOCOLS_KEY, { projectId }] : PROTOCOLS_KEY,
-    queryFn: () =>
-      customInstance<Protocol[]>({
+    queryFn: async () => {
+      const resp = await customInstance<Protocol[] | { items: Protocol[] }>({
         url: "/api/v1/protocols",
         method: "GET",
         ...(projectId ? { params: { project_id: projectId } } : {}),
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
   });
 }
 

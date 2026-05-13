@@ -644,6 +644,205 @@ export const useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost = <TEr
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * Re-resolve all non-override measurements in a DRAFT campaign.
+ * @summary Refresh Campaign
+ */
+export const refreshCampaignApiV1CampaignsCampaignIdRefreshPost = (
+    campaignId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CampaignResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/refresh`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getRefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, TError,{campaignId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, TError,{campaignId: string}, TContext> => {
+
+const mutationKey = ['refreshCampaignApiV1CampaignsCampaignIdRefreshPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, {campaignId: string}> = (props) => {
+          const {campaignId} = props ?? {};
+
+          return  refreshCampaignApiV1CampaignsCampaignIdRefreshPost(campaignId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationResult = NonNullable<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>>
+    
+    export type RefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Refresh Campaign
+ */
+export const useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, TError,{campaignId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>,
+        TError,
+        {campaignId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Lock a DRAFT campaign and optionally publish a frozen Collection.
+ * @summary Close Campaign
+ */
+export const closeCampaignApiV1CampaignsCampaignIdClosePost = (
+    campaignId: string,
+    closeCampaignRequest: CloseCampaignRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CampaignResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/close`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: closeCampaignRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getCloseCampaignApiV1CampaignsCampaignIdClosePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, TError,{campaignId: string;data: CloseCampaignRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, TError,{campaignId: string;data: CloseCampaignRequest}, TContext> => {
+
+const mutationKey = ['closeCampaignApiV1CampaignsCampaignIdClosePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, {campaignId: string;data: CloseCampaignRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  closeCampaignApiV1CampaignsCampaignIdClosePost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CloseCampaignApiV1CampaignsCampaignIdClosePostMutationResult = NonNullable<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>>
+    export type CloseCampaignApiV1CampaignsCampaignIdClosePostMutationBody = CloseCampaignRequest
+    export type CloseCampaignApiV1CampaignsCampaignIdClosePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Close Campaign
+ */
+export const useCloseCampaignApiV1CampaignsCampaignIdClosePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, TError,{campaignId: string;data: CloseCampaignRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>,
+        TError,
+        {campaignId: string;data: CloseCampaignRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getCloseCampaignApiV1CampaignsCampaignIdClosePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Mark a closed campaign as superseded by a newer one.
+
+``campaign_id`` is the OLD (closed) campaign to supersede.
+``body.new_campaign_id`` is the NEW campaign that replaces it.
+Returns the old campaign (now SUPERSEDED).
+ * @summary Supersede Campaign
+ */
+export const supersedeCampaignApiV1CampaignsCampaignIdSupersedePost = (
+    campaignId: string,
+    supersedeRequest: SupersedeRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CampaignResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/supersede`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: supersedeRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getSupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, TError,{campaignId: string;data: SupersedeRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, TError,{campaignId: string;data: SupersedeRequest}, TContext> => {
+
+const mutationKey = ['supersedeCampaignApiV1CampaignsCampaignIdSupersedePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, {campaignId: string;data: SupersedeRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  supersedeCampaignApiV1CampaignsCampaignIdSupersedePost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationResult = NonNullable<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>>
+    export type SupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationBody = SupersedeRequest
+    export type SupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Supersede Campaign
+ */
+export const useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, TError,{campaignId: string;data: SupersedeRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>,
+        TError,
+        {campaignId: string;data: SupersedeRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getSupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * Add a channel to a draft Campaign.
  * @summary Add Campaign Channel
  */
@@ -1169,205 +1368,6 @@ export const useAddResultRowApiV1CampaignsCampaignIdResultsPost = <TError = HTTP
       > => {
 
       const mutationOptions = getAddResultRowApiV1CampaignsCampaignIdResultsPostMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    /**
- * Re-resolve all non-override measurements in a DRAFT campaign.
- * @summary Refresh Campaign
- */
-export const refreshCampaignApiV1CampaignsCampaignIdRefreshPost = (
-    campaignId: string,
- signal?: AbortSignal
-) => {
-      
-      
-      return customInstance<CampaignResponse>(
-      {url: `/api/v1/campaigns/${campaignId}/refresh`, method: 'POST', signal
-    },
-      );
-    }
-  
-
-
-export const getRefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, TError,{campaignId: string}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, TError,{campaignId: string}, TContext> => {
-
-const mutationKey = ['refreshCampaignApiV1CampaignsCampaignIdRefreshPost'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, {campaignId: string}> = (props) => {
-          const {campaignId} = props ?? {};
-
-          return  refreshCampaignApiV1CampaignsCampaignIdRefreshPost(campaignId,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationResult = NonNullable<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>>
-    
-    export type RefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationError = HTTPValidationError
-
-    /**
- * @summary Refresh Campaign
- */
-export const useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>, TError,{campaignId: string}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof refreshCampaignApiV1CampaignsCampaignIdRefreshPost>>,
-        TError,
-        {campaignId: string},
-        TContext
-      > => {
-
-      const mutationOptions = getRefreshCampaignApiV1CampaignsCampaignIdRefreshPostMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    /**
- * Lock a DRAFT campaign and optionally publish a frozen Collection.
- * @summary Close Campaign
- */
-export const closeCampaignApiV1CampaignsCampaignIdClosePost = (
-    campaignId: string,
-    closeCampaignRequest: CloseCampaignRequest,
- signal?: AbortSignal
-) => {
-      
-      
-      return customInstance<CampaignResponse>(
-      {url: `/api/v1/campaigns/${campaignId}/close`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: closeCampaignRequest, signal
-    },
-      );
-    }
-  
-
-
-export const getCloseCampaignApiV1CampaignsCampaignIdClosePostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, TError,{campaignId: string;data: CloseCampaignRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, TError,{campaignId: string;data: CloseCampaignRequest}, TContext> => {
-
-const mutationKey = ['closeCampaignApiV1CampaignsCampaignIdClosePost'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, {campaignId: string;data: CloseCampaignRequest}> = (props) => {
-          const {campaignId,data} = props ?? {};
-
-          return  closeCampaignApiV1CampaignsCampaignIdClosePost(campaignId,data,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CloseCampaignApiV1CampaignsCampaignIdClosePostMutationResult = NonNullable<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>>
-    export type CloseCampaignApiV1CampaignsCampaignIdClosePostMutationBody = CloseCampaignRequest
-    export type CloseCampaignApiV1CampaignsCampaignIdClosePostMutationError = HTTPValidationError
-
-    /**
- * @summary Close Campaign
- */
-export const useCloseCampaignApiV1CampaignsCampaignIdClosePost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>, TError,{campaignId: string;data: CloseCampaignRequest}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof closeCampaignApiV1CampaignsCampaignIdClosePost>>,
-        TError,
-        {campaignId: string;data: CloseCampaignRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getCloseCampaignApiV1CampaignsCampaignIdClosePostMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    /**
- * Mark a closed campaign as superseded by a newer one.
-
-``campaign_id`` is the OLD (closed) campaign to supersede.
-``body.new_campaign_id`` is the NEW campaign that replaces it.
-Returns the old campaign (now SUPERSEDED).
- * @summary Supersede Campaign
- */
-export const supersedeCampaignApiV1CampaignsCampaignIdSupersedePost = (
-    campaignId: string,
-    supersedeRequest: SupersedeRequest,
- signal?: AbortSignal
-) => {
-      
-      
-      return customInstance<CampaignResponse>(
-      {url: `/api/v1/campaigns/${campaignId}/supersede`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: supersedeRequest, signal
-    },
-      );
-    }
-  
-
-
-export const getSupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, TError,{campaignId: string;data: SupersedeRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, TError,{campaignId: string;data: SupersedeRequest}, TContext> => {
-
-const mutationKey = ['supersedeCampaignApiV1CampaignsCampaignIdSupersedePost'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, {campaignId: string;data: SupersedeRequest}> = (props) => {
-          const {campaignId,data} = props ?? {};
-
-          return  supersedeCampaignApiV1CampaignsCampaignIdSupersedePost(campaignId,data,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationResult = NonNullable<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>>
-    export type SupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationBody = SupersedeRequest
-    export type SupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationError = HTTPValidationError
-
-    /**
- * @summary Supersede Campaign
- */
-export const useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>, TError,{campaignId: string;data: SupersedeRequest}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof supersedeCampaignApiV1CampaignsCampaignIdSupersedePost>>,
-        TError,
-        {campaignId: string;data: SupersedeRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getSupersedeCampaignApiV1CampaignsCampaignIdSupersedePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

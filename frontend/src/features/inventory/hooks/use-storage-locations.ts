@@ -10,11 +10,13 @@ const STORAGE_KEY = ["storage-locations"];
 export function useStorageLocations() {
   return useQuery({
     queryKey: STORAGE_KEY,
-    queryFn: () =>
-      customInstance<StorageLocation[]>({
+    queryFn: async () => {
+      const resp = await customInstance<StorageLocation[] | { items: StorageLocation[] }>({
         url: "/api/v1/storage-locations",
         method: "GET",
-      }),
+      });
+      return Array.isArray(resp) ? resp : resp.items;
+    },
   });
 }
 
