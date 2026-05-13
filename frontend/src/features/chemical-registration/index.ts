@@ -20,3 +20,5 @@ export type {
 
 // Query key constants (exported for cross-feature cache invalidation)
 export { MOLECULES_KEY } from "./hooks/query-keys";
+
+export { useMoleculesByIds } from "./hooks/use-molecules-by-ids";

@@ -19,7 +19,7 @@ import { showError } from "@/shared/lib/toast";
 import { MemberName } from "@/shared/components/entity-name";
 import type { CampaignResponse } from "../../types";
 import { CampaignStatusChip } from "../campaign-status-chip";
-import { campaignKeys } from "../../lib/hooks";
+import { campaignKeys } from "../../hooks/use-campaigns";
 
 interface HeaderStripProps {
   campaign: CampaignResponse;

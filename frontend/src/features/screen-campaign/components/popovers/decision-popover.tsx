@@ -20,7 +20,7 @@ import { Button } from "@/shared/components/ui/button";
 import { showError } from "@/shared/lib/toast";
 
 import { useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../../lib/hooks";
+import { campaignKeys } from "../../hooks/use-campaigns";
 import type { CampaignResultResponse } from "../../types";
 
 type Decision = "selected" | "deferred" | "rejected";

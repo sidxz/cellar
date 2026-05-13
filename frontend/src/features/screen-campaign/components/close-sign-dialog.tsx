@@ -32,7 +32,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Separator } from "@/shared/components/ui/separator";
 
 import { useCloseCampaignApiV1CampaignsCampaignIdClosePost } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys } from "../hooks/use-campaigns";
 import type { CampaignResponse } from "../types";
 
 // ── Component ─────────────────────────────────────────────────────────────────

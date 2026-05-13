@@ -32,7 +32,7 @@ import { useBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPat
 
 import type { CampaignResponse } from "../types";
 import { rowPassesFilters, type CampaignFilters } from "./campaign-filter-bar";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys } from "../hooks/use-campaigns";
 
 type Decision = "selected" | "deferred" | "rejected";
 

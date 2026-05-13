@@ -61,7 +61,7 @@ import {
   useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost,
 } from "@/shared/lib/api/campaigns/campaigns";
 
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys } from "../hooks/use-campaigns";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 

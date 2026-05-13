@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 
-import { useCampaignsByProject } from "../lib/hooks";
+import { useCampaigns } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { CampaignStatusChip } from "./campaign-status-chip";
@@ -32,7 +32,7 @@ interface CampaignListProps {
  * will be wired in Phase 8.
  */
 export function CampaignList({ projectId }: CampaignListProps) {
-  const { data, isLoading, error } = useCampaignsByProject(projectId);
+  const { data, isLoading, error } = useCampaigns(projectId);
   const { data: project } = useProject(projectId);
 
   useBreadcrumbTrail([

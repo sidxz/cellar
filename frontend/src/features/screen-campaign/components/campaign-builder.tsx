@@ -12,7 +12,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useCampaign, campaignKeys } from "../lib/hooks";
+import { useCampaign, campaignKeys } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { ResultsGridV2 } from "./grid/results-grid";

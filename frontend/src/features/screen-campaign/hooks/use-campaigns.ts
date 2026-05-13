@@ -14,7 +14,6 @@ import {
   listCampaignsApiV1CampaignsGet,
   getCampaignApiV1CampaignsCampaignIdGet,
 } from "@/shared/lib/api/campaigns/campaigns";
-import { listMoleculesApiV1MoleculesGet } from "@/shared/lib/api/molecules/molecules";
 import type { CampaignResponse } from "@/shared/lib/api/model";
 
 // ─── Query key factory ───────────────────────────────────────────────────────
@@ -29,20 +28,25 @@ export const campaignKeys = {
 // ─── List hook ───────────────────────────────────────────────────────────────
 
 /**
- * Fetches all campaigns for the given project (workspace-scoped automatically
- * by the auth middleware on the backend).
+ * Fetches all campaigns, optionally filtered to a given project.
+ * If `projectId` is provided the query is workspace-scoped to that project
+ * by the auth middleware on the backend.
  */
-export function useCampaignsByProject(
-  projectId: string,
+export function useCampaigns(
+  projectId?: string,
   options?: Partial<
     UseQueryOptions<CampaignResponse[], Error, CampaignResponse[]>
   >,
 ) {
   return useQuery({
-    queryKey: campaignKeys.byProject(projectId),
-    queryFn: () =>
-      listCampaignsApiV1CampaignsGet({ project_id: projectId }),
-    enabled: !!projectId,
+    queryKey: projectId ? campaignKeys.byProject(projectId) : campaignKeys.all,
+    queryFn: async () => {
+      const page = await listCampaignsApiV1CampaignsGet(
+        projectId ? { project_id: projectId } : {},
+      );
+      return page.items;
+    },
+    enabled: projectId !== undefined ? !!projectId : true,
     ...options,
   });
 }
@@ -63,21 +67,5 @@ export function useCampaign(
     queryFn: () => getCampaignApiV1CampaignsCampaignIdGet(campaignId),
     enabled: !!campaignId,
     ...options,
-  });
-}
-
-// ─── Bulk molecule lookup hook ───────────────────────────────────────────────
-
-/**
- * Bulk-fetches molecules by id list (workspace-scoped).
- * Uses GET /api/v1/molecules?ids=<csv>.
- * The query key is stable for the same sorted id set.
- */
-export function useMoleculesByIds(ids: string[]) {
-  const sortedKey = [...ids].sort().join(",");
-  return useQuery({
-    queryKey: ["molecules", "by-ids", sortedKey],
-    queryFn: () => listMoleculesApiV1MoleculesGet({ ids: sortedKey }),
-    enabled: ids.length > 0,
   });
 }

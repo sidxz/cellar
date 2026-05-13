@@ -48,7 +48,7 @@ import {
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys } from "../hooks/use-campaigns";
 import type { CampaignChannelResponse } from "../types";
 
 // ── Schema ────────────────────────────────────────────────────────────────────

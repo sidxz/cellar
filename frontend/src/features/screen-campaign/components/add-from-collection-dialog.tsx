@@ -29,7 +29,7 @@ import {
 } from "@/shared/components/ui/select";
 import { useCollections } from "@/features/research-organization/hooks/use-collections";
 import { useAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys } from "../hooks/use-campaigns";
 import { showSuccess, showError } from "@/shared/lib/toast";
 
 interface AddFromCollectionDialogProps {

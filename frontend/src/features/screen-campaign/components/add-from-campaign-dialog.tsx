@@ -32,7 +32,7 @@ import {
 import {
   useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost,
 } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys, useCampaignsByProject } from "../lib/hooks";
+import { campaignKeys, useCampaigns } from "../hooks/use-campaigns";
 import { showSuccess, showError } from "@/shared/lib/toast";
 
 const DECISION_OPTIONS = [
@@ -60,7 +60,7 @@ export function AddFromCampaignDialog({
   const [description, setDescription] = useState("");
 
   const { data: allCampaigns, isLoading: campaignsLoading } =
-    useCampaignsByProject(projectId, { enabled: open });
+    useCampaigns(projectId, { enabled: open });
 
   // Exclude current campaign from picker
   const sourceCampaigns = allCampaigns?.filter((c) => c.id !== campaignId) ?? [];

@@ -46,8 +46,8 @@ import {
   type CurveParams,
 } from "@/features/screening-assay/types";
 
-import { useMoleculesByIds } from "../../lib/hooks";
-import { useCampaignCurves } from "../../lib/use-campaign-curves";
+import { useMoleculesByIds } from "@/features/chemical-registration";
+import { useCampaignCurves } from "../../hooks/use-campaign-curves";
 import { OverrideModal } from "../override-modal";
 import {
   type CampaignFilters,

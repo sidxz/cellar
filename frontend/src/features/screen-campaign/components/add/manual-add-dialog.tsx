@@ -23,7 +23,7 @@ import { Button } from "@/shared/components/ui/button";
 
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import { useAddResultRowApiV1CampaignsCampaignIdResultsPost } from "@/shared/lib/api/campaigns/campaigns";
-import { campaignKeys } from "../../lib/hooks";
+import { campaignKeys } from "../../hooks/use-campaigns";
 
 export interface ManualAddDialogProps {
   open: boolean;

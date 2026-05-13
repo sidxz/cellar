@@ -31,7 +31,7 @@ import {
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 
-import { campaignKeys } from "../lib/hooks";
+import { campaignKeys } from "../hooks/use-campaigns";
 import type {
   CampaignResultResponse,
   CampaignChannelResponse,

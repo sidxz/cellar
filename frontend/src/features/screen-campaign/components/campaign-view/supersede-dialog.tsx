@@ -29,7 +29,7 @@ import { Separator } from "@/shared/components/ui/separator";
 
 import { CreateCampaignDialog } from "../create-campaign-dialog";
 import { CampaignStatusChip } from "../campaign-status-chip";
-import { campaignKeys } from "../../lib/hooks";
+import { campaignKeys } from "../../hooks/use-campaigns";
 
 import {
   useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost,
@@ -68,8 +68,8 @@ export function SupersedeDialog({
     {
       query: {
         enabled: markStep,
-        select: (list) =>
-          list.filter(
+        select: (page) =>
+          page.items.filter(
             (c) => c.status === "closed" && c.id !== campaign.id,
           ),
       },
