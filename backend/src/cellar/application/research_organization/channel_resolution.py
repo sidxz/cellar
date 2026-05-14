@@ -87,6 +87,12 @@ class ResolvedCandidate:
     #: persisted with the fit so an intercept-keyed HitCriterion can read
     #: the right value (e.g. EC90 instead of the primary EC50).
     intercept_values: list[dict] | None = None
+    # Carried into the curve_snapshot so the campaign expand-dialog renders
+    # via the same <DoseResponseChart> as protocol-runs / search.
+    curve_type: str | None = None
+    curve_confidence_interval_low: float | None = None
+    curve_confidence_interval_high: float | None = None
+    curve_fit_quality_warnings: list[str] | None = None
 
 
 @runtime_checkable
@@ -274,6 +280,21 @@ def _build_curve_snapshot(c: ResolvedCandidate) -> dict | None:
     excluded = _condense_curve_points(c.curve_excluded_points)
     if excluded:
         snap["excluded_points"] = excluded
+    # Extra fields the FE <DoseResponseChart> reads. Without these the
+    # campaign's expand-dialog would lose the secondary intercept chips,
+    # CI strip, and fit-warning badges that the search + protocol-runs
+    # surfaces already show. None values are preserved on the wire so the
+    # FE can distinguish "not yet fit" from "0".
+    if c.curve_type is not None:
+        snap["curve_type"] = c.curve_type
+    if c.curve_confidence_interval_low is not None:
+        snap["confidence_interval_low"] = c.curve_confidence_interval_low
+    if c.curve_confidence_interval_high is not None:
+        snap["confidence_interval_high"] = c.curve_confidence_interval_high
+    if c.intercept_values:
+        snap["intercept_values"] = c.intercept_values
+    if c.curve_fit_quality_warnings:
+        snap["fit_quality_warnings"] = c.curve_fit_quality_warnings
     return snap
 
 

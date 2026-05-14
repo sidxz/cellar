@@ -114,10 +114,14 @@ class SQLAlchemyChannelResolutionQuery:
                 DoseResponseCurveModel.id,
                 DoseResponseCurveModel.fitted_value,
                 DoseResponseCurveModel.curve_class,
+                DoseResponseCurveModel.curve_type,
                 DoseResponseCurveModel.top,
                 DoseResponseCurveModel.bottom,
                 DoseResponseCurveModel.hill_slope,
                 DoseResponseCurveModel.r_squared,
+                DoseResponseCurveModel.confidence_interval_low,
+                DoseResponseCurveModel.confidence_interval_high,
+                DoseResponseCurveModel.fit_quality_warnings,
                 DoseResponseCurveModel.raw_data,
                 DoseResponseCurveModel.excluded_points,
                 DoseResponseCurveModel.intercept_values,
@@ -171,6 +175,10 @@ class SQLAlchemyChannelResolutionQuery:
                 curve_raw_data=row.raw_data,
                 curve_excluded_points=row.excluded_points,
                 intercept_values=row.intercept_values,
+                curve_type=row.curve_type,
+                curve_confidence_interval_low=row.confidence_interval_low,
+                curve_confidence_interval_high=row.confidence_interval_high,
+                curve_fit_quality_warnings=row.fit_quality_warnings,
             )
             for row in rows
         ]
@@ -200,10 +208,14 @@ class SQLAlchemyChannelResolutionQuery:
                     DoseResponseCurveModel.molecule_id,
                     DoseResponseCurveModel.fitted_value,
                     DoseResponseCurveModel.curve_class,
+                    DoseResponseCurveModel.curve_type,
                     DoseResponseCurveModel.top,
                     DoseResponseCurveModel.bottom,
                     DoseResponseCurveModel.hill_slope,
                     DoseResponseCurveModel.r_squared,
+                    DoseResponseCurveModel.confidence_interval_low,
+                    DoseResponseCurveModel.confidence_interval_high,
+                    DoseResponseCurveModel.fit_quality_warnings,
                     DoseResponseCurveModel.raw_data,
                     DoseResponseCurveModel.excluded_points,
                     DoseResponseCurveModel.intercept_values,
@@ -291,6 +303,10 @@ class SQLAlchemyChannelResolutionQuery:
                     curve_raw_data=row.raw_data,
                     curve_excluded_points=row.excluded_points,
                     intercept_values=row.intercept_values,
+                    curve_type=row.curve_type,
+                    curve_confidence_interval_low=row.confidence_interval_low,
+                    curve_confidence_interval_high=row.confidence_interval_high,
+                    curve_fit_quality_warnings=row.fit_quality_warnings,
                 )
             else:
                 qualifier_str = row.value_qualifier or "="

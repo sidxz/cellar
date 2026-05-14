@@ -98,6 +98,23 @@ function curveSnapshotFromMeasurement(
     raw_data:
       (live.raw_data as Array<{ x: number; y: number }> | null | undefined) ??
       null,
+    // The four chart fields. Pre-2026-05-14 snapshots didn't carry these,
+    // so for measurements that fall back to the live FK we surface them
+    // here. <DoseResponseChart>'s SummaryCard reads these to render the
+    // intercept chip strip + CI strip + fit-warning badges.
+    curve_type: (live as unknown as { curve_type?: string | null }).curve_type ?? null,
+    confidence_interval_low:
+      (live as unknown as { confidence_interval_low?: number | null })
+        .confidence_interval_low ?? null,
+    confidence_interval_high:
+      (live as unknown as { confidence_interval_high?: number | null })
+        .confidence_interval_high ?? null,
+    intercept_values:
+      (live as unknown as { intercept_values?: Array<Record<string, unknown>> | null })
+        .intercept_values ?? null,
+    fit_quality_warnings:
+      (live as unknown as { fit_quality_warnings?: string[] | null })
+        .fit_quality_warnings ?? null,
   };
 }
 

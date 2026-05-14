@@ -3,25 +3,32 @@
 /**
  * CurveExpandDialog — click-to-expand for the campaign grid's curve cell.
  *
- * Read-only modal that renders the same dose-response figure used by every
- * other surface (protocol Activity tab, search results, run DR, sparkline).
- * Delegates the actual drawing to <DoseResponseFigure size="expand" />
- * so a closed-campaign curve looks bit-identical to its protocol-tab
- * counterpart. Modal supplies the chrome (molecule + channel label,
- * curve-class badge, IC50 / R² / Hill / Top / Bottom strip) around it.
+ * Read-only dialog that renders via the same `<DoseResponseChart
+ * isInteractive={false}>` that protocol-runs and search use, so a
+ * closed-campaign curve looks bit-identical to its protocol-tab
+ * counterpart. The chart's SummaryCard already supplies the molecule /
+ * intercept label, CI strip, secondary intercept chips, and
+ * fit-quality badges — this file just supplies the dialog chrome.
+ *
+ * The campaign measurement carries a frozen `curve_snapshot` JSONB; the
+ * `snapshotToDoseResponseCurve` adapter widens it to the chart's
+ * expected `DoseResponseCurve` shape (with placeholder UUIDs for the
+ * FK fields the chart never reads). Pre-2026-05-14 snapshots that
+ * don't carry curve_type / intercept_values / CI / warnings still
+ * render — the chart degrades gracefully (no chip strip, no CI strip,
+ * legacy curve_type label).
  */
 
+import { useMemo } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
-import {
-  DoseResponseFigure,
-  type CurveSnapshot,
-} from "@/features/screening-assay/components/dose-response-figure";
+import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
+import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import { snapshotToDoseResponseCurve } from "../../lib/snapshot-adapter";
 
 export interface ExpandedCurve extends CurveSnapshot {
   unit?: string | null;
@@ -36,21 +43,16 @@ interface Props {
 }
 
 export function CurveExpandDialog({ data, onOpenChange }: Props) {
-  if (!data) return null;
+  const adapted = useMemo(() => {
+    if (!data) return null;
+    return snapshotToDoseResponseCurve(data, {
+      moleculeLabel: data.moleculeLabel,
+      channelLabel: data.channelLabel,
+      unit: data.unit ?? null,
+    });
+  }, [data]);
 
-  const showFitted = Number.isFinite(data.fitted_value) && data.fitted_value > 0;
-  // `channelLabel` is the channel's chemist-facing name ("Resazurin EC50",
-  // "EC90", "Caco-2 P_app"). Anything past the last whitespace is the
-  // intercept label for DR channels post-Surface-#1; the original full
-  // label is fine when there's no space. Cheap heuristic that beats the
-  // pre-fix hardcoded "IC50" by miles. The full DRY pass (snapshot
-  // carries intercept_values + curve_type, dialog renders via
-  // DoseResponseChart with isInteractive=false) is a separate task that
-  // also needs a backend migration to round-trip the missing fields.
-  const interceptLabel = (() => {
-    const parts = data.channelLabel.trim().split(/\s+/);
-    return parts.length > 1 ? parts[parts.length - 1] : data.channelLabel;
-  })();
+  if (!data || !adapted) return null;
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -62,41 +64,9 @@ export function CurveExpandDialog({ data, onOpenChange }: Props) {
             <span className="text-muted-foreground font-normal">
               {data.channelLabel}
             </span>
-            <CurveClassBadge
-              curveClass={data.curve_class ?? null}
-              renderNullAs="nothing"
-              className="ml-1"
-            />
           </DialogTitle>
         </DialogHeader>
-
-        <div className="flex items-baseline gap-4 text-sm font-mono">
-          {showFitted && (
-            <span>
-              <span className="text-muted-foreground">{interceptLabel}</span>{" "}
-              {data.fitted_value.toPrecision(4)}
-              {data.unit ? ` ${data.unit}` : ""}
-            </span>
-          )}
-          {data.r_squared != null && Number.isFinite(data.r_squared) && (
-            <span>
-              <span className="text-muted-foreground">R²</span>{" "}
-              {data.r_squared.toFixed(3)}
-            </span>
-          )}
-          <span>
-            <span className="text-muted-foreground">Hill</span>{" "}
-            {data.hill_slope.toFixed(2)}
-          </span>
-          <span>
-            <span className="text-muted-foreground">Top/Bot</span>{" "}
-            {data.top.toFixed(1)} / {data.bottom.toFixed(1)}
-          </span>
-        </div>
-
-        <div className="flex justify-center pt-2">
-          <DoseResponseFigure curve={data} size="expand" unit={data.unit ?? null} />
-        </div>
+        <DoseResponseChart curves={[adapted]} isInteractive={false} />
       </DialogContent>
     </Dialog>
   );

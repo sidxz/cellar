@@ -48,6 +48,21 @@ export interface CurveSnapshot {
   curve_class?: string | null;
   raw_data?: CurvePoint[] | null;
   excluded_points?: CurvePoint[] | null;
+  /** Descriptive curve type ("ec50", "ic50", …). Post-033 it's not
+   *  identity-bearing (readout_definition_id is); only used by the
+   *  shared <DoseResponseChart> SummaryCard's legacy-fallback label. */
+  curve_type?: string | null;
+  /** Bounds of the primary intercept's CI strip in the chart's
+   *  SummaryCard. Optional — pre-Hill-fit or aggregate snapshots omit. */
+  confidence_interval_low?: number | null;
+  confidence_interval_high?: number | null;
+  /** Per-spec intercepts derived from the same Hill fit (EC50 + EC90 …).
+   *  Drives the secondary chip strip and the headline label via
+   *  `interceptLabel(spec)` when present. Legacy snapshots omit. */
+  intercept_values?: Array<Record<string, unknown>> | null;
+  /** Machine-readable fit-quality codes (`"ec50_at_bound"`, …). Rendered
+   *  as amber badges in the SummaryCard. */
+  fit_quality_warnings?: string[] | null;
 }
 
 export type FigureSize = "sparkline" | "cell" | "expand" | "full";

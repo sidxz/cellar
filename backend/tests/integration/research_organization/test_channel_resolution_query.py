@@ -239,3 +239,157 @@ async def test_empty_candidates_for_readout_source(session_factory):
         molecule_id=uuid.uuid4(),
     )
     assert candidates == []
+
+
+@pytest.mark.asyncio
+async def test_curve_candidate_carries_chart_fields_into_snapshot(session_factory):
+    """The curve_snapshot frozen on a CampaignMeasurement must carry the
+    fields <DoseResponseChart> needs (curve_type, intercept_values, CI,
+    fit warnings) — without them the campaign expand-dialog can't render
+    via the same component as protocol-runs and search.
+    """
+    import json
+
+    from cellar.application.research_organization.channel_resolution import (
+        _build_curve_snapshot,
+    )
+    from cellar.domain.research_organization.campaign_channel import CampaignChannel
+    from cellar.domain.research_organization.enums import (
+        ChannelSourceKind,
+        QualifierHandling,
+        SelectionRule,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
+        SQLAlchemyChannelResolutionQuery,
+    )
+
+    ws_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+    user_id = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")
+    protocol_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    molecule_id = uuid.uuid4()
+    batch_id = uuid.uuid4()
+    rd_id = uuid.uuid4()
+    curve_id = uuid.uuid4()
+
+    intercept_values = [
+        {
+            "spec": {"kind": "ec", "level": 50.0, "basis": "absolute"},
+            "value": 4.5,
+            "at_bound": False,
+            "confidence_interval_low": 3.8,
+            "confidence_interval_high": 5.3,
+        },
+        {
+            "spec": {"kind": "ec", "level": 90.0, "basis": "absolute"},
+            "value": 41.2,
+            "at_bound": False,
+        },
+    ]
+    fit_warnings = ["wide_confidence_interval"]
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT INTO organizations "
+                "(id, workspace_id, name, org_type, is_active, version) "
+                "VALUES (:id, :ws, 'Test Org', 'internal', true, 1) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {"id": org_id, "ws": ws_id},
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO protocols "
+                "(id, workspace_id, name, protocol_type, status, "
+                "is_locked, dose_unit, pos_control_signal, version, "
+                "protocol_version, created_by) "
+                "VALUES (:id, :ws, 'Resz', 'cell_based', 'active', "
+                "false, 'uM', 'high', 1, 1, :user)"
+            ),
+            {"id": protocol_id, "ws": ws_id, "user": user_id},
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO readout_definitions "
+                "(id, protocol_id, name, data_type, display_order, "
+                "is_calculated) "
+                "VALUES (:id, :proto, 'Resazurin', 'dose_response', 0, false)"
+            ),
+            {"id": rd_id, "proto": protocol_id},
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO runs "
+                "(id, workspace_id, protocol_id, run_date, operator, "
+                "status, is_locked, version, notes) "
+                "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', "
+                "false, 1, NULL)"
+            ),
+            {
+                "id": run_id,
+                "ws": ws_id,
+                "proto": protocol_id,
+                "run_date": date.today(),
+                "user": user_id,
+            },
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO dose_response_curves "
+                "(id, workspace_id, molecule_id, batch_id, protocol_id, "
+                "run_id, readout_definition_id, curve_type, fitted_value, "
+                "hill_slope, top, bottom, r_squared, num_points, "
+                "confidence_interval_low, confidence_interval_high, "
+                "fit_quality_warnings, intercept_values) "
+                "VALUES (:id, :ws, :mol, :batch, :proto, :run, :rd, "
+                "'ec50', 4.5, 1.2, 95.0, -1.0, 0.92, 8, "
+                ":ci_lo, :ci_hi, :warns, :ivs)"
+            ),
+            {
+                "id": curve_id,
+                "ws": ws_id,
+                "mol": molecule_id,
+                "batch": batch_id,
+                "proto": protocol_id,
+                "run": run_id,
+                "rd": rd_id,
+                "ci_lo": 3.8,
+                "ci_hi": 5.3,
+                "warns": json.dumps(fit_warnings),
+                "ivs": json.dumps(intercept_values),
+            },
+        )
+
+    query = SQLAlchemyChannelResolutionQuery(session_factory)
+    channel = CampaignChannel(
+        campaign_id=uuid.uuid4(),
+        label="Resazurin EC50",
+        protocol_id=protocol_id,
+        readout_definition_id=rd_id,
+        source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=0,
+    )
+
+    candidates = await query.fetch_candidates(
+        workspace_id=ws_id, channel=channel, molecule_id=molecule_id
+    )
+    assert len(candidates) == 1
+    cand = candidates[0]
+
+    assert cand.curve_type == "ec50"
+    assert cand.curve_confidence_interval_low == pytest.approx(3.8)
+    assert cand.curve_confidence_interval_high == pytest.approx(5.3)
+    assert cand.curve_fit_quality_warnings == fit_warnings
+    assert cand.intercept_values == intercept_values
+
+    snap = _build_curve_snapshot(cand)
+    assert snap is not None
+    assert snap["curve_type"] == "ec50"
+    assert snap["confidence_interval_low"] == pytest.approx(3.8)
+    assert snap["confidence_interval_high"] == pytest.approx(5.3)
+    assert snap["intercept_values"] == intercept_values
+    assert snap["fit_quality_warnings"] == fit_warnings
