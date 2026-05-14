@@ -9,6 +9,9 @@ from fastapi import APIRouter
 from cellar.application.research_organization.add_campaign_channel import (
     AddCampaignChannelCommand,
 )
+from cellar.application.research_organization.mirror_protocol_channels import (
+    MirrorProtocolChannelsCommand,
+)
 from cellar.application.research_organization.remove_campaign_channel import (
     RemoveCampaignChannelCommand,
 )
@@ -25,6 +28,7 @@ from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.interface.dependencies import (
     AddCampaignChannelDep,
     AuthDep,
+    MirrorProtocolChannelsDep,
     RemoveCampaignChannelDep,
     UpdateCampaignChannelDep,
 )
@@ -32,6 +36,8 @@ from cellar.interface.error_handlers import result_to_response
 from cellar.interface.routes._campaign_dtos import (
     AddChannelRequest,
     CampaignResponse,
+    MirrorProtocolOutcomeResponse,
+    MirrorProtocolRequest,
     UpdateChannelRequest,
 )
 
@@ -105,6 +111,39 @@ async def update_campaign_channel(
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
+
+
+@router.post(
+    "/{campaign_id}/channels/mirror-protocol",
+    response_model=MirrorProtocolOutcomeResponse,
+    status_code=200,
+)
+async def mirror_protocol_channels(
+    campaign_id: uuid.UUID,
+    body: MirrorProtocolRequest,
+    auth: AuthDep,
+    uc: MirrorProtocolChannelsDep,
+) -> MirrorProtocolOutcomeResponse:
+    """Bulk-create channels for every readout in a protocol.
+
+    Chemist's "mirror" shortcut: one click instead of one popover per
+    readout. Multi-intercept DR readouts emit one channel per intercept
+    (matches the add-from-runs split shipped in commit #14). Idempotent:
+    existing channels with a matching key are silently skipped, so the
+    chemist can re-mirror after a protocol intercept change without
+    duplicating columns.
+    """
+    cmd = MirrorProtocolChannelsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        protocol_id=body.protocol_id,
+    )
+    outcome = result_to_response(await uc(cmd, auth=auth))
+    return MirrorProtocolOutcomeResponse(
+        channels_created=outcome.channels_created,
+        channels_skipped=outcome.channels_skipped,
+        campaign=CampaignResponse.from_domain(outcome.campaign),
+    )
 
 
 @router.delete("/{campaign_id}/channels/{channel_id}", response_model=CampaignResponse)

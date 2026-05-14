@@ -227,6 +227,18 @@ class CloseCampaignRequest(BaseModel):
     publishes_collection: bool | None = None
 
 
+class MirrorProtocolRequest(BaseModel):
+    protocol_id: uuid.UUID
+
+
+class MirrorProtocolOutcomeResponse(BaseModel):
+    """Counts the bulk-create produced + the up-to-date campaign."""
+
+    channels_created: int
+    channels_skipped: int
+    campaign: CampaignResponse
+
+
 class SupersedeRequest(BaseModel):
     new_campaign_id: uuid.UUID
 

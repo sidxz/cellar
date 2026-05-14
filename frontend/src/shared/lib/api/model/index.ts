@@ -623,6 +623,8 @@ export * from './mergeImpactCategoryResponse';
 export * from './mergeImpactCategoryResponseItemsItem';
 export * from './mergeImpactResponse';
 export * from './mergeReason';
+export * from './mirrorProtocolOutcomeResponse';
+export * from './mirrorProtocolRequest';
 export * from './moleculeActivityDetailResponse';
 export * from './moleculeReferenceBody';
 export * from './moleculeResponse';

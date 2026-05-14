@@ -74,6 +74,9 @@ from cellar.application.research_organization.recompute_channel import Recompute
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
 )
+from cellar.application.research_organization.mirror_protocol_channels import (
+    MirrorProtocolChannels,
+)
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.set_result_decision import SetResultDecision
@@ -139,6 +142,7 @@ __all__ = [
     "PreviewRunImportDep",
     "AddCampaignChannelDep",
     "UpdateCampaignChannelDep",
+    "MirrorProtocolChannelsDep",
     "RemoveCampaignChannelDep",
     "SetResultDecisionDep",
     "BulkSetResultDecisionsDep",
@@ -233,6 +237,9 @@ PreviewRunImportDep = Annotated[PreviewRunImport, Depends(_get_use_case(PreviewR
 AddCampaignChannelDep = Annotated[AddCampaignChannel, Depends(_get_use_case(AddCampaignChannel))]
 UpdateCampaignChannelDep = Annotated[
     UpdateCampaignChannel, Depends(_get_use_case(UpdateCampaignChannel))
+]
+MirrorProtocolChannelsDep = Annotated[
+    MirrorProtocolChannels, Depends(_get_use_case(MirrorProtocolChannels))
 ]
 RemoveCampaignChannelDep = Annotated[
     RemoveCampaignChannel, Depends(_get_use_case(RemoveCampaignChannel))

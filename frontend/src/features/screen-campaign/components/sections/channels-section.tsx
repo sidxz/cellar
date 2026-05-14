@@ -10,16 +10,29 @@
  */
 
 import { useState } from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Copy, MoreHorizontal, Plus } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/shared/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { Label } from "@/shared/components/ui/label";
+import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import { useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost } from "@/shared/lib/api/campaigns/campaigns";
+import { showError, showSuccess } from "@/shared/lib/toast";
 import type { CampaignResponse, CampaignChannelResponse } from "../../types";
 import { ChannelPopoverForm, parseHitThreshold } from "../channel-popover";
+import { campaignKeys } from "../../hooks/use-campaigns";
 import {
   interceptKeyLabel,
   narrowInterceptKey,
@@ -58,24 +71,27 @@ export function ChannelsSection({
       <div className="mb-2 flex items-center justify-between">
         <h2 className={SECTION_HEADING}>Channels</h2>
         {!readOnly && (
-          <Popover open={addOpen} onOpenChange={setAddOpen}>
-            <PopoverTrigger asChild>
-              <button type="button" className={ADD_PILL}>
-                <Plus className="h-3 w-3" /> Channel
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
-            >
-              <h4 className="text-sm font-semibold mb-3">Add channel</h4>
-              <ChannelPopoverForm
-                campaignId={campaign.id}
-                projectId={projectId}
-                onClose={() => setAddOpen(false)}
-              />
-            </PopoverContent>
-          </Popover>
+          <div className="flex items-center gap-1.5">
+            <MirrorProtocolPopover campaignId={campaign.id} projectId={projectId} />
+            <Popover open={addOpen} onOpenChange={setAddOpen}>
+              <PopoverTrigger asChild>
+                <button type="button" className={ADD_PILL}>
+                  <Plus className="h-3 w-3" /> Channel
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+              >
+                <h4 className="text-sm font-semibold mb-3">Add channel</h4>
+                <ChannelPopoverForm
+                  campaignId={campaign.id}
+                  projectId={projectId}
+                  onClose={() => setAddOpen(false)}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         )}
       </div>
 
@@ -186,5 +202,116 @@ function ChannelRow({
         </Popover>
       )}
     </li>
+  );
+}
+
+// ── MirrorProtocolPopover ─────────────────────────────────────────────────────
+
+/**
+ * One-click shortcut to bulk-create channels mirroring a protocol's readouts.
+ *
+ * Backend endpoint POST /channels/mirror-protocol does the iteration
+ * (multi-intercept DR readouts emit one channel per intercept, see commit
+ * #14's add-from-runs split). Idempotent: existing matching channels are
+ * skipped, so re-mirror after a protocol edit doesn't duplicate columns.
+ */
+function MirrorProtocolPopover({
+  campaignId,
+  projectId,
+}: {
+  campaignId: string;
+  projectId: string;
+}) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [protocolId, setProtocolId] = useState<string>("");
+  const { data: protocols } = useProtocolSummaries([projectId]);
+
+  const mutation = useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost({
+    mutation: {
+      onSuccess: (data) => {
+        const created = data.channels_created;
+        const skipped = data.channels_skipped;
+        if (created === 0 && skipped === 0) {
+          showError("Protocol has no readouts to mirror");
+        } else if (created === 0) {
+          showSuccess(`No new channels — ${skipped} already mirrored`);
+        } else {
+          showSuccess(
+            skipped > 0
+              ? `Created ${created} channels (${skipped} already existed)`
+              : `Created ${created} channels`,
+          );
+        }
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        setOpen(false);
+        setProtocolId("");
+      },
+      onError: (err: unknown) => {
+        const msg =
+          err && typeof err === "object" && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to mirror protocol";
+        showError(msg);
+      },
+    },
+  });
+
+  const handleMirror = () => {
+    if (!protocolId) return;
+    mutation.mutate({ campaignId, data: { protocol_id: protocolId } });
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={ADD_PILL}>
+          <Copy className="h-3 w-3" /> Mirror protocol
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[340px] p-4 space-y-3">
+        <div>
+          <h4 className="text-sm font-semibold">Mirror protocol</h4>
+          <p className="text-xs text-muted-foreground mt-1">
+            Creates one channel per readout. Multi-intercept dose-response
+            readouts emit one channel per intercept (EC50, EC90, …). Existing
+            channels with a matching key are skipped.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Protocol</Label>
+          <Select value={protocolId} onValueChange={setProtocolId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select protocol..." />
+            </SelectTrigger>
+            <SelectContent>
+              {(protocols ?? []).map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleMirror}
+            disabled={!protocolId || mutation.isPending}
+          >
+            {mutation.isPending ? "Mirroring…" : "Mirror"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

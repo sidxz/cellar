@@ -39,6 +39,8 @@ import type {
   GetPublishedCampaignApiV1CampaignsCampaignIdPublishedGetParams,
   HTTPValidationError,
   ListCampaignsApiV1CampaignsGetParams,
+  MirrorProtocolOutcomeResponse,
+  MirrorProtocolRequest,
   OverrideCellRequest,
   PaginatedResponseCampaignResponse,
   PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet200,
@@ -1037,6 +1039,79 @@ export const useRemoveCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDe
       > => {
 
       const mutationOptions = getRemoveCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Bulk-create channels for every readout in a protocol.
+
+Chemist's "mirror" shortcut: one click instead of one popover per
+readout. Multi-intercept DR readouts emit one channel per intercept
+(matches the add-from-runs split shipped in commit #14). Idempotent:
+existing channels with a matching key are silently skipped, so the
+chemist can re-mirror after a protocol intercept change without
+duplicating columns.
+ * @summary Mirror Protocol Channels
+ */
+export const mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost = (
+    campaignId: string,
+    mirrorProtocolRequest: MirrorProtocolRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<MirrorProtocolOutcomeResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/channels/mirror-protocol`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: mirrorProtocolRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost>>, TError,{campaignId: string;data: MirrorProtocolRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost>>, TError,{campaignId: string;data: MirrorProtocolRequest}, TContext> => {
+
+const mutationKey = ['mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost>>, {campaignId: string;data: MirrorProtocolRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPostMutationResult = NonNullable<Awaited<ReturnType<typeof mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost>>>
+    export type MirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPostMutationBody = MirrorProtocolRequest
+    export type MirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Mirror Protocol Channels
+ */
+export const useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost>>, TError,{campaignId: string;data: MirrorProtocolRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof mirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost>>,
+        TError,
+        {campaignId: string;data: MirrorProtocolRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

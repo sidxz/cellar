@@ -109,6 +109,9 @@ from cellar.application.research_organization.recompute_channel import Recompute
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
 )
+from cellar.application.research_organization.mirror_protocol_channels import (
+    MirrorProtocolChannels,
+)
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 
@@ -437,6 +440,16 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _mirror_protocol_channels(c: Container) -> MirrorProtocolChannels:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MirrorProtocolChannels(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
     def _set_decision(c: Container) -> SetResultDecision:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SetResultDecision(
@@ -559,6 +572,7 @@ def register_research_organization(container: Container) -> None:
     container.define(AddCampaignChannel, _add_channel)
     container.define(UpdateCampaignChannel, _update_channel)
     container.define(RemoveCampaignChannel, _remove_channel)
+    container.define(MirrorProtocolChannels, _mirror_protocol_channels)
     container.define(SetResultDecision, _set_decision)
     container.define(BulkSetResultDecisions, _bulk_set_decisions)
     container.define(OverrideResultCell, _override_cell)
