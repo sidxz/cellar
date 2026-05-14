@@ -257,6 +257,7 @@ class SQLAlchemyProtocolActivityReader:
                     DoseResponseCurveModel.fitted_value,
                     DoseResponseCurveModel.r_squared,
                     DoseResponseCurveModel.raw_data,
+                    DoseResponseCurveModel.intercept_values,
                     BatchModel.batch_number,
                     func.row_number()
                     .over(
@@ -286,6 +287,7 @@ class SQLAlchemyProtocolActivityReader:
                 BestParamsRow(
                     molecule_id=r.molecule_id,
                     readout_definition_id=r.readout_definition_id,
+                    intercept_values=r.intercept_values,
                     curve_class=r.curve_class,
                     hill_slope=r.hill_slope,
                     top=r.top,

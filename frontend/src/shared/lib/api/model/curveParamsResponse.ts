@@ -4,6 +4,7 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { InterceptValueResponse } from './interceptValueResponse';
 
 export interface CurveParamsResponse {
   hill_slope: number;
@@ -11,4 +12,5 @@ export interface CurveParamsResponse {
   bottom: number;
   fitted_value: number;
   r_squared: number;
+  intercept_values?: InterceptValueResponse[];
 }

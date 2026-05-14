@@ -223,6 +223,10 @@ class ProtocolActivityResponse(BaseModel):
     protocol_type: str
     readouts: list[ActivityValueResponse] = []
     best_curves: list[dict[str, Any]] = []
+    # Protocol-declared intercept specs (EC50, EC90, IC10, ...). The FE
+    # builds one column per spec inside this protocol's Card; matches
+    # cell values out of each row's ``intercept_values``.
+    intercepts: list[dict[str, Any]] = []
 
 
 class ActivitySummaryResponse(BaseModel):
@@ -239,6 +243,7 @@ class ActivitySummaryResponse(BaseModel):
                     protocol_name=p.protocol_name,
                     protocol_type=p.protocol_type,
                     best_curves=p.best_curves,
+                    intercepts=p.intercepts,
                 )
                 for p in summary.protocols
             ],

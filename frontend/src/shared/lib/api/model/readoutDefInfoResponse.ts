@@ -5,10 +5,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ReadoutDefInfoResponseUnit } from './readoutDefInfoResponseUnit';
+import type { InterceptSpecResponse } from './interceptSpecResponse';
 
 export interface ReadoutDefInfoResponse {
   name: string;
   data_type: string;
   unit?: ReadoutDefInfoResponseUnit;
   best_direction: string;
+  intercepts?: InterceptSpecResponse[];
 }

@@ -739,6 +739,7 @@ export * from './projectScopeStatsResponse';
 export * from './projectStatus';
 export * from './protocolActivityResponse';
 export * from './protocolActivityResponseBestCurvesItem';
+export * from './protocolActivityResponseInterceptsItem';
 export * from './protocolCurveGroupResponse';
 export * from './protocolCurveGroupResponseTargetId';
 export * from './protocolFormResponse';

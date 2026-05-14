@@ -30,10 +30,60 @@ VALID_STATUSES = ("completed", "approved")
 _AGGREGATABLE_DATA_TYPES = {"numeric", "dose_response"}
 
 
+def _hydrate_intercept_payloads(
+    raw: list[dict] | None,
+) -> list["InterceptValuePayload"]:
+    """Hydrate JSONB-serialized intercept_values into payload dataclasses.
+
+    The persistence layer stores intercept_values as a JSONB array of
+    ``{spec: {kind, level, basis, label}, value, ci_low, ci_high, at_bound}``
+    (see ``dose_response_curve_repository._serialize_intercept_values``).
+    """
+    if not raw:
+        return []
+    out: list[InterceptValuePayload] = []
+    for d in raw:
+        if not isinstance(d, dict):
+            continue
+        spec = d.get("spec") or {}
+        out.append(
+            InterceptValuePayload(
+                spec=InterceptSpecPayload(
+                    kind=str(spec.get("kind", "")),
+                    level=float(spec.get("level", 0)),
+                    basis=str(spec.get("basis", "relative_percent")),
+                    label=spec.get("label"),
+                ),
+                value=float(d.get("value", 0)),
+                confidence_interval_low=d.get("ci_low"),
+                confidence_interval_high=d.get("ci_high"),
+                at_bound=bool(d.get("at_bound", False)),
+            )
+        )
+    return out
+
+
 @dataclass(frozen=True, kw_only=True)
 class GetProtocolActivityQuery(Query):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class InterceptSpecPayload:
+    kind: str  # "ic" | "ec"
+    level: float
+    basis: str  # "relative_percent" | "absolute"
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class InterceptValuePayload:
+    spec: InterceptSpecPayload
+    value: float
+    confidence_interval_low: float | None = None
+    confidence_interval_high: float | None = None
+    at_bound: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +93,10 @@ class CurveParams:
     bottom: float
     fitted_value: float
     r_squared: float
+    # Per-spec intercepts (EC50, EC90, IC10, ...). Empty list on legacy
+    # curves; the FE column factory falls back to a single "Fitted Value"
+    # column when intercept_values is empty.
+    intercept_values: list[InterceptValuePayload] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -63,6 +117,10 @@ class ReadoutDefInfo:
     data_type: str
     unit: str | None
     best_direction: str  # "high" or "low"
+    # For ``dose_response`` readouts, the protocol's declared intercept
+    # specs (one per column on the activity grid). Empty for numeric
+    # readouts. Drives dynamic column headers — never hardcode "EC50".
+    intercepts: list[InterceptSpecPayload] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -130,6 +188,28 @@ class GetProtocolActivitySummary:
                 continue
 
             best_direction = "low" if rd.data_type == "dose_response" else "high"
+            intercept_specs: list[InterceptSpecPayload] = []
+            if rd.data_type == "dose_response":
+                cfg = rd.dose_response_config
+                # ``rd`` is a ``ProtocolRow.readout_definitions`` entry — the
+                # read-model carries the SA model, where dose_response_config
+                # is a JSONB dict (not the domain VO). Defensively handle both.
+                cfg_dict = cfg if isinstance(cfg, dict) else getattr(cfg, "__dict__", None)
+                raw_intercepts = (
+                    (cfg_dict or {}).get("intercepts") if isinstance(cfg_dict, dict) else None
+                )
+                if isinstance(raw_intercepts, list):
+                    for spec in raw_intercepts:
+                        if not isinstance(spec, dict):
+                            continue
+                        intercept_specs.append(
+                            InterceptSpecPayload(
+                                kind=str(spec.get("kind", "")),
+                                level=float(spec.get("level", 0)),
+                                basis=str(spec.get("basis", "relative_percent")),
+                                label=spec.get("label"),
+                            )
+                        )
 
             readout_defs.append(
                 ReadoutDefInfo(
@@ -138,6 +218,7 @@ class GetProtocolActivitySummary:
                     data_type=rd.data_type,
                     unit=rd.unit,
                     best_direction=best_direction,
+                    intercepts=intercept_specs,
                 )
             )
 
@@ -199,12 +280,14 @@ class GetProtocolActivitySummary:
                         curve_class = bp_row.curve_class
                         if best_batch_number is None:
                             best_batch_number = getattr(bp_row, "batch_number", None)
+                        intercepts_payload = _hydrate_intercept_payloads(bp_row.intercept_values)
                         curve_params = CurveParams(
                             hill_slope=float(bp_row.hill_slope),
                             top=float(bp_row.top),
                             bottom=float(bp_row.bottom),
                             fitted_value=float(bp_row.fitted_value),
                             r_squared=float(bp_row.r_squared),
+                            intercept_values=intercepts_payload,
                         )
                         # Extract condensed data points from raw_data JSONB
                         raw = bp_row.raw_data

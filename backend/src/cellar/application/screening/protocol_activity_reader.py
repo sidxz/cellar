@@ -73,6 +73,11 @@ class BestParamsRow:
     r_squared: float
     raw_data: list[dict] | None
     batch_number: str | None
+    # Per-spec intercepts (IC50/IC90/EC50/EC90/...) from the same Hill fit.
+    # None on legacy curves fit before multi-intercept support. The
+    # use-case layer flattens these into ``CurveParams.intercept_values``
+    # so each row of the activity grid can read EC90 alongside EC50.
+    intercept_values: list[dict] | None
 
 
 @dataclass(frozen=True)

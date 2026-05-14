@@ -62,9 +62,12 @@ class MoleculeActivityService:
         for curve in curves:
             proto_ids.add(curve.protocol_id)
 
-        # Fetch protocol metadata (single query) — used for both display
-        # name/type and dose_unit lookup for IC50 unit decoration.
+        # Fetch protocol metadata (single query) — used for display
+        # name/type, dose_unit (for IC50 unit decoration), and the
+        # protocol's declared intercept specs (per-Card column headers
+        # on the molecule activity tab).
         protocols_by_id: dict[uuid.UUID, tuple[str, str, str]] = {}
+        intercepts_by_proto: dict[uuid.UUID, list[dict[str, Any]]] = {}
         if proto_ids:
             protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
             for proto in protos:
@@ -73,11 +76,51 @@ class MoleculeActivityService:
                     proto.protocol_type.value,
                     proto.dose_unit.value,
                 )
+                # Pull intercept specs from the first DR readout-def on the
+                # protocol. Multi-DR (per-readout spec lists) is out of
+                # scope for this round — see Spec §"Multi-readout-def".
+                dr_def = next(
+                    (
+                        rd
+                        for rd in proto.readout_definitions
+                        if rd.dose_response_config is not None
+                    ),
+                    None,
+                )
+                if dr_def and dr_def.dose_response_config:
+                    raw_intercepts = dr_def.dose_response_config.intercepts or []
+                    intercepts_by_proto[proto.id] = [
+                        {
+                            "kind": spec.kind.value,
+                            "level": spec.level,
+                            "basis": spec.basis.value,
+                            "label": spec.label,
+                        }
+                        for spec in raw_intercepts
+                    ]
 
         for curve in curves:
             data_points = None
             if curve.raw_data and isinstance(curve.raw_data, list):
                 data_points = _condense_raw_data(curve.raw_data)
+
+            # Serialize per-spec intercepts so the molecule activity tab
+            # can render EC50 / EC90 as separate columns per Card row.
+            intercept_values_payload = [
+                {
+                    "spec": {
+                        "kind": iv.spec.kind.value,
+                        "level": iv.spec.level,
+                        "basis": iv.spec.basis.value,
+                        "label": iv.spec.label,
+                    },
+                    "value": iv.value,
+                    "confidence_interval_low": iv.confidence_interval_low,
+                    "confidence_interval_high": iv.confidence_interval_high,
+                    "at_bound": iv.at_bound,
+                }
+                for iv in curve.intercept_values
+            ]
 
             unit = protocols_by_id.get(curve.protocol_id, ("", "", "uM"))[2]
             curves_by_proto.setdefault(curve.protocol_id, []).append(
@@ -92,6 +135,7 @@ class MoleculeActivityService:
                     "num_points": curve.num_points,
                     "curve_class": curve.curve_class.value if curve.curve_class else None,
                     "data_points": data_points,
+                    "intercept_values": intercept_values_payload,
                 }
             )
 
@@ -104,6 +148,7 @@ class MoleculeActivityService:
                     protocol_name=name,
                     protocol_type=ptype,
                     best_curves=curves_by_proto.get(pid, []),
+                    intercepts=intercepts_by_proto.get(pid, []),
                 )
             )
 

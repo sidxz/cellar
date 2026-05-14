@@ -65,6 +65,10 @@ class ProtocolActivitySummary:
     protocol_type: str
     readouts: list[AggregatedReadout] = field(default_factory=list)
     best_curves: list[dict[str, Any]] = field(default_factory=list)
+    # Protocol-declared intercept specs (EC50, EC90, IC10, ...). Drives the
+    # per-Card dynamic column set on the molecule activity tab. Empty when
+    # the protocol's DR readouts declare no explicit intercepts.
+    intercepts: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

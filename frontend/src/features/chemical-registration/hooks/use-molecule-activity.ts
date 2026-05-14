@@ -28,6 +28,31 @@ export interface ProtocolActivityResponse {
     num_points: number;
     curve_class: string | null;
     data_points: Array<{ x: number; y: number }> | null;
+    /** Per-spec intercepts (EC50, EC90, IC10, ...) computed from this
+     *  curve's fit. Empty on legacy curves; the FE per-Card table
+     *  renders one column per protocol intercept and reads values from
+     *  this list. */
+    intercept_values?: Array<{
+      spec: {
+        kind: "ic" | "ec";
+        level: number;
+        basis: "relative_percent" | "absolute";
+        label?: string | null;
+      };
+      value: number;
+      confidence_interval_low: number | null;
+      confidence_interval_high: number | null;
+      at_bound: boolean;
+    }>;
+  }>;
+  /** Protocol-declared intercept specs. Drives the dynamic column set
+   *  on this protocol's Card; matches cell values out of each row's
+   *  `intercept_values` by (kind, level). */
+  intercepts?: Array<{
+    kind: "ic" | "ec";
+    level: number;
+    basis: "relative_percent" | "absolute";
+    label?: string | null;
   }>;
 }
 

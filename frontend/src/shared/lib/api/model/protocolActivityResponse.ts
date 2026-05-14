@@ -6,6 +6,7 @@
  */
 import type { ActivityValueResponse } from './activityValueResponse';
 import type { ProtocolActivityResponseBestCurvesItem } from './protocolActivityResponseBestCurvesItem';
+import type { ProtocolActivityResponseInterceptsItem } from './protocolActivityResponseInterceptsItem';
 
 export interface ProtocolActivityResponse {
   protocol_id: string;
@@ -13,4 +14,5 @@ export interface ProtocolActivityResponse {
   protocol_type: string;
   readouts?: ActivityValueResponse[];
   best_curves?: ProtocolActivityResponseBestCurvesItem[];
+  intercepts?: ProtocolActivityResponseInterceptsItem[];
 }

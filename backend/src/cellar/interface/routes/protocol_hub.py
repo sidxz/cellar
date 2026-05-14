@@ -57,12 +57,31 @@ class ProtocolStatsResponse(BaseModel):
     latest_run: LatestRunResponse | None = None
 
 
+class InterceptSpecResponse(BaseModel):
+    kind: str  # "ic" | "ec"
+    level: float
+    basis: str  # "relative_percent" | "absolute"
+    label: str | None = None
+
+
+class InterceptValueResponse(BaseModel):
+    spec: InterceptSpecResponse
+    value: float
+    confidence_interval_low: float | None = None
+    confidence_interval_high: float | None = None
+    at_bound: bool = False
+
+
 class CurveParamsResponse(BaseModel):
     hill_slope: float
     top: float
     bottom: float
     fitted_value: float
     r_squared: float
+    # Per-spec intercepts (EC50, EC90, IC10, ...). Empty list on legacy
+    # curves; the FE uses this to render one column per intercept on the
+    # activity grid.
+    intercept_values: list[InterceptValueResponse] = []
 
 
 class ReadoutValueResponse(BaseModel):
@@ -80,6 +99,9 @@ class ReadoutDefInfoResponse(BaseModel):
     data_type: str
     unit: str | None = None
     best_direction: str
+    # For DR readouts, the protocol's declared intercept specs. Drives
+    # the activity grid's dynamic column headers (one column per spec).
+    intercepts: list[InterceptSpecResponse] = []
 
 
 class CompoundActivityResponse(BaseModel):
@@ -179,6 +201,21 @@ async def get_protocol_activity_summary(
                                 bottom=rv.curve_params.bottom,
                                 fitted_value=rv.curve_params.fitted_value,
                                 r_squared=rv.curve_params.r_squared,
+                                intercept_values=[
+                                    InterceptValueResponse(
+                                        spec=InterceptSpecResponse(
+                                            kind=iv.spec.kind,
+                                            level=iv.spec.level,
+                                            basis=iv.spec.basis,
+                                            label=iv.spec.label,
+                                        ),
+                                        value=iv.value,
+                                        confidence_interval_low=iv.confidence_interval_low,
+                                        confidence_interval_high=iv.confidence_interval_high,
+                                        at_bound=iv.at_bound,
+                                    )
+                                    for iv in rv.curve_params.intercept_values
+                                ],
                             )
                             if rv.curve_params is not None
                             else None
@@ -198,6 +235,15 @@ async def get_protocol_activity_summary(
                 data_type=rd.data_type,
                 unit=rd.unit,
                 best_direction=rd.best_direction,
+                intercepts=[
+                    InterceptSpecResponse(
+                        kind=spec.kind,
+                        level=spec.level,
+                        basis=spec.basis,
+                        label=spec.label,
+                    )
+                    for spec in rd.intercepts
+                ],
             )
             for rd in summary.readout_definitions
         ],

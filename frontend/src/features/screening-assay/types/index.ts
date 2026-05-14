@@ -711,6 +711,10 @@ export interface CurveParams {
   bottom: number;
   fitted_value: number;
   r_squared: number;
+  /** Per-spec intercepts (EC50, EC90, IC10, ...). Empty list on legacy
+   *  curves; the FE activity grid renders one column per intercept and
+   *  reads values via `findInterceptValue`. */
+  intercept_values?: InterceptValue[];
 }
 
 export interface ReadoutValue {
@@ -728,6 +732,10 @@ export interface ReadoutDefInfo {
   data_type: string;
   unit: string | null;
   best_direction: "high" | "low";
+  /** For ``dose_response`` readouts: the protocol's declared intercept
+   *  specs, drives the per-readout dynamic column set on the activity
+   *  grid (EC50, EC90, IC10, ...). Empty for numeric readouts. */
+  intercepts?: InterceptSpec[];
 }
 
 export interface CompoundActivity {
