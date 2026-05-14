@@ -240,8 +240,8 @@ class SQLAlchemyMoleculeReader:
         Supports configurable sorting via ``sort_by`` / ``sort_dir``. Uses
         keyset pagination: cursor encodes ``(sort_value, id)`` when sorting
         by a field other than ``id``. Special sort
-        ``drc:{protocol_id}:{curve_type}`` orders by the best (lowest)
-        ``fitted_value`` from DoseResponseCurve for that protocol+type;
+        ``drc:{readout_definition_id}`` orders by the best (lowest)
+        ``fitted_value`` from DoseResponseCurve for that DR readout-def;
         compounds without data sort last (NULLS LAST).
 
         When ``include_similarity_score=True``, returns
@@ -268,8 +268,7 @@ class SQLAlchemyMoleculeReader:
             drc_sort = _parse_drc_sort(sort_by)
 
             if drc_sort is not None:
-                protocol_id, curve_type = drc_sort
-                stmt = _apply_drc_sort(stmt, workspace_id, protocol_id, curve_type, descending)
+                stmt = _apply_drc_sort(stmt, workspace_id, drc_sort, descending)
             elif project_score and sort_by is None:
                 # Default: order by similarity score DESC (most similar first)
                 stmt = stmt.order_by(text("similarity DESC"))
@@ -413,21 +412,23 @@ def _find_first_tanimoto_threshold(criteria: list[dict[str, Any]]) -> float | No
     return None
 
 
-def _parse_drc_sort(sort_by: str | None) -> tuple[uuid.UUID, str] | None:
-    """Parse ``drc:{protocol_id}:{curve_type}`` into components."""
+def _parse_drc_sort(sort_by: str | None) -> uuid.UUID | None:
+    """Parse ``drc:{readout_definition_id}`` into the readout-def UUID.
+
+    A DR readout-def uniquely identifies the column ("Target IC50",
+    "Counter IC50", "Cytotoxicity LD50", ...). Protocol and curve_type are
+    implied by it — sorting by `(protocol, curve_type)` was ambiguous when
+    a protocol had multiple DR readouts of the same curve_type.
+    """
     if not sort_by or not sort_by.startswith("drc:"):
         return None
-    parts = sort_by.split(":", 2)
-    if len(parts) != 3:
+    parts = sort_by.split(":", 1)
+    if len(parts) != 2:
         return None
     try:
-        protocol_id = uuid.UUID(parts[1])
+        return uuid.UUID(parts[1])
     except ValueError:
         return None
-    curve_type = parts[2]
-    if not curve_type:
-        return None
-    return protocol_id, curve_type
 
 
 def _find_first_similarity_criterion(
@@ -543,11 +544,10 @@ def _build_base_stmt_with_score(
 def _apply_drc_sort(
     stmt: sa.Select,
     workspace_id: uuid.UUID,
-    protocol_id: uuid.UUID,
-    curve_type: str,
+    readout_definition_id: uuid.UUID,
     descending: bool,
 ) -> sa.Select:
-    """LEFT JOIN a best-value subquery and order by it."""
+    """LEFT JOIN a best-value subquery for one DR readout-def and order by it."""
     from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
         DoseResponseCurveModel,
     )
@@ -559,8 +559,7 @@ def _apply_drc_sort(
         )
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
-            DoseResponseCurveModel.protocol_id == protocol_id,
-            DoseResponseCurveModel.curve_type == curve_type,
+            DoseResponseCurveModel.readout_definition_id == readout_definition_id,
         )
         .group_by(DoseResponseCurveModel.molecule_id)
         .subquery("drc_best")

@@ -425,6 +425,9 @@ export interface DoseResponseCurve {
   batch_number: string | null;
   protocol_id: string;
   run_id: string;
+  /** The DR readout-def the curve was fitted from — identity-bearing on
+   *  multi-DR protocols where two DRs may share a curve_type. */
+  readout_definition_id: string;
   curve_type: CurveType;
   fitted_value: number;
   fitted_unit: string;

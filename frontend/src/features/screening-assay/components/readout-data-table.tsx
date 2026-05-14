@@ -118,6 +118,10 @@ export function ReadoutDataTable({
   // fitted_value here so every row of a compound shows that compound's curve
   // value (curves don't exist per-well; this is the natural way to surface
   // DR results alongside per-well readouts).
+  //
+  // Curves are matched by ``readout_definition_id`` — a protocol can have
+  // multiple DR readouts sharing one curve_type (target IC50 + counter-
+  // screen IC50), so matching by curve_type would mix them together.
   const curveLookup = useMemo(() => {
     const map = new Map<string, Map<string, DoseResponseCurve>>();
     for (const rd of readoutDefs) {
@@ -125,13 +129,7 @@ export function ReadoutDataTable({
       map.set(rd.id, new Map());
     }
     for (const c of curves ?? []) {
-      // Pick the curve matching the protocol's dose-response def by curve_type
-      const def = readoutDefs.find(
-        (rd) =>
-          rd.data_type === "dose_response" && rd.dose_response_config?.curve_type === c.curve_type,
-      );
-      if (!def) continue;
-      const inner = map.get(def.id);
+      const inner = map.get(c.readout_definition_id);
       if (!inner) continue;
       const key = `${c.molecule_id}::${c.batch_id}`;
       // If multiple curves exist for the same (mol, batch) (e.g. refits),

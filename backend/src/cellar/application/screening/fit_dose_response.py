@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.screening._dose_response_config_serde import (
+    serialize_dose_response_config,
+)
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
@@ -309,12 +312,17 @@ class FitDoseResponseCurves:
                     continue
 
                 fitted = fit_result.unwrap()
+                # Snapshot the *actual config used for this fit* (post-override)
+                # so reproducibility doesn't depend on the readout-def's live
+                # config staying unchanged.
+                config_snapshot = serialize_dose_response_config(config)
                 curve = DoseResponseCurve(
                     workspace_id=run.workspace_id,
                     molecule_id=molecule_id,
                     batch_id=batch_id,
                     protocol_id=run.protocol_id,
                     run_id=run.id,
+                    readout_definition_id=dr_def.id,
                     curve_type=config.curve_type,
                     fitted_value=fitted.fitted_value,
                     hill_slope=fitted.hill_slope,
@@ -329,6 +337,7 @@ class FitDoseResponseCurves:
                     excluded_points=fitted.excluded_points or [],
                     fit_quality_warnings=list(fitted.fit_quality_warnings),
                     intercept_values=list(fitted.intercept_values),
+                    dose_response_config_snapshot=config_snapshot,
                 )
                 await self._curve_repo.save(curve)
                 all_curves.append(curve)

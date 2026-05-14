@@ -67,6 +67,7 @@ class CurveDetail:
     curve_id: uuid.UUID
     run_id: uuid.UUID
     batch_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str
     fitted_value: float
     fitted_unit: str  # protocol's dose_unit, set by caller from the protocol
@@ -93,6 +94,7 @@ class CurveDetail:
             curve_id=curve.id,
             run_id=curve.run_id,
             batch_id=curve.batch_id,
+            readout_definition_id=curve.readout_definition_id,
             curve_type=curve.curve_type.value,
             fitted_value=curve.fitted_value,
             fitted_unit=dose_unit,

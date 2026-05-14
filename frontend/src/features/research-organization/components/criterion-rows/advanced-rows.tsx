@@ -12,11 +12,11 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Group, Trash2 } from "lucide-react";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import {
   BATCH_FIELD_TYPE_OPTIONS,
   BATCH_NUMERIC_FIELDS,
   BATCH_TEXT_FIELDS,
-  CURVE_TYPE_OPTIONS,
   CUSTOM_FIELD_MODE_OPTIONS,
   PROPERTY_OPERATORS,
   TEXT_OPERATORS,
@@ -55,6 +55,15 @@ export function ActivityCriterionRow({
   const { data: protocols } = useProtocols();
   const { data: protocol } = useProtocol(criterion.protocol_id || undefined);
 
+  // The picker exposes every DR readout-def *and* every numeric readout-def
+  // as its own row. A "Target IC50 (IC50)" readout and a "Counter IC50
+  // (IC50)" readout on the same protocol stay distinguishable — the row
+  // value combines source + readout-def UUID so the wire payload stays
+  // unambiguous.
+  const fieldValue = criterion.readout_definition_id
+    ? `${criterion.source ?? "dr_curve"}:${criterion.readout_definition_id}`
+    : undefined;
+
   return (
     <div className="flex items-end gap-2 flex-wrap">
       <div className="w-44">
@@ -66,7 +75,7 @@ export function ActivityCriterionRow({
               ...criterion,
               protocol_id: v,
               readout_definition_id: undefined,
-              curve_type: undefined,
+              source: undefined,
             })
           }
         >
@@ -85,16 +94,14 @@ export function ActivityCriterionRow({
         </Select>
       </div>
       <div className="w-44">
-        <Label className="text-xs text-muted-foreground">Readout / Curve</Label>
+        <Label className="text-xs text-muted-foreground">Readout</Label>
         <Select
-          value={criterion.readout_definition_id ?? criterion.curve_type ?? undefined}
+          value={fieldValue}
           onValueChange={(v) => {
-            const isCurve = CURVE_TYPE_OPTIONS.some((ct) => ct.value === v);
-            if (isCurve) {
-              onChange({ ...criterion, curve_type: v, readout_definition_id: undefined });
-            } else {
-              onChange({ ...criterion, readout_definition_id: v, curve_type: undefined });
-            }
+            const sep = v.indexOf(":");
+            const src = v.slice(0, sep) as "dr_curve" | "readout_data";
+            const rdId = v.slice(sep + 1);
+            onChange({ ...criterion, source: src, readout_definition_id: rdId });
           }}
         >
           <SelectTrigger className="h-9">
@@ -102,18 +109,24 @@ export function ActivityCriterionRow({
           </SelectTrigger>
           <SelectContent>
             {protocol?.readout_definitions
-              ?.filter((rd) => rd.data_type === "numeric")
+              ?.filter((rd) => rd.dose_response_config)
+              .map((rd) => {
+                const ct = rd.dose_response_config?.curve_type;
+                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
+                return (
+                  <SelectItem key={rd.id} value={`dr_curve:${rd.id}`}>
+                    {rd.name}{suffix}
+                  </SelectItem>
+                );
+              })}
+            {protocol?.readout_definitions
+              ?.filter((rd) => rd.data_type === "numeric" && !rd.dose_response_config)
               .map((rd) => (
-                <SelectItem key={rd.id} value={rd.id}>
+                <SelectItem key={rd.id} value={`readout_data:${rd.id}`}>
                   {rd.name}
                   {rd.unit ? ` (${rd.unit})` : ""}
                 </SelectItem>
               ))}
-            {CURVE_TYPE_OPTIONS.map((ct) => (
-              <SelectItem key={ct.value} value={ct.value}>
-                {ct.label} (curve)
-              </SelectItem>
-            ))}
           </SelectContent>
         </Select>
       </div>

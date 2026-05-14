@@ -204,12 +204,15 @@ class SQLAlchemyProtocolActivityReader:
             ]
 
             # ----------------------------------------------------------
-            # Query 3a: DR aggregation — geo mean + min per curve_type
+            # Query 3a: DR aggregation — geo mean + min per readout-def.
+            # Grouping by curve_type would collapse multi-DR protocols
+            # (target IC50 + counter-screen IC50 share curve_type='ic50');
+            # the readout-def is the precise column identity.
             # ----------------------------------------------------------
             dr_agg_stmt = (
                 select(
                     DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.curve_type,
+                    DoseResponseCurveModel.readout_definition_id,
                     func.min(DoseResponseCurveModel.fitted_value).label("best"),
                     func.exp(func.avg(func.ln(DoseResponseCurveModel.fitted_value))).label(
                         "geo_mean"
@@ -225,7 +228,7 @@ class SQLAlchemyProtocolActivityReader:
                 )
                 .group_by(
                     DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.curve_type,
+                    DoseResponseCurveModel.readout_definition_id,
                 )
             )
             raw_dr_agg_rows = (await session.execute(dr_agg_stmt)).all()
@@ -233,7 +236,7 @@ class SQLAlchemyProtocolActivityReader:
             dr_agg_rows = [
                 DRAggRow(
                     molecule_id=r.molecule_id,
-                    curve_type=r.curve_type,
+                    readout_definition_id=r.readout_definition_id,
                     best=r.best,
                     geo_mean=r.geo_mean,
                 )
@@ -246,7 +249,7 @@ class SQLAlchemyProtocolActivityReader:
             ranked_sub = (
                 select(
                     DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.curve_type,
+                    DoseResponseCurveModel.readout_definition_id,
                     DoseResponseCurveModel.curve_class,
                     DoseResponseCurveModel.hill_slope,
                     DoseResponseCurveModel.top,
@@ -259,7 +262,7 @@ class SQLAlchemyProtocolActivityReader:
                     .over(
                         partition_by=[
                             DoseResponseCurveModel.molecule_id,
-                            DoseResponseCurveModel.curve_type,
+                            DoseResponseCurveModel.readout_definition_id,
                         ],
                         order_by=DoseResponseCurveModel.fitted_value.asc(),
                     )
@@ -282,7 +285,7 @@ class SQLAlchemyProtocolActivityReader:
             best_params_rows = [
                 BestParamsRow(
                     molecule_id=r.molecule_id,
-                    curve_type=r.curve_type,
+                    readout_definition_id=r.readout_definition_id,
                     curve_class=r.curve_class,
                     hill_slope=r.hill_slope,
                     top=r.top,

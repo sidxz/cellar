@@ -58,6 +58,7 @@ class ReadoutValue:
 
 @dataclass(frozen=True)
 class ReadoutDefInfo:
+    id: uuid.UUID
     name: str
     data_type: str
     unit: str | None
@@ -119,27 +120,20 @@ class GetProtocolActivitySummary:
         if data.protocol is None:
             return Failure(NotFoundError(f"Protocol {pid} not found in workspace"))
 
-        # Build readout_defs (only numeric + dose_response)
+        # Build readout_defs (only numeric + dose_response). For DR rows
+        # we key by the readout-def UUID — curve_type was ambiguous when
+        # two DR readouts on one protocol shared it.
         readout_defs: list[ReadoutDefInfo] = []
-        # Map curve_type -> readout_name for DR readouts
-        dr_curve_type_map: dict[str, str] = {}
 
         for rd in data.protocol.readout_definitions:
             if rd.data_type not in _AGGREGATABLE_DATA_TYPES:
                 continue
 
-            if rd.data_type == "dose_response":
-                best_direction = "low"
-                config = rd.dose_response_config
-                if config and isinstance(config, dict):
-                    curve_type = config.get("curve_type")
-                    if curve_type:
-                        dr_curve_type_map[curve_type] = rd.name
-            else:
-                best_direction = "high"
+            best_direction = "low" if rd.data_type == "dose_response" else "high"
 
             readout_defs.append(
                 ReadoutDefInfo(
+                    id=rd.id,
                     name=rd.name,
                     data_type=rd.data_type,
                     unit=rd.unit,
@@ -174,14 +168,14 @@ class GetProtocolActivitySummary:
             (row.molecule_id, row.readout_name): row for row in data.numeric_rows
         }
 
-        # Index DR agg rows: (molecule_id, curve_type) -> row
-        dr_agg_map: dict[tuple[uuid.UUID, str], object] = {
-            (row.molecule_id, row.curve_type): row for row in data.dr_agg_rows
+        # Index DR agg rows: (molecule_id, readout_definition_id) -> row
+        dr_agg_map: dict[tuple[uuid.UUID, uuid.UUID], object] = {
+            (row.molecule_id, row.readout_definition_id): row for row in data.dr_agg_rows
         }
 
-        # Index best params rows: (molecule_id, curve_type) -> row
-        best_params_map: dict[tuple[uuid.UUID, str], object] = {
-            (row.molecule_id, row.curve_type): row for row in data.best_params_rows
+        # Index best params rows: (molecule_id, readout_definition_id) -> row
+        best_params_map: dict[tuple[uuid.UUID, uuid.UUID], object] = {
+            (row.molecule_id, row.readout_definition_id): row for row in data.best_params_rows
         }
 
         items: list[CompoundActivity] = []
@@ -191,16 +185,7 @@ class GetProtocolActivitySummary:
 
             for rd_info in readout_defs:
                 if rd_info.data_type == "dose_response":
-                    # Find curve_type for this readout name
-                    curve_type: str | None = None
-                    for ct, rn in dr_curve_type_map.items():
-                        if rn == rd_info.name:
-                            curve_type = ct
-                            break
-                    if curve_type is None:
-                        continue
-
-                    dr_key = (mol.molecule_id, curve_type)
+                    dr_key = (mol.molecule_id, rd_info.id)
                     dr_row = dr_agg_map.get(dr_key)
                     bp_row = best_params_map.get(dr_key)
 

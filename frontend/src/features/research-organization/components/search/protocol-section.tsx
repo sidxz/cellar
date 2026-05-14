@@ -83,22 +83,27 @@ function formatLastRun(iso: string | null): string {
 const RECENTS_LIMIT = 5;
 const RECENTS_MIN_TOTAL = 8; // only pin a recents group if the list is at least this long
 
-/** Extract available curve types from a protocol's readout definitions. */
-function getProtocolCurveTypes(
+/** A DR readout-def usable as an activity-criterion column. Each row in the
+ *  picker is an explicit readout — multi-DR protocols surface multiple rows
+ *  (e.g. "Target IC50", "Counter IC50") instead of collapsing under one
+ *  curve_type label. */
+interface DrReadoutOption {
+  id: string;
+  /** Display label: the readout-def name plus the curve_type suffix when
+   *  configured, e.g. ``Target potency (IC50)``. */
+  label: string;
+}
+
+function getProtocolDrReadouts(
   protocol: import("@/features/screening-assay/types").Protocol | undefined,
-): { value: string; label: string }[] {
+): DrReadoutOption[] {
   if (!protocol?.readout_definitions) return [];
-  const seen = new Set<string>();
-  const options: { value: string; label: string }[] = [];
+  const options: DrReadoutOption[] = [];
   for (const rd of protocol.readout_definitions) {
     const ct = rd.dose_response_config?.curve_type;
-    if (ct && !seen.has(ct)) {
-      seen.add(ct);
-      options.push({
-        value: ct,
-        label: CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase(),
-      });
-    }
+    if (!ct) continue;
+    const suffix = CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase();
+    options.push({ id: rd.id, label: `${rd.name} (${suffix})` });
   }
   return options;
 }
@@ -110,19 +115,21 @@ function defaultActivityCriterion(): ActivityCriterion {
 }
 
 function defaultWhereCondition(): ActivityWhereCondition {
-  return { operator: "lt", value: 0 };
+  // The user must pick a readout before the row is sendable; we seed
+  // with an empty id and dr_curve source which is the most common choice.
+  return { source: "dr_curve", readout_definition_id: "", operator: "lt", value: 0 };
 }
 
-/** Read where[] from a criterion, normalizing the legacy inline shape into
- *  a single-element list so the UI only has to think in one model. */
+/** Read where[] from a criterion, normalizing the inline single-where shape
+ *  into a single-element list so the UI only has to think in one model. */
 function readWhere(c: ActivityCriterion): ActivityWhereCondition[] {
   if (Array.isArray(c.where)) return c.where;
-  if (c.curve_type || c.readout_definition_id) {
+  if (c.readout_definition_id) {
     const cond: ActivityWhereCondition = {
+      source: c.source ?? "dr_curve",
+      readout_definition_id: c.readout_definition_id,
       operator: c.operator ?? "lt",
     };
-    if (c.curve_type) cond.curve_type = c.curve_type;
-    if (c.readout_definition_id) cond.readout_definition_id = c.readout_definition_id;
     if (c.value !== undefined) cond.value = c.value;
     return [cond];
   }
@@ -132,7 +139,7 @@ function readWhere(c: ActivityCriterion): ActivityWhereCondition[] {
 /** Strip empty / incomplete where rows before sending to the backend. */
 function pruneWhere(where: ActivityWhereCondition[]): ActivityWhereCondition[] {
   return where.filter((w) => {
-    if (!w.curve_type && !w.readout_definition_id) return false;
+    if (!w.readout_definition_id) return false;
     if (w.operator === "between") {
       return w.min !== undefined && w.max !== undefined;
     }
@@ -199,11 +206,6 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
 
 // ─── Activity where rows (multiple ANDed conditions) ───────────────────────
 
-interface CurveTypeOption {
-  value: string;
-  label: string;
-}
-
 interface NumericReadout {
   id: string;
   name: string;
@@ -212,12 +214,12 @@ interface NumericReadout {
 
 interface WhereListProps {
   where: ActivityWhereCondition[];
-  curveTypeOptions: CurveTypeOption[];
+  drReadouts: DrReadoutOption[];
   numericReadouts: NumericReadout[];
   onChange: (next: ActivityWhereCondition[]) => void;
 }
 
-function WhereList({ where, curveTypeOptions, numericReadouts, onChange }: WhereListProps) {
+function WhereList({ where, drReadouts, numericReadouts, onChange }: WhereListProps) {
   function update(i: number, next: ActivityWhereCondition) {
     onChange(where.map((w, idx) => (idx === i ? next : w)));
   }
@@ -246,7 +248,7 @@ function WhereList({ where, curveTypeOptions, numericReadouts, onChange }: Where
               key={i}
               cond={cond}
               isFirst={i === 0}
-              curveTypeOptions={curveTypeOptions}
+              drReadouts={drReadouts}
               numericReadouts={numericReadouts}
               onChange={(next) => update(i, next)}
               onRemove={() => remove(i)}
@@ -269,7 +271,7 @@ function WhereList({ where, curveTypeOptions, numericReadouts, onChange }: Where
 interface WhereRowProps {
   cond: ActivityWhereCondition;
   isFirst: boolean;
-  curveTypeOptions: CurveTypeOption[];
+  drReadouts: DrReadoutOption[];
   numericReadouts: NumericReadout[];
   onChange: (next: ActivityWhereCondition) => void;
   onRemove: () => void;
@@ -278,14 +280,17 @@ interface WhereRowProps {
 function WhereRow({
   cond,
   isFirst,
-  curveTypeOptions,
+  drReadouts,
   numericReadouts,
   onChange,
   onRemove,
 }: WhereRowProps) {
+  // The picker exposes every DR readout-def and every numeric readout-def
+  // as its own entry; the row stores the readout-def id plus a `source`
+  // discriminator telling the backend which table to query.
   const fieldValue = cond.readout_definition_id
-    ? `readout:${cond.readout_definition_id}`
-    : (cond.curve_type ?? "");
+    ? `${cond.source ?? "dr_curve"}:${cond.readout_definition_id}`
+    : "";
   const isBetween = cond.operator === "between";
 
   return (
@@ -295,55 +300,53 @@ function WhereRow({
         {isFirst ? "where" : "and"}
       </span>
 
-      {/* Field picker (curve_type or readout_definition_id) */}
+      {/* Readout-def picker (DR readouts hit dose_response_curves; numeric
+          readouts hit readout_data) */}
       <Select
         value={fieldValue}
         onValueChange={(v) => {
           if (!v) {
-            onChange({ ...cond, curve_type: undefined, readout_definition_id: undefined });
-          } else if (v.startsWith("readout:")) {
-            onChange({
-              ...cond,
-              readout_definition_id: v.slice(8),
-              curve_type: undefined,
-            });
-          } else {
-            onChange({
-              ...cond,
-              curve_type: v,
-              readout_definition_id: undefined,
-            });
+            onChange({ ...cond, readout_definition_id: "" });
+            return;
           }
+          const sep = v.indexOf(":");
+          const src = v.slice(0, sep) as "dr_curve" | "readout_data";
+          const rdId = v.slice(sep + 1);
+          onChange({ ...cond, source: src, readout_definition_id: rdId });
         }}
       >
-        <SelectTrigger className="h-8 w-32 text-sm shrink-0">
-          <SelectValue placeholder="select…" />
+        <SelectTrigger className="h-8 w-44 text-sm shrink-0">
+          <SelectValue placeholder="select readout…" />
         </SelectTrigger>
         <SelectContent>
-          {curveTypeOptions.length > 0 &&
-            curveTypeOptions.map((ct) => (
-              <SelectItem key={ct.value} value={ct.value}>
-                {ct.label}
-              </SelectItem>
-            ))}
+          {drReadouts.length > 0 && (
+            <>
+              <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                Dose-response
+              </div>
+              {drReadouts.map((rd) => (
+                <SelectItem key={rd.id} value={`dr_curve:${rd.id}`}>
+                  {rd.label}
+                </SelectItem>
+              ))}
+            </>
+          )}
           {numericReadouts.length > 0 && (
             <>
-              {curveTypeOptions.length > 0 && (
-                <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                  Readouts
-                </div>
-              )}
+              <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                Numeric readouts
+              </div>
               {numericReadouts.map((rd) => (
-                <SelectItem key={rd.id} value={`readout:${rd.id}`}>
+                <SelectItem key={rd.id} value={`readout_data:${rd.id}`}>
                   {rd.name}
                   {rd.unit ? ` (${rd.unit})` : ""}
                 </SelectItem>
               ))}
             </>
           )}
-          {curveTypeOptions.length === 0 && numericReadouts.length === 0 && (
+          {drReadouts.length === 0 && numericReadouts.length === 0 && (
             <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-              No curve types or readouts configured
+              No readouts configured
             </div>
           )}
         </SelectContent>
@@ -519,7 +522,7 @@ function ActivityRow({
       (rd) => rd.data_type === "numeric" && !rd.dose_response_config,
     ) ?? [];
 
-  const curveTypeOptions = getProtocolCurveTypes(protocol);
+  const drReadouts = getProtocolDrReadouts(protocol);
   const hasProtocol = Boolean(criterion.protocol_id);
   // Pristine rows don't surface validation — the row is a passive
   // "always-visible empty row" placeholder. Only flag invalid once the
@@ -620,7 +623,7 @@ function ActivityRow({
                               ...criterion,
                               protocol_id: p.id,
                               readout_definition_id: undefined,
-                              curve_type: undefined,
+                              source: undefined,
                             });
                             setProtocolOpen(false);
                           }}
@@ -642,7 +645,7 @@ function ActivityRow({
                           ...criterion,
                           protocol_id: p.id,
                           readout_definition_id: undefined,
-                          curve_type: undefined,
+                          source: undefined,
                         });
                         setProtocolOpen(false);
                       }}
@@ -702,14 +705,14 @@ function ActivityRow({
               ("compounds screened in this protocol/scope"). */}
           <WhereList
             where={whereList}
-            curveTypeOptions={curveTypeOptions}
+            drReadouts={drReadouts}
             numericReadouts={numericReadouts}
             onChange={(next) => {
-              // Drop legacy inline single-where fields once we manage where[].
+              // Drop the inline single-where fields once we manage where[].
               onChange({
                 ...criterion,
                 where: next,
-                curve_type: undefined,
+                source: undefined,
                 readout_definition_id: undefined,
                 operator: undefined,
                 value: undefined,

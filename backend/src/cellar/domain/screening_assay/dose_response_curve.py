@@ -33,6 +33,7 @@ class DoseResponseCurve(Entity):
         batch_id: uuid.UUID,
         protocol_id: uuid.UUID,
         run_id: uuid.UUID,
+        readout_definition_id: uuid.UUID,
         curve_type: CurveType,
         fitted_value: float,
         hill_slope: float,
@@ -47,6 +48,7 @@ class DoseResponseCurve(Entity):
         excluded_points: list[dict[str, Any]] | None = None,
         fit_quality_warnings: list[str] | None = None,
         intercept_values: list[InterceptValue] | None = None,
+        dose_response_config_snapshot: dict[str, Any] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -62,6 +64,12 @@ class DoseResponseCurve(Entity):
         self.batch_id = batch_id
         self.protocol_id = protocol_id
         self.run_id = run_id
+        # Identifies which DR readout-def this curve was fitted from. A
+        # protocol can have N dose-response readouts (target IC50,
+        # counter-screen IC50, cytotoxicity LD50, ...) and each one's curve
+        # is stored as its own row. `curve_type` is descriptive (display +
+        # intercept-language), never identity — disambiguate by this FK.
+        self.readout_definition_id = readout_definition_id
         self.curve_type = curve_type
         # Fitted IC50/EC50/etc value. Unit is the owning protocol's dose_unit;
         # callers look it up at display time. Not denormalized here.
@@ -81,6 +89,12 @@ class DoseResponseCurve(Entity):
         # Empty list = legacy single-intercept curve; readers fall back to
         # ``fitted_value`` for the headline.
         self.intercept_values = list(intercept_values or [])
+        # Frozen copy of the DR config that was active when the fit ran
+        # (curve_type, y_normalization, x_readout_name, fit bounds). Without
+        # this a config edit on the readout-def silently re-interprets every
+        # historical curve. Optional — None on legacy rows; the readout-def's
+        # current config is the fallback for display.
+        self.dose_response_config_snapshot = dose_response_config_snapshot
 
     def update_fit(
         self,
@@ -98,6 +112,7 @@ class DoseResponseCurve(Entity):
         excluded_points: list[dict[str, Any]] | None,
         fit_quality_warnings: list[str] | None,
         intercept_values: list[InterceptValue] | None,
+        dose_response_config_snapshot: dict[str, Any] | None = None,
     ) -> None:
         """Replace the fit results, re-validating the same invariants as
         ``__init__`` (num_points >= 1, r_squared in [0, 1])."""
@@ -119,3 +134,8 @@ class DoseResponseCurve(Entity):
         self.excluded_points = excluded_points
         self.fit_quality_warnings = list(fit_quality_warnings or [])
         self.intercept_values = list(intercept_values or [])
+        # Refresh the snapshot when the caller passes one — a refit may
+        # apply different overrides than the original fit, so the snapshot
+        # tracks the *currently realized* fit context.
+        if dose_response_config_snapshot is not None:
+            self.dose_response_config_snapshot = dose_response_config_snapshot

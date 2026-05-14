@@ -141,10 +141,13 @@ function decomposeQuery(query: SearchQuery | undefined) {
 /**
  * Derive protocol column IDs from activity criteria for cross-protocol display.
  *
- * Explicit filters (curve_type or readout_definition_id) project directly to a
- * `drc:` / `rd:` column. When a criterion filters by protocol alone, we fall
- * back to "show what the protocol actually emits" instead of always defaulting
- * to IC50 — see `defaultProtocolColumns` for the rules.
+ * Every where-row carries a readout-def UUID plus a ``source`` discriminator;
+ * the column key folds those into the read-model's column spec format:
+ *   - ``drc:{readout_definition_id}`` for DR-curve sources
+ *   - ``rd:{protocol_id}:{readout_definition_id}`` for raw readout sources
+ * When a criterion filters by protocol alone, ``defaultProtocolColumns`` falls
+ * back to "show what the protocol actually emits" so we don't always default
+ * to IC50 on a single-dose protocol.
  */
 function deriveProtocolColumns(
   activityCriteria: ActivityCriterion[],
@@ -156,26 +159,22 @@ function deriveProtocolColumns(
   }
   for (const c of activityCriteria) {
     if (!c.protocol_id) continue;
-    // Collect every (curve_type | readout) referenced by this criterion's
-    // where[] (or the legacy inline single-where shape).
     const conds =
       Array.isArray(c.where) && c.where.length > 0
         ? c.where
-        : [{ curve_type: c.curve_type, readout_definition_id: c.readout_definition_id }];
+        : c.readout_definition_id
+          ? [{ source: c.source ?? "dr_curve", readout_definition_id: c.readout_definition_id }]
+          : [];
     let addedAny = false;
     for (const cond of conds) {
-      if (cond.curve_type) {
-        add(`drc:${c.protocol_id}:${cond.curve_type}`);
-        addedAny = true;
-      }
-      if (cond.readout_definition_id) {
+      if (!cond.readout_definition_id) continue;
+      if (cond.source === "readout_data") {
         add(`rd:${c.protocol_id}:${cond.readout_definition_id}`);
-        addedAny = true;
+      } else {
+        add(`drc:${cond.readout_definition_id}`);
       }
+      addedAny = true;
     }
-    // Protocol-only filter (no curve / no readout): pick defaults from the
-    // protocol's actual readout definitions so e.g. a single-dose %inhibition
-    // protocol doesn't show empty IC50 / IC50 Plot columns.
     if (!addedAny) {
       for (const col of defaultProtocolColumns(c.protocol_id, protocols)) {
         add(col);
@@ -205,16 +204,19 @@ function deriveProtocolColumns(
  */
 function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): string[] {
   const proto = protocols.find((p) => p.id === protocolId);
-  if (!proto) return [`drc:${protocolId}:ic50`];
+  if (!proto) return [];
 
   const ordered = [...proto.readout_definitions].sort(
     (a, b) => a.display_order - b.display_order,
   );
 
+  // Every DR readout-def becomes its own column. A protocol with two DR
+  // readouts of the same curve_type (target IC50 + counter IC50) now
+  // surfaces two columns instead of merging them.
   const drcCols: string[] = [];
   for (const rd of ordered) {
-    if (rd.data_type === "dose_response" && rd.dose_response_config?.curve_type) {
-      drcCols.push(`drc:${protocolId}:${rd.dose_response_config.curve_type}`);
+    if (rd.data_type === "dose_response") {
+      drcCols.push(`drc:${rd.id}`);
     }
   }
   if (drcCols.length > 0) return drcCols;
@@ -229,9 +231,7 @@ function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): stri
       rdCols.push(`rd:${protocolId}:${rd.id}`);
     }
   }
-  if (rdCols.length > 0) return rdCols;
-
-  return [`drc:${protocolId}:ic50`];
+  return rdCols;
 }
 
 // Walks the composed criteria tree looking for any similarity structure clause.
@@ -327,7 +327,7 @@ export function SearchForm({
     const cleanedActivity = activityCriteria.map((c) => {
       if (!Array.isArray(c.where)) return c;
       const cleaned = c.where.filter((w) => {
-        if (!w.curve_type && !w.readout_definition_id) return false;
+        if (!w.readout_definition_id) return false;
         if (w.operator === "between") {
           return w.min !== undefined && w.max !== undefined;
         }
@@ -410,7 +410,7 @@ export function SearchForm({
 
     // Advanced: selectivity
     for (const c of advanced.selectivity) {
-      if (c.target_protocol_id && c.counter_protocol_id) criteria.push(c);
+      if (c.target_readout_definition_id && c.counter_readout_definition_id) criteria.push(c);
     }
 
     // Advanced: batch

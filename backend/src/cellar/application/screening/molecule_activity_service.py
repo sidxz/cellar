@@ -123,7 +123,10 @@ class MoleculeActivityService:
           - "rd:{protocol_id}:{readout_definition_id}:{normalization}" -- the
             named normalization layer of the readout (e.g. ``percent_inhibition``,
             ``z_score``). Without the suffix the raw layer is returned.
-          - "drc:{protocol_id}:{curve_type}" -- best dose-response curve
+          - "drc:{readout_definition_id}" -- best dose-response curve for that
+            DR readout-def. The readout-def identifies the column on multi-DR
+            protocols (target IC50, counter-screen IC50, ...); curve_type was
+            ambiguous when two DRs shared it.
         """
         if not molecule_ids or not protocol_columns:
             return {}
@@ -144,10 +147,11 @@ class MoleculeActivityService:
         #   "rd:{rd_def_id}"                          -- raw, legacy/unscoped
         #   "rd:{proto_id}:{rd_def_id}"               -- raw, protocol-scoped
         #   "rd:{proto_id}:{rd_def_id}:{normalization}" -- normalized layer
-        #   "drc:{proto_id}:{curve_type}"             -- best dose-response curve
+        #   "drc:{rd_def_id}"                         -- best DR curve for the
+        #                                                DR readout-def
         rd_specs: list[tuple[uuid.UUID, str | None]] = []
         rd_col_map: dict[tuple[uuid.UUID, str | None], str] = {}
-        drc_specs: list[tuple[uuid.UUID, str]] = []  # (protocol_id, curve_type)
+        drc_specs: list[uuid.UUID] = []  # readout_definition_id
         for col in protocol_columns:
             if col.startswith("rd:"):
                 parts = col.split(":")
@@ -163,8 +167,7 @@ class MoleculeActivityService:
                 rd_specs.append(spec)
                 rd_col_map[spec] = col
             elif col.startswith("drc:"):
-                parts = col.split(":")
-                drc_specs.append((uuid.UUID(parts[1]), parts[2]))
+                drc_specs.append(uuid.UUID(col.split(":", 1)[1]))
 
         # Fetch aggregated readouts
         rd_data: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
@@ -173,18 +176,27 @@ class MoleculeActivityService:
                 workspace_id, molecule_ids, rd_specs
             )
 
-        # Fetch best curves
-        curve_proto_ids = list({spec[0] for spec in drc_specs})
+        # Fetch best curves keyed by readout-def
         curve_data: dict[uuid.UUID, dict[uuid.UUID, object]] = {}
         proto_dose_unit: dict[uuid.UUID, str] = {}
-        if curve_proto_ids:
+        if drc_specs:
             curve_data = await self._curve_repo.find_best_curves_for_molecules(
-                workspace_id, molecule_ids, curve_proto_ids
+                workspace_id, molecule_ids, drc_specs
             )
-            # Resolve dose_unit for each protocol once — IC50 unit decoration
-            # is sourced from the protocol, not denormalized on each curve.
-            protos = await self._protocol_repo.find_by_ids(workspace_id, curve_proto_ids)
-            proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
+            # Resolve dose_unit per protocol once. The fitted IC50 unit
+            # decoration is sourced from the owning protocol (not denormalized
+            # on the curve), so we collect the protocols the picked curves
+            # actually came from.
+            curve_proto_ids = {
+                curve.protocol_id
+                for by_rd in curve_data.values()
+                for curve in by_rd.values()
+            }
+            if curve_proto_ids:
+                protos = await self._protocol_repo.find_by_ids(
+                    workspace_id, list(curve_proto_ids)
+                )
+                proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
 
         # Build result
         result: dict[uuid.UUID, dict[str, ActivityValue]] = {}
@@ -207,10 +219,10 @@ class MoleculeActivityService:
 
             # Dose-response columns
             mol_curves = curve_data.get(mol_id, {})
-            for proto_id, curve_type in drc_specs:
-                col_key = f"drc:{proto_id}:{curve_type}"
-                curve = mol_curves.get(proto_id)
-                if curve and curve.curve_type.value == curve_type:
+            for rd_id in drc_specs:
+                col_key = f"drc:{rd_id}"
+                curve = mol_curves.get(rd_id)
+                if curve:
                     # Condense raw_data to [{x, y}] for inline sparkline
                     condensed = None
                     if curve.raw_data and isinstance(curve.raw_data, list):
@@ -219,7 +231,7 @@ class MoleculeActivityService:
                     mol_activity[col_key] = ActivityValue(
                         value=curve.fitted_value,
                         qualifier=None,
-                        unit=proto_dose_unit.get(proto_id, "uM"),
+                        unit=proto_dose_unit.get(curve.protocol_id, "uM"),
                         source="dose_response",
                         curve_type=curve.curve_type.value,
                         r_squared=curve.r_squared,

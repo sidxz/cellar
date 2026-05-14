@@ -46,10 +46,15 @@ class NumericReadoutRow:
 
 @dataclass(frozen=True)
 class DRAggRow:
-    """Dose-response aggregation row from the read model."""
+    """Dose-response aggregation row from the read model.
+
+    Grouped by readout-def, not curve_type — a protocol can have N DR
+    readouts sharing one curve_type (target IC50 + counter-screen IC50)
+    and grouping by curve_type would collapse them into one row.
+    """
 
     molecule_id: uuid.UUID
-    curve_type: str
+    readout_definition_id: uuid.UUID
     best: float | None
     geo_mean: float | None
 
@@ -59,7 +64,7 @@ class BestParamsRow:
     """Best curve params row from the read model."""
 
     molecule_id: uuid.UUID
-    curve_type: str
+    readout_definition_id: uuid.UUID
     curve_class: str | None
     hill_slope: float
     top: float

@@ -232,11 +232,18 @@ export type RunScope =
 
 export type RunScopeMode = RunScope["mode"];
 
+/** Which data table the condition reads from.
+ *  - "dr_curve": the readout-def is a dose-response readout; the value
+ *    is a fitted IC50/EC50/etc. from dose_response_curves.
+ *  - "readout_data": the readout-def is a raw numeric readout; the value
+ *    is an aggregated reading from readout_data. */
+export type ActivityWhereSource = "dr_curve" | "readout_data";
+
 /** A single where-condition on an activity criterion. Multiple conditions
  *  on the same criterion are ANDed together. */
 export interface ActivityWhereCondition {
-  curve_type?: string;
-  readout_definition_id?: string;
+  source: ActivityWhereSource;
+  readout_definition_id: string;
   /** Includes "between" — chemists routinely bracket potency. */
   operator: PropertyOperator;
   value?: number;
@@ -251,10 +258,10 @@ export interface ActivityCriterion {
   where?: ActivityWhereCondition[];
   /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
   run_scope?: RunScope;
-  /** @deprecated legacy single-where fields. Kept for saved-search compat;
-   *  the composer normalizes them to a single-element where list. */
+  /** Single-where shape. The composer normalizes it to a single-element
+   *  where list — useful for saved searches stored from the old UI. */
+  source?: ActivityWhereSource;
   readout_definition_id?: string;
-  curve_type?: string;
   operator?: PropertyOperator;
   value?: number;
 }
@@ -297,10 +304,13 @@ export interface ProjectCriterion {
 
 export interface SelectivityCriterion {
   type: "selectivity";
-  target_protocol_id: string;
-  target_curve_type: string;
-  counter_protocol_id: string;
-  counter_curve_type: string;
+  /** Target DR readout-def (the "wanted" potency column). The readout-def
+   *  identifies the column on multi-DR protocols (target IC50 vs counter
+   *  IC50 are different readout-defs even when both are curve_type=ic50). */
+  target_readout_definition_id: string;
+  /** Counter-screen DR readout-def (the "unwanted" potency column —
+   *  cytotoxicity, off-target, etc.). */
+  counter_readout_definition_id: string;
   ratio_operator: PropertyOperator;
   ratio_value: number;
 }
@@ -433,6 +443,9 @@ export interface CurveDetail {
   curve_id: string;
   run_id: string;
   batch_id: string;
+  /** The DR readout-def this curve was fitted from. Identity on multi-DR
+   *  protocols where two DRs may share a curve_type. */
+  readout_definition_id: string;
   curve_type: string;
   fitted_value: number;
   fitted_unit: string;

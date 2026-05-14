@@ -46,6 +46,7 @@ class CurveDetailResponse(BaseModel):
     curve_id: uuid.UUID
     run_id: uuid.UUID
     batch_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str
     fitted_value: float
     fitted_unit: str
@@ -93,6 +94,7 @@ class MoleculeActivityDetailResponse(BaseModel):
                             curve_id=c.curve_id,
                             run_id=c.run_id,
                             batch_id=c.batch_id,
+                            readout_definition_id=c.readout_definition_id,
                             curve_type=c.curve_type,
                             fitted_value=c.fitted_value,
                             fitted_unit=c.fitted_unit,

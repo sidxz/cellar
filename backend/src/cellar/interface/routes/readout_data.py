@@ -129,6 +129,7 @@ class DoseResponseCurveResponse(BaseModel):
     batch_number: str | None = None
     protocol_id: uuid.UUID
     run_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str
     fitted_value: float
     fitted_unit: str
@@ -171,6 +172,7 @@ class DoseResponseCurveResponse(BaseModel):
             batch_number=batch_number,
             protocol_id=c.protocol_id,
             run_id=c.run_id,
+            readout_definition_id=c.readout_definition_id,
             curve_type=c.curve_type.value,
             fitted_value=c.fitted_value,
             fitted_unit=dose_unit,
@@ -260,6 +262,7 @@ class CreateDoseResponseCurveRequest(BaseModel):
     batch_id: uuid.UUID
     protocol_id: uuid.UUID
     run_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str
     fitted_value: float
     hill_slope: float
@@ -400,6 +403,7 @@ async def create_dose_response_curve(
         batch_id=body.batch_id,
         protocol_id=body.protocol_id,
         run_id=body.run_id,
+        readout_definition_id=body.readout_definition_id,
         curve_type=body.curve_type,
         fitted_value=body.fitted_value,
         hill_slope=body.hill_slope,

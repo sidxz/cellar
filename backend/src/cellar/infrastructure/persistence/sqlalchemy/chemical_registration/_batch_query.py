@@ -132,22 +132,24 @@ def _selectivity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> C
     meets the specified ratio threshold.  A high ratio means the compound
     is much more potent at the target than the counter-screen.
 
+    Each side names a DR readout-def — a readout-def is the column ("Target
+    IC50", "Counter IC50", "Cytotoxicity LD50"). Protocol and curve_type are
+    implied by it; sorting/joining by ``(protocol, curve_type)`` was
+    ambiguous on multi-DR protocols (two DRs sharing a curve_type were
+    indistinguishable).
+
     Example criterion::
 
         {
             "type": "selectivity",
-            "target_protocol_id": "<uuid>",
-            "target_curve_type": "ic50",
-            "counter_protocol_id": "<uuid>",
-            "counter_curve_type": "ic50",
+            "target_readout_definition_id": "<uuid>",
+            "counter_readout_definition_id": "<uuid>",
             "ratio_operator": "gte",
             "ratio_value": 100,
         }
     """
-    target_pid = criterion["target_protocol_id"]
-    target_ct = criterion["target_curve_type"]
-    counter_pid = criterion["counter_protocol_id"]
-    counter_ct = criterion["counter_curve_type"]
+    target_rd = criterion["target_readout_definition_id"]
+    counter_rd = criterion["counter_readout_definition_id"]
     ratio_op = criterion.get("ratio_operator", "gte")
     ratio_val = criterion["ratio_value"]
 
@@ -175,11 +177,9 @@ def _selectivity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> C
         .join(c, t.c.molecule_id == c.c.molecule_id)
         .where(
             t.c.workspace_id == workspace_id,
-            t.c.protocol_id == target_pid,
-            t.c.curve_type == target_ct,
+            t.c.readout_definition_id == target_rd,
             c.c.workspace_id == workspace_id,
-            c.c.protocol_id == counter_pid,
-            c.c.curve_type == counter_ct,
+            c.c.readout_definition_id == counter_rd,
             getattr(ratio_expr, op_name)(ratio_val),
         )
     )

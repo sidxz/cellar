@@ -137,6 +137,14 @@ class SQLAlchemyChannelResolutionQuery:
                 DoseResponseCurveModel.workspace_id == workspace_id,
                 DoseResponseCurveModel.molecule_id == molecule_id,
                 DoseResponseCurveModel.protocol_id == channel.protocol_id,
+                # Disambiguate among DR readouts on a multi-DR protocol.
+                # A protocol can declare N dose-response readouts (target
+                # IC50 vs counter-screen IC50, primary vs cytotoxicity, ...).
+                # Without this predicate, two DR readouts that happen to
+                # share a curve_type would both surface here and the
+                # selection rule below would silently pick the wrong one.
+                DoseResponseCurveModel.readout_definition_id
+                == channel.readout_definition_id,
             )
         )
         async with self._sf() as session:
@@ -213,6 +221,9 @@ class SQLAlchemyChannelResolutionQuery:
                     DoseResponseCurveModel.workspace_id == workspace_id,
                     DoseResponseCurveModel.protocol_id == protocol_id,
                     DoseResponseCurveModel.run_id.in_(run_ids),
+                    # Pin to the channel's readout-def — see _fetch_curve_candidates
+                    # for why this matters on multi-DR protocols.
+                    DoseResponseCurveModel.readout_definition_id == readout_definition_id,
                 )
             )
         else:

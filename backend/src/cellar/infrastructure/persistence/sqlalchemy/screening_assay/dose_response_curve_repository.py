@@ -160,17 +160,23 @@ class SQLAlchemyDoseResponseCurveRepository:
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
-        protocol_ids: list[uuid.UUID] | None = None,
+        readout_definition_ids: list[uuid.UUID] | None = None,
     ) -> dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]]:
-        """Batch query: molecule_id -> protocol_id -> best curve (highest r_squared)."""
+        """Batch query: molecule_id -> readout_definition_id -> best curve (highest r_squared).
+
+        Keyed by readout-def, not protocol — a protocol can declare N DR
+        readouts (target IC50, counter-screen IC50, ...) so "best curve
+        for this protocol" was ambiguous. "Best curve for this DR
+        readout-def" is the precise question every caller actually wants.
+        """
         if not molecule_ids:
             return {}
 
-        # Subquery: best r_squared per (molecule_id, protocol_id)
+        # Subquery: best r_squared per (molecule_id, readout_definition_id)
         best_sq = (
             select(
                 DoseResponseCurveModel.molecule_id,
-                DoseResponseCurveModel.protocol_id,
+                DoseResponseCurveModel.readout_definition_id,
                 func.max(DoseResponseCurveModel.r_squared).label("best_r2"),
             )
             .where(
@@ -179,12 +185,14 @@ class SQLAlchemyDoseResponseCurveRepository:
             )
             .group_by(
                 DoseResponseCurveModel.molecule_id,
-                DoseResponseCurveModel.protocol_id,
+                DoseResponseCurveModel.readout_definition_id,
             )
         )
 
-        if protocol_ids:
-            best_sq = best_sq.where(DoseResponseCurveModel.protocol_id.in_(protocol_ids))
+        if readout_definition_ids:
+            best_sq = best_sq.where(
+                DoseResponseCurveModel.readout_definition_id.in_(readout_definition_ids)
+            )
 
         best_sq = best_sq.subquery()
 
@@ -193,7 +201,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             .join(
                 best_sq,
                 (DoseResponseCurveModel.molecule_id == best_sq.c.molecule_id)
-                & (DoseResponseCurveModel.protocol_id == best_sq.c.protocol_id)
+                & (DoseResponseCurveModel.readout_definition_id == best_sq.c.readout_definition_id)
                 & (DoseResponseCurveModel.r_squared == best_sq.c.best_r2),
             )
             .where(DoseResponseCurveModel.workspace_id == workspace_id)
@@ -204,7 +212,7 @@ class SQLAlchemyDoseResponseCurveRepository:
 
         out: dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]] = {}
         for curve in curves:
-            out.setdefault(curve.molecule_id, {})[curve.protocol_id] = curve
+            out.setdefault(curve.molecule_id, {})[curve.readout_definition_id] = curve
 
         return out
 
@@ -228,6 +236,7 @@ class SQLAlchemyDoseResponseCurveRepository:
         model.batch_id = entity.batch_id
         model.protocol_id = entity.protocol_id
         model.run_id = entity.run_id
+        model.readout_definition_id = entity.readout_definition_id
         model.curve_type = entity.curve_type.value
         model.fitted_value = entity.fitted_value
         model.hill_slope = entity.hill_slope
@@ -242,6 +251,7 @@ class SQLAlchemyDoseResponseCurveRepository:
         model.excluded_points = entity.excluded_points
         model.fit_quality_warnings = entity.fit_quality_warnings
         model.intercept_values = _serialize_intercept_values(entity.intercept_values)
+        model.dose_response_config_snapshot = entity.dose_response_config_snapshot
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         stmt = delete(DoseResponseCurveModel).where(
@@ -271,6 +281,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             batch_id=model.batch_id,
             protocol_id=model.protocol_id,
             run_id=model.run_id,
+            readout_definition_id=model.readout_definition_id,
             curve_type=curve_type,
             fitted_value=model.fitted_value,
             hill_slope=model.hill_slope,
@@ -291,6 +302,7 @@ class SQLAlchemyDoseResponseCurveRepository:
                 fallback_ci_low=model.confidence_interval_low,
                 fallback_ci_high=model.confidence_interval_high,
             ),
+            dose_response_config_snapshot=model.dose_response_config_snapshot,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -304,6 +316,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             batch_id=entity.batch_id,
             protocol_id=entity.protocol_id,
             run_id=entity.run_id,
+            readout_definition_id=entity.readout_definition_id,
             curve_type=entity.curve_type.value,
             fitted_value=entity.fitted_value,
             hill_slope=entity.hill_slope,
@@ -318,4 +331,5 @@ class SQLAlchemyDoseResponseCurveRepository:
             excluded_points=entity.excluded_points,
             fit_quality_warnings=entity.fit_quality_warnings,
             intercept_values=_serialize_intercept_values(entity.intercept_values),
+            dose_response_config_snapshot=entity.dose_response_config_snapshot,
         )

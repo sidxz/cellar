@@ -21,6 +21,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     Uuid,
     text,
 )
@@ -346,6 +347,17 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     run_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("runs.id"), nullable=False, index=True
     )
+    # The DR readout-def this curve was fitted from. Identity-bearing — a
+    # protocol can hold many DR readouts (target IC50, counter-screen IC50,
+    # cytotoxicity LD50, ...) and each one's curve is its own row.
+    # ``curve_type`` is descriptive (display label + intercept language),
+    # never identifying. Cascade on delete: readout-def removal is draft-only
+    # so cascading is safe (no live runs can reference a draft readout-def).
+    readout_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("readout_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     curve_type: Mapped[str] = mapped_column(String(20), nullable=False)
     fitted_value: Mapped[float] = mapped_column(Float, nullable=False)
     hill_slope: Mapped[float] = mapped_column(Float, nullable=False)
@@ -363,11 +375,37 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     # NULL on legacy rows; readers synthesize a single-element list from
     # (curve_type, fitted_value, ci_low, ci_high) when None.
     intercept_values: Mapped[list | None] = mapped_column(JSONB)
+    # Frozen snapshot of the DR config that drove this fit. Lets a future
+    # drift detector tell when a curve was fit under an older config than
+    # the readout-def currently declares (top/bottom constraints,
+    # y_normalization, x_readout_name, etc.). Null on legacy / pre-snapshot
+    # rows — display falls back to the readout-def's live config.
+    dose_response_config_snapshot: Mapped[dict | None] = mapped_column(JSONB)
 
     __table_args__ = (
         Index("ix_drc_run", "run_id"),
         Index("ix_drc_molecule", "molecule_id"),
         Index("ix_drc_protocol", "protocol_id"),
+        # Channel-resolver hot path: filter by
+        # (workspace, molecule, protocol, readout_def).
+        Index(
+            "ix_drc_resolver",
+            "workspace_id",
+            "molecule_id",
+            "protocol_id",
+            "readout_definition_id",
+        ),
+        # One fit per (run, well-group, readout-def). The fitter is
+        # wipe-then-rewrite per-run so this never trips during normal flow,
+        # but blocks accidental duplicates from direct API callers.
+        UniqueConstraint(
+            "workspace_id",
+            "run_id",
+            "molecule_id",
+            "batch_id",
+            "readout_definition_id",
+            name="uq_drc_run_well_readout",
+        ),
     )
 
 

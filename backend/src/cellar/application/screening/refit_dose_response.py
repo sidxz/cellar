@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.screening._dose_response_config_serde import (
+    serialize_dose_response_config,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import (
@@ -120,6 +123,7 @@ class RefitDoseResponseCurve:
                 excluded_points=fitted.excluded_points,
                 fit_quality_warnings=fitted.fit_quality_warnings,
                 intercept_values=fitted.intercept_values,
+                dose_response_config_snapshot=serialize_dose_response_config(config),
             )
 
             await self._curve_repo.save(curve)

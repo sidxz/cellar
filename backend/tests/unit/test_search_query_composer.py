@@ -168,11 +168,13 @@ class TestComposeCriteria:
     # ── Activity multi-where (where[] list of conditions ANDed) ──────────
 
     def test_activity_legacy_single_where_still_works(self) -> None:
-        """Inline curve_type+operator+value (legacy shape) is unchanged."""
+        """Inline source+readout_definition_id (single-where shape) works."""
         proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve", "readout_definition_id": rd,
                  "operator": "lt", "value": 1.0}
             ],
             "logic": "and",
@@ -182,15 +184,18 @@ class TestComposeCriteria:
         assert "fitted_value" in sql
 
     def test_activity_where_list_two_conditions_anded(self) -> None:
-        """where=[{IC50<1}, {readout>50}] → two subqueries AND'd."""
+        """where=[{DR<1}, {readout>50}] → two subqueries AND'd."""
         proto = str(uuid.uuid4())
+        dr_rd = str(uuid.uuid4())
         readout = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
                 {"type": "activity", "protocol_id": proto,
                  "where": [
-                     {"curve_type": "ic50", "operator": "lt", "value": 1.0},
-                     {"readout_definition_id": readout, "operator": "gte", "value": 50.0},
+                     {"source": "dr_curve", "readout_definition_id": dr_rd,
+                      "operator": "lt", "value": 1.0},
+                     {"source": "readout_data", "readout_definition_id": readout,
+                      "operator": "gte", "value": 50.0},
                  ]}
             ],
             "logic": "and",
@@ -206,12 +211,13 @@ class TestComposeCriteria:
     def test_activity_where_between_operator(self) -> None:
         """between requires min+max instead of value."""
         proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
                 {"type": "activity", "protocol_id": proto,
                  "where": [
-                     {"curve_type": "ic50", "operator": "between",
-                      "min": 0.1, "max": 10.0}
+                     {"source": "dr_curve", "readout_definition_id": rd,
+                      "operator": "between", "min": 0.1, "max": 10.0}
                  ]}
             ],
             "logic": "and",
@@ -221,12 +227,13 @@ class TestComposeCriteria:
         assert "between" in sql.lower()
 
     def test_activity_where_between_inline_legacy(self) -> None:
-        """between also accepted on the legacy single-where shape."""
+        """between also accepted on the single-where shape."""
         proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
                 {"type": "activity", "protocol_id": proto,
-                 "curve_type": "ic50",
+                 "source": "dr_curve", "readout_definition_id": rd,
                  "operator": "between", "min": 0.1, "max": 10.0}
             ],
             "logic": "and",
@@ -251,6 +258,7 @@ class TestComposeCriteria:
     def test_activity_where_run_scope_applied_to_each_condition(self) -> None:
         """run_scope must be honored on every where-row."""
         proto = str(uuid.uuid4())
+        dr_rd = str(uuid.uuid4())
         readout = str(uuid.uuid4())
         run = "11111111-2222-3333-4444-555555555555"
         clause = _compose({
@@ -258,8 +266,10 @@ class TestComposeCriteria:
                 {"type": "activity", "protocol_id": proto,
                  "run_scope": {"mode": "specific", "run_id": run},
                  "where": [
-                     {"curve_type": "ic50", "operator": "lt", "value": 1.0},
-                     {"readout_definition_id": readout, "operator": "gte", "value": 50.0},
+                     {"source": "dr_curve", "readout_definition_id": dr_rd,
+                      "operator": "lt", "value": 1.0},
+                     {"source": "readout_data", "readout_definition_id": readout,
+                      "operator": "gte", "value": 50.0},
                  ]}
             ],
             "logic": "and",
@@ -269,9 +279,9 @@ class TestComposeCriteria:
         assert sql.lower().count("run_id") >= 2
 
     def test_activity_where_missing_field_raises(self) -> None:
-        """A where-row needs either curve_type or readout_definition_id."""
+        """A where-row needs readout_definition_id."""
         proto = str(uuid.uuid4())
-        with pytest.raises(ValueError, match="curve_type|readout"):
+        with pytest.raises(ValueError, match="readout_definition_id"):
             _compose({
                 "criteria": [
                     {"type": "activity", "protocol_id": proto,
@@ -282,22 +292,24 @@ class TestComposeCriteria:
 
     def test_activity_between_missing_min_max_raises(self) -> None:
         proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
         with pytest.raises(ValueError, match="between"):
             _compose({
                 "criteria": [
                     {"type": "activity", "protocol_id": proto,
                      "where": [
-                         {"curve_type": "ic50", "operator": "between"}
+                         {"source": "dr_curve", "readout_definition_id": rd,
+                          "operator": "between"}
                      ]}
                 ],
                 "logic": "and",
             })
 
-    # ── Activity presence-only (no curve_type / no readout) ──────────────
+    # ── Activity presence-only (no readout_definition_id) ────────────────
 
     def test_activity_presence_only_matches_any_data(self) -> None:
-        """An activity criterion without curve_type or readout_definition_id
-        is a 'tested-in-protocol' presence filter — no value comparison."""
+        """An activity criterion without readout_definition_id is a
+        'tested-in-protocol' presence filter — no value comparison."""
         proto = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
@@ -332,14 +344,18 @@ class TestComposeCriteria:
         proto = str(uuid.uuid4())
         without = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0}
             ],
             "logic": "and",
         })
         with_any = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0,
                  "run_scope": {"mode": "any"}}
             ],
@@ -353,7 +369,9 @@ class TestComposeCriteria:
         run = "11111111-2222-3333-4444-555555555555"
         clause = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0,
                  "run_scope": {"mode": "specific", "run_id": run}}
             ],
@@ -366,7 +384,9 @@ class TestComposeCriteria:
         proto = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0,
                  "run_scope": {"mode": "date_range",
                                "date_from": "2026-01-01",
@@ -381,7 +401,9 @@ class TestComposeCriteria:
         proto = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0,
                  "run_scope": {"mode": "past_n_days", "days": 30}}
             ],
@@ -394,7 +416,9 @@ class TestComposeCriteria:
         proto = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0,
                  "run_scope": {"mode": "latest"}}
             ],
@@ -410,7 +434,9 @@ class TestComposeCriteria:
         proto = str(uuid.uuid4())
         clause = _compose({
             "criteria": [
-                {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                  "operator": "lt", "value": 1.0,
                  "run_scope": {"mode": "all"}}
             ],
@@ -444,7 +470,9 @@ class TestComposeCriteria:
         with pytest.raises(ValueError, match="run_scope"):
             _compose({
                 "criteria": [
-                    {"type": "activity", "protocol_id": proto, "curve_type": "ic50",
+                    {"type": "activity", "protocol_id": proto,
+                 "source": "dr_curve",
+                 "readout_definition_id": str(uuid.uuid4()),
                      "operator": "lt", "value": 1.0,
                      "run_scope": {"mode": "wat"}}
                 ],
@@ -458,7 +486,8 @@ class TestComposeCriteria:
                 {
                     "type": "activity",
                     "protocol_id": proto,
-                    "curve_type": "ic50",
+                    "source": "dr_curve",
+                    "readout_definition_id": str(uuid.uuid4()),
                     "operator": "lt",
                     "value": 100,
                     "negate": True,
@@ -489,10 +518,8 @@ class TestComposeCriteria:
             "criteria": [
                 {
                     "type": "selectivity",
-                    "target_protocol_id": str(uuid.uuid4()),
-                    "target_curve_type": "ic50",
-                    "counter_protocol_id": str(uuid.uuid4()),
-                    "counter_curve_type": "ic50",
+                    "target_readout_definition_id": str(uuid.uuid4()),
+                    "counter_readout_definition_id": str(uuid.uuid4()),
                     "ratio_operator": "gte",
                     "ratio_value": 100,
                 }
@@ -502,14 +529,15 @@ class TestComposeCriteria:
         assert clause is not None
 
     def test_selectivity_different_curve_types(self) -> None:
+        """Each side names a DR readout-def; mismatched curve_types (e.g.
+        IC50 target vs EC50 counter-screen) are valid by virtue of pointing
+        at different readout-defs."""
         clause = _compose({
             "criteria": [
                 {
                     "type": "selectivity",
-                    "target_protocol_id": str(uuid.uuid4()),
-                    "target_curve_type": "ic50",
-                    "counter_protocol_id": str(uuid.uuid4()),
-                    "counter_curve_type": "ec50",
+                    "target_readout_definition_id": str(uuid.uuid4()),
+                    "counter_readout_definition_id": str(uuid.uuid4()),
                     "ratio_operator": "gt",
                     "ratio_value": 50,
                 }
@@ -524,10 +552,8 @@ class TestComposeCriteria:
                 "criteria": [
                     {
                         "type": "selectivity",
-                        "target_protocol_id": str(uuid.uuid4()),
-                        "target_curve_type": "ic50",
-                        "counter_protocol_id": str(uuid.uuid4()),
-                        "counter_curve_type": "ic50",
+                        "target_readout_definition_id": str(uuid.uuid4()),
+                        "counter_readout_definition_id": str(uuid.uuid4()),
                         "ratio_operator": "like",
                         "ratio_value": 100,
                     }
@@ -540,10 +566,8 @@ class TestComposeCriteria:
             "criteria": [
                 {
                     "type": "selectivity",
-                    "target_protocol_id": str(uuid.uuid4()),
-                    "target_curve_type": "ic50",
-                    "counter_protocol_id": str(uuid.uuid4()),
-                    "counter_curve_type": "ic50",
+                    "target_readout_definition_id": str(uuid.uuid4()),
+                    "counter_readout_definition_id": str(uuid.uuid4()),
                     "ratio_operator": "gte",
                     "ratio_value": 100,
                     "negate": True,

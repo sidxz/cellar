@@ -75,6 +75,29 @@ async def _insert_run(
     )
 
 
+async def _insert_readout_def(
+    uow: AsyncUnitOfWork, rd_id: uuid.UUID, protocol_id: uuid.UUID
+) -> None:
+    """Seed a dose-response readout-def on the protocol so curves can FK to it.
+
+    Minimal shape: a numeric-typed readout with no normalizations. The curve
+    tests don't exercise the protocol-level DR config, only the curve row's
+    FK identity.
+    """
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO readout_definitions "
+            "(id, protocol_id, name, data_type, display_order, is_calculated) "
+            "VALUES (:id, :proto, :name, 'numeric', 0, false)"
+        ),
+        {
+            "id": rd_id,
+            "proto": protocol_id,
+            "name": f"Readout-{str(rd_id)[:8]}",
+        },
+    )
+
+
 async def seed_curve(
     uow: AsyncUnitOfWork,
     *,
@@ -88,9 +111,11 @@ async def seed_curve(
     org_id = uuid.uuid4()
     protocol_id = uuid.uuid4()
     run_id = uuid.uuid4()
+    readout_def_id = uuid.uuid4()
 
     await _insert_org(uow, org_id, workspace_id)
     await _insert_protocol(uow, protocol_id, workspace_id)
+    await _insert_readout_def(uow, readout_def_id, protocol_id)
     await _insert_run(uow, run_id, protocol_id, workspace_id)
 
     curve = DoseResponseCurve(
@@ -99,6 +124,7 @@ async def seed_curve(
         batch_id=uuid.uuid4(),
         protocol_id=protocol_id,
         run_id=run_id,
+        readout_definition_id=readout_def_id,
         curve_type=CurveType.IC50,
         fitted_value=10.0,
         hill_slope=1.0,

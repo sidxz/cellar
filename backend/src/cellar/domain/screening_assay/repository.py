@@ -181,7 +181,7 @@ class DoseResponseCurveRepository(Protocol):
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
-        protocol_ids: list[uuid.UUID] | None = None,
+        readout_definition_ids: list[uuid.UUID] | None = None,
     ) -> dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]]: ...
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID

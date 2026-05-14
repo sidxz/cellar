@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import type {
   SelectivityCriterion,
   BatchCriterion,
@@ -28,13 +29,6 @@ import type {
 } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-
-const CURVE_TYPE_OPTIONS = [
-  { value: "ic50", label: "IC50" },
-  { value: "ec50", label: "EC50" },
-  { value: "ki", label: "Ki" },
-  { value: "kd", label: "Kd" },
-] as const;
 
 const PROPERTY_OPERATORS: { value: PropertyOperator; label: string }[] = [
   { value: "eq", label: "=" },
@@ -88,10 +82,8 @@ const CUSTOM_FIELD_MODE_OPTIONS: { value: CustomFieldMode; label: string }[] = [
 function defaultSelectivity(): SelectivityCriterion {
   return {
     type: "selectivity",
-    target_protocol_id: "",
-    target_curve_type: "ic50",
-    counter_protocol_id: "",
-    counter_curve_type: "ic50",
+    target_readout_definition_id: "",
+    counter_readout_definition_id: "",
     ratio_operator: "gte",
     ratio_value: 100,
   };
@@ -127,6 +119,20 @@ function SelectivityTerm({
   const { data: protocols } = useProtocols();
   const activeProtocols = protocols?.filter((p) => p.status === "active");
 
+  // The selectivity criterion stores readout-def UUIDs (post-033), but the
+  // user picks Protocol -> Readout. Two transient picker-state values let
+  // us scope the readout-def dropdown to a chosen protocol without
+  // mutating the criterion until both halves are selected.
+  const [targetProtocolId, setTargetProtocolId] = useState<string>("");
+  const [counterProtocolId, setCounterProtocolId] = useState<string>("");
+  const { data: targetProtocol } = useProtocol(targetProtocolId);
+  const { data: counterProtocol } = useProtocol(counterProtocolId);
+
+  const targetDrReadouts =
+    targetProtocol?.readout_definitions?.filter((rd) => rd.dose_response_config) ?? [];
+  const counterDrReadouts =
+    counterProtocol?.readout_definitions?.filter((rd) => rd.dose_response_config) ?? [];
+
   return (
     <div className="space-y-2 rounded border border-dashed border-border p-3">
       <div className="flex items-center justify-between">
@@ -141,8 +147,11 @@ function SelectivityTerm({
         <div className="w-44">
           <Label className="text-xs text-muted-foreground">Target Protocol</Label>
           <Select
-            value={criterion.target_protocol_id || undefined}
-            onValueChange={(v) => onChange({ ...criterion, target_protocol_id: v })}
+            value={targetProtocolId || undefined}
+            onValueChange={(v) => {
+              setTargetProtocolId(v);
+              onChange({ ...criterion, target_readout_definition_id: "" });
+            }}
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Select..." />
@@ -154,17 +163,22 @@ function SelectivityTerm({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-28">
-          <Label className="text-xs text-muted-foreground">Curve</Label>
+        <div className="w-44">
+          <Label className="text-xs text-muted-foreground">Readout</Label>
           <Select
-            value={criterion.target_curve_type}
-            onValueChange={(v) => onChange({ ...criterion, target_curve_type: v })}
+            value={criterion.target_readout_definition_id || undefined}
+            onValueChange={(v) => onChange({ ...criterion, target_readout_definition_id: v })}
+            disabled={!targetProtocolId}
           >
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
             <SelectContent>
-              {CURVE_TYPE_OPTIONS.map((ct) => (
-                <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
-              ))}
+              {targetDrReadouts.map((rd) => {
+                const ct = rd.dose_response_config?.curve_type;
+                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
+                return (
+                  <SelectItem key={rd.id} value={rd.id}>{rd.name}{suffix}</SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -173,8 +187,11 @@ function SelectivityTerm({
         <div className="w-44">
           <Label className="text-xs text-muted-foreground">Counter Protocol</Label>
           <Select
-            value={criterion.counter_protocol_id || undefined}
-            onValueChange={(v) => onChange({ ...criterion, counter_protocol_id: v })}
+            value={counterProtocolId || undefined}
+            onValueChange={(v) => {
+              setCounterProtocolId(v);
+              onChange({ ...criterion, counter_readout_definition_id: "" });
+            }}
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Select..." />
@@ -186,17 +203,22 @@ function SelectivityTerm({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-28">
-          <Label className="text-xs text-muted-foreground">Curve</Label>
+        <div className="w-44">
+          <Label className="text-xs text-muted-foreground">Readout</Label>
           <Select
-            value={criterion.counter_curve_type}
-            onValueChange={(v) => onChange({ ...criterion, counter_curve_type: v })}
+            value={criterion.counter_readout_definition_id || undefined}
+            onValueChange={(v) => onChange({ ...criterion, counter_readout_definition_id: v })}
+            disabled={!counterProtocolId}
           >
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
             <SelectContent>
-              {CURVE_TYPE_OPTIONS.map((ct) => (
-                <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
-              ))}
+              {counterDrReadouts.map((rd) => {
+                const ct = rd.dose_response_config?.curve_type;
+                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
+                return (
+                  <SelectItem key={rd.id} value={rd.id}>{rd.name}{suffix}</SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

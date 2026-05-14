@@ -15,6 +15,7 @@ export interface CreateDoseResponseCurveRequest {
   batch_id: string;
   protocol_id: string;
   run_id: string;
+  readout_definition_id: string;
   curve_type: string;
   fitted_value: number;
   hill_slope: number;

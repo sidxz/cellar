@@ -99,6 +99,7 @@ def _make_curve(
         batch_id=batch_id or uuid.uuid4(),
         protocol_id=protocol_id,
         run_id=run_id or uuid.uuid4(),
+        readout_definition_id=uuid.uuid4(),
         curve_type=curve_type,
         fitted_value=fitted_value,
         hill_slope=hill_slope,

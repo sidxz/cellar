@@ -57,6 +57,7 @@ function adaptCurve(curve: CurveDetail, protocolId: string, molecule: Molecule):
     batch_number: null,
     protocol_id: protocolId,
     run_id: curve.run_id,
+    readout_definition_id: curve.readout_definition_id,
     curve_type: curve.curve_type as CurveType,
     fitted_value: curve.fitted_value,
     fitted_unit: curve.fitted_unit,

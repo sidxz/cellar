@@ -1,6 +1,7 @@
 "use client";
 
-import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { StructureEditorDialog, StructureRenderer } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -15,7 +16,6 @@ import {
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
-  CURVE_TYPE_OPTIONS,
   PROPERTY_OPERATORS,
   STRUCTURE_TYPES,
 } from "../../lib/search-query-config";
@@ -187,6 +187,19 @@ export function SelectivityCriterionRow({
   const { data: protocols } = useProtocols();
   const activeProtocols = protocols?.filter((p) => p.status === "active");
 
+  // Transient picker state: the criterion stores readout-def UUIDs only
+  // (post-033). We still ask the user to pick a protocol first so the
+  // readout-def dropdown stays scoped.
+  const [targetProtocolId, setTargetProtocolId] = useState<string>("");
+  const [counterProtocolId, setCounterProtocolId] = useState<string>("");
+  const { data: targetProtocol } = useProtocol(targetProtocolId);
+  const { data: counterProtocol } = useProtocol(counterProtocolId);
+
+  const targetDrReadouts =
+    targetProtocol?.readout_definitions?.filter((rd) => rd.dose_response_config) ?? [];
+  const counterDrReadouts =
+    counterProtocol?.readout_definitions?.filter((rd) => rd.dose_response_config) ?? [];
+
   return (
     <div className="space-y-2 rounded border border-dashed border-border p-3">
       <div className="flex items-center justify-between">
@@ -201,8 +214,11 @@ export function SelectivityCriterionRow({
         <div className="w-44">
           <Label className="text-xs text-muted-foreground">Target Protocol</Label>
           <Select
-            value={criterion.target_protocol_id || undefined}
-            onValueChange={(v) => onChange({ ...criterion, target_protocol_id: v })}
+            value={targetProtocolId || undefined}
+            onValueChange={(v) => {
+              setTargetProtocolId(v);
+              onChange({ ...criterion, target_readout_definition_id: "" });
+            }}
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Select..." />
@@ -216,21 +232,26 @@ export function SelectivityCriterionRow({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-28">
-          <Label className="text-xs text-muted-foreground">Curve</Label>
+        <div className="w-44">
+          <Label className="text-xs text-muted-foreground">Readout</Label>
           <Select
-            value={criterion.target_curve_type}
-            onValueChange={(v) => onChange({ ...criterion, target_curve_type: v })}
+            value={criterion.target_readout_definition_id || undefined}
+            onValueChange={(v) => onChange({ ...criterion, target_readout_definition_id: v })}
+            disabled={!targetProtocolId}
           >
             <SelectTrigger className="h-9">
-              <SelectValue />
+              <SelectValue placeholder="Select..." />
             </SelectTrigger>
             <SelectContent>
-              {CURVE_TYPE_OPTIONS.map((ct) => (
-                <SelectItem key={ct.value} value={ct.value}>
-                  {ct.label}
-                </SelectItem>
-              ))}
+              {targetDrReadouts.map((rd) => {
+                const ct = rd.dose_response_config?.curve_type;
+                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
+                return (
+                  <SelectItem key={rd.id} value={rd.id}>
+                    {rd.name}{suffix}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -239,8 +260,11 @@ export function SelectivityCriterionRow({
         <div className="w-44">
           <Label className="text-xs text-muted-foreground">Counter Protocol</Label>
           <Select
-            value={criterion.counter_protocol_id || undefined}
-            onValueChange={(v) => onChange({ ...criterion, counter_protocol_id: v })}
+            value={counterProtocolId || undefined}
+            onValueChange={(v) => {
+              setCounterProtocolId(v);
+              onChange({ ...criterion, counter_readout_definition_id: "" });
+            }}
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Select..." />
@@ -254,21 +278,26 @@ export function SelectivityCriterionRow({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-28">
-          <Label className="text-xs text-muted-foreground">Curve</Label>
+        <div className="w-44">
+          <Label className="text-xs text-muted-foreground">Readout</Label>
           <Select
-            value={criterion.counter_curve_type}
-            onValueChange={(v) => onChange({ ...criterion, counter_curve_type: v })}
+            value={criterion.counter_readout_definition_id || undefined}
+            onValueChange={(v) => onChange({ ...criterion, counter_readout_definition_id: v })}
+            disabled={!counterProtocolId}
           >
             <SelectTrigger className="h-9">
-              <SelectValue />
+              <SelectValue placeholder="Select..." />
             </SelectTrigger>
             <SelectContent>
-              {CURVE_TYPE_OPTIONS.map((ct) => (
-                <SelectItem key={ct.value} value={ct.value}>
-                  {ct.label}
-                </SelectItem>
-              ))}
+              {counterDrReadouts.map((rd) => {
+                const ct = rd.dose_response_config?.curve_type;
+                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
+                return (
+                  <SelectItem key={rd.id} value={rd.id}>
+                    {rd.name}{suffix}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

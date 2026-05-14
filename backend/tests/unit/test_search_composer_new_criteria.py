@@ -12,13 +12,14 @@ _WS = uuid.UUID("00000000-0000-0000-0000-ffffffffffff")
 
 
 class TestActivityClause:
-    def test_curve_type_filter(self):
+    def test_dr_curve_filter(self):
         query = {
             "criteria": [
                 {
                     "type": "activity",
                     "protocol_id": "00000000-0000-0000-0000-000000000001",
-                    "curve_type": "ic50",
+                    "source": "dr_curve",
+                    "readout_definition_id": "00000000-0000-0000-0000-000000000003",
                     "operator": "lt",
                     "value": 10.0,
                 }
@@ -27,12 +28,13 @@ class TestActivityClause:
         clause = compose_criteria(query, workspace_id=_WS)
         assert clause is not None
 
-    def test_readout_definition_filter(self):
+    def test_readout_data_filter(self):
         query = {
             "criteria": [
                 {
                     "type": "activity",
                     "protocol_id": "00000000-0000-0000-0000-000000000001",
+                    "source": "readout_data",
                     "readout_definition_id": "00000000-0000-0000-0000-000000000002",
                     "operator": "gte",
                     "value": 50.0,
@@ -48,7 +50,8 @@ class TestActivityClause:
                 {
                     "type": "activity",
                     "protocol_id": "00000000-0000-0000-0000-000000000001",
-                    "curve_type": "ic50",
+                    "source": "dr_curve",
+                    "readout_definition_id": "00000000-0000-0000-0000-000000000003",
                     "operator": "nope",
                     "value": 10.0,
                 }
@@ -128,7 +131,8 @@ class TestCombinedCriteria:
                 {
                     "type": "activity",
                     "protocol_id": "00000000-0000-0000-0000-000000000002",
-                    "curve_type": "ic50",
+                    "source": "dr_curve",
+                    "readout_definition_id": "00000000-0000-0000-0000-000000000003",
                     "operator": "lt",
                     "value": 100.0,
                 },

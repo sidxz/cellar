@@ -21,6 +21,7 @@ from cellar.domain.screening_assay.enums import CurveClass, CurveType
 WS = uuid.uuid4()
 MOL_ID = uuid.uuid4()
 PROTO_ID = uuid.uuid4()
+RD_ID = uuid.uuid4()
 
 
 class _FakeUoW:
@@ -43,6 +44,7 @@ def _make_curve(
     *,
     molecule_id: uuid.UUID = MOL_ID,
     protocol_id: uuid.UUID = PROTO_ID,
+    readout_definition_id: uuid.UUID = RD_ID,
     curve_type: CurveType = CurveType.IC50,
     fitted_value: float = 5.2,
     hill_slope: float = -1.1,
@@ -61,6 +63,7 @@ def _make_curve(
         batch_id=uuid.uuid4(),
         protocol_id=protocol_id,
         run_id=uuid.uuid4(),
+        readout_definition_id=readout_definition_id,
         curve_type=curve_type,
         fitted_value=fitted_value,
         hill_slope=hill_slope,
@@ -110,11 +113,11 @@ class TestEnrichMoleculesWithCurveParams:
         curve_repo = AsyncMock()
         # find_best_curves_for_molecules returns {mol_id -> {proto_id -> curve}}
         curve_repo.find_best_curves_for_molecules.return_value = {
-            MOL_ID: {PROTO_ID: curve},
+            MOL_ID: {RD_ID: curve},
         }
 
         service = _make_service(curve_repo=curve_repo)
-        col_spec = f"drc:{PROTO_ID}:ic50"
+        col_spec = f"drc:{RD_ID}"
 
         result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
 
@@ -152,11 +155,11 @@ class TestEnrichMoleculesWithCurveParams:
 
         curve_repo = AsyncMock()
         curve_repo.find_best_curves_for_molecules.return_value = {
-            MOL_ID: {PROTO_ID: curve},
+            MOL_ID: {RD_ID: curve},
         }
 
         service = _make_service(curve_repo=curve_repo)
-        col_spec = f"drc:{PROTO_ID}:ic50"
+        col_spec = f"drc:{RD_ID}"
 
         result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
 
@@ -177,11 +180,11 @@ class TestEnrichMoleculesWithCurveParams:
 
         curve_repo = AsyncMock()
         curve_repo.find_best_curves_for_molecules.return_value = {
-            MOL_ID: {PROTO_ID: curve},
+            MOL_ID: {RD_ID: curve},
         }
 
         service = _make_service(curve_repo=curve_repo)
-        col_spec = f"drc:{PROTO_ID}:ic50"
+        col_spec = f"drc:{RD_ID}"
 
         result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
 
@@ -198,7 +201,7 @@ class TestEnrichMoleculesEmptyInputs:
     @pytest.mark.asyncio
     async def test_empty_molecule_ids_returns_empty(self) -> None:
         service = _make_service()
-        result = await service.enrich_molecules(WS, [], [f"drc:{PROTO_ID}:ic50"])
+        result = await service.enrich_molecules(WS, [], [f"drc:{RD_ID}"])
         assert result == {}
 
     @pytest.mark.asyncio
@@ -214,7 +217,7 @@ class TestEnrichMoleculesEmptyInputs:
         curve_repo.find_best_curves_for_molecules.return_value = {}
 
         service = _make_service(curve_repo=curve_repo)
-        col_spec = f"drc:{PROTO_ID}:ic50"
+        col_spec = f"drc:{RD_ID}"
 
         result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
         assert result == {}

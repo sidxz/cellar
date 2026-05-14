@@ -81,13 +81,6 @@ export const BATCH_FIELD_TYPE_OPTIONS: { value: BatchFieldType; label: string }[
   { value: "date", label: "Synthesis Date" },
 ];
 
-export const CURVE_TYPE_OPTIONS = [
-  { value: "ic50", label: "IC50" },
-  { value: "ec50", label: "EC50" },
-  { value: "ki", label: "Ki" },
-  { value: "kd", label: "Kd" },
-] as const;
-
 export const REF_TYPE_OPTIONS: { value: RefType; label: string }[] = [
   { value: "registration_number", label: "Registration Number" },
   { value: "name", label: "Name" },
@@ -170,10 +163,8 @@ export function defaultCustomFieldCriterion(): CustomFieldCriterion {
 export function defaultSelectivityCriterion(): SelectivityCriterion {
   return {
     type: "selectivity",
-    target_protocol_id: "",
-    target_curve_type: "ic50",
-    counter_protocol_id: "",
-    counter_curve_type: "ic50",
+    target_readout_definition_id: "",
+    counter_readout_definition_id: "",
     ratio_operator: "gte",
     ratio_value: 100,
   };

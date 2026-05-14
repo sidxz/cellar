@@ -35,13 +35,20 @@ _ACTIVITY_OP_MAP: dict[str, str] = {
 def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
     """Filter molecules by biological activity values.
 
+    Each condition names a readout-def and a ``source`` discriminator
+    (``"dr_curve"`` → dose_response_curves table, ``"readout_data"`` → the
+    raw readout_data table). The readout-def is identity-bearing — on a
+    multi-DR protocol where two DR readouts share a curve_type (target
+    IC50 + counter-screen IC50), the readout-def is the only thing that
+    tells them apart.
+
     Shapes accepted:
-        - **Multi-where:** ``where: [{curve_type|readout_definition_id, operator,
-          value or min/max}, ...]`` — each condition becomes a subquery, all
-          ANDed together. Empty list ⇒ presence-only filter.
-        - **Legacy single-where:** inline ``curve_type|readout_definition_id``
-          plus ``operator`` and ``value`` (or ``min``/``max`` for ``between``).
-          Treated as a single-element where list.
+        - **Multi-where:** ``where: [{source, readout_definition_id,
+          operator, value or min/max}, ...]`` — each condition becomes a
+          subquery, all ANDed together. Empty list ⇒ presence-only filter.
+        - **Single-where:** inline ``source`` + ``readout_definition_id``
+          plus ``operator`` and ``value`` (or ``min``/``max`` for
+          ``between``). Treated as a single-element where list.
         - **Presence-only:** neither shape provides a where condition.
 
     ``run_scope`` (optional) restricts every condition to a subset of runs:
@@ -69,28 +76,24 @@ def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
 
 
 def _normalize_where(criterion: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return a list of where-conditions, normalizing the legacy single-where shape."""
+    """Return a list of where-conditions, normalizing the inline single-where shape."""
     where = criterion.get("where")
     if isinstance(where, list):
         return [c for c in where if isinstance(c, dict)]
-    has_curve = bool(criterion.get("curve_type"))
-    has_readout = bool(criterion.get("readout_definition_id"))
-    if not has_curve and not has_readout:
+    if not criterion.get("readout_definition_id"):
         return []
-    legacy: dict[str, Any] = {
+    inline: dict[str, Any] = {
+        "source": criterion.get("source", "dr_curve"),
+        "readout_definition_id": criterion["readout_definition_id"],
         "operator": criterion.get("operator", "lt"),
     }
-    if has_curve:
-        legacy["curve_type"] = criterion["curve_type"]
-    if has_readout:
-        legacy["readout_definition_id"] = criterion["readout_definition_id"]
     if "value" in criterion:
-        legacy["value"] = criterion["value"]
+        inline["value"] = criterion["value"]
     if "min" in criterion:
-        legacy["min"] = criterion["min"]
+        inline["min"] = criterion["min"]
     if "max" in criterion:
-        legacy["max"] = criterion["max"]
-    return [legacy]
+        inline["max"] = criterion["max"]
+    return [inline]
 
 
 def _activity_where_clause(
@@ -100,30 +103,32 @@ def _activity_where_clause(
     run_scope: Any,
 ) -> ColumnElement:
     """Compose a single where-condition into a molecule-id subquery."""
-    has_curve = bool(cond.get("curve_type"))
-    has_readout = bool(cond.get("readout_definition_id"))
-    if not has_curve and not has_readout:
-        msg = "where condition needs curve_type or readout_definition_id"
+    rd_id = cond.get("readout_definition_id")
+    if not rd_id:
+        msg = "where condition needs readout_definition_id"
         raise ValueError(msg)
 
-    if has_curve:
+    source = cond.get("source", "dr_curve")
+    if source == "dr_curve":
         data_col = DoseResponseCurveModel.fitted_value
         molecule_col = DoseResponseCurveModel.molecule_id
         run_id_col = DoseResponseCurveModel.run_id
         base_filters: list[ColumnElement] = [
             DoseResponseCurveModel.workspace_id == workspace_id,
-            DoseResponseCurveModel.protocol_id == protocol_id,
-            DoseResponseCurveModel.curve_type == cond["curve_type"],
+            DoseResponseCurveModel.readout_definition_id == rd_id,
         ]
-    else:
+    elif source == "readout_data":
         data_col = ReadoutDataModel.value_numeric
         molecule_col = ReadoutDataModel.molecule_id
         run_id_col = ReadoutDataModel.run_id
         base_filters = [
             ReadoutDataModel.workspace_id == workspace_id,
-            ReadoutDataModel.readout_definition_id == cond["readout_definition_id"],
+            ReadoutDataModel.readout_definition_id == rd_id,
             ReadoutDataModel.is_outlier == False,  # noqa: E712
         ]
+    else:
+        msg = f"Unknown activity where source: {source!r}"
+        raise ValueError(msg)
 
     scope_filter = _run_scope_filter(run_scope, workspace_id, protocol_id, run_id_col)
     if scope_filter is not None:

@@ -27,6 +27,7 @@ export interface DoseResponseCurveResponse {
   batch_number?: DoseResponseCurveResponseBatchNumber;
   protocol_id: string;
   run_id: string;
+  readout_definition_id: string;
   curve_type: string;
   fitted_value: number;
   fitted_unit: string;

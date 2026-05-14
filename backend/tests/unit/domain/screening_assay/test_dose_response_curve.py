@@ -21,6 +21,7 @@ def _make_curve(**kwargs) -> DoseResponseCurve:
         batch_id=uuid.uuid4(),
         protocol_id=uuid.uuid4(),
         run_id=uuid.uuid4(),
+        readout_definition_id=uuid.uuid4(),
         curve_type=CurveType.IC50,
         fitted_value=5.2,
         hill_slope=-1.0,

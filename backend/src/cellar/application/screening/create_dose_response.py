@@ -26,6 +26,7 @@ class CreateDoseResponseCurveCommand(Command):
     batch_id: uuid.UUID
     protocol_id: uuid.UUID
     run_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str
     fitted_value: float
     hill_slope: float
@@ -81,6 +82,7 @@ class CreateDoseResponseCurve:
                 batch_id=input.batch_id,
                 protocol_id=input.protocol_id,
                 run_id=input.run_id,
+                readout_definition_id=input.readout_definition_id,
                 curve_type=CurveType(input.curve_type),
                 fitted_value=input.fitted_value,
                 hill_slope=input.hill_slope,
