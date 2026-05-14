@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { InterceptSpec, InterceptValue } from "../types";
-import { findInterceptValue, interceptLabel } from "./intercept-label";
+import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
+import {
+  findInterceptValue,
+  interceptKeyId,
+  interceptKeyLabel,
+  interceptLabel,
+  parseInterceptKeyId,
+} from "./intercept-label";
 
 function spec(over: Partial<InterceptSpec> = {}): InterceptSpec {
   return {
@@ -79,5 +85,38 @@ describe("findInterceptValue", () => {
     ];
     expect(findInterceptValue(values, spec({ kind: "ic", level: 50 }))?.value).toBe(1.1);
     expect(findInterceptValue(values, spec({ kind: "ec", level: 50 }))?.value).toBe(2.2);
+  });
+});
+
+describe("interceptKeyLabel", () => {
+  it("renders KIND+LEVEL from a bare key (no protocol-side label)", () => {
+    expect(interceptKeyLabel({ kind: "ec", level: 50 } as InterceptKey)).toBe("EC50");
+    expect(interceptKeyLabel({ kind: "ic", level: 90 } as InterceptKey)).toBe("IC90");
+  });
+
+  it("strips trailing .0 from integer levels and keeps non-integers", () => {
+    expect(interceptKeyLabel({ kind: "ec", level: 50 } as InterceptKey)).toBe("EC50");
+    expect(interceptKeyLabel({ kind: "ec", level: 12.5 } as InterceptKey)).toBe("EC12.5");
+  });
+});
+
+describe("interceptKeyId / parseInterceptKeyId", () => {
+  it("round-trips ec / ic kinds", () => {
+    expect(parseInterceptKeyId(interceptKeyId({ kind: "ec", level: 50 }))).toEqual({
+      kind: "ec",
+      level: 50,
+    });
+    expect(parseInterceptKeyId(interceptKeyId({ kind: "ic", level: 90 }))).toEqual({
+      kind: "ic",
+      level: 90,
+    });
+  });
+
+  it("returns null for malformed or unknown-kind ids", () => {
+    expect(parseInterceptKeyId(undefined)).toBeNull();
+    expect(parseInterceptKeyId("")).toBeNull();
+    expect(parseInterceptKeyId("primary")).toBeNull();
+    expect(parseInterceptKeyId("xx:50")).toBeNull();
+    expect(parseInterceptKeyId("ec:nope")).toBeNull();
   });
 });

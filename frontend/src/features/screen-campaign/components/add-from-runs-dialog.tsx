@@ -52,7 +52,11 @@ import { formatDate } from "@/shared/lib/format-date";
 import { useGetProtocolApiV1ProtocolsProtocolIdGet } from "@/shared/lib/api/protocols/protocols";
 import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
-import { READOUT_NORMALIZATION_LABELS, type HitCriterion } from "@/features/screening-assay/types";
+import {
+  READOUT_NORMALIZATION_LABELS,
+  type HitCriterion,
+  type InterceptKey,
+} from "@/features/screening-assay/types";
 import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
 import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
@@ -87,6 +91,12 @@ interface ChannelConfigUI {
    *  Auto-derived from the readout's first non-`none` normalization on selection.
    *  Ignored for dose-response curve channels. */
   normalization_applied: string | null;
+  /** Which dose-response intercept the threshold targets. `null` = primary
+   *  (Surface #7 convention — also matches legacy channels saved before
+   *  intercept_key existed). Carried forward verbatim from the protocol's
+   *  recommended criterion via `deriveChannelHitDefaults`. Ignored for
+   *  non-DR channels. */
+  intercept_key: InterceptKey | null;
 }
 
 const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as const;
@@ -176,6 +186,10 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             hasThreshold || isDoseResponse || defaults.allowed_curve_classes.length > 0,
           allowed_curve_classes: defaults.allowed_curve_classes,
           normalization_applied: primaryNorm,
+          // Carry forward verbatim — no inline editor for intercept_key in
+          // this dialog yet; the chemist can refine via the channel popover
+          // after the channels are created.
+          intercept_key: isDoseResponse ? defaults.intercept_key : null,
         };
       });
   }, [protocolDetail, selectedRunIds.size, userEditedConfigs]);
@@ -202,7 +216,12 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       source_kind: string;
       selection_rule: string;
       hit_threshold:
-        | { readout_name: string; operator: string; value: number | number[] }
+        | {
+            readout_name: string;
+            operator: string;
+            value: number | number[];
+            intercept_key: InterceptKey | null;
+          }
         | null;
       use_for_filter: boolean;
       allowed_curve_classes?: string[] | null;
@@ -213,8 +232,18 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
     return {
       run_ids: [...selectedRunIds],
       channel_configs: channelConfigs.map((c) => {
+        // intercept_key only meaningful on DR-curve channels (others read raw
+        // values; no curve = no intercept). Mirrors channel-popover's save
+        // logic so both creation paths stay coherent.
+        const interceptKey =
+          c.source_kind === "dose_response_curve" ? (c.intercept_key ?? null) : null;
         let hitThreshold:
-          | { readout_name: string; operator: string; value: number | number[] }
+          | {
+              readout_name: string;
+              operator: string;
+              value: number | number[];
+              intercept_key: InterceptKey | null;
+            }
           | null = null;
         if (c.hit_operator === "between") {
           const low = c.hit_value_low === "" ? null : Number(c.hit_value_low);
@@ -228,6 +257,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
               readout_name: c.label,
               operator: "between",
               value: [low, high],
+              intercept_key: interceptKey,
             };
           }
         } else if (c.hit_operator) {
@@ -237,6 +267,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
               readout_name: c.label,
               operator: c.hit_operator,
               value: numericValue,
+              intercept_key: interceptKey,
             };
           }
         }

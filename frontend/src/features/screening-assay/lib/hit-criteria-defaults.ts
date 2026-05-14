@@ -18,7 +18,7 @@
  *     and seeds `allowed_curve_classes`.
  */
 
-import type { HitCriterion } from "../types";
+import type { HitCriterion, InterceptKey } from "../types";
 
 export interface ChannelHitDefaults {
   /** "" means "(no threshold)". */
@@ -28,6 +28,11 @@ export interface ChannelHitDefaults {
   hit_value_high: string;
   /** Empty array = "all classes pass" (no filter). */
   allowed_curve_classes: string[];
+  /** Which intercept the threshold compares against on a dose-response
+   *  curve. `null` = primary (terse wire shape — matches Surface #7's
+   *  `HitCriterion.intercept_key` convention). The caller is responsible
+   *  for ignoring this on non-DR channels. */
+  intercept_key: InterceptKey | null;
 }
 
 const EMPTY: ChannelHitDefaults = {
@@ -36,10 +41,26 @@ const EMPTY: ChannelHitDefaults = {
   hit_value_low: "",
   hit_value_high: "",
   allowed_curve_classes: [],
+  intercept_key: null,
 };
 
 const LOWERS = new Set(["gt", "gte"]);
 const UPPERS = new Set(["lt", "lte"]);
+
+/** Treat `undefined` and `null` as equal (both = "primary"). Matches by
+ *  `(kind, level)` for explicit keys. */
+function sameInterceptKey(
+  a: InterceptKey | null | undefined,
+  b: InterceptKey | null | undefined,
+): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.kind === b.kind && a.level === b.level;
+}
+
+function normalizeKey(k: InterceptKey | null | undefined): InterceptKey | null {
+  return k ?? null;
+}
 
 export function deriveChannelHitDefaults(
   recommended: HitCriterion[] | null | undefined,
@@ -77,20 +98,29 @@ export function deriveChannelHitDefaults(
       hit_value_low: "",
       hit_value_high: "",
       allowed_curve_classes,
+      intercept_key: normalizeKey(c.intercept_key),
     };
   }
 
   // Two-or-more numerics: try to pair a lower bound with an upper bound
-  // and present as `between`. Anything else collapses to the first criterion.
+  // and present as `between`. The pair must target the same intercept —
+  // a "between [EC50_low, EC90_high]" range is incoherent and should fall
+  // back to keeping only the first criterion.
   const lower = numeric.find((c) => LOWERS.has(c.operator));
   const upper = numeric.find((c) => UPPERS.has(c.operator));
-  if (lower && upper && lower !== upper) {
+  if (
+    lower &&
+    upper &&
+    lower !== upper &&
+    sameInterceptKey(lower.intercept_key, upper.intercept_key)
+  ) {
     return {
       hit_operator: "between",
       hit_value: "",
       hit_value_low: String(lower.value as number),
       hit_value_high: String(upper.value as number),
       allowed_curve_classes,
+      intercept_key: normalizeKey(lower.intercept_key),
     };
   }
 
@@ -101,5 +131,6 @@ export function deriveChannelHitDefaults(
     hit_value_low: "",
     hit_value_high: "",
     allowed_curve_classes,
+    intercept_key: normalizeKey(first.intercept_key),
   };
 }

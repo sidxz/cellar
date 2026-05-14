@@ -20,6 +20,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import type { CampaignResponse, CampaignChannelResponse } from "../../types";
 import { ChannelPopoverForm, parseHitThreshold } from "../channel-popover";
+import { interceptKeyLabel } from "@/features/screening-assay/lib/intercept-label";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -110,11 +111,18 @@ function formatThreshold(hit_threshold: CampaignChannelResponse["hit_threshold"]
   const parsed = parseHitThreshold(hit_threshold);
   if (!parsed) return "";
   const opLabel = OPERATOR_LABEL[parsed.operator] ?? parsed.operator;
+  // Non-primary intercept gets surfaced in the chip text so chemists see
+  // which intercept the channel targets at a glance ("hit if EC90 < 50").
+  // Primary (`intercept_key === null` per Surface #7) stays implicit —
+  // every channel has *some* primary, naming it everywhere is noise.
+  const ik = parsed.intercept_key
+    ? `${interceptKeyLabel(parsed.intercept_key)} `
+    : "";
   if (Array.isArray(parsed.value)) {
     const [lo, hi] = parsed.value;
-    return `hit if ${lo} – ${hi}`;
+    return `hit if ${ik}${lo} – ${hi}`;
   }
-  return `hit if ${opLabel} ${parsed.value}`;
+  return `hit if ${ik}${opLabel} ${parsed.value}`;
 }
 
 function ChannelRow({
