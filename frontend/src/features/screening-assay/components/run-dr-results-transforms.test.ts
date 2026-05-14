@@ -25,6 +25,7 @@ function makeRow(overrides: Partial<CompoundCurveRow> = {}): CompoundCurveRow {
     num_points: 8,
     curve_class: "full",
     data_points: null,
+    intercept_values: null,
     all_curves: [],
     ...overrides,
   };

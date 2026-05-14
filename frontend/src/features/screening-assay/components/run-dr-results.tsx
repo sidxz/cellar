@@ -22,7 +22,7 @@ import { ComparisonTable } from "./comparison-table";
 import { CurveNavigator } from "./curve-navigator";
 import { DoseResponseChart } from "./dose-response-chart";
 import { HitCriteriaDialog } from "./hit-criteria-dialog";
-import { COLUMN_DEFS } from "./run-dr-results-columns";
+import { buildColumnDefs } from "./run-dr-results-columns";
 import { applyHitFilter, buildCompoundRows } from "./run-dr-results-transforms";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
 
@@ -102,7 +102,19 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
     navigateTo(newIdx);
   }, [selectedIndex, filteredRows.length, navigateTo]);
 
-  const columnDefs = COLUMN_DEFS;
+  // Column set is driven by the protocol's intercept specs — one column
+  // per declared intercept (EC50, EC90, IC10, ...). When the protocol
+  // declares multiple DOSE_RESPONSE readout-defs (e.g. target + counter-
+  // screen) we use the first one's intercepts; per-readout column groups
+  // are a separate UX (see spec §"Multi-readout-def disambiguation").
+  const protocolIntercepts = useMemo(() => {
+    const drDef = protocol?.readout_definitions.find(
+      (r) => r.data_type === "dose_response" && r.dose_response_config,
+    );
+    return drDef?.dose_response_config?.intercepts ?? [];
+  }, [protocol]);
+
+  const columnDefs = useMemo(() => buildColumnDefs(protocolIntercepts), [protocolIntercepts]);
 
   // Excel enhancer — fill image columns + add SMILES/Synonyms + raw data sheet
   const excelEnhancer: ExcelEnhancer = useCallback(

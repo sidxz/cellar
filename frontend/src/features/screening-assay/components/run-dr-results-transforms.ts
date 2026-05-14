@@ -1,5 +1,5 @@
 import { groupBy } from "@/shared/lib/group-by";
-import type { CurveClass, DoseResponseCurve, HitCriterion } from "../types";
+import type { CurveClass, DoseResponseCurve, HitCriterion, InterceptValue } from "../types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +23,9 @@ export interface CompoundCurveRow {
   num_points: number;
   curve_class: CurveClass | null;
   data_points: Array<{ x: number; y: number }> | null;
+  /** Per-spec intercepts (EC50, EC90, IC10, ...) from this curve's fit.
+   *  Columns matching protocol intercepts read values out of this list. */
+  intercept_values: InterceptValue[] | null;
   /** All curves for this molecule in this run (for detail panel) */
   all_curves: DoseResponseCurve[];
 }
@@ -81,6 +84,7 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
       num_points: best.num_points,
       curve_class: best.curve_class as CurveClass | null,
       data_points: dataPoints,
+      intercept_values: best.intercept_values ?? null,
       all_curves: molCurves,
     });
   }

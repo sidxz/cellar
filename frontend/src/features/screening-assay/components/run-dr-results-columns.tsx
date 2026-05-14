@@ -1,8 +1,8 @@
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import type { CurveClass, CurveType } from "../types";
-import { CURVE_TYPE_LABELS } from "../types";
+import { findInterceptValue, interceptLabel } from "../lib/intercept-label";
+import type { CurveClass, InterceptSpec } from "../types";
 import { CurveClassBadge } from "./curve-class-badge";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
@@ -17,9 +17,17 @@ function curveClassBadge(cc: CurveClass | null) {
 
 // ---------------------------------------------------------------------------
 // Column factory
+//
+// The column set is data-driven: one column per protocol intercept
+// (EC50, EC90, IC10, ...) plus the fixed metadata columns (Compound,
+// Structure, R², Class, Hill, Curve sparkline, Points). No literal
+// "EC50" / "EC90" appears anywhere — headers come from
+// `interceptLabel(spec)` and cells match by `(kind, level)` so a
+// protocol-level relabel after fit doesn't lose data.
 // ---------------------------------------------------------------------------
 
-export function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
+export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCurveRow>[] {
+  const interceptColumns = buildInterceptColumns(intercepts);
   return [
     {
       headerName: "Compound",
@@ -84,33 +92,7 @@ export function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
         );
       },
     },
-    {
-      headerName: "Type",
-      field: "curve_type",
-      width: 70,
-      cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
-        if (!params.value) return null;
-        return (
-          <Badge variant="outline" className="text-xs">
-            {CURVE_TYPE_LABELS[params.value as CurveType] ?? params.value}
-          </Badge>
-        );
-      },
-    },
-    {
-      headerName: "Fitted Value",
-      field: "fitted_value",
-      width: 120,
-      sort: "desc",
-      cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
-        if (!params.data) return null;
-        return (
-          <span className="font-mono">
-            {params.data.fitted_value.toPrecision(4)} {params.data.fitted_unit}
-          </span>
-        );
-      },
-    },
+    ...interceptColumns,
     {
       headerName: "R²",
       field: "r_squared",
@@ -161,6 +143,100 @@ export function buildColumnDefs(): ColDef<CompoundCurveRow>[] {
   ];
 }
 
-// Module-level constant — buildColumnDefs has no component-state closure
-// so there is no need to re-create the array each render.
-export const COLUMN_DEFS = buildColumnDefs();
+/**
+ * One column per protocol intercept spec.
+ *
+ * The primary intercept (`intercepts[0]`) reads `row.fitted_value` — the
+ * domain layer guarantees this equals `intercept_values[0].value`, and
+ * legacy curves that lack any persisted `intercept_values` still expose
+ * the headline value here. Sort defaults to ascending on the primary
+ * (lowest = most potent).
+ *
+ * Secondary intercepts look up their value via `findInterceptValue` —
+ * matched by `(kind, level)` so a later protocol relabel of an intercept
+ * doesn't break the column→cell wiring on existing curves.
+ *
+ * Edge cases:
+ *   - `at_bound = true` → amber chip "⚠︎ at bound" (the curve never reaches
+ *     the response threshold; the fit value is just the asymptotic bound).
+ *   - Missing match → "—" with a "Recompute needed" title (the curve was
+ *     fit before this intercept was added to the protocol).
+ *
+ * When the protocol declares no intercepts (legacy or single-intercept
+ * curves), fall back to a single "Fitted Value" column so the table
+ * still surfaces the headline number.
+ */
+function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurveRow>[] {
+  if (intercepts.length === 0) {
+    return [
+      {
+        headerName: "Fitted Value",
+        field: "fitted_value",
+        width: 120,
+        sort: "asc",
+        cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
+          if (!params.data) return null;
+          return (
+            <span className="font-mono">
+              {params.data.fitted_value.toPrecision(4)} {params.data.fitted_unit}
+            </span>
+          );
+        },
+      },
+    ];
+  }
+
+  return intercepts.map((spec, idx): ColDef<CompoundCurveRow> => {
+    const label = interceptLabel(spec);
+    return {
+      headerName: label,
+      colId: `intercept:${spec.kind}:${spec.level}`,
+      width: 120,
+      // Primary intercept gets default sort: lowest fitted value is most
+      // potent for IC/EC curves.
+      ...(idx === 0 ? { sort: "asc" as const } : {}),
+      // valueGetter feeds AG Grid's sort + filter; cellRenderer paints
+      // the chip / dash / at-bound state.
+      valueGetter: (params) => {
+        if (!params.data) return null;
+        // Primary intercept tracks `fitted_value` even on legacy curves
+        // that haven't been re-fit since intercept_values was added.
+        if (idx === 0) return params.data.fitted_value;
+        const iv = findInterceptValue(params.data.intercept_values, spec);
+        return iv?.value ?? null;
+      },
+      cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
+        if (!params.data) return null;
+        const iv = findInterceptValue(params.data.intercept_values, spec);
+        // Primary fallback: legacy curves carry the headline on
+        // `fitted_value` even when `intercept_values` is null.
+        const value = iv?.value ?? (idx === 0 ? params.data.fitted_value : null);
+        if (value == null) {
+          return (
+            <span
+              className="text-muted-foreground"
+              title="No value for this intercept. Recompute the curve to refresh."
+            >
+              —
+            </span>
+          );
+        }
+        if (iv?.at_bound) {
+          return (
+            <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
+              <span className="font-mono">
+                {value.toPrecision(4)} {params.data.fitted_unit}
+              </span>
+              <span className="ml-1">⚠︎ at bound</span>
+            </Badge>
+          );
+        }
+        return (
+          <span className="font-mono">
+            {value.toPrecision(4)} {params.data.fitted_unit}
+          </span>
+        );
+      },
+    };
+  });
+}
