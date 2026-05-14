@@ -769,9 +769,14 @@ export function DoseResponseChart({
     ) {
       for (const iv of curve.intercept_values.slice(1)) {
         if (iv.at_bound || !Number.isFinite(iv.value)) continue;
+        // `spec.level` is a percentage (50 for IC50, 90 for IC90), so it
+        // needs /100 to interpolate between top and bottom. Without the
+        // divide an IC90 marker lands at ~90× the curve range above bottom
+        // and Plotly's autoscale stretches the Y axis to 10k, collapsing
+        // the actual sigmoid into a flat line.
         const yLevel =
           iv.spec.basis === "relative_percent"
-            ? curve.bottom + iv.spec.level * (curve.top - curve.bottom)
+            ? curve.bottom + (iv.spec.level / 100) * (curve.top - curve.bottom)
             : iv.spec.level;
         const label =
           iv.spec.label ??
