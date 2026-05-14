@@ -65,13 +65,36 @@ function normalizeKey(k: InterceptKey | null | undefined): InterceptKey | null {
 export function deriveChannelHitDefaults(
   recommended: HitCriterion[] | null | undefined,
   readout: { name: string; data_type: string },
+  /** When set, only criteria targeting this intercept are considered for
+   *  the numeric threshold. Used by the add-from-runs flow to derive
+   *  per-intercept channels (e.g. one channel for `EC50 < 10` and a
+   *  separate one for `EC90 < 50`) — each pulls only its own criterion.
+   *
+   *  Three modes:
+   *    - `undefined` (omitted): no filter, any criterion on the readout
+   *       wins — preserves the pre-#7 single-channel-per-readout behavior.
+   *    - `null`: only criteria with `intercept_key` null/missing (primary)
+   *       pass through.
+   *    - `{kind, level}`: only criteria matching that exact intercept.
+   *
+   *  Curve-class criteria are *not* filtered — they apply to the readout
+   *  as a whole, regardless of intercept. */
+  interceptKey?: InterceptKey | null,
 ): ChannelHitDefaults {
   if (!recommended || recommended.length === 0) return { ...EMPTY };
 
-  // Numeric criteria targeting this specific readout (by name).
-  const numeric = recommended.filter(
-    (c) => c.readout_name === readout.name && typeof c.value === "number",
-  );
+  // Numeric criteria targeting this specific readout (by name). When the
+  // caller passes an explicit `interceptKey` (including null = primary),
+  // further filter to criteria targeting that intercept; otherwise leave
+  // the full set so legacy callers behave unchanged.
+  const numeric = recommended.filter((c) => {
+    if (c.readout_name !== readout.name) return false;
+    if (typeof c.value !== "number") return false;
+    if (interceptKey !== undefined && !sameInterceptKey(c.intercept_key, interceptKey)) {
+      return false;
+    }
+    return true;
+  });
 
   // The free-standing Curve Class rule applies to any DR readout in the
   // protocol — it doesn't carry a readout name in the channel sense.

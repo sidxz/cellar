@@ -49,14 +49,15 @@ import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { formatDate } from "@/shared/lib/format-date";
 
-import { useGetProtocolApiV1ProtocolsProtocolIdGet } from "@/shared/lib/api/protocols/protocols";
-import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
 import {
   READOUT_NORMALIZATION_LABELS,
   type HitCriterion,
   type InterceptKey,
+  type InterceptSpec,
 } from "@/features/screening-assay/types";
+import { interceptLabel } from "@/features/screening-assay/lib/intercept-label";
 import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
 import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
@@ -101,6 +102,28 @@ interface ChannelConfigUI {
 
 const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as const;
 
+/**
+ * Stable key for `userEditedConfigs`, disambiguating per intercept.
+ *
+ * Single-intercept readouts and non-DR channels keep `rd.id` as the key
+ * (back-compat with pre-#13 saved-edit state and matches the natural
+ * "one config per readout" mental model). Multi-intercept DR channels
+ * past the primary get `${rd.id}:${kind}:${level}` so the chemist's edit
+ * to the EC90 row doesn't clobber the EC50 row's saved state.
+ *
+ * The primary intercept on a multi-intercept readout still uses just
+ * `rd.id` (its `intercept_key` is null per Surface #7's null-=-primary
+ * convention) — that means primary edits on a multi-intercept readout
+ * share the same key as the legacy single-channel-per-readout path.
+ */
+function channelConfigKey(
+  readoutDefId: string,
+  interceptKey: InterceptKey | null,
+): string {
+  if (interceptKey) return `${readoutDefId}:${interceptKey.kind}:${interceptKey.level}`;
+  return readoutDefId;
+}
+
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
@@ -133,10 +156,14 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
   // — Data —
   const { data: protocolsData } = useProtocolSummaries([projectId]);
   const protocols = protocolsData ?? [];
-  const { data: protocolDetail } = useGetProtocolApiV1ProtocolsProtocolIdGet(
-    protocolId ?? "",
-    { query: { enabled: !!protocolId } },
-  );
+  // Hand-typed hook (returns the FE `Protocol` shape from screening-assay/types)
+  // — necessary so `dose_response_config.intercepts` types as
+  // `InterceptSpec[] | undefined` instead of orval's loose
+  // `Record<string, unknown> | null`. The multi-intercept channel split
+  // below needs to walk that list.
+  const { data: protocolDetail } = useProtocol(protocolId ?? "", {
+    enabled: !!protocolId,
+  } as Parameters<typeof useProtocol>[1]);
   const { data: runs } = useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet(
     protocolId ?? "",
     { query: { enabled: !!protocolId } },
@@ -145,52 +172,97 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
   // Derive the full channel config list from protocol readouts, merging any
   // user edits stored in `userEditedConfigs`. Pure derivation — no effects or
   // feedback loops because user edits live in a separate map.
+  //
+  // Multi-intercept DR readouts (e.g. Resazurin with EC50 + EC90) expand into
+  // one channel per declared intercept so the chemist sees both values + can
+  // set independent hit thresholds. Single-intercept and non-DR readouts emit
+  // one channel (the pre-#14 behavior).
   const channelConfigs = useMemo<ChannelConfigUI[]>(() => {
     if (!protocolDetail || selectedRunIds.size === 0) return [];
+    const recommended = (protocolDetail.recommended_hit_criteria ??
+      []) as unknown as HitCriterion[];
+
+    // Build a single config — extracted so the multi-intercept path below
+    // can call it once per intercept without duplicating the field-by-field
+    // construction. `intercept` is null for non-DR readouts and for legacy
+    // single-intercept DR readouts (treated identically since neither needs
+    // an intercept-aware filter on the recommended criteria).
+    const buildConfig = (
+      rd: typeof protocolDetail.readout_definitions[number],
+      intercept: InterceptSpec | null,
+      isPrimary: boolean,
+    ): ChannelConfigUI => {
+      const isDoseResponse = rd.data_type === "dose_response";
+      const primaryNorm = isDoseResponse
+        ? null
+        : (rd.normalizations?.find((n) => n !== "none") ?? null);
+      const normSuffix = primaryNorm
+        ? ` (${READOUT_NORMALIZATION_LABELS[primaryNorm as keyof typeof READOUT_NORMALIZATION_LABELS] ?? primaryNorm})`
+        : "";
+      const interceptSuffix = intercept ? ` ${interceptLabel(intercept)}` : "";
+
+      // Wire convention (Surface #7): primary stores as `intercept_key=null`
+      // so the binding tracks the protocol's current primary if intercepts
+      // are reordered later. Non-primary stores explicit `{kind, level}`.
+      const interceptKey: InterceptKey | null =
+        !isPrimary && intercept
+          ? { kind: intercept.kind, level: intercept.level }
+          : null;
+
+      // Filter mode: explicit `null`/`{kind,level}` only when we're in the
+      // multi-intercept split (intercept != null). Single-intercept and
+      // non-DR readouts pass `undefined` to keep the legacy "any criterion
+      // on the readout" behavior — protocols predating Surface #7 didn't
+      // mark their criteria with intercept_key, so filtering by null would
+      // drop them incorrectly.
+      const filterKey: InterceptKey | null | undefined = intercept
+        ? interceptKey
+        : undefined;
+
+      const defaults = deriveChannelHitDefaults(
+        recommended,
+        { name: rd.name, data_type: rd.data_type },
+        filterKey,
+      );
+      const hasThreshold = defaults.hit_operator !== "";
+
+      return {
+        protocol_id: protocolDetail.id,
+        readout_definition_id: rd.id,
+        label: `${rd.name}${normSuffix}${interceptSuffix}`,
+        source_kind: isDoseResponse ? "dose_response_curve" : "readout_data",
+        selection_rule: "latest_approved_run" as const,
+        hit_operator: defaults.hit_operator,
+        hit_value: defaults.hit_value,
+        hit_value_low: defaults.hit_value_low,
+        hit_value_high: defaults.hit_value_high,
+        use_for_filter:
+          hasThreshold || isDoseResponse || defaults.allowed_curve_classes.length > 0,
+        allowed_curve_classes: defaults.allowed_curve_classes,
+        normalization_applied: primaryNorm,
+        intercept_key: isDoseResponse ? interceptKey : null,
+      };
+    };
+
     return protocolDetail.readout_definitions
-      .filter((rd) => rd.data_type !== "text")  // text-only readouts aren't filterable
-      .map((rd) => {
-        const prior = userEditedConfigs.get(rd.id);
-        if (prior) return prior;
-        // Auto-pick source kind: dose-response readouts come from the curves
-        // table (fitted IC50/EC50/etc.), not the per-well ReadoutData.
-        const isDoseResponse = rd.data_type === "dose_response";
-        // Pick the readout's first non-`none` normalization as the chemist's
-        // primary view (% Inhibition, Z-Score, etc.). Raw if no normalizations
-        // configured. Ignored for DR-curve channels.
-        const primaryNorm = isDoseResponse
-          ? null
-          : (rd.normalizations?.find((n) => n !== "none") ?? null);
-        const labelSuffix = primaryNorm
-          ? ` (${READOUT_NORMALIZATION_LABELS[primaryNorm as keyof typeof READOUT_NORMALIZATION_LABELS] ?? primaryNorm})`
-          : "";
-        const defaults = deriveChannelHitDefaults(
-          (protocolDetail.recommended_hit_criteria ?? []) as unknown as HitCriterion[],
-          { name: rd.name, data_type: rd.data_type },
+      .filter((rd) => rd.data_type !== "text") // text-only readouts aren't filterable
+      .flatMap((rd) => {
+        const intercepts = rd.dose_response_config?.intercepts ?? [];
+        const isMultiIntercept =
+          rd.data_type === "dose_response" && intercepts.length >= 2;
+
+        const fresh: ChannelConfigUI[] = isMultiIntercept
+          ? intercepts.map((spec, idx) => buildConfig(rd, spec, idx === 0))
+          : [buildConfig(rd, null, true)];
+
+        // Apply any per-config edits the chemist has made — keyed per
+        // intercept so editing the EC90 row doesn't clobber the EC50 row.
+        return fresh.map(
+          (cfg) =>
+            userEditedConfigs.get(
+              channelConfigKey(cfg.readout_definition_id, cfg.intercept_key),
+            ) ?? cfg,
         );
-        const hasThreshold = defaults.hit_operator !== "";
-        return {
-          protocol_id: protocolDetail.id,
-          readout_definition_id: rd.id,
-          label: `${rd.name}${labelSuffix}`,
-          source_kind: isDoseResponse ? "dose_response_curve" : "readout_data",
-          selection_rule: "latest_approved_run" as const,
-          hit_operator: defaults.hit_operator,
-          hit_value: defaults.hit_value,
-          hit_value_low: defaults.hit_value_low,
-          hit_value_high: defaults.hit_value_high,
-          // DR readouts are the natural hit candidates → filter ON by default
-          // even without a numeric threshold; any non-DR readout needs a
-          // threshold or curve-class filter to contribute to filtering.
-          use_for_filter:
-            hasThreshold || isDoseResponse || defaults.allowed_curve_classes.length > 0,
-          allowed_curve_classes: defaults.allowed_curve_classes,
-          normalization_applied: primaryNorm,
-          // Carry forward verbatim — no inline editor for intercept_key in
-          // this dialog yet; the chemist can refine via the channel popover
-          // after the channels are created.
-          intercept_key: isDoseResponse ? defaults.intercept_key : null,
-        };
       });
   }, [protocolDetail, selectedRunIds.size, userEditedConfigs]);
 
@@ -393,7 +465,11 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
               if (!cfg) return;
               setUserEditedConfigs((prev) => {
                 const next = new Map(prev);
-                next.set(cfg.readout_definition_id, { ...cfg, ...patch });
+                const updated = { ...cfg, ...patch };
+                next.set(
+                  channelConfigKey(updated.readout_definition_id, updated.intercept_key),
+                  updated,
+                );
                 return next;
               });
             }}

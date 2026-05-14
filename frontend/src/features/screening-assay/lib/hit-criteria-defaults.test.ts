@@ -155,4 +155,69 @@ describe("deriveChannelHitDefaults", () => {
     expect(d.hit_operator).toBe("between");
     expect(d.intercept_key).toBeNull();
   });
+
+  // ── interceptKey filter (add-from-runs per-intercept channel split) ─────────
+
+  it("with interceptKey={EC90} filter, only EC90 criteria contribute", () => {
+    const d = deriveChannelHitDefaults(
+      [num("Resazurin", "lt", 10, EC50), num("Resazurin", "lt", 50, EC90)],
+      { name: "Resazurin", data_type: "dose_response" },
+      EC90,
+    );
+    expect(d.hit_operator).toBe("lt");
+    expect(d.hit_value).toBe("50");
+    expect(d.intercept_key).toEqual(EC90);
+  });
+
+  it("with interceptKey=null filter, only primary-targeting criteria contribute", () => {
+    const d = deriveChannelHitDefaults(
+      // EC50 criterion is explicit primary (intercept_key=null); EC90
+      // criterion should be excluded.
+      [
+        { readout_name: "Resazurin", operator: "lt", value: 10, intercept_key: null },
+        num("Resazurin", "lt", 50, EC90),
+      ],
+      { name: "Resazurin", data_type: "dose_response" },
+      null,
+    );
+    expect(d.hit_operator).toBe("lt");
+    expect(d.hit_value).toBe("10");
+    expect(d.intercept_key).toBeNull();
+  });
+
+  it("with interceptKey filter and no matching criterion, returns empty numeric defaults", () => {
+    const d = deriveChannelHitDefaults(
+      [num("Resazurin", "lt", 10, EC50)],
+      { name: "Resazurin", data_type: "dose_response" },
+      EC90,
+    );
+    expect(d.hit_operator).toBe("");
+    expect(d.intercept_key).toBeNull();
+  });
+
+  it("filter treats undefined intercept_key on a criterion as primary (null)", () => {
+    // Legacy pre-Surface-#7 criterion stored without intercept_key. When
+    // a caller filters for primary (null), that criterion should pass.
+    const d = deriveChannelHitDefaults(
+      [{ readout_name: "Resazurin", operator: "lt", value: 10 }],
+      { name: "Resazurin", data_type: "dose_response" },
+      null,
+    );
+    expect(d.hit_operator).toBe("lt");
+    expect(d.hit_value).toBe("10");
+  });
+
+  it("curve-class criteria are not affected by the intercept filter", () => {
+    // Curve Class lives per-readout (whole-curve quality), not per-intercept.
+    const d = deriveChannelHitDefaults(
+      [
+        num("Resazurin", "lt", 50, EC90),
+        curveClass("full", "partial"),
+      ],
+      { name: "Resazurin", data_type: "dose_response" },
+      EC90,
+    );
+    expect(d.hit_operator).toBe("lt");
+    expect(d.allowed_curve_classes).toEqual(["full", "partial"]);
+  });
 });
