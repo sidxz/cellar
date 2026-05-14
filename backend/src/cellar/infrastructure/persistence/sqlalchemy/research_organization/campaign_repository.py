@@ -22,7 +22,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SourceRef
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -155,6 +155,9 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                 HitCriterion.from_dict(model.hit_threshold) if model.hit_threshold else None
             ),
             normalization_applied=model.normalization_applied,
+            intercept_key=(
+                InterceptKey.from_dict(model.intercept_key) if model.intercept_key else None
+            ),
         )
 
     @staticmethod
@@ -172,6 +175,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             qc_filter=ch.qc_filter,
             hit_threshold=ch.hit_threshold.to_dict() if ch.hit_threshold else None,
             normalization_applied=ch.normalization_applied,
+            intercept_key=ch.intercept_key.to_dict() if ch.intercept_key else None,
         )
 
     @staticmethod
@@ -186,6 +190,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.qc_filter = ch.qc_filter
         model.hit_threshold = ch.hit_threshold.to_dict() if ch.hit_threshold else None
         model.normalization_applied = ch.normalization_applied
+        model.intercept_key = ch.intercept_key.to_dict() if ch.intercept_key else None
 
     # ------------------------------------------------------------------
     # Result mapping

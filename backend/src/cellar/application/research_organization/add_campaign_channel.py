@@ -36,7 +36,7 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,6 +56,11 @@ class AddCampaignChannelCommand(Command):
     #: "percent_inhibition"). ``None`` selects the raw layer. Ignored for
     #: dose-response curve channels.
     normalization_applied: str | None = None
+    #: Identifies which intercept of a DR curve this channel surfaces.
+    #: ``None`` = primary intercept (legacy single-intercept channels).
+    #: When ``hit_threshold`` is None, carry-forward prefers a criterion
+    #: matching both readout_name AND this intercept_key.
+    intercept_key: InterceptKey | None = None
 
 
 class AddCampaignChannel:
@@ -127,14 +132,25 @@ class AddCampaignChannel:
                         )
                     )
                 if protocol.recommended_hit_criteria:
+                    # Prefer a criterion that matches both the readout AND
+                    # the channel's intercept (e.g. EC90-targeting channel
+                    # picks up the protocol's EC90 criterion, not its EC50).
+                    name_matches = [
+                        c
+                        for c in protocol.recommended_hit_criteria
+                        if c.readout_name == readout_def.name
+                    ]
                     matched = next(
-                        (
-                            c
-                            for c in protocol.recommended_hit_criteria
-                            if c.readout_name == readout_def.name
-                        ),
+                        (c for c in name_matches if c.intercept_key == input.intercept_key),
                         None,
                     )
+                    if matched is None:
+                        # Fall back to first name-match (legacy behavior) only
+                        # when the channel targets the primary intercept; a
+                        # non-primary channel without an exact criterion match
+                        # gets no auto-threshold.
+                        if input.intercept_key is None and name_matches:
+                            matched = name_matches[0]
                     effective_threshold = matched  # None if no match — that is fine
 
             try:
@@ -154,6 +170,7 @@ class AddCampaignChannel:
                         if input.source_kind == ChannelSourceKind.READOUT_DATA
                         else None
                     ),
+                    intercept_key=input.intercept_key,
                 )
                 campaign.add_channel(channel)
             except ValidationError as e:

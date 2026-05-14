@@ -36,6 +36,7 @@ import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-cri
 import {
   interceptKeyId,
   interceptLabel,
+  narrowInterceptKey,
   parseInterceptKeyId,
 } from "@/features/screening-assay/lib/intercept-label";
 import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
@@ -208,13 +209,18 @@ export function ChannelPopoverForm({
     existingHit && Array.isArray(existingHit.value) ? String(existingHit.value[0]) : "";
   const defaultHitHigh =
     existingHit && Array.isArray(existingHit.value) ? String(existingHit.value[1]) : "";
-  // Default to the explicit persisted intercept_key when present.
-  // Primary-targeting channels carry `intercept_key = null` per Surface #7's
-  // convention — those fall through to "" here and get resolved to the
-  // protocol's primary intercept id by the useEffect below, once
-  // fullProtocol arrives.
-  const defaultHitInterceptKey = existingHit?.intercept_key
-    ? interceptKeyId(existingHit.intercept_key)
+  // Default to the channel's own intercept_key (post-Option-A: top-level
+  // field). Falls back to the threshold's intercept_key for legacy data
+  // saved before the channel-level field existed. Primary-targeting
+  // channels carry null in both — those fall through to "" here and get
+  // resolved to the protocol's primary intercept id by the useEffect
+  // below once fullProtocol arrives.
+  const persistedInterceptKey =
+    narrowInterceptKey(existing?.intercept_key) ??
+    existingHit?.intercept_key ??
+    null;
+  const defaultHitInterceptKey = persistedInterceptKey
+    ? interceptKeyId(persistedInterceptKey)
     : "";
 
   const {
@@ -295,9 +301,10 @@ export function ChannelPopoverForm({
   }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
   // Edit mode: once fullProtocol resolves, fill `hit_intercept_key` with
-  // the existing channel's persisted key (when set) OR the readout's
-  // primary — needed because we can't compute the primary's id at
-  // defaultValues time (the protocol fetch is async).
+  // the channel's persisted key (post-Option-A: top-level; falls back to
+  // the threshold's for legacy) OR the readout's primary — needed because
+  // we can't compute the primary's id at defaultValues time (the protocol
+  // fetch is async).
   useEffect(() => {
     if (!existing) return;
     if (!fullProtocol?.readout_definitions) return;
@@ -309,7 +316,10 @@ export function ChannelPopoverForm({
       setValue("hit_intercept_key", "");
       return;
     }
-    const persisted = existingHit?.intercept_key;
+    const persisted =
+      narrowInterceptKey(existing.intercept_key) ??
+      existingHit?.intercept_key ??
+      null;
     setValue(
       "hit_intercept_key",
       persisted ? interceptKeyId(persisted) : interceptKeyId(intercepts[0]),
@@ -326,6 +336,24 @@ export function ChannelPopoverForm({
     if (!rd) return;
     const primary = rd.normalizations?.find((n) => n !== "none");
     setValue("normalization_applied", primary ?? "raw");
+  }, [watchedReadoutId, existing, fullProtocol, setValue]);
+
+  // Auto-derive source_kind from the readout's data_type (create mode only).
+  // A DR-typed readout means the chemist wants the fitted curve (EC50/EC90);
+  // anything else (numeric / pick_list / ...) means the raw readout value.
+  // The previous "Source" dropdown asked chemists a redundant question — the
+  // answer is determined by the readout they picked one step up. Single
+  // edge case (chemist wants the raw % inhibition layer of a DR readout)
+  // is served by creating a separate non-DR readout for that snapshot view.
+  useEffect(() => {
+    if (existing) return;
+    if (!watchedReadoutId || !fullProtocol?.readout_definitions) return;
+    const rd = fullProtocol.readout_definitions.find((r) => r.id === watchedReadoutId);
+    if (!rd) return;
+    setValue(
+      "source_kind",
+      rd.data_type === "dose_response" ? "dose_response_curve" : "readout_data",
+    );
   }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
   const onSubmit = (values: ChannelFormValues) => {
@@ -420,6 +448,10 @@ export function ChannelPopoverForm({
           qc_filter: qcFilter ?? null,
           hit_threshold: hitThreshold,
           normalization_applied: normalizationApplied,
+          // Channel-level intercept identity (Option A). Survives the wire
+          // even when hit_threshold is null (display-only channel for a
+          // secondary intercept).
+          intercept_key: computeInterceptKey(),
         },
       });
     }
@@ -504,28 +536,10 @@ export function ChannelPopoverForm({
         </>
       )}
 
-      {/* Source — only editable at create time. Changing it on an existing
-          channel would invalidate every measurement. */}
-      {!isEdit && (
-        <div className="space-y-1">
-          <Label>Source</Label>
-          <Controller
-            name="source_kind"
-            control={control}
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="readout_data">Readout data</SelectItem>
-                  <SelectItem value="dose_response_curve">
-                    Dose-response curve
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </div>
-      )}
+      {/* Source is auto-derived from the readout's data_type — DR-typed
+          readouts route to the fitted curve, everything else to readout
+          data. The dropdown was redundant noise. Edit mode shows the
+          frozen value as a hint so chemists know what's locked in. */}
       {isEdit && existing && (
         <div className="text-xs text-muted-foreground">
           Source:{" "}

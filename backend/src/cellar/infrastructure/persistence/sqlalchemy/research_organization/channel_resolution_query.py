@@ -256,6 +256,11 @@ class SQLAlchemyChannelResolutionQuery:
                     ReadoutDataModel.run_id.in_(run_ids),
                     ReadoutDataModel.value_numeric.is_not(None),
                     ReadoutDataModel.is_outlier.is_(False),
+                    # Control / blank wells carry molecule_id=NULL on
+                    # readout_data — they're not attributable to a compound
+                    # and would crash the downstream CampaignResult insert
+                    # (campaign_result.molecule_id is NOT NULL).
+                    ReadoutDataModel.molecule_id.is_not(None),
                     _normalization_clause(normalization_applied),
                 )
             )

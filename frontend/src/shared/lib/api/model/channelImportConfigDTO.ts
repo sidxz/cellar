@@ -7,6 +7,7 @@
 import type { ChannelImportConfigDTOHitThreshold } from './channelImportConfigDTOHitThreshold';
 import type { ChannelImportConfigDTOAllowedCurveClasses } from './channelImportConfigDTOAllowedCurveClasses';
 import type { ChannelImportConfigDTONormalizationApplied } from './channelImportConfigDTONormalizationApplied';
+import type { ChannelImportConfigDTOInterceptKey } from './channelImportConfigDTOInterceptKey';
 
 export interface ChannelImportConfigDTO {
   protocol_id: string;
@@ -18,4 +19,5 @@ export interface ChannelImportConfigDTO {
   use_for_filter?: boolean;
   allowed_curve_classes?: ChannelImportConfigDTOAllowedCurveClasses;
   normalization_applied?: ChannelImportConfigDTONormalizationApplied;
+  intercept_key?: ChannelImportConfigDTOInterceptKey;
 }

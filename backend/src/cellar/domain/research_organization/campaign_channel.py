@@ -17,7 +17,7 @@ from cellar.domain.research_organization.enums import (
     QualifierHandling,
     SelectionRule,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -41,6 +41,14 @@ class CampaignChannel:
     #: dose-response curve channels (the curve's normalization is locked in
     #: by the protocol's ``dose_response_config.y_normalization``).
     normalization_applied: str | None = None
+    #: For a dose-response channel, identifies *which intercept* of the
+    #: curve this channel surfaces (e.g. EC90 on a curve that also reports
+    #: EC50). ``None`` means the curve's primary intercept — preserves
+    #: legacy single-intercept channels. Channel identity is set at
+    #: creation and never changes (a chemist wanting a different intercept
+    #: creates a new channel). The threshold's ``intercept_key`` is treated
+    #: as informational; the channel's value is authoritative.
+    intercept_key: InterceptKey | None = None
 
     def __post_init__(self) -> None:
         if not self.label or not self.label.strip():

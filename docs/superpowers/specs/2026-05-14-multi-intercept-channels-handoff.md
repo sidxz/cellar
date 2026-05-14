@@ -1,7 +1,7 @@
 # Multi-Intercept Campaign Channels — Architecture Gap & Re-evaluation Brief
 
 **Date:** 2026-05-14 (handoff to fresh session)
-**Status:** Open — design re-evaluation needed before implementation
+**Status:** **CLOSED 2026-05-14 — Option A shipped in commit #16.** Top-level `intercept_key` on `CampaignChannel`; alembic migration `035_cc_intercept_key`; preview/add-from-runs/resolver/route/DTO/FE pivoted to channel-level identity. New regression test (`test_multi_intercept_channels_with_display_only_second_intercept`) covers the chemist's actual workflow. 2454 BE tests + 152 FE tests green; tsc clean; dev DB migrated. Awaiting live smoke against `Mtb_WCA_mc2-7000_Resazurin`. See CLAUDE.md commit #16 entry for the per-layer summary.
 **Spec context:** Surface #7 follow-on of `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 **Branch:** `prot-2` (28 commits ahead of `e807dd03`); commits 13-15 attempt this and are *partial* — leave a broken UX state for multi-intercept channels with no threshold
 

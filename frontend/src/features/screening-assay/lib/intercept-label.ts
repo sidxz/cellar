@@ -83,3 +83,16 @@ export function parseInterceptKeyId(id: string | undefined | null): InterceptKey
   if ((kind !== "ec" && kind !== "ic") || Number.isNaN(level)) return null;
   return { kind, level };
 }
+
+/** Narrow a `{kind: string, level: number}` (orval emits `kind: string` from
+ *  the OpenAPI schema; the protocol-side `InterceptKey` uses a literal
+ *  `"ec" | "ic"` union). Returns null when the input is null/undefined or
+ *  carries an invalid `kind`. Use at the boundary between wire types and
+ *  the hand-typed domain. */
+export function narrowInterceptKey(
+  raw: { kind: string; level: number } | null | undefined,
+): InterceptKey | null {
+  if (!raw) return null;
+  if (raw.kind !== "ec" && raw.kind !== "ic") return null;
+  return { kind: raw.kind, level: raw.level };
+}

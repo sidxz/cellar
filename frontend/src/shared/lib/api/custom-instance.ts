@@ -73,7 +73,30 @@ export const customInstance = async <T>({
   });
 
   if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    // Surface the response body's `detail` so chemists see what the
+    // server actually rejected, not just a status code. FastAPI emits
+    // two shapes: custom 422s from result_to_response (`{detail: "..."}`)
+    // and Pydantic request-validation 422s (`{detail: [{loc, msg, ...}]}`).
+    let detail: string | undefined;
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body?.detail)) {
+        detail = body.detail
+          .map((d: { loc?: unknown; msg?: unknown }) => {
+            const loc = Array.isArray(d.loc) ? d.loc.join(".") : "";
+            const msg = typeof d.msg === "string" ? d.msg : JSON.stringify(d);
+            return loc ? `${loc}: ${msg}` : msg;
+          })
+          .join("; ");
+      }
+    } catch {
+      // body not JSON or already consumed — fall through with no detail
+    }
+    throw new Error(
+      detail ? `API error: ${response.status} — ${detail}` : `API error: ${response.status}`,
+    );
   }
 
   if (response.status === 204) {

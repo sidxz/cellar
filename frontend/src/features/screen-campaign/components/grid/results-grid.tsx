@@ -325,8 +325,18 @@ export function ResultsGridV2({
     for (const [protoId, channels] of groupedChannels) {
       const protoName = protocolNameById.get(protoId) ?? "Protocol";
       const groupChildren: ColDef<RowData>[] = [];
+      // Class + Curve columns are emitted only for the FIRST channel of a
+      // given (protocol, readout-def) — sibling intercept channels (e.g.
+      // EC50 + EC90 on the same Resazurin curve) share the same Hill fit,
+      // so duplicating Class and the curve drawing is pure noise. Value
+      // columns stay per-channel since each intercept has its own number.
+      const seenReadoutDefs = new Set<string>();
       for (const ch of channels) {
         const isDR = ch.source_kind === "dose_response_curve";
+        const isFirstForReadout = !seenReadoutDefs.has(ch.readout_definition_id);
+        if (isFirstForReadout) {
+          seenReadoutDefs.add(ch.readout_definition_id);
+        }
         // For non-DR channels the channel header includes the normalization
         // label (e.g. "Raw Data (% Inhibition)") so the chemist sees what
         // formula produced each cell.
@@ -394,7 +404,7 @@ export function ResultsGridV2({
           },
         });
 
-        if (isDR) {
+        if (isDR && isFirstForReadout) {
           groupChildren.push({
             headerName: "Class",
             colId: `${ch.id}_class`,

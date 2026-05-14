@@ -36,6 +36,7 @@ def _channel(
     threshold: HitCriterion | None = None,
     qc: dict | None = None,
     qualifier_handling: QualifierHandling | None = None,
+    intercept_key: InterceptKey | None = None,
 ) -> CampaignChannel:
     return CampaignChannel(
         campaign_id=uuid.uuid4(),
@@ -48,6 +49,7 @@ def _channel(
         display_order=0,
         qc_filter=qc,
         hit_threshold=threshold,
+        intercept_key=intercept_key,
     )
 
 
@@ -177,19 +179,13 @@ async def test_qc_filter_drops_low_z_prime():
 
 @pytest.mark.asyncio
 async def test_intercept_key_resolves_secondary_intercept_for_hit_call():
-    """EC90-keyed criterion compares against the curve's EC90, not its EC50."""
+    """A channel that surfaces EC90 yields EC90's value as the cell value,
+    and the threshold (`< 50`) compares against EC90 (80) → MISS."""
     ch = _channel(
         SelectionRule.LATEST_APPROVED_RUN,
-        threshold=HitCriterion(
-            readout_name="Resazurin",
-            operator="lt",
-            value=50.0,
-            intercept_key=InterceptKey(kind="ec", level=90.0),
-        ),
+        intercept_key=InterceptKey(kind="ec", level=90.0),
+        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
     )
-    # Primary (EC50) = 2.0 against lt 50 would mark HIT; EC90 = 80.0 marks MISS.
-    # Without intercept_key support the resolver would read pick.value (2.0)
-    # and return HIT.
     candidates = [
         _candidate(
             2.0,
@@ -205,12 +201,12 @@ async def test_intercept_key_resolves_secondary_intercept_for_hit_call():
         molecule_id=uuid.uuid4(),
     )
     assert m.hit_call == HitCall.MISS
-    assert m.value == 2.0  # stored measurement value stays as the primary
+    assert m.value == 80.0  # the channel IS for EC90 — its value IS EC90
 
 
 @pytest.mark.asyncio
 async def test_intercept_key_none_keeps_legacy_primary_behavior():
-    """Legacy criterion (no intercept_key) reads pick.value as before."""
+    """No channel-level intercept_key → cell value is the primary fitted value."""
     ch = _channel(
         SelectionRule.LATEST_APPROVED_RUN,
         threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
@@ -219,8 +215,6 @@ async def test_intercept_key_none_keeps_legacy_primary_behavior():
         _candidate(
             2.0,
             run_date=date(2026, 5, 1),
-            # EC90=80 is present but the threshold has no intercept_key, so
-            # the secondary intercept is ignored.
             intercept_values=[_iv("ec", 50.0, 2.0), _iv("ec", 90.0, 80.0)],
         )
     ]
@@ -231,20 +225,17 @@ async def test_intercept_key_none_keeps_legacy_primary_behavior():
         result_id=uuid.uuid4(),
         molecule_id=uuid.uuid4(),
     )
+    assert m.value == 2.0
     assert m.hit_call == HitCall.HIT
 
 
 @pytest.mark.asyncio
 async def test_intercept_key_missing_match_yields_no_hit_call():
-    """Criterion targets EC90 but the legacy curve only has EC50 -> hit_call=None."""
+    """Channel targets EC90 but the curve only has EC50 → cell value None, hit_call None."""
     ch = _channel(
         SelectionRule.LATEST_APPROVED_RUN,
-        threshold=HitCriterion(
-            readout_name="Resazurin",
-            operator="lt",
-            value=50.0,
-            intercept_key=InterceptKey(kind="ec", level=90.0),
-        ),
+        intercept_key=InterceptKey(kind="ec", level=90.0),
+        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
     )
     candidates = [
         _candidate(
@@ -260,23 +251,19 @@ async def test_intercept_key_missing_match_yields_no_hit_call():
         result_id=uuid.uuid4(),
         molecule_id=uuid.uuid4(),
     )
+    assert m.value is None
     assert m.hit_call is None
 
 
 @pytest.mark.asyncio
 async def test_intercept_key_aggregates_under_mean_selection():
-    """MEAN_ACROSS_RUNS + intercept_key averages EC90 values across candidates."""
+    """MEAN_ACROSS_RUNS on a channel keyed to EC90 averages the EC90 values."""
     ch = _channel(
         SelectionRule.MEAN_ACROSS_RUNS,
-        threshold=HitCriterion(
-            readout_name="Resazurin",
-            operator="lt",
-            value=50.0,
-            intercept_key=InterceptKey(kind="ec", level=90.0),
-        ),
+        intercept_key=InterceptKey(kind="ec", level=90.0),
+        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
     )
-    # Primary fitted values 2 and 4 average to 3 (under lt 50 -> HIT if read).
-    # EC90 values 80 and 100 average to 90 -> MISS under lt 50.
+    # EC90 values 80 and 100 average to 90 → MISS under lt 50.
     candidates = [
         _candidate(2.0, intercept_values=[_iv("ec", 50.0, 2.0), _iv("ec", 90.0, 80.0)]),
         _candidate(4.0, intercept_values=[_iv("ec", 50.0, 4.0), _iv("ec", 90.0, 100.0)]),
@@ -288,7 +275,7 @@ async def test_intercept_key_aggregates_under_mean_selection():
         result_id=uuid.uuid4(),
         molecule_id=uuid.uuid4(),
     )
-    assert m.value == 3.0  # primary mean is still the stored measurement
+    assert m.value == 90.0  # mean of the EC90 values
     assert m.hit_call == HitCall.MISS
 
 

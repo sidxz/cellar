@@ -59,6 +59,7 @@ async def add_campaign_channel(
         hit_threshold=body.hit_threshold.to_domain() if body.hit_threshold is not None else None,
         display_order=body.display_order,
         normalization_applied=body.normalization_applied,
+        intercept_key=body.intercept_key.to_domain() if body.intercept_key is not None else None,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

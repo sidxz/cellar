@@ -38,7 +38,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 # Placeholder unit used for ND cells when no candidate is available to
 # contribute one. The domain forbids empty units; this keeps invariants
@@ -138,30 +138,45 @@ def _is_qualified(c: ResolvedCandidate) -> bool:
     return c.qualifier in {ValueQualifier.LT, ValueQualifier.GT}
 
 
-def _threshold_input_value(
-    c: ResolvedCandidate, threshold: HitCriterion | None
+def _intercept_scalar(
+    c: ResolvedCandidate, intercept_key: InterceptKey | None
 ) -> float | None:
-    """Scalar to compare against ``threshold`` for one candidate.
+    """Scalar for one candidate at the given intercept.
 
-    Legacy criteria (no ``intercept_key``) read ``c.value`` — for a DR
-    channel this equals the curve's primary fitted value, preserving
-    historical behavior. Intercept-keyed criteria look up the matching
-    ``(kind, level)`` pair in ``c.intercept_values``; missing match (legacy
-    fit, intercept added after the curve was fit) yields None.
+    ``intercept_key=None`` returns ``c.value`` — the primary fitted value
+    for DR sources, the raw readout for RD sources. Otherwise looks up
+    the matching ``(kind, level)`` pair in ``c.intercept_values``; a
+    missing match (legacy fit, intercept added after the curve was fit)
+    yields None.
     """
-    if threshold is None or threshold.intercept_key is None:
+    if intercept_key is None:
         return c.value
     ivs = c.intercept_values
     if not ivs:
         return None
-    target_kind = threshold.intercept_key.kind
-    target_level = threshold.intercept_key.level
+    target_kind = intercept_key.kind
+    target_level = intercept_key.level
     for iv in ivs:
         spec = iv.get("spec") or {}
         if spec.get("kind") == target_kind and spec.get("level") == target_level:
             val = iv.get("value")
             return float(val) if isinstance(val, (int, float)) else None
     return None
+
+
+def _threshold_input_value(
+    c: ResolvedCandidate, threshold: HitCriterion | None
+) -> float | None:
+    """Back-compat shim: scalar for the threshold's intercept_key.
+
+    Pre-Option-A callers pass a ``HitCriterion`` whose ``intercept_key``
+    carried the channel's intercept identity. Post-Option-A, channel
+    identity lives on the channel itself; this shim still exists for
+    protocol-level criterion evaluation paths that haven't been
+    rewired (e.g. evaluating ``recommended_hit_criteria`` outside of a
+    campaign channel).
+    """
+    return _intercept_scalar(c, threshold.intercept_key if threshold else None)
 
 
 def _compute_hit_call(value: float | None, threshold: HitCriterion | None) -> HitCall | None:
@@ -294,9 +309,15 @@ class ChannelResolver:
         pname = candidates[0].protocol_name
         pver = candidates[0].protocol_version
 
+        # Post-Option-A: intercept identity is read from the channel, not
+        # from its threshold — so a display-only channel (no threshold)
+        # still surfaces the right intercept's number. When the channel
+        # targets an intercept the curve doesn't carry, the cell is ND.
+        ik = channel.intercept_key
+        value: float | None
         if channel.selection_rule == SelectionRule.LATEST_APPROVED_RUN:
             pick = max(candidates, key=lambda c: c.run_date or date.min)
-            value = pick.value
+            value = _intercept_scalar(pick, ik) if ik else pick.value
             qualifier = pick.qualifier
             source_run = pick.run_id
             curve = pick.curve_id
@@ -305,10 +326,17 @@ class ChannelResolver:
             pver = pick.protocol_version
             rdate = pick.run_date
             unit = pick.unit or _ND_UNIT_PLACEHOLDER
-            eval_value = _threshold_input_value(pick, channel.hit_threshold)
         elif channel.selection_rule == SelectionRule.MEAN_ACROSS_RUNS:
-            vals = [c.value for c in candidates]
-            value = sum(vals) / len(vals)
+            if ik is None:
+                vals = [c.value for c in candidates]
+                value = sum(vals) / len(vals)
+            else:
+                ik_vals = [
+                    v
+                    for v in (_intercept_scalar(c, ik) for c in candidates)
+                    if v is not None
+                ]
+                value = sum(ik_vals) / len(ik_vals) if ik_vals else None
             qualifier = ValueQualifier.EQ
             source_run = curve = readout = None
             rdate = None
@@ -316,32 +344,36 @@ class ChannelResolver:
             # curve shape — the aggregate value can't be a sigmoid, but a
             # drawing still needs *something* to render.
             pick = max(candidates, key=lambda c: c.run_date or date.min)
-            eval_pool = [_threshold_input_value(c, channel.hit_threshold) for c in candidates]
-            eval_pool = [v for v in eval_pool if v is not None]
-            eval_value = sum(eval_pool) / len(eval_pool) if eval_pool else None
         elif channel.selection_rule == SelectionRule.GEOMETRIC_MEAN:
-            positives = [c.value for c in candidates if c.value > 0]
-            if not positives:
-                return _nd_measurement(
-                    result_id=result_id,
-                    channel_id=channel.id,
-                    unit=unit,
-                    protocol_name=pname,
-                    protocol_version=pver,
-                )
-            value = math.exp(sum(math.log(v) for v in positives) / len(positives))
+            if ik is None:
+                positives = [c.value for c in candidates if c.value > 0]
+            else:
+                positives = [
+                    v
+                    for v in (_intercept_scalar(c, ik) for c in candidates)
+                    if v is not None and v > 0
+                ]
+            value = (
+                math.exp(sum(math.log(v) for v in positives) / len(positives))
+                if positives
+                else None
+            )
             qualifier = ValueQualifier.EQ
             source_run = curve = readout = None
             rdate = None
             pick = max(candidates, key=lambda c: c.run_date or date.min)
-            eval_pool = [_threshold_input_value(c, channel.hit_threshold) for c in candidates]
-            eval_positives = [v for v in eval_pool if v is not None and v > 0]
-            eval_value = (
-                math.exp(sum(math.log(v) for v in eval_positives) / len(eval_positives))
-                if eval_positives
-                else None
-            )
         else:  # MANUAL_PICK — user fills in later; cell stays ND.
+            return _nd_measurement(
+                result_id=result_id,
+                channel_id=channel.id,
+                unit=unit,
+                protocol_name=pname,
+                protocol_version=pver,
+            )
+
+        # If aggregation produced no value (intercept missing across all
+        # candidates, or GEOMETRIC_MEAN with no positives), the cell is ND.
+        if value is None:
             return _nd_measurement(
                 result_id=result_id,
                 channel_id=channel.id,
@@ -356,7 +388,7 @@ class ChannelResolver:
             value=value,
             value_qualifier=qualifier,
             unit=unit,
-            hit_call=_compute_hit_call(eval_value, channel.hit_threshold),
+            hit_call=_compute_hit_call(value, channel.hit_threshold),
             source_run_id=source_run,
             source_curve_id=curve,
             source_readout_id=readout,

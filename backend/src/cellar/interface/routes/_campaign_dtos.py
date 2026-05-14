@@ -117,6 +117,11 @@ class ChannelImportConfigDTO(BaseModel):
     #: Normalization layer for ``readout_data`` source: None=raw,
     #: "percent_inhibition"=computed, etc. Ignored for dose-response curves.
     normalization_applied: str | None = None
+    #: Identifies which intercept of a DR curve this channel surfaces.
+    #: ``None`` = primary intercept (legacy behavior). Top-level field — not
+    #: nested under hit_threshold — so display-only channels (no threshold)
+    #: keep their intercept identity on the wire.
+    intercept_key: InterceptKeyDTO | None = None
 
     def to_domain(self) -> ChannelImportConfig:
         return ChannelImportConfig(
@@ -129,6 +134,7 @@ class ChannelImportConfigDTO(BaseModel):
             use_for_filter=self.use_for_filter,
             allowed_curve_classes=self.allowed_curve_classes,
             normalization_applied=self.normalization_applied,
+            intercept_key=self.intercept_key.to_domain() if self.intercept_key else None,
         )
 
 
@@ -157,6 +163,11 @@ class AddChannelRequest(BaseModel):
     display_order: int = 0
     #: Normalization layer for ``readout_data`` source. Ignored for dose-response.
     normalization_applied: str | None = None
+    #: Identifies which intercept of a DR curve this channel surfaces.
+    #: ``None`` = primary intercept. Set-on-create; ``UpdateChannelRequest``
+    #: does not accept this field (a chemist wanting a different intercept
+    #: creates a new channel).
+    intercept_key: InterceptKeyDTO | None = None
 
 
 class UpdateChannelRequest(BaseModel):
@@ -314,6 +325,9 @@ class CampaignChannelResponse(BaseModel):
     hit_threshold: HitCriterionDTO | None = None
     display_order: int
     normalization_applied: str | None = None
+    #: Identifies which intercept of a DR curve this channel surfaces.
+    #: ``None`` = primary intercept (legacy single-intercept channels).
+    intercept_key: InterceptKeyDTO | None = None
 
     @classmethod
     def from_domain(cls, ch: CampaignChannel) -> CampaignChannelResponse:
@@ -331,6 +345,9 @@ class CampaignChannelResponse(BaseModel):
             else None,
             display_order=ch.display_order,
             normalization_applied=ch.normalization_applied,
+            intercept_key=InterceptKeyDTO.from_domain(ch.intercept_key)
+            if ch.intercept_key is not None
+            else None,
         )
 
 

@@ -156,21 +156,16 @@ class AddResultsFromRuns:
             # Reuse key is (protocol, readout, normalization, intercept_key)
             # so a single readout can expose multiple distinct channels for
             # different intercepts (e.g. Resazurin EC50 + Resazurin EC90).
-            # Without the intercept axis, the two collapse onto one channel
-            # and the EC90 split from add-from-runs never lands separate
-            # measurements.
+            # After Option A, the intercept_key lives on the channel /
+            # config directly, not under hit_threshold — so a display-only
+            # channel (no threshold) still keeps its intercept identity
+            # and doesn't collide with the threshold-bearing primary.
             channels_created = 0
             channels_reused = 0
             # The intercept-key fourth element uses the frozen InterceptKey VO
             # directly (hashable by `@dataclass(frozen=True)`); None means
-            # the channel targets the primary intercept (Surface #7 convention).
+            # the channel targets the primary intercept.
             ChannelKey = tuple[uuid.UUID, uuid.UUID, str | None, object]
-
-            def _cfg_intercept(c):
-                return c.hit_threshold.intercept_key if c.hit_threshold else None
-
-            def _channel_intercept(ch):
-                return ch.hit_threshold.intercept_key if ch.hit_threshold else None
 
             channel_by_config: dict[ChannelKey, CampaignChannel] = {}
             existing_by_key: dict[ChannelKey, CampaignChannel] = {
@@ -178,7 +173,7 @@ class AddResultsFromRuns:
                     ch.protocol_id,
                     ch.readout_definition_id,
                     ch.normalization_applied,
-                    _channel_intercept(ch),
+                    ch.intercept_key,
                 ): ch
                 for ch in campaign.channels
             }
@@ -196,11 +191,13 @@ class AddResultsFromRuns:
                     cfg.protocol_id,
                     cfg.readout_definition_id,
                     norm,
-                    _cfg_intercept(cfg),
+                    cfg.intercept_key,
                 )
                 existing = existing_by_key.get(key)
                 if existing:
-                    # Reuse — apply updated selection rule + threshold
+                    # Reuse — apply updated selection rule + threshold.
+                    # Intercept identity is locked at creation; chemist
+                    # editing the threshold doesn't move the channel.
                     existing.selection_rule = cfg.selection_rule
                     existing.hit_threshold = cfg.hit_threshold
                     channel_by_config[key] = existing
@@ -217,6 +214,7 @@ class AddResultsFromRuns:
                         display_order=next_display_order,
                         hit_threshold=cfg.hit_threshold,
                         normalization_applied=norm,
+                        intercept_key=cfg.intercept_key,
                     )
                     next_display_order += 1
                     try:
@@ -242,7 +240,7 @@ class AddResultsFromRuns:
                     cfg.protocol_id,
                     cfg.readout_definition_id,
                     norm,
-                    _cfg_intercept(cfg),
+                    cfg.intercept_key,
                 )
                 channel = channel_by_config[key]
                 if cfg.use_for_filter and cfg.hit_threshold is not None:
@@ -266,15 +264,15 @@ class AddResultsFromRuns:
                         if not candidates:
                             continue
                     picked = _apply_selection_rule(
-                        candidates, cfg.selection_rule, cfg.hit_threshold
+                        candidates, cfg.selection_rule, cfg.intercept_key
                     )
                     if picked is None:
                         continue  # Skip ND cells — don't add a measurement
-                    # hit_call honors the channel's intercept_key via
-                    # `picked.eval_value` (= primary value when no intercept_key
-                    # is set, intercept-specific scalar otherwise).
+                    # picked.value IS the channel's intercept value (primary
+                    # if intercept_key=None, intercept-specific otherwise);
+                    # threshold compares directly against it.
                     hit = (
-                        _compute_hit_call(picked.eval_value, cfg.hit_threshold)
+                        _compute_hit_call(picked.value, cfg.hit_threshold)
                         if cfg.hit_threshold
                         else None
                     )
@@ -432,12 +430,11 @@ def _build_measurement(
     kwargs = dict(
         result_id=result_id,
         channel_id=channel_id,
-        # Persisted value tracks the channel's targeted intercept (eval_value
-        # = primary aggregate when no intercept_key, intercept-specific
-        # aggregate otherwise). Keeps the campaign cell consistent with the
-        # preview and with the chemist's mental model: this channel "is
-        # for" EC90 → its measurement value IS the EC90.
-        value=picked.eval_value,
+        # Persisted value IS the channel's intercept value (primary if
+        # no intercept_key, intercept-specific otherwise). Matches the
+        # chemist's mental model: a channel "is for" EC90 → its
+        # measurement value IS the EC90.
+        value=picked.value,
         value_qualifier=picked.qualifier,
         unit=picked.unit,
         protocol_name_snapshot=picked.protocol_name,

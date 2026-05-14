@@ -38,7 +38,19 @@ interface Props {
 export function CurveExpandDialog({ data, onOpenChange }: Props) {
   if (!data) return null;
 
-  const showIc50 = Number.isFinite(data.fitted_value) && data.fitted_value > 0;
+  const showFitted = Number.isFinite(data.fitted_value) && data.fitted_value > 0;
+  // `channelLabel` is the channel's chemist-facing name ("Resazurin EC50",
+  // "EC90", "Caco-2 P_app"). Anything past the last whitespace is the
+  // intercept label for DR channels post-Surface-#1; the original full
+  // label is fine when there's no space. Cheap heuristic that beats the
+  // pre-fix hardcoded "IC50" by miles. The full DRY pass (snapshot
+  // carries intercept_values + curve_type, dialog renders via
+  // DoseResponseChart with isInteractive=false) is a separate task that
+  // also needs a backend migration to round-trip the missing fields.
+  const interceptLabel = (() => {
+    const parts = data.channelLabel.trim().split(/\s+/);
+    return parts.length > 1 ? parts[parts.length - 1] : data.channelLabel;
+  })();
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -59,9 +71,9 @@ export function CurveExpandDialog({ data, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="flex items-baseline gap-4 text-sm font-mono">
-          {showIc50 && (
+          {showFitted && (
             <span>
-              <span className="text-muted-foreground">IC50</span>{" "}
+              <span className="text-muted-foreground">{interceptLabel}</span>{" "}
               {data.fitted_value.toPrecision(4)}
               {data.unit ? ` ${data.unit}` : ""}
             </span>

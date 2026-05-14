@@ -51,29 +51,10 @@ from cellar.interface.routes._campaign_dtos import (
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
 
-@router.patch("/{campaign_id}/results/{result_id}", response_model=CampaignResponse)
-async def set_result_decision(
-    campaign_id: uuid.UUID,
-    result_id: uuid.UUID,
-    body: SetResultDecisionRequest,
-    auth: AuthDep,
-    uc: SetResultDecisionDep,
-) -> CampaignResponse:
-    """Set a screener's per-compound decision (SELECTED / DEFERRED / REJECTED)."""
-    cmd_kwargs: dict = {
-        "workspace_id": auth.workspace_id,
-        "campaign_id": campaign_id,
-        "result_id": result_id,
-        "decision": CampaignDecision(body.decision),
-        "reason": body.reason,
-    }
-    if "notes" in body.model_fields_set:
-        cmd_kwargs["notes"] = body.notes
-    cmd = SetResultDecisionCommand(**cmd_kwargs)
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
-
-
+# NOTE: route order matters. FastAPI matches in registration order, so the
+# literal `/bulk-decision` MUST be registered before `/{result_id}` —
+# otherwise the path-parameter route swallows "bulk-decision" as a
+# ``result_id`` value and fails UUID validation with a 422.
 @router.patch(
     "/{campaign_id}/results/bulk-decision",
     response_model=BulkSetResultDecisionsResponse,
@@ -103,6 +84,29 @@ async def bulk_set_result_decisions(
         updated_count=outcome.updated_count,
         missing_ids=outcome.missing_ids,
     )
+
+
+@router.patch("/{campaign_id}/results/{result_id}", response_model=CampaignResponse)
+async def set_result_decision(
+    campaign_id: uuid.UUID,
+    result_id: uuid.UUID,
+    body: SetResultDecisionRequest,
+    auth: AuthDep,
+    uc: SetResultDecisionDep,
+) -> CampaignResponse:
+    """Set a screener's per-compound decision (SELECTED / DEFERRED / REJECTED)."""
+    cmd_kwargs: dict = {
+        "workspace_id": auth.workspace_id,
+        "campaign_id": campaign_id,
+        "result_id": result_id,
+        "decision": CampaignDecision(body.decision),
+        "reason": body.reason,
+    }
+    if "notes" in body.model_fields_set:
+        cmd_kwargs["notes"] = body.notes
+    cmd = SetResultDecisionCommand(**cmd_kwargs)
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
 
 
 @router.patch(

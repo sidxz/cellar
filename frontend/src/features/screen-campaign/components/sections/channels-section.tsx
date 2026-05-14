@@ -20,7 +20,10 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import type { CampaignResponse, CampaignChannelResponse } from "../../types";
 import { ChannelPopoverForm, parseHitThreshold } from "../channel-popover";
-import { interceptKeyLabel } from "@/features/screening-assay/lib/intercept-label";
+import {
+  interceptKeyLabel,
+  narrowInterceptKey,
+} from "@/features/screening-assay/lib/intercept-label";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -61,7 +64,10 @@ export function ChannelsSection({
                 <Plus className="h-3 w-3" /> Channel
               </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-[420px] p-4">
+            <PopoverContent
+              align="end"
+              className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+            >
               <h4 className="text-sm font-semibold mb-3">Add channel</h4>
               <ChannelPopoverForm
                 campaignId={campaign.id}
@@ -107,17 +113,17 @@ const OPERATOR_LABEL: Record<string, string> = {
   between: "between",
 };
 
-function formatThreshold(hit_threshold: CampaignChannelResponse["hit_threshold"]): string {
-  const parsed = parseHitThreshold(hit_threshold);
+function formatThreshold(channel: CampaignChannelResponse): string {
+  const parsed = parseHitThreshold(channel.hit_threshold);
   if (!parsed) return "";
   const opLabel = OPERATOR_LABEL[parsed.operator] ?? parsed.operator;
-  // Non-primary intercept gets surfaced in the chip text so chemists see
-  // which intercept the channel targets at a glance ("hit if EC90 < 50").
-  // Primary (`intercept_key === null` per Surface #7) stays implicit —
-  // every channel has *some* primary, naming it everywhere is noise.
-  const ik = parsed.intercept_key
-    ? `${interceptKeyLabel(parsed.intercept_key)} `
-    : "";
+  // Channel-level intercept_key wins (Option A). Falls back to the
+  // threshold's intercept_key for legacy rows saved before the top-level
+  // field existed. Primary (`null` in both) stays implicit — every
+  // channel has *some* primary, naming it everywhere is noise.
+  const effectiveIk =
+    narrowInterceptKey(channel.intercept_key) ?? parsed.intercept_key;
+  const ik = effectiveIk ? `${interceptKeyLabel(effectiveIk)} ` : "";
   if (Array.isArray(parsed.value)) {
     const [lo, hi] = parsed.value;
     return `hit if ${ik}${lo} – ${hi}`;
@@ -141,7 +147,7 @@ function ChannelRow({
   const sourceKind =
     channel.source_kind === "dose_response_curve" ? "DR" : "RD";
 
-  const thresholdLabel = formatThreshold(channel.hit_threshold);
+  const thresholdLabel = formatThreshold(channel);
 
   const rule = channel.selection_rule.replace(/_/g, " ");
 
@@ -165,7 +171,10 @@ function ChannelRow({
               <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[420px] p-4">
+          <PopoverContent
+            align="end"
+            className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+          >
             <h4 className="text-sm font-semibold mb-3">Edit channel</h4>
             <ChannelPopoverForm
               campaignId={campaign.id}

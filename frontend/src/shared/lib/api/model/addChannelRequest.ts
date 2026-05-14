@@ -7,6 +7,7 @@
 import type { AddChannelRequestQcFilter } from './addChannelRequestQcFilter';
 import type { AddChannelRequestHitThreshold } from './addChannelRequestHitThreshold';
 import type { AddChannelRequestNormalizationApplied } from './addChannelRequestNormalizationApplied';
+import type { AddChannelRequestInterceptKey } from './addChannelRequestInterceptKey';
 
 export interface AddChannelRequest {
   label: string;
@@ -19,4 +20,5 @@ export interface AddChannelRequest {
   hit_threshold?: AddChannelRequestHitThreshold;
   display_order?: number;
   normalization_applied?: AddChannelRequestNormalizationApplied;
+  intercept_key?: AddChannelRequestInterceptKey;
 }

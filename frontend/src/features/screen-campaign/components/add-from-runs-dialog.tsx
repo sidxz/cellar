@@ -25,6 +25,12 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/components/ui/tooltip";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -315,6 +321,10 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       use_for_filter: boolean;
       allowed_curve_classes?: string[] | null;
       normalization_applied?: string | null;
+      // Channel-level intercept identity (Option A). Survives the wire
+      // even when hit_threshold is null — keeps display-only EC90 channels
+      // distinct from their primary-EC50 sibling on the same readout.
+      intercept_key: InterceptKey | null;
     }[];
     filter_mode: "any" | "all";
   } {
@@ -374,6 +384,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
               : null,
           normalization_applied:
             c.source_kind === "readout_data" ? c.normalization_applied : null,
+          intercept_key: interceptKey,
         };
       }),
       filter_mode: filterMode,
@@ -661,7 +672,7 @@ function ConfigureStep(p: ConfigureStepProps) {
               <div className="space-y-2">
                 {p.channelConfigs.map((c, idx) => (
                   <div
-                    key={c.readout_definition_id}
+                    key={channelConfigKey(c.readout_definition_id, c.intercept_key)}
                     className="rounded border p-3 space-y-2 bg-muted/20"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -957,6 +968,9 @@ interface PreviewCell {
   test_concentration_unit: string | null;
   replicate_count: number | null;
   qc_pass: boolean | null;
+  /** Chemist-facing explanation for `qc_pass === false`. Backend formats
+   *  ("Source run not approved" / "z' = 0.42 (below 0.5)" / aggregate). */
+  qc_reason: string | null;
   hit_call: string | null;
 }
 
@@ -997,9 +1011,21 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
       </div>
     );
   }
-  const { summary, rows, channels } = data;
+  const { summary, channels } = data;
+  // Hits first so the chemist sees the rows that matter without scanning;
+  // already-in-campaign rows sink to the bottom (still dimmed). Stable
+  // within each bucket so the molecule order from the backend response
+  // (registration-number-ish) is preserved.
+  const rows = [...data.rows].sort((a, b) => {
+    if (a.already_in_campaign !== b.already_in_campaign) {
+      return a.already_in_campaign ? 1 : -1;
+    }
+    if (a.is_hit !== b.is_hit) return a.is_hit ? -1 : 1;
+    return 0;
+  });
 
   return (
+    <TooltipProvider delayDuration={120}>
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 text-xs">
         <Badge variant="secondary">{summary.molecules_total} molecules</Badge>
@@ -1084,9 +1110,16 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
                           </span>
                         )}
                         {cell.qc_pass === false && (
-                          <Badge variant="destructive" className="text-[9px] px-1 py-0">
-                            QC
-                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] px-1 py-0 cursor-help">
+                                QC
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {cell.qc_reason ?? "QC heuristic failed"}
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     </td>
@@ -1098,5 +1131,6 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
         </table>
       </ScrollArea>
     </div>
+    </TooltipProvider>
   );
 }

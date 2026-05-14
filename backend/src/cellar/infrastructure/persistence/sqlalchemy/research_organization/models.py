@@ -237,6 +237,12 @@ class CampaignChannelModel(Base, EntityModelMixin):
     # readout_data. NULL = raw layer; any string filters to that formula
     # (e.g. "percent_inhibition"). Ignored when source_kind="dose_response_curve".
     normalization_applied: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Identifies which intercept of a DR curve this channel surfaces (e.g.
+    # EC90 on a curve that also reports EC50). NULL = primary intercept.
+    # JSONB shape: {"kind": "ec"|"ic", "level": float}. Channel identity is
+    # set at creation; threshold's intercept_key (under hit_threshold) is
+    # informational only after migration 035.
+    intercept_key: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class CampaignResultModel(Base, EntityModelMixin):

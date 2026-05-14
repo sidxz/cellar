@@ -754,8 +754,8 @@ class TestPreviewRunImport:
                     label="EC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
                     selection_rule=SelectionRule.LATEST_APPROVED_RUN,
-                    # Primary-targeting threshold: intercept_key=None per
-                    # Surface #7 convention (terse "primary" wire shape).
+                    # Channel-level intercept_key=None → primary intercept.
+                    intercept_key=None,
                     hit_threshold=HitCriterion(
                         readout_name="EC50", operator="lt", value=50.0
                     ),
@@ -767,11 +767,10 @@ class TestPreviewRunImport:
                     label="EC90",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
                     selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    # Channel IS for EC90 — identity lives on the config.
+                    intercept_key=InterceptKey(kind="ec", level=90),
                     hit_threshold=HitCriterion(
-                        readout_name="EC90",
-                        operator="lt",
-                        value=50.0,
-                        intercept_key=InterceptKey(kind="ec", level=90),
+                        readout_name="EC90", operator="lt", value=50.0
                     ),
                     use_for_filter=True,
                 ),
@@ -795,7 +794,6 @@ class TestPreviewRunImport:
         # Cells should carry the *intercept-specific* value, not the primary on both.
         a_cells = {c["channel_key"]: c for c in row_a["cells"]}
         assert len(a_cells) == 2, "EC50 and EC90 cells must not collide on channel_key"
-        ec50_key_a, ec90_key_a = sorted(a_cells.keys())
         # The EC90 cell's value should be the EC90 number (40), not the EC50 number (4).
         assert {c["value"] for c in a_cells.values()} == {4.0, 40.0}
         assert all(c["hit_call"] == "hit" for c in a_cells.values())
@@ -810,6 +808,114 @@ class TestPreviewRunImport:
 
         assert doc["summary"]["hits"] == 1
         assert doc["summary"]["non_hits"] == 1
+
+    @pytest.mark.asyncio
+    async def test_multi_intercept_channels_with_display_only_second_intercept(self) -> None:
+        """Chemist's real workflow (the scenario that drove Option A):
+        one channel for EC50 with ``< 50`` threshold + filtering ON, one
+        channel for EC90 with NO threshold (informational column only).
+
+        Channel identity for EC90 lives on ``ChannelImportConfig.intercept_key``,
+        NOT on a threshold's intercept_key — because there is no threshold.
+        The pre-Option-A code keyed channel identity off ``hit_threshold.intercept_key``,
+        so the EC90 channel collapsed onto the EC50 key and the EC90 cell
+        showed the EC50 number on every row.
+
+        Expected: both molecules pass EC50 < 50 (4 < 50, 10 < 50) ⇒ both hits.
+        EC50 cells show 4 / 10; EC90 cells show 40 / 200; EC90 hit_call is
+        ``None`` (no threshold means no decision)."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        proto = uuid.uuid4()
+        readout = uuid.uuid4()
+        run_id = uuid.uuid4()
+        mol_a = uuid.uuid4()
+        mol_b = uuid.uuid4()
+
+        def _cand_with_intercepts(
+            primary: float, ec90: float, run_id: uuid.UUID
+        ) -> ResolvedCandidate:
+            base = _candidate(value=primary, run_id=run_id, unit="uM")
+            return ResolvedCandidate(
+                value=base.value, qualifier=base.qualifier, unit=base.unit,
+                run_id=base.run_id, run_date=base.run_date, run_approved=base.run_approved,
+                z_prime=base.z_prime, protocol_name=base.protocol_name,
+                protocol_version=base.protocol_version, curve_id=base.curve_id,
+                readout_id=base.readout_id,
+                intercept_values=[
+                    {"spec": {"kind": "ec", "level": 50}, "value": primary},
+                    {"spec": {"kind": "ec", "level": 90}, "value": ec90},
+                ],
+            )
+
+        candidates = {
+            (proto, readout): {
+                mol_a: [_cand_with_intercepts(primary=4.0, ec90=40.0, run_id=run_id)],
+                mol_b: [_cand_with_intercepts(primary=10.0, ec90=200.0, run_id=run_id)],
+            }
+        }
+        uc = PreviewRunImport(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_make_run_repo([run_id]),
+            molecule_repo=_make_molecule_repo([_make_mol(mol_a), _make_mol(mol_b)]),
+            channel_query=FakeChannelQuery(candidates),
+        )
+        q = PreviewRunImportQuery(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="EC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    intercept_key=None,
+                    hit_threshold=HitCriterion(
+                        readout_name="EC50", operator="lt", value=50.0
+                    ),
+                    use_for_filter=True,
+                ),
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="EC90",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    intercept_key=InterceptKey(kind="ec", level=90),
+                    hit_threshold=None,
+                    use_for_filter=False,
+                ),
+            ],
+            filter_mode="all",
+        )
+        out = await uc(q, auth=auth)
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+
+        assert doc["summary"]["channels_new"] == 2
+        assert len({c["channel_key"] for c in doc["channels"]}) == 2
+
+        rows_by_mid = {r["molecule"]["id"]: r for r in doc["rows"]}
+        row_a = rows_by_mid[str(mol_a)]
+        row_b = rows_by_mid[str(mol_b)]
+
+        a_cells = {c["channel_key"]: c for c in row_a["cells"]}
+        assert len(a_cells) == 2, "EC50 and EC90 cells must not collide on channel_key"
+        assert {c["value"] for c in a_cells.values()} == {4.0, 40.0}
+        assert {c["hit_call"] for c in a_cells.values()} == {"hit", None}
+        assert row_a["is_hit"] is True
+
+        b_cells = {c["channel_key"]: c for c in row_b["cells"]}
+        assert len(b_cells) == 2
+        assert {c["value"] for c in b_cells.values()} == {10.0, 200.0}
+        assert {c["hit_call"] for c in b_cells.values()} == {"hit", None}
+        assert row_b["is_hit"] is True
+
+        assert doc["summary"]["hits"] == 2
+        assert doc["summary"]["non_hits"] == 0
 
     @pytest.mark.asyncio
     async def test_qc_pass_false_for_unapproved_or_low_z_prime(self) -> None:
