@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, ListPlus, Settings2, BookmarkPlus } from "lucide-react";
+import { ListPlus, Settings2, BookmarkPlus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 
 interface ResultsToolbarProps {
@@ -8,7 +8,6 @@ interface ResultsToolbarProps {
   selectedCount: number;
   onSelectAll: () => void;
   onSelectNone: () => void;
-  onExport: () => void;
   onAddToCollection: () => void;
   onCustomizeReport: () => void;
   onSaveSearch: () => void;
@@ -19,7 +18,6 @@ export function ResultsToolbar({
   selectedCount,
   onSelectAll,
   onSelectNone,
-  onExport,
   onAddToCollection,
   onCustomizeReport,
   onSaveSearch,
@@ -59,10 +57,6 @@ export function ResultsToolbar({
       <div className="flex-1" />
 
       <div className="flex gap-1.5">
-        <Button variant="outline" size="sm" className="h-8 text-sm gap-1.5" onClick={onExport}>
-          <Download className="h-3.5 w-3.5" />
-          Export
-        </Button>
         <Button
           variant="outline"
           size="sm"

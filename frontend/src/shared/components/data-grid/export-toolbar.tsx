@@ -25,14 +25,37 @@ export type ExcelEnhancer = (
   rows: any[],
 ) => Promise<void>;
 
+/**
+ * Extra dropdown item appended after Excel + CSV — e.g. a feature-specific
+ * format like SDF (structures-only) on the search results, or a JSON
+ * snapshot on a config screen. The toolbar handles the menu chrome and
+ * the loading spinner; the consumer's `onSelect` does the actual work.
+ */
+export interface ExtraExportItem {
+  label: string;
+  /** Filename extension hint rendered on the right of the dropdown row
+   *  (e.g. ".sdf" — no leading dot is enforced; the toolbar passes
+   *  through whatever the caller provides for parity with .xlsx/.csv). */
+  extension: string;
+  onSelect: () => void | Promise<void>;
+}
+
 interface ExportToolbarProps {
   gridRef: RefObject<AgGridReact | null>;
   filename: string;
   /** Optional enhancer for Excel exports — adds images, extra sheets, etc. */
   excelEnhancer?: ExcelEnhancer;
+  /** Additional dropdown items rendered after Excel + CSV — caller owns
+   *  the export action (e.g. backend SDF download). */
+  extraItems?: ExtraExportItem[];
 }
 
-export function ExportToolbar({ gridRef, filename, excelEnhancer }: ExportToolbarProps) {
+export function ExportToolbar({
+  gridRef,
+  filename,
+  excelEnhancer,
+  extraItems,
+}: ExportToolbarProps) {
   const [exporting, setExporting] = useState(false);
 
   const handleCsvExport = useCallback(() => {
@@ -137,6 +160,23 @@ export function ExportToolbar({ gridRef, filename, excelEnhancer }: ExportToolba
           <span>CSV</span>
           <span className="ml-auto text-[11px] tracking-wide text-muted-foreground">.csv</span>
         </DropdownMenuItem>
+        {extraItems?.map((item) => (
+          <DropdownMenuItem
+            key={item.label}
+            onSelect={() => {
+              const result = item.onSelect();
+              if (result instanceof Promise) {
+                setExporting(true);
+                result.finally(() => setExporting(false));
+              }
+            }}
+          >
+            <span>{item.label}</span>
+            <span className="ml-auto text-[11px] tracking-wide text-muted-foreground">
+              {item.extension}
+            </span>
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

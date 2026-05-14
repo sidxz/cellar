@@ -42,6 +42,11 @@ interface ResultsGridProps {
   onRowClick: (molecule: EnrichedMolecule) => void;
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
+  /** When provided, an "SDF" entry is appended to the export dropdown
+   *  alongside Excel + CSV. The caller decides which molecules to export
+   *  (selected vs. full result set) — see `handleExportSdf` in
+   *  search-page.tsx. */
+  onExportSdf?: () => void;
 }
 
 // ─── Row height by image size ───────────────────────────────────────────────
@@ -434,6 +439,7 @@ export function ResultsGrid({
   onRowClick,
   selectedIds,
   onSelectionChange,
+  onExportSdf,
 }: ResultsGridProps) {
   const rowHeight = ROW_HEIGHTS[reportConfig.imageSize] ?? 150;
 
@@ -463,6 +469,16 @@ export function ResultsGrid({
   // clearSelectionToken mechanism detects the falsy value and calls deselectAll.
   const clearSelectionToken = selectedIds.size;
 
+  // SDF rides as an extra item in the unified Export dropdown alongside
+  // Excel + CSV — chemists get one Export affordance, three formats.
+  const extraExportItems = useMemo(
+    () =>
+      onExportSdf
+        ? [{ label: "SDF", extension: ".sdf", onSelect: onExportSdf }]
+        : undefined,
+    [onExportSdf],
+  );
+
   return (
     <>
       <style>{`
@@ -490,6 +506,8 @@ export function ResultsGrid({
         enableMultiSelect
         suppressSelectColumn
         searchPlaceholder={false}
+        exportFilename="cellar-search"
+        extraExportItems={extraExportItems}
         onRowClick={onRowClick}
         onSelectionChanged={(event) => {
           const rows = event.api.getSelectedRows();

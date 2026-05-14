@@ -403,7 +403,6 @@ function SearchPageInner() {
               selectedCount={gridSelectedIds.size}
               onSelectAll={handleSelectAll}
               onSelectNone={handleSelectNone}
-              onExport={handleExportSdf}
               onAddToCollection={handleAddToCollection}
               onCustomizeReport={() => setReportOpen(true)}
               onSaveSearch={() => setSaveOpen(true)}
@@ -417,6 +416,7 @@ function SearchPageInner() {
               onRowClick={handleRowClick}
               selectedIds={gridSelectedIds}
               onSelectionChange={(ids) => dispatch({ type: "setGridSelection", ids })}
+              onExportSdf={handleExportSdf}
             />
             {nextCursor && (
               <div className="flex justify-center py-3">

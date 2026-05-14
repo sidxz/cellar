@@ -16,7 +16,11 @@ import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import { Search } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cellarTheme } from "./ag-grid-theme";
-import { type ExcelEnhancer, ExportToolbar } from "./export-toolbar";
+import {
+  type ExcelEnhancer,
+  ExportToolbar,
+  type ExtraExportItem,
+} from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -38,6 +42,9 @@ export interface DataGridProps<TData = unknown>
   exportFilename?: string;
   /** Optional enhancer for Excel exports — adds images, extra sheets, etc. */
   excelEnhancer?: ExcelEnhancer;
+  /** Extra dropdown items appended after Excel + CSV — for feature-specific
+   *  formats (e.g. SDF structure export on the search grid). */
+  extraExportItems?: ExtraExportItem[];
   /** When provided, persists column state (width, order, visibility) to localStorage. */
   preferencesKey?: string;
   /** Render prop for selection toolbar. Shown above grid when rows are selected.
@@ -80,6 +87,7 @@ export function DataGrid<TData = unknown>({
   suppressFilters = false,
   exportFilename,
   excelEnhancer,
+  extraExportItems,
   preferencesKey,
   selectionToolbar,
   enableMultiSelect,
@@ -206,6 +214,7 @@ export function DataGrid<TData = unknown>({
             gridRef={gridRef}
             filename={exportFilename!}
             excelEnhancer={excelEnhancer}
+            extraItems={extraExportItems}
           />
         ) : null}
       </div>
