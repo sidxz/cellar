@@ -11,6 +11,12 @@ import pytest
 from cellar.application.screening.molecule_activity_service import (
     MoleculeActivityService,
 )
+from cellar.domain.screening_assay.curve_fitting import InterceptValue
+from cellar.domain.screening_assay.dose_response_config import (
+    InterceptBasis,
+    InterceptKind,
+    InterceptSpec,
+)
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.enums import CurveClass, CurveType
 
@@ -56,6 +62,7 @@ def _make_curve(
     raw_data: list[dict] | None = None,
     confidence_interval_low: float | None = 3.8,
     confidence_interval_high: float | None = 7.1,
+    intercept_values: list[InterceptValue] | None = None,
 ) -> DoseResponseCurve:
     return DoseResponseCurve(
         workspace_id=WS,
@@ -75,6 +82,7 @@ def _make_curve(
         raw_data=raw_data,
         confidence_interval_low=confidence_interval_low,
         confidence_interval_high=confidence_interval_high,
+        intercept_values=intercept_values,
     )
 
 
@@ -193,6 +201,91 @@ class TestEnrichMoleculesWithCurveParams:
         assert av.curve_params.curve_class is None
         assert av.curve_params.confidence_interval_low is None
         assert av.curve_params.confidence_interval_high is None
+
+
+class TestEnrichMoleculesInterceptValues:
+    """Per-spec intercepts (EC50/EC90/IC10/...) flow to ActivityValue."""
+
+    @pytest.mark.asyncio
+    async def test_intercept_values_serialized_on_dr_activity(self) -> None:
+        """DR-source ActivityValue carries the curve's intercept_values list.
+
+        Search results grid keys per-protocol column groups by ``drc:<rd_id>``
+        and renders one sub-column per protocol intercept (EC50, EC90, ...).
+        Each cell looks up its value by (kind, level) — so the wire payload
+        must carry both the spec and the value for every persisted intercept.
+        """
+        intercepts = [
+            InterceptValue(
+                spec=InterceptSpec(
+                    kind=InterceptKind.EC,
+                    level=50.0,
+                    basis=InterceptBasis.RELATIVE_PERCENT,
+                    label="EC50",
+                ),
+                value=5.2,
+                confidence_interval_low=3.8,
+                confidence_interval_high=7.1,
+                at_bound=False,
+            ),
+            InterceptValue(
+                spec=InterceptSpec(
+                    kind=InterceptKind.EC,
+                    level=90.0,
+                    basis=InterceptBasis.RELATIVE_PERCENT,
+                    label="EC90",
+                ),
+                value=12.4,
+                confidence_interval_low=None,
+                confidence_interval_high=None,
+                at_bound=True,
+            ),
+        ]
+        curve = _make_curve(intercept_values=intercepts)
+
+        curve_repo = AsyncMock()
+        curve_repo.find_best_curves_for_molecules.return_value = {
+            MOL_ID: {RD_ID: curve},
+        }
+
+        service = _make_service(curve_repo=curve_repo)
+        col_spec = f"drc:{RD_ID}"
+
+        result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
+        av = result[MOL_ID][col_spec]
+
+        assert av.intercept_values is not None
+        assert len(av.intercept_values) == 2
+
+        ec50 = av.intercept_values[0]
+        assert ec50["spec"]["kind"] == "ec"
+        assert ec50["spec"]["level"] == 50.0
+        assert ec50["spec"]["label"] == "EC50"
+        assert ec50["value"] == 5.2
+        assert ec50["at_bound"] is False
+
+        ec90 = av.intercept_values[1]
+        assert ec90["spec"]["level"] == 90.0
+        assert ec90["spec"]["label"] == "EC90"
+        assert ec90["at_bound"] is True
+        assert ec90["confidence_interval_low"] is None
+
+    @pytest.mark.asyncio
+    async def test_intercept_values_none_when_curve_has_none(self) -> None:
+        """Legacy curve with no intercept_values yields intercept_values=None."""
+        curve = _make_curve(intercept_values=None)
+
+        curve_repo = AsyncMock()
+        curve_repo.find_best_curves_for_molecules.return_value = {
+            MOL_ID: {RD_ID: curve},
+        }
+
+        service = _make_service(curve_repo=curve_repo)
+        col_spec = f"drc:{RD_ID}"
+
+        result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
+        av = result[MOL_ID][col_spec]
+        assert av.intercept_values is None
 
 
 class TestEnrichMoleculesEmptyInputs:

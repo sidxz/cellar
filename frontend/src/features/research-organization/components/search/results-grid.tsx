@@ -9,10 +9,19 @@ import {
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { Badge } from "@/shared/components/ui/badge";
 import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
-import { READOUT_NORMALIZATION_LABELS, type Protocol } from "@/features/screening-assay/types";
+import {
+  READOUT_NORMALIZATION_LABELS,
+  type InterceptSpec,
+  type Protocol,
+} from "@/features/screening-assay/types";
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
+import {
+  findInterceptValue,
+  interceptLabel,
+} from "@/features/screening-assay/lib/intercept-label";
 import type { ActivityValue, ReportConfig } from "../../types";
 import { DoseResponseCell } from "./dose-response-cell";
 
@@ -144,107 +153,264 @@ function buildPropertyColumns(
   return cols;
 }
 
+/** colId shapes that resolve to a protocol column:
+ *    rd:<protoId>:<rdId>[:<norm>]   — aggregated readout (scoped)
+ *    rd:<rdId>                      — aggregated readout (unscoped/legacy)
+ *    drc:<rdId>                     — best dose-response curve for that DR
+ *                                     readout-def (curve identity is by
+ *                                     readout-def, not curve_type, per 033). */
+export interface ResolvedColumn {
+  colId: string;
+  prefix: "rd" | "drc";
+  protocolId: string;
+  readoutDefId: string | null;
+}
+
+export function resolveColumns(
+  protocolColumns: string[],
+  protocols: Protocol[],
+): ResolvedColumn[] {
+  // Build a reverse index so 2-segment colIds (drc:<rd_id> or legacy
+  // rd:<rd_id>) can find their owning protocol.
+  const protoByRdId = new Map<string, Protocol>();
+  for (const p of protocols) {
+    for (const rd of p.readout_definitions ?? []) {
+      protoByRdId.set(rd.id, p);
+    }
+  }
+
+  const resolved: ResolvedColumn[] = [];
+  for (const colId of protocolColumns) {
+    const parts = colId.split(":");
+    const prefix = parts[0];
+    if (prefix !== "rd" && prefix !== "drc") continue;
+
+    if (prefix === "drc") {
+      const rdId = parts[1];
+      if (!rdId) continue;
+      const proto = protoByRdId.get(rdId);
+      if (!proto) continue;
+      resolved.push({ colId, prefix, protocolId: proto.id, readoutDefId: rdId });
+    } else if (parts.length >= 3) {
+      // rd:<proto>:<rd>[:<norm>]
+      const protoId = parts[1];
+      const rdId = parts[2];
+      if (!protoId || !rdId) continue;
+      resolved.push({ colId, prefix, protocolId: protoId, readoutDefId: rdId });
+    } else {
+      // rd:<rd_id> legacy fallback
+      const rdId = parts[1];
+      if (!rdId) continue;
+      const proto = protoByRdId.get(rdId);
+      if (!proto) continue;
+      resolved.push({ colId, prefix, protocolId: proto.id, readoutDefId: rdId });
+    }
+  }
+
+  return resolved;
+}
+
+function renderInterceptCell(
+  av: ActivityValue | undefined,
+  spec: InterceptSpec,
+  isPrimary: boolean,
+): React.ReactNode {
+  if (!av) return <span className="text-muted-foreground">&mdash;</span>;
+  const iv = findInterceptValue(av.intercept_values, spec);
+  // Primary intercept falls back to `value` (== fitted_value) so legacy
+  // curves fit before intercept_values were persisted still render in the
+  // primary column.
+  const value = iv?.value ?? (isPrimary ? av.value : null);
+  if (value == null) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="No value for this intercept. Recompute the curve to refresh."
+      >
+        &mdash;
+      </span>
+    );
+  }
+  const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
+  if (iv?.at_bound) {
+    return (
+      <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
+        <span className="font-mono">
+          {q}
+          {value.toPrecision(4)}
+        </span>
+        <span className="ml-1">⚠︎ at bound</span>
+      </Badge>
+    );
+  }
+  return (
+    <span className="inline-flex items-center font-mono text-xs">
+      {q}
+      {value.toPrecision(4)}
+      {av.unit ? ` ${av.unit}` : ""}
+      {isPrimary ? (
+        <CurveClassBadge
+          curveClass={av.curve_params?.curve_class ?? null}
+          compact
+          renderNullAs="nothing"
+        />
+      ) : null}
+    </span>
+  );
+}
+
+function buildReadoutColumn(
+  colId: string,
+  proto: Protocol | undefined,
+  readoutDefId: string,
+  normalization: string | null,
+): ColDef<EnrichedMolecule> {
+  // Header resolves from the protocol's readout definitions. 4-segment IDs
+  // (`rd:<p>:<id>:<norm>`) view a specific normalization (e.g.
+  // percent_inhibition). The backend hands us the formula-appropriate unit
+  // in `av.unit`, so the header decorates with the formula label and the
+  // cell renderer trusts `av.unit`.
+  const rd = proto?.readout_definitions?.find((r) => r.id === readoutDefId);
+  const rdName = rd?.name ?? "Readout";
+  const normLabel = normalization
+    ? READOUT_NORMALIZATION_LABELS[normalization as keyof typeof READOUT_NORMALIZATION_LABELS] ??
+      normalization
+    : null;
+  const headerSuffix = normLabel
+    ? ` (${normLabel})`
+    : rd?.unit
+      ? ` (${rd.unit})`
+      : "";
+
+  return {
+    headerName: `${rdName}${headerSuffix}`,
+    width: 130,
+    valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
+    cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+      const av = params.data?.activity?.[colId];
+      if (av?.value == null) {
+        return <span className="text-muted-foreground">&mdash;</span>;
+      }
+      const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
+      return (
+        <span className="font-mono text-xs">
+          {q}
+          {av.value.toPrecision(4)}
+          {av.unit ? ` ${av.unit}` : ""}
+        </span>
+      );
+    },
+  };
+}
+
+/** Build one dynamic intercept column per `dose_response_config.intercepts`
+ *  entry on the readout-def. Primary intercept reads `av.value` as a
+ *  fallback for legacy curves; secondaries fall back to "—" with a
+ *  Recompute hint. Plot column sits at the end of the readout-def's
+ *  child set. */
+export function buildDrcColumns(
+  colId: string,
+  proto: Protocol | undefined,
+  readoutDefId: string,
+): ColDef<EnrichedMolecule>[] {
+  const rd = proto?.readout_definitions?.find((r) => r.id === readoutDefId);
+  const intercepts = rd?.dose_response_config?.intercepts ?? [];
+
+  const cols: ColDef<EnrichedMolecule>[] = [];
+
+  if (intercepts.length === 0) {
+    // Defensive fallback: protocol's DR readout declared no intercepts
+    // (e.g. server default never explicitly populated `intercepts`). Emit
+    // a single anonymous value column so the grid still surfaces the
+    // headline fitted_value.
+    cols.push({
+      headerName: rd?.name ?? "Curve",
+      colId: `${colId}:value`,
+      width: 130,
+      valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
+      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+        const av = params.data?.activity?.[colId];
+        if (av?.value == null) {
+          return <span className="text-muted-foreground">&mdash;</span>;
+        }
+        return (
+          <span className="inline-flex items-center font-mono text-xs">
+            {av.value.toPrecision(4)}
+            {av.unit ? ` ${av.unit}` : ""}
+            <CurveClassBadge
+              curveClass={av.curve_params?.curve_class ?? null}
+              compact
+              renderNullAs="nothing"
+            />
+          </span>
+        );
+      },
+    });
+  } else {
+    intercepts.forEach((spec, idx) => {
+      const isPrimary = idx === 0;
+      cols.push({
+        headerName: interceptLabel(spec),
+        colId: `${colId}:${spec.kind}:${spec.level}`,
+        width: 130,
+        valueGetter: (p) => {
+          const av = p.data?.activity?.[colId];
+          if (!av) return null;
+          const iv = findInterceptValue(av.intercept_values, spec);
+          if (iv) return iv.value;
+          return isPrimary ? (av.value ?? null) : null;
+        },
+        cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) =>
+          renderInterceptCell(params.data?.activity?.[colId], spec, isPrimary),
+      });
+    });
+  }
+
+  // Single Plot column per DR readout — one curve serves every intercept.
+  cols.push({
+    headerName: "Plot",
+    colId: `${colId}:plot`,
+    width: 240,
+    sortable: false,
+    filter: false,
+    cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
+      const av = params.data?.activity?.[colId];
+      return <DoseResponseCell value={av} />;
+    },
+  });
+
+  return cols;
+}
+
 function buildProtocolColumnGroups(
   protocolColumns: string[],
   protocols: Protocol[],
 ): ColGroupDef[] {
-  // Group columns by protocol ID — supports both drc: and rd: prefixes
-  const validColumns = protocolColumns.filter((colId) => {
-    const [prefix, protoId] = colId.split(":");
-    return (prefix === "drc" || prefix === "rd") && !!protoId;
-  });
-  const grouped = groupBy(validColumns, (colId) => colId.split(":")[1]);
+  const resolved = resolveColumns(protocolColumns, protocols);
+  const grouped = groupBy(resolved, (r) => r.protocolId);
 
   const groups: ColGroupDef[] = [];
-  for (const [protoId, colIds] of grouped) {
+  for (const [protoId, entries] of grouped) {
     const proto = protocols.find((p) => p.id === protoId);
     const headerName = proto?.name ?? "Protocol";
 
     const children: ColDef<EnrichedMolecule>[] = [];
-
-    for (const colId of colIds) {
-      const parts = colId.split(":");
-      const prefix = parts[0];
-
-      if (prefix === "rd") {
-        // Readout value column — resolve name from protocol's readout definitions.
-        // 4-segment IDs (`rd:<p>:<id>:<norm>`) view a specific normalization
-        // of the readout (e.g. percent_inhibition). The backend hands us the
-        // formula-appropriate unit in `av.unit`, so the header decorates with
-        // the formula label and the cell renderer trusts `av.unit`.
-        const rdId = parts[2];
-        const normalization = parts[3] ?? null;
-        const rd = proto?.readout_definitions?.find((r) => r.id === rdId);
-        const rdName = rd?.name ?? "Readout";
-        const normLabel = normalization
-          ? READOUT_NORMALIZATION_LABELS[normalization as keyof typeof READOUT_NORMALIZATION_LABELS] ??
-            normalization
-          : null;
-        const headerSuffix = normLabel
-          ? ` (${normLabel})`
-          : rd?.unit
-            ? ` (${rd.unit})`
-            : "";
-
-        children.push({
-          headerName: `${rdName}${headerSuffix}`,
-          width: 130,
-          valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
-          cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-            const av = params.data?.activity?.[colId];
-            if (av?.value == null) {
-              return <span className="text-muted-foreground">&mdash;</span>;
-            }
-            const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
-            return (
-              <span className="font-mono text-xs">
-                {q}{av.value.toPrecision(4)}{av.unit ? ` ${av.unit}` : ""}
-              </span>
-            );
-          },
-        });
+    for (const entry of entries) {
+      if (entry.prefix === "rd") {
+        const parts = entry.colId.split(":");
+        const normalization = parts.length >= 4 ? parts[3] || null : null;
+        children.push(
+          buildReadoutColumn(
+            entry.colId,
+            proto,
+            entry.readoutDefId ?? "",
+            normalization,
+          ),
+        );
       } else {
-        // Dose-response curve columns (drc:)
-        const curveType = parts[2]?.toUpperCase() ?? "";
-
-        // Fitted value column
-        children.push({
-          headerName: curveType,
-          width: 120,
-          valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
-          cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-            const av = params.data?.activity?.[colId];
-            if (!av?.value) {
-              return <span className="text-muted-foreground">&mdash;</span>;
-            }
-            const q =
-              av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
-            return (
-              <span className="inline-flex items-center font-mono text-xs">
-                {q}
-                {av.value.toPrecision(4)}
-                {av.unit ? ` ${av.unit}` : ""}
-                <CurveClassBadge
-                  curveClass={av.curve_params?.curve_class ?? null}
-                  compact
-                  renderNullAs="nothing"
-                />
-              </span>
-            );
-          },
-        });
-
-        // Plot column
-        children.push({
-          headerName: `${curveType} Plot`,
-          width: 240,
-          sortable: false,
-          filter: false,
-          cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
-            const av = params.data?.activity?.[colId];
-            return <DoseResponseCell value={av} />;
-          },
-        });
+        children.push(
+          ...buildDrcColumns(entry.colId, proto, entry.readoutDefId ?? ""),
+        );
       }
     }
 

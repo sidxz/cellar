@@ -379,6 +379,14 @@ export interface ActivityValue {
   data_point_count: number;
   raw_data: Array<{ x: number; y: number }> | null;
   curve_params: CurveParams | null;
+  /** Per-spec intercepts (EC50, EC90, IC10, ...) derived from the same Hill
+   *  fit. Source: `MoleculeActivityService.enrich_molecules` flattens
+   *  `DoseResponseCurve.intercept_values` so the results grid can render one
+   *  sub-column per protocol intercept and look cells up via
+   *  `findInterceptValue(av.intercept_values, spec)`. Null on readout-sourced
+   *  ActivityValues; may be null on legacy DR curves fitted before
+   *  intercepts were persisted. */
+  intercept_values?: CurveInterceptValue[] | null;
 }
 
 // ─── Report Configuration ───────────────────────────────────────────────────

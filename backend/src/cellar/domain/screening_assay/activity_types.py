@@ -54,6 +54,12 @@ class ActivityValue:
     data_point_count: int = 1
     raw_data: list[dict[str, float]] | None = None  # X/Y points for inline chart
     curve_params: CurveParams | None = None  # curve fit parameters
+    # Per-spec intercept values for dose_response sources. Same wire shape as
+    # ``CurveDetail.intercept_values`` so the search grid can render one
+    # column per protocol intercept (EC50, EC90, IC10, ...). Each entry is a
+    # plain dict with keys ``spec`` (kind/level/basis/label), ``value``,
+    # ``confidence_interval_low``, ``confidence_interval_high``, ``at_bound``.
+    intercept_values: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)

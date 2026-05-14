@@ -19,11 +19,40 @@ from cellar.domain.screening_assay.activity_types import (
     CurveParams,
     ProtocolActivitySummary,
 )
+from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
     ReadoutDataRepository,
 )
+
+
+def _serialize_intercept_values(
+    values: list[InterceptValue] | None,
+) -> list[dict[str, Any]]:
+    """Flatten domain ``InterceptValue`` objects into wire-shape dicts.
+
+    Same shape consumed by ``CurveDetail.intercept_values`` on the molecule
+    activity tab and ``ActivityValue.intercept_values`` on the search grid —
+    one helper keeps the two payloads from drifting.
+    """
+    if not values:
+        return []
+    return [
+        {
+            "spec": {
+                "kind": iv.spec.kind.value,
+                "level": iv.spec.level,
+                "basis": iv.spec.basis.value,
+                "label": iv.spec.label,
+            },
+            "value": iv.value,
+            "confidence_interval_low": iv.confidence_interval_low,
+            "confidence_interval_high": iv.confidence_interval_high,
+            "at_bound": iv.at_bound,
+        }
+        for iv in values
+    ]
 
 
 class MoleculeActivityService:
@@ -104,23 +133,9 @@ class MoleculeActivityService:
             if curve.raw_data and isinstance(curve.raw_data, list):
                 data_points = _condense_raw_data(curve.raw_data)
 
-            # Serialize per-spec intercepts so the molecule activity tab
-            # can render EC50 / EC90 as separate columns per Card row.
-            intercept_values_payload = [
-                {
-                    "spec": {
-                        "kind": iv.spec.kind.value,
-                        "level": iv.spec.level,
-                        "basis": iv.spec.basis.value,
-                        "label": iv.spec.label,
-                    },
-                    "value": iv.value,
-                    "confidence_interval_low": iv.confidence_interval_low,
-                    "confidence_interval_high": iv.confidence_interval_high,
-                    "at_bound": iv.at_bound,
-                }
-                for iv in curve.intercept_values
-            ]
+            intercept_values_payload = _serialize_intercept_values(
+                curve.intercept_values
+            )
 
             unit = protocols_by_id.get(curve.protocol_id, ("", "", "uM"))[2]
             curves_by_proto.setdefault(curve.protocol_id, []).append(
@@ -273,6 +288,9 @@ class MoleculeActivityService:
                     if curve.raw_data and isinstance(curve.raw_data, list):
                         condensed = _condense_raw_data(curve.raw_data)
 
+                    intercepts_payload = _serialize_intercept_values(
+                        curve.intercept_values
+                    )
                     mol_activity[col_key] = ActivityValue(
                         value=curve.fitted_value,
                         qualifier=None,
@@ -294,6 +312,7 @@ class MoleculeActivityService:
                             if curve.fit_quality_warnings
                             else None,
                         ),
+                        intercept_values=intercepts_payload or None,
                     )
 
             if mol_activity:
