@@ -185,7 +185,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
-**Branch:** `prot-2`, 13 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
+**Branch:** `prot-2`, 14 commits ahead of `e807dd03` (the merged `fe2` HEAD). Browser-smoke passed 2026-05-14. Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
 
 **Spec:** `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 
@@ -256,15 +256,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 - Backend: 2422 → 2438 → 456 → 2424 → 2452 green at each commit (final sweep after Surface #7).
 - Frontend: 106 → 115 → 122 → 127 → 138 tests green. `pnpm exec tsc --noEmit` clean throughout.
 - Refit script ran successfully on dev DB; orval regen committed.
-- Browser smoke: NOT done. Worth verifying these surfaces visually:
-  - Run page → Dose-Response tab: should show EC50 + EC90 columns on `Mtb_WCA_mc2-7000_Resazurin`. 3 of 21 curves are legacy (no EC90 persisted) — those cells should render "—" with a Recompute hint.
-  - Protocol page → Activity tab: per-readout intercept columns + Mean + Class + Curve sparkline.
-  - Molecule detail → Activity tab: per-Card table with intercept columns matching each protocol's spec list.
-  - Search results grid: per-protocol column groups with one sub-column per intercept (EC50 + EC90 on the Mtb_WCA protocol) + Plot column at the end. Legacy curves still primary-fallback to `value` (so 3 of 21 should fill EC50 but blank EC90).
-  - Compound detail drawer (right-side sheet on a search row click): per-protocol DR chart shows primary intercept on its summary line + secondary intercept chips, both via `interceptLabel` (so a relabeled "Potency" / "Coverage" surfaces here too, not just on the run-DR table).
-  - Readout-data page: every well row now denorms one column per intercept (e.g. "Resazurin EC50 (µM)" + "Resazurin EC90 (µM)") instead of a single anonymous fitted_value column.
-  - EC90 marker fix (from 0d8aae80): toggling "EC50 marker" on a curve dialog should no longer collapse the Y axis.
-  - **Surface #7 (new):** open the hit-criteria dialog on the Mtb_WCA protocol — "Readout" dropdown should now list "Resazurin EC50" + "Resazurin EC90" + "Curve Class" (instead of a single "Resazurin" entry). Authoring an "EC90 < 50" rule should filter the activity grid using the curve's EC90, not its primary EC50. The badge above the grid should read "Resazurin EC90 < 50". Re-opening the dialog on a previously-saved primary rule should pre-select the primary intercept option (round-trip with `intercept_key=null`).
+- **Browser smoke: PASSED on 2026-05-14** against the live `Mtb_WCA_mc2-7000_Resazurin` protocol. All seven shipped surfaces walk cleanly (run DR table, protocol activity tab, molecule activity tab, search grid, search detail drawer, readout-data table, hit-criteria dialog) plus the protocol-design editor polish. EC90 marker fix verified on the curve dialog. No regressions observed.
 
 **Remaining spec surfaces (in priority order):**
 - **#8 Exports** — run export, project export, search export all need per-intercept columns (header via `interceptLabel`; optional CI low/high sub-columns when at least one row has non-null CI). Scoping pass first — no single export-builder module was located.
@@ -272,9 +264,10 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 - **Channel-popover hit-threshold carry-forward** (Surface #7 follow-on) — `deriveChannelHitDefaults` at `screening-assay/lib/hit-criteria-defaults.ts` currently drops `intercept_key` when projecting a protocol recommendation onto a channel's form fields. The channel hit-threshold form (`screen-campaign/components/channel-popover.tsx`) doesn't model an intercept selector. Need to (a) thread `intercept_key` through `ChannelHitDefaults`, (b) add an intercept picker to the channel form (likely a simpler "use primary / use EC90 / ..." radio since each channel is single-readout), (c) save the channel's `hit_threshold.intercept_key`. Backlogged.
 
 **How to resume:**
-1. **Browser-smoke pass.** Seven surfaces shipped this conversation (run DR table, protocol activity tab, molecule activity tab, search grid, search detail drawer, readout-data table, hit-criteria dialog) plus the protocol-design editor polish. Reload Cellar and walk each one against the Mtb_WCA_mc2-7000_Resazurin protocol — that's the live test case the work was built against. Two surfaces (drawer + grid grouping) had already-shipped bugs caught during smoke, so don't skip this. Focus extra attention on #7: hit-criteria dialog dropdown + activity-tab filter chips + filtered row counts when authoring an EC90 rule.
-2. **Push** — `prot-2` is 13 commits ahead of `e807dd03`, nothing pushed yet. If smoke is clean, push.
-3. **Pick next surface.** #8 (exports) is the largest remaining surface — start with a scoping pass to identify where run/project/search exports are produced (CSV / Excel builders). Channel-popover hit-threshold carry-forward (the Surface #7 follow-on) is smaller and well-scoped.
+1. **Push** — `prot-2` is 14 commits ahead of `e807dd03`, smoked, nothing pushed. `git push -u origin prot-2` (or merge straight to `main` if you're done with the branch).
+2. **Pick next surface.** Two well-scoped tickets remain:
+   - **#8 Exports** (largest) — scoping pass first to find where run / project / search CSV+Excel exports are produced (no single builder module surfaced in this session's grep). Then per-intercept columns via `interceptLabel`; optional CI low/high sub-columns when at least one row has a non-null CI for the intercept.
+   - **Channel-popover hit-threshold carry-forward** (smaller, the Surface #7 follow-on) — `deriveChannelHitDefaults` at `frontend/src/features/screening-assay/lib/hit-criteria-defaults.ts` drops `intercept_key` when projecting a protocol recommendation onto a channel form. Channel form (`screen-campaign/components/channel-popover.tsx`) needs an intercept selector (likely a radio: "primary / EC90 / IC90 / ..." per the channel's readout-def intercepts). Backend `CampaignChannel.hit_threshold.intercept_key` already round-trips; only UI work.
 
 **Diagnostic anchors if something looks wrong:**
 - `frontend/src/features/screening-assay/lib/intercept-label.ts` — only place chemist-facing intercept labels are produced or cell lookups happen.
