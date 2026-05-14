@@ -29,6 +29,7 @@ from cellar.application.research_organization.channel_resolution import (
     ResolvedCandidate,
     _build_curve_snapshot,
     _compute_hit_call,
+    _threshold_input_value,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -95,7 +96,19 @@ class PreviewRunImportQuery(Command):
 
 @dataclass(frozen=True)
 class _Picked:
+    #: Primary aggregate (always the headline fitted_value for DR sources
+    #: or the raw readout value for RD sources). Kept on the dataclass for
+    #: snapshot continuity — `CampaignMeasurement.value` historically meant
+    #: "the primary metric for this candidate," and rebuild paths that
+    #: don't know about intercepts still read this.
     value: float | None
+    #: Intercept-aware aggregate that the channel's threshold compares
+    #: against. Equals `value` when the channel has no threshold or its
+    #: `intercept_key` is None (primary); equals the matching intercept's
+    #: scalar when the threshold targets a specific (kind, level). This is
+    #: what gets stored on the persisted measurement and surfaced in the
+    #: preview cell so multi-intercept channels display the right number.
+    eval_value: float | None
     qualifier: ValueQualifier
     unit: str
     source_run_id: uuid.UUID | None
@@ -113,11 +126,23 @@ class _Picked:
 
 
 def _apply_selection_rule(
-    candidates: list[ResolvedCandidate], rule: SelectionRule
+    candidates: list[ResolvedCandidate],
+    rule: SelectionRule,
+    threshold: HitCriterion | None = None,
 ) -> _Picked | None:
     """Apply a selection rule to a pre-filtered candidate list.
 
-    Returns None for ND (empty candidates or MANUAL_PICK).
+    Returns None for ND (empty candidates or MANUAL_PICK). Computes both
+    the primary aggregate (`value`) AND the threshold's intercept-aware
+    aggregate (`eval_value`) — they coincide when the threshold targets
+    the primary intercept (or there's no threshold), and diverge when
+    the threshold targets a secondary (e.g. EC90) on a DR curve.
+
+    For MEAN / GEOMETRIC_MEAN rules, the intercept-aware aggregate is
+    computed over each candidate's intercept-specific value, NOT by
+    looking up the intercept on the primary aggregate — so the mean of
+    EC90s across three runs is the average of the three EC90 numbers,
+    not the EC90 lookup on the average curve.
     """
     if not candidates:
         return None
@@ -137,6 +162,7 @@ def _apply_selection_rule(
         pick = rep
         return _Picked(
             value=pick.value,
+            eval_value=_threshold_input_value(pick, threshold),
             qualifier=pick.qualifier,
             unit=pick.unit or "-",
             source_run_id=pick.run_id,
@@ -151,8 +177,17 @@ def _apply_selection_rule(
         )
     if rule == SelectionRule.MEAN_ACROSS_RUNS:
         vals = [c.value for c in candidates]
+        # Per-candidate intercept-aware values, dropping Nones (legacy fits
+        # without the intercept persisted, or fits where the intercept
+        # missed its bounds).
+        eval_vals = [
+            v
+            for v in (_threshold_input_value(c, threshold) for c in candidates)
+            if v is not None
+        ]
         return _Picked(
             value=sum(vals) / len(vals),
+            eval_value=(sum(eval_vals) / len(eval_vals)) if eval_vals else None,
             qualifier=ValueQualifier.EQ,
             unit=unit_seed,
             source_run_id=None,
@@ -169,8 +204,19 @@ def _apply_selection_rule(
         positives = [c.value for c in candidates if c.value > 0]
         if not positives:
             return None
+        eval_positives = [
+            v
+            for v in (_threshold_input_value(c, threshold) for c in candidates)
+            if v is not None and v > 0
+        ]
+        eval_value = (
+            math.exp(sum(math.log(v) for v in eval_positives) / len(eval_positives))
+            if eval_positives
+            else None
+        )
         return _Picked(
             value=math.exp(sum(math.log(v) for v in positives) / len(positives)),
+            eval_value=eval_value,
             qualifier=ValueQualifier.EQ,
             unit=unit_seed,
             source_run_id=None,
@@ -231,8 +277,13 @@ class PreviewRunImport:
             return Failure(ValidationError("At least one channel_config is required"))
 
         # Step 2 — channel meta (new vs reused). Reuse key is
-        # (protocol, readout, normalization_applied) so the same readout
-        # exposed through different normalization layers stays distinct.
+        # (protocol, readout, normalization_applied, intercept_key) so the
+        # same readout exposed through different intercepts (e.g. Resazurin
+        # EC50 + Resazurin EC90) becomes distinct channels — they each
+        # display their own intercept's value and have independent hit
+        # decisions. Without the intercept axis here, EC50 and EC90 would
+        # collide on the same channel_key, dragging both into the same
+        # `active_keys` bucket and producing nonsensical hit aggregates.
         def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
             return (
                 cfg.normalization_applied
@@ -240,19 +291,37 @@ class PreviewRunImport:
                 else None
             )
 
-        existing_by_key: dict[tuple[uuid.UUID, uuid.UUID, str | None], Any] = {
-            (ch.protocol_id, ch.readout_definition_id, ch.normalization_applied): ch
+        def _cfg_intercept(cfg: ChannelImportConfig):
+            return cfg.hit_threshold.intercept_key if cfg.hit_threshold else None
+
+        def _channel_intercept(ch: Any):
+            return ch.hit_threshold.intercept_key if ch.hit_threshold else None
+
+        existing_by_key: dict[tuple[Any, ...], Any] = {
+            (
+                ch.protocol_id,
+                ch.readout_definition_id,
+                ch.normalization_applied,
+                _channel_intercept(ch),
+            ): ch
             for ch in campaign.channels
         }
         channels_meta: list[dict[str, Any]] = []
 
         def _channel_key(cfg: ChannelImportConfig) -> str:
             norm = _cfg_norm(cfg)
-            suffix = f":{norm}" if norm else ""
-            return f"{cfg.protocol_id}/{cfg.readout_definition_id}{suffix}"
+            norm_suffix = f":{norm}" if norm else ""
+            ik = _cfg_intercept(cfg)
+            ik_suffix = f":{ik.kind}{ik.level}" if ik else ""
+            return f"{cfg.protocol_id}/{cfg.readout_definition_id}{norm_suffix}{ik_suffix}"
 
         for cfg in q.channel_configs:
-            key = (cfg.protocol_id, cfg.readout_definition_id, _cfg_norm(cfg))
+            key = (
+                cfg.protocol_id,
+                cfg.readout_definition_id,
+                _cfg_norm(cfg),
+                _cfg_intercept(cfg),
+            )
             existing = existing_by_key.get(key)
             channels_meta.append(
                 {
@@ -292,19 +361,25 @@ class PreviewRunImport:
                     ]
                     if not candidates:
                         continue
-                picked = _apply_selection_rule(candidates, cfg.selection_rule)
+                picked = _apply_selection_rule(
+                    candidates, cfg.selection_rule, cfg.hit_threshold
+                )
                 if picked is None:
                     cell = _nd_cell(key)
                 else:
+                    # hit_call and the displayed value both key off the
+                    # intercept-aware eval_value so an EC90-targeting channel
+                    # shows EC90 (not the primary EC50) and its hit decision
+                    # honors the EC90 threshold.
                     hit = (
-                        _compute_hit_call(picked.value, cfg.hit_threshold)
+                        _compute_hit_call(picked.eval_value, cfg.hit_threshold)
                         if cfg.hit_threshold
                         else None
                     )
                     qc_pass_all = all(_qc_pass(c) for c in candidates)
                     cell = {
                         "channel_key": key,
-                        "value": picked.value,
+                        "value": picked.eval_value,
                         "value_qualifier": picked.qualifier.value,
                         "unit": picked.unit,
                         "test_concentration_value": None,
