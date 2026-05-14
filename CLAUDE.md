@@ -185,7 +185,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
-**Branch:** `prot-2`, 9 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
+**Branch:** `prot-2`, 12 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
 
 **Spec:** `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 
@@ -232,9 +232,21 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
    - Now emits one column per declared intercept (header `${rd.name} ${interceptLabel(spec)}`, colId `${rd.id}::${kind}::${level}`, value via `findInterceptValue` with primary fallback to `curve.fitted_value`, amber chip on `at_bound`). Defensive fallback for DR readouts with no declared intercepts keeps the single anonymous column.
    - No backend change — the denorm join lives in the FE `curveLookup` and `intercept_values` was already on `CurveDetail` since Surface #2.
 
+9. **`622490f8` — `fix(search): detail drawer Selected Protocols card missing on DR rows`**
+   - Browser-smoke regression caught after Surface #4: opening a compound's detail drawer showed "Also tested in 1 other protocol" but no "Selected Protocols" section / chart, even when the grid row clearly had EC50 + EC90 + plot for that protocol.
+   - Root cause: `search-page.tsx` derived `visibleProtocolIds` via `c.split(":")[1]`. That used to be the proto_id on the pre-033 `drc:<proto>:<curve_type>` token, but post-033 the token is `drc:<readout_def_id>` — `parts[1]` is a readout-def UUID, not a proto_id — so `visibleSet.has(group.protocol_id)` in `compound-detail-sheet.tsx` always fell through and every DR-tested protocol got bucketed into the collapsed "Others" group.
+   - Same root cause family as the grid-grouping bug fixed in `e67b7641`. Lifted the resolver into shared `frontend/src/features/research-organization/lib/protocol-column-id.ts` (`resolveColumns`, `uniqueProtocolIds`); both `results-grid.tsx` and `search-page.tsx` now go through it. The `ReportCustomizer.activeProtocolIds` flow-through (search-page.tsx:456) gets the fix automatically. +5 unit tests for the shared helper.
+
+10. **`c561f557` — `feat(screening): promote Intercepts to first-class in protocol design`**
+    - Browser smoke surfaced a UX gap: after Surfaces #1–#6 every downstream UI emits one column per intercept, but the dialog that lets a chemist *declare* intercepts had the editor hidden inside a collapsed `<details>` labeled "Data Calculations" below "Classification thresholds".
+    - **Edit dialog** (`detail-tabs/readout-definition-dialog.tsx`): InterceptsEditor moves up to sit directly between Y Layer and the Advanced X-axis disclosure (answers "what do we measure?" before "how strict are the fit bounds?"). Drops the `<details>` wrapper — always visible, labeled "Intercepts" with the inline hint `One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill fit`.
+    - **Viewer dialog** (`readout-definition-viewer-dialog.tsx`): "Data Calculations" → "Intercepts", reordered above "Fit Parameters".
+    - **Create dialog** (`create-protocol-dialog.tsx`): previously emitted `dose_response_config` with no `intercepts` field — new protocols always started with the implicit single 50% intercept. Added `dr_intercepts: InterceptSpec[]` to the form schema (default `[]`), rendered the editor in the DR-config block right after Curve Type / X / Y, included `intercepts` in the submit payload only when the chemist explicitly added ≥1 row (empty stays implicit, keeping the wire terse).
+    - Curve Type kept as-is — post-033 it no longer carries identity (that's `readout_definition_id`) but still seeds the implicit primary intercept and picks IC-vs-EC direction; chemists read "IC50/EC50" as scientific terms, not identity tokens.
+
 **Verification:**
 - Backend: 2422 → 2438 → 456 → 2424 green at each commit (final sweep after Surface #4 wire-shape).
-- Frontend: 106 → 115 → 122 tests green. `pnpm exec tsc --noEmit` clean throughout.
+- Frontend: 106 → 115 → 122 → 127 tests green. `pnpm exec tsc --noEmit` clean throughout.
 - Refit script ran successfully on dev DB; orval regen committed.
 - Browser smoke: NOT done. Worth verifying these surfaces visually:
   - Run page → Dose-Response tab: should show EC50 + EC90 columns on `Mtb_WCA_mc2-7000_Resazurin`. 3 of 21 curves are legacy (no EC90 persisted) — those cells should render "—" with a Recompute hint.
@@ -250,7 +262,15 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 - **#8 Exports** — run export, project export, search export all need per-intercept columns (header via `interceptLabel`; optional CI low/high sub-columns when at least one row has non-null CI).
 - **#9 Curve cards** — already correct (no work).
 
-**How to resume:** Reload Cellar, look at the six shipped surfaces in browser. If they render correctly, pick a remaining spec surface (#7 is highest scope; #8 is mostly backend column-emission). If something looks wrong, the helpers (`interceptLabel`/`findInterceptValue`) + the new `resolveColumns`/`buildDrcColumns` in `results-grid.tsx` + the per-intercept denorm loop in `readout-data-table.tsx` are the diagnostic anchors — they're the only places chemist-facing labels are produced or cell lookups happen.
+**How to resume:**
+1. **Browser-smoke pass.** Six surfaces shipped this conversation (run DR table, protocol activity tab, molecule activity tab, search grid, search detail drawer, readout-data table) plus the protocol-design editor polish. Reload Cellar and walk each one against the Mtb_WCA_mc2-7000_Resazurin protocol — that's the live test case the work was built against. Two surfaces (drawer + grid grouping) had already-shipped bugs caught during smoke, so don't skip this.
+2. **Push** — `prot-2` is 12 commits ahead of `e807dd03`, nothing pushed yet. If smoke is clean, push.
+3. **Pick next surface.** #7 (hit-criteria builder) is highest-scope remaining — touches `HitCriterion` value object (`backend/src/cellar/domain/shared/hit_criterion.py:14`) + persistence (JSONB, no migration needed since `to_dict`/`from_dict` already round-trip), API DTOs, FE `hit-criteria-dialog.tsx`, and the campaign hit-call evaluator. Strategy: add optional `intercept_key: {kind, level} | None`; legacy criteria (null) treated as `(kind=primary.kind, level=primary.level)` at read time. #8 (exports) is a scoping pass first — no single export-builder module was found, suggests it's scattered or partial.
+
+**Diagnostic anchors if something looks wrong:**
+- `frontend/src/features/screening-assay/lib/intercept-label.ts` — only place chemist-facing intercept labels are produced or cell lookups happen.
+- `frontend/src/features/research-organization/lib/protocol-column-id.ts` — only place `drc:<rd_id>` / `rd:<proto>:<rd>` colIds get joined back to their owning protocol. Both `results-grid.tsx` and `search-page.tsx` go through `resolveColumns`/`uniqueProtocolIds` here.
+- Backend serialization: `application/screening/molecule_activity_service.py::_serialize_intercept_values` — single helper feeds both the molecule-activity payload and the search-grid `ActivityValue.intercept_values`.
 
 **Open caveat:** Multi-DR protocols (a protocol declaring 2+ DOSE_RESPONSE readout-defs with their own intercept lists) still use the *first* DR readout's intercepts on every grid. Per-readout column groups are documented as a known limitation in the spec — defer until a real protocol surfaces it.
 
