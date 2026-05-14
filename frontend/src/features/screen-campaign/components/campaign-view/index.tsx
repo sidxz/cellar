@@ -30,7 +30,7 @@ import { SourcesSection } from "../sections/sources-section";
 import { ChannelsSection } from "../sections/channels-section";
 import {
   CampaignFilterBar,
-  emptyFilters,
+  closedCampaignFilters,
   type CampaignFilters,
 } from "../campaign-filter-bar";
 
@@ -48,7 +48,9 @@ interface CampaignViewProps {
 
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
-  const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
+  const [filters, setFilters] = useState<CampaignFilters>(() =>
+    closedCampaignFilters(),
+  );
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =

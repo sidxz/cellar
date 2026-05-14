@@ -31,6 +31,18 @@ export function emptyFilters(): CampaignFilters {
   };
 }
 
+/** Default filter state for the read-only closed-campaign view: only the
+ *  Selected molecules. Closed campaigns are decision-frozen — the chemist
+ *  almost always wants to see "what made the cut" first; rejected/deferred
+ *  rows are still one chip-toggle away. */
+export function closedCampaignFilters(): CampaignFilters {
+  return {
+    decisions: new Set(["selected"]),
+    hitStatus: new Set(),
+    overriddenOnly: false,
+  };
+}
+
 export function filtersActive(f: CampaignFilters): boolean {
   return f.decisions.size > 0 || f.hitStatus.size > 0 || f.overriddenOnly;
 }
