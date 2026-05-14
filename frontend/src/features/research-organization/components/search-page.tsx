@@ -11,6 +11,7 @@ import type { SearchQuery, ActivityValue, SortField, SortDir, SavedSearch } from
 import { useExecuteSearch, type EnrichedSearchResponse } from "../hooks/use-search";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { useReportConfig } from "../hooks/use-report-config";
+import { uniqueProtocolIds } from "../lib/protocol-column-id";
 import { SearchForm } from "./search/search-form";
 import { ResultsToolbar } from "./search/results-toolbar";
 import { ResultsGrid } from "./search/results-grid";
@@ -186,15 +187,15 @@ function SearchPageInner() {
   }, [protocolColumns, readoutExtraColumns]);
 
   // ── Derived: visible protocol IDs for detail panel ─────────────────────
-  const visibleProtocolIds = useMemo(() => {
-    return [
-      ...new Set(
-        mergedProtocolColumns
-          .filter((c) => c.startsWith("drc:") || c.startsWith("rd:"))
-          .map((c) => c.split(":")[1]),
-      ),
-    ];
-  }, [mergedProtocolColumns]);
+  // Resolves each protocol-column token to its owning protocol.
+  // `parts[1]` is NOT the proto_id on `drc:<rd_id>` (2-segment, post
+  // migration 033) — the reverse readout-def index in
+  // `uniqueProtocolIds` keeps the detail drawer's "Selected vs Others"
+  // split honest for DR-only column sets.
+  const visibleProtocolIds = useMemo(
+    () => uniqueProtocolIds(mergedProtocolColumns, protocols ?? []),
+    [mergedProtocolColumns, protocols],
+  );
 
   // ── Enrichment helper ──────────────────────────────────────────────────
   const enrichItems = useCallback(

@@ -22,6 +22,10 @@ import {
   findInterceptValue,
   interceptLabel,
 } from "@/features/screening-assay/lib/intercept-label";
+import {
+  type ResolvedColumn,
+  resolveColumns as resolveColumnsShared,
+} from "../../lib/protocol-column-id";
 import type { ActivityValue, ReportConfig } from "../../types";
 import { DoseResponseCell } from "./dose-response-cell";
 
@@ -153,62 +157,13 @@ function buildPropertyColumns(
   return cols;
 }
 
-/** colId shapes that resolve to a protocol column:
- *    rd:<protoId>:<rdId>[:<norm>]   — aggregated readout (scoped)
- *    rd:<rdId>                      — aggregated readout (unscoped/legacy)
- *    drc:<rdId>                     — best dose-response curve for that DR
- *                                     readout-def (curve identity is by
- *                                     readout-def, not curve_type, per 033). */
-export interface ResolvedColumn {
-  colId: string;
-  prefix: "rd" | "drc";
-  protocolId: string;
-  readoutDefId: string | null;
-}
-
-export function resolveColumns(
-  protocolColumns: string[],
-  protocols: Protocol[],
-): ResolvedColumn[] {
-  // Build a reverse index so 2-segment colIds (drc:<rd_id> or legacy
-  // rd:<rd_id>) can find their owning protocol.
-  const protoByRdId = new Map<string, Protocol>();
-  for (const p of protocols) {
-    for (const rd of p.readout_definitions ?? []) {
-      protoByRdId.set(rd.id, p);
-    }
-  }
-
-  const resolved: ResolvedColumn[] = [];
-  for (const colId of protocolColumns) {
-    const parts = colId.split(":");
-    const prefix = parts[0];
-    if (prefix !== "rd" && prefix !== "drc") continue;
-
-    if (prefix === "drc") {
-      const rdId = parts[1];
-      if (!rdId) continue;
-      const proto = protoByRdId.get(rdId);
-      if (!proto) continue;
-      resolved.push({ colId, prefix, protocolId: proto.id, readoutDefId: rdId });
-    } else if (parts.length >= 3) {
-      // rd:<proto>:<rd>[:<norm>]
-      const protoId = parts[1];
-      const rdId = parts[2];
-      if (!protoId || !rdId) continue;
-      resolved.push({ colId, prefix, protocolId: protoId, readoutDefId: rdId });
-    } else {
-      // rd:<rd_id> legacy fallback
-      const rdId = parts[1];
-      if (!rdId) continue;
-      const proto = protoByRdId.get(rdId);
-      if (!proto) continue;
-      resolved.push({ colId, prefix, protocolId: proto.id, readoutDefId: rdId });
-    }
-  }
-
-  return resolved;
-}
+// Re-export the shared resolver so existing imports from this module
+// (and the colocated test file) keep working. The implementation lives
+// in `../../lib/protocol-column-id.ts` so the search-page can use the
+// same logic to derive `visibleProtocolIds` without a feature-cross
+// import into the grid component.
+export type { ResolvedColumn };
+export const resolveColumns = resolveColumnsShared;
 
 function renderInterceptCell(
   av: ActivityValue | undefined,
