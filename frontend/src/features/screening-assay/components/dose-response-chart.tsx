@@ -19,6 +19,7 @@ import {
   X_AXIS_MAX_RATIO,
   X_AXIS_MIN_RATIO,
 } from "../lib/dose-response-display";
+import { interceptLabel } from "../lib/intercept-label";
 import {
   computeReplicateStats,
   extractPoints,
@@ -110,7 +111,12 @@ function SummaryCard({
       </CardHeader>
       <CardContent className="pt-2 space-y-1">
         <p className="text-sm font-mono">
-          {CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type}
+          {/* Prefer the protocol's intercept label — single source of
+              truth (spec: 2026-05-13). curve.curve_type is descriptive
+              only post-033 and ignores per-protocol relabels. */}
+          {curve.intercept_values?.[0]?.spec
+            ? interceptLabel(curve.intercept_values[0].spec)
+            : (CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type)}
           {" = "}
           {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
           {isExtrapolated && <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>}
@@ -118,9 +124,7 @@ function SummaryCard({
         {curve.intercept_values && curve.intercept_values.length > 1 && (
           <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground pt-0.5">
             {curve.intercept_values.slice(1).map((iv, idx) => {
-              const label =
-                iv.spec.label ??
-                `${iv.spec.kind.toUpperCase()}${iv.spec.level.toString().replace(/\.0$/, "")}`;
+              const label = interceptLabel(iv.spec);
               if (iv.at_bound || !Number.isFinite(iv.value)) {
                 return (
                   <span
