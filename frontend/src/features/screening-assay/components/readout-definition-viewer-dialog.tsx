@@ -147,6 +147,18 @@ export function ReadoutDefinitionViewerDialog({
                 </div>
               </Section>
 
+              <Section title="Intercepts">
+                <p className="text-xs text-muted-foreground mb-2 leading-tight">
+                  One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill
+                  fit. Empty list defaults to a single 50% intercept seeded from the Curve Type.
+                </p>
+                <InterceptsEditor
+                  value={cfg.intercepts ?? []}
+                  curveType={cfg.curve_type as CurveType}
+                  disabled
+                />
+              </Section>
+
               <Section title="Fit Parameters">
                 <div className="space-y-3">
                   <ParamRow
@@ -182,18 +194,6 @@ export function ReadoutDefinitionViewerDialog({
                     <Field label="Activity Threshold (%)" value={String(cfg.activity_threshold)} />
                   )}
                 </div>
-              </Section>
-
-              <Section title="Data Calculations">
-                <p className="text-xs text-muted-foreground mb-2 leading-tight">
-                  Intercepts derived from the same Hill fit. Empty list defaults to a single 50%
-                  intercept of the curve type.
-                </p>
-                <InterceptsEditor
-                  value={cfg.intercepts ?? []}
-                  curveType={cfg.curve_type as CurveType}
-                  disabled
-                />
               </Section>
 
               <Section title="Outlier Detection">

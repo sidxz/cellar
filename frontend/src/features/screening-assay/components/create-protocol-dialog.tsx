@@ -47,9 +47,11 @@ import {
 import {
   CURVE_TYPE_LABELS,
   type CreateReadoutDefinitionInput,
+  type CurveType,
   DOSE_UNIT_LABELS,
   type DoseUnit,
   HILL_SLOPE_CONSTRAINT_LABELS,
+  type InterceptSpec,
   NORMALIZATION_SCOPE_LABELS,
   PROTOCOL_TYPE_LABELS,
   type PickListValue,
@@ -58,6 +60,7 @@ import {
   READOUT_DATA_TYPE_LABELS,
   type ReadoutNormalization,
 } from "../types";
+import { InterceptsEditor } from "./intercepts-editor";
 import { FormulaInput } from "./formula-input";
 import { PickListEditor } from "./pick-list-editor";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
@@ -84,6 +87,16 @@ const readoutSchema = z.object({
   dr_hill_constraint: z.string(),
   dr_normalization_scope: z.string(),
   dr_activity_threshold: z.string(),
+  // Per-spec intercepts derived from the same Hill fit. Empty defaults
+  // server-side to a single 50% intercept seeded from `dr_curve_type`.
+  dr_intercepts: z.array(
+    z.object({
+      kind: z.enum(["ic", "ec"]),
+      level: z.number(),
+      basis: z.enum(["relative_percent", "absolute"]),
+      label: z.string().nullable().optional(),
+    }),
+  ) as z.ZodArray<z.ZodType<InterceptSpec>>,
 });
 
 const conditionSchema = z.object({
@@ -126,6 +139,7 @@ function defaultReadout(order: number): ProtocolFormValues["readouts"][number] {
     dr_hill_constraint: "unconstrained",
     dr_normalization_scope: "per_plate",
     dr_activity_threshold: "",
+    dr_intercepts: [],
   };
 }
 
@@ -322,6 +336,13 @@ export function CreateProtocolDialog({
             normalization_scope: rd.dr_normalization_scope,
             top_constraint: null,
             bottom_constraint: null,
+            // Empty list -> server seeds a single 50% intercept from
+            // curve_type. Send only when the chemist explicitly
+            // configured >=1 intercept so we don't drown the create
+            // payload in a single-default row.
+            ...(rd.dr_intercepts.length > 0
+              ? { intercepts: rd.dr_intercepts }
+              : {}),
           } as CreateReadoutDefinitionInput["dose_response_config"];
         }
         return base;
@@ -832,6 +853,37 @@ export function CreateProtocolDialog({
                                 />
                               </div>
                             </div>
+
+                            {/* Intercepts — chemist declares which intercepts
+                                the fit emits (EC50, EC90, IC10, …). Empty list
+                                = single implicit 50% intercept seeded from the
+                                Curve Type. Every downstream surface emits one
+                                column per row. */}
+                            <Controller
+                              control={form.control}
+                              name={`readouts.${index}.dr_intercepts`}
+                              render={({ field: f }) => (
+                                <div className="grid gap-2 rounded-md border bg-background p-3">
+                                  <div className="flex items-baseline justify-between">
+                                    <Label className="text-xs font-medium">Intercepts</Label>
+                                    <span className="text-[11px] text-muted-foreground">
+                                      One row per intercept (EC50, EC90, IC10, …) — all derived
+                                      from the same Hill fit
+                                    </span>
+                                  </div>
+                                  <InterceptsEditor
+                                    value={f.value as InterceptSpec[]}
+                                    onChange={f.onChange}
+                                    curveType={
+                                      (form.watch(
+                                        `readouts.${index}.dr_curve_type`,
+                                      ) as CurveType) ?? "ic50"
+                                    }
+                                  />
+                                </div>
+                              )}
+                            />
+
                             <div className="grid grid-cols-3 gap-3">
                               <div className="grid gap-1">
                                 <Label className="text-xs">Hill Slope</Label>

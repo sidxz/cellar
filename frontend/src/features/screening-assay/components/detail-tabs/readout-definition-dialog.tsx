@@ -272,6 +272,25 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
           </p>
         </div>
       )}
+
+      {/* Intercepts — first-class after migration 033. Every downstream
+          surface (run DR table, activity tabs, search grid, readout-data
+          denorm, exports) emits one column per entry. Empty list = single
+          implicit 50% intercept seeded from the Curve Type. */}
+      <div className="grid gap-2 rounded-md border bg-background p-3">
+        <div className="flex items-baseline justify-between">
+          <Label className="text-xs font-medium">Intercepts</Label>
+          <span className="text-[11px] text-muted-foreground">
+            One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill fit
+          </span>
+        </div>
+        <InterceptsEditor
+          value={drIntercepts}
+          onChange={setDrIntercepts}
+          curveType={drCurveType}
+        />
+      </div>
+
       <Collapsible defaultOpen={xIsAdvanced}>
         <CollapsibleTrigger className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
           <span aria-hidden>▸</span>
@@ -669,22 +688,6 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
         </div>
       </details>
 
-      <details className="rounded-md border bg-background/40 p-2">
-        <summary className="cursor-pointer text-xs font-medium select-none">
-          Data Calculations
-        </summary>
-        <div className="mt-3 space-y-2">
-          <p className="text-[11px] text-muted-foreground">
-            Each row is one intercept derived from the same Hill fit (e.g. IC50, IC90). Empty list
-            defaults to a single 50% intercept of the curve type.
-          </p>
-          <InterceptsEditor
-            value={drIntercepts}
-            onChange={setDrIntercepts}
-            curveType={drCurveType}
-          />
-        </div>
-      </details>
     </div>
   );
 }
