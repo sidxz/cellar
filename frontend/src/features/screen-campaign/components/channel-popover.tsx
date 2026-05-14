@@ -7,7 +7,7 @@
  * Used by both the legacy ChannelStrip chip-strip and the new ChannelsSection.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -192,8 +192,14 @@ export function ChannelPopoverForm({
 
   // Parse existing qc_filter — it's typed as `{ [key: string]: unknown } | null`
   const existingQc = existing?.qc_filter as Record<string, unknown> | null | undefined;
-  // Parse existing hit_threshold into the form's split fields.
-  const existingHit = parseHitThreshold(existing?.hit_threshold);
+  // Parse existing hit_threshold once per `existing` ref change. Memoizing
+  // gives us a stable identity so the edit-mode useEffect below can take
+  // it as a dep without re-firing every render (parseHitThreshold returns
+  // a fresh object each call).
+  const existingHit = useMemo(
+    () => parseHitThreshold(existing?.hit_threshold),
+    [existing],
+  );
   const defaultHitOperator: ChannelFormValues["hit_operator"] =
     (existingHit?.operator as ChannelFormValues["hit_operator"] | undefined) ?? "none";
   const defaultHitValue =
@@ -291,10 +297,7 @@ export function ChannelPopoverForm({
   // Edit mode: once fullProtocol resolves, fill `hit_intercept_key` with
   // the existing channel's persisted key (when set) OR the readout's
   // primary — needed because we can't compute the primary's id at
-  // defaultValues time (the protocol fetch is async). `existingHit` is
-  // re-derived inline here (rather than depended on) so the effect doesn't
-  // re-fire every render — `parseHitThreshold` returns a fresh object even
-  // when the underlying channel is unchanged.
+  // defaultValues time (the protocol fetch is async).
   useEffect(() => {
     if (!existing) return;
     if (!fullProtocol?.readout_definitions) return;
@@ -306,12 +309,12 @@ export function ChannelPopoverForm({
       setValue("hit_intercept_key", "");
       return;
     }
-    const persisted = parseHitThreshold(existing.hit_threshold)?.intercept_key;
+    const persisted = existingHit?.intercept_key;
     setValue(
       "hit_intercept_key",
       persisted ? interceptKeyId(persisted) : interceptKeyId(intercepts[0]),
     );
-  }, [fullProtocol, existing, setValue]);
+  }, [fullProtocol, existing, existingHit, setValue]);
 
   // Auto-pick the readout's primary normalization layer when the readout is
   // chosen (create mode only). Chemists want "% Inhibition" by default, not

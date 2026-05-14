@@ -10,6 +10,15 @@
  */
 import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
 
+/** Canonical chemist-facing format for an intercept identified only by
+ *  (kind, level): e.g. `("ec", 50)` → `"EC50"`, `("ec", 12.5)` → `"EC12.5"`.
+ *  Shared by `interceptLabel` (when no protocol-side custom label is set)
+ *  and `interceptKeyLabel` (which has no spec at all). */
+function formatKindLevel(kind: string, level: number): string {
+  const lvl = level % 1 === 0 ? String(level) : level.toFixed(1);
+  return `${kind.toUpperCase()}${lvl}`;
+}
+
 /**
  * Display label for a protocol intercept spec.
  *
@@ -21,9 +30,7 @@ import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
  * dropdown option names an intercept.
  */
 export function interceptLabel(spec: InterceptSpec): string {
-  if (spec.label) return spec.label;
-  const lvl = spec.level % 1 === 0 ? String(spec.level) : spec.level.toFixed(1);
-  return `${spec.kind.toUpperCase()}${lvl}`;
+  return spec.label ?? formatKindLevel(spec.kind, spec.level);
 }
 
 /**
@@ -54,8 +61,7 @@ export function findInterceptValue(
  * respects custom protocol labels like "Coverage EC90".
  */
 export function interceptKeyLabel(key: InterceptKey): string {
-  const lvl = key.level % 1 === 0 ? String(key.level) : key.level.toFixed(1);
-  return `${key.kind.toUpperCase()}${lvl}`;
+  return formatKindLevel(key.kind, key.level);
 }
 
 /** Stable, parseable id for an intercept — used as a form value /
