@@ -7,7 +7,38 @@ from dataclasses import dataclass
 from cellar.domain.shared.errors import ValidationError
 
 _VALID_OPERATORS = {"gt", "lt", "gte", "lte", "in", "between"}
+_VALID_INTERCEPT_KINDS = {"ec", "ic"}
 _MAX_CRITERIA = 3
+
+
+@dataclass(frozen=True)
+class InterceptKey:
+    """Identifies one intercept on a dose-response curve by (kind, level).
+
+    Used by :class:`HitCriterion` to target a specific intercept (e.g. EC90)
+    instead of the curve's primary fitted value. Matches the persisted
+    ``intercept_values[].spec.kind`` and ``.spec.level`` on a fitted curve.
+    """
+
+    kind: str  # "ec" or "ic"
+    level: float  # (0, 100) exclusive — percent on the relative basis
+
+    def __post_init__(self) -> None:
+        if self.kind not in _VALID_INTERCEPT_KINDS:
+            raise ValidationError(
+                f"InterceptKey kind must be one of {_VALID_INTERCEPT_KINDS}, got '{self.kind}'"
+            )
+        if not (0 < self.level < 100):
+            raise ValidationError(
+                f"InterceptKey level must be in (0, 100), got {self.level}"
+            )
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "level": self.level}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> InterceptKey:
+        return cls(kind=data["kind"], level=data["level"])
 
 
 @dataclass(frozen=True)
@@ -21,11 +52,17 @@ class HitCriterion:
       campaign hit-call evaluator skips it.)
     - ``between``: value is a 2-element list of numbers ``[low, high]``;
       hit if ``low <= measurement <= high`` (inclusive on both ends).
+
+    ``intercept_key`` (optional) targets a specific dose-response intercept
+    (e.g. ``EC90``) on the named readout's fitted curve. ``None`` means
+    "use the channel cell value as-is", which for a DR channel equals the
+    curve's primary fitted value — preserves legacy criteria.
     """
 
     readout_name: str
     operator: str  # gt, lt, gte, lte, in, between
     value: float | list[str] | list[float]
+    intercept_key: InterceptKey | None = None
 
     def __post_init__(self) -> None:
         if not self.readout_name or not self.readout_name.strip():
@@ -60,18 +97,23 @@ class HitCriterion:
                 )
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "readout_name": self.readout_name,
             "operator": self.operator,
             "value": self.value,
         }
+        if self.intercept_key is not None:
+            d["intercept_key"] = self.intercept_key.to_dict()
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> HitCriterion:
+        ik_raw = data.get("intercept_key")
         return cls(
             readout_name=data["readout_name"],
             operator=data["operator"],
             value=data["value"],
+            intercept_key=InterceptKey.from_dict(ik_raw) if ik_raw else None,
         )
 
 

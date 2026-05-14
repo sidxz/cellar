@@ -81,6 +81,12 @@ class ResolvedCandidate:
     curve_r_squared: float | None = None
     curve_raw_data: list[dict] | None = None
     curve_excluded_points: list[dict] | None = None
+    #: JSONB shape: ``[{"spec": {"kind": "ec", "level": 50.0, ...},
+    #: "value": 1.23, "at_bound": false, ...}, ...]``. Populated only for
+    #: dose_response_curve candidates; carries every per-spec intercept
+    #: persisted with the fit so an intercept-keyed HitCriterion can read
+    #: the right value (e.g. EC90 instead of the primary EC50).
+    intercept_values: list[dict] | None = None
 
 
 @runtime_checkable
@@ -130,6 +136,32 @@ def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
 
 def _is_qualified(c: ResolvedCandidate) -> bool:
     return c.qualifier in {ValueQualifier.LT, ValueQualifier.GT}
+
+
+def _threshold_input_value(
+    c: ResolvedCandidate, threshold: HitCriterion | None
+) -> float | None:
+    """Scalar to compare against ``threshold`` for one candidate.
+
+    Legacy criteria (no ``intercept_key``) read ``c.value`` — for a DR
+    channel this equals the curve's primary fitted value, preserving
+    historical behavior. Intercept-keyed criteria look up the matching
+    ``(kind, level)`` pair in ``c.intercept_values``; missing match (legacy
+    fit, intercept added after the curve was fit) yields None.
+    """
+    if threshold is None or threshold.intercept_key is None:
+        return c.value
+    ivs = c.intercept_values
+    if not ivs:
+        return None
+    target_kind = threshold.intercept_key.kind
+    target_level = threshold.intercept_key.level
+    for iv in ivs:
+        spec = iv.get("spec") or {}
+        if spec.get("kind") == target_kind and spec.get("level") == target_level:
+            val = iv.get("value")
+            return float(val) if isinstance(val, (int, float)) else None
+    return None
 
 
 def _compute_hit_call(value: float | None, threshold: HitCriterion | None) -> HitCall | None:
@@ -273,6 +305,7 @@ class ChannelResolver:
             pver = pick.protocol_version
             rdate = pick.run_date
             unit = pick.unit or _ND_UNIT_PLACEHOLDER
+            eval_value = _threshold_input_value(pick, channel.hit_threshold)
         elif channel.selection_rule == SelectionRule.MEAN_ACROSS_RUNS:
             vals = [c.value for c in candidates]
             value = sum(vals) / len(vals)
@@ -283,6 +316,9 @@ class ChannelResolver:
             # curve shape — the aggregate value can't be a sigmoid, but a
             # drawing still needs *something* to render.
             pick = max(candidates, key=lambda c: c.run_date or date.min)
+            eval_pool = [_threshold_input_value(c, channel.hit_threshold) for c in candidates]
+            eval_pool = [v for v in eval_pool if v is not None]
+            eval_value = sum(eval_pool) / len(eval_pool) if eval_pool else None
         elif channel.selection_rule == SelectionRule.GEOMETRIC_MEAN:
             positives = [c.value for c in candidates if c.value > 0]
             if not positives:
@@ -298,6 +334,13 @@ class ChannelResolver:
             source_run = curve = readout = None
             rdate = None
             pick = max(candidates, key=lambda c: c.run_date or date.min)
+            eval_pool = [_threshold_input_value(c, channel.hit_threshold) for c in candidates]
+            eval_positives = [v for v in eval_pool if v is not None and v > 0]
+            eval_value = (
+                math.exp(sum(math.log(v) for v in eval_positives) / len(eval_positives))
+                if eval_positives
+                else None
+            )
         else:  # MANUAL_PICK — user fills in later; cell stays ND.
             return _nd_measurement(
                 result_id=result_id,
@@ -313,7 +356,7 @@ class ChannelResolver:
             value=value,
             value_qualifier=qualifier,
             unit=unit,
-            hit_call=_compute_hit_call(value, channel.hit_threshold),
+            hit_call=_compute_hit_call(eval_value, channel.hit_threshold),
             source_run_id=source_run,
             source_curve_id=curve,
             source_readout_id=readout,

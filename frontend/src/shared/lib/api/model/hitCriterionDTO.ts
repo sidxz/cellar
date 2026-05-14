@@ -5,9 +5,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { HitCriterionDTOValue } from './hitCriterionDTOValue';
+import type { HitCriterionDTOInterceptKey } from './hitCriterionDTOInterceptKey';
 
 export interface HitCriterionDTO {
   readout_name: string;
   operator: string;
   value: HitCriterionDTOValue;
+  intercept_key?: HitCriterionDTOInterceptKey;
 }

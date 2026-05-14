@@ -69,6 +69,68 @@ describe("applyHitFilter", () => {
     expect(result.map((r) => r.molecule_id)).toEqual(["mol-1", "mol-2"]);
   });
 
+  it("filters by a secondary intercept (intercept_key=EC90) instead of fitted_value", () => {
+    const iv = (kind: "ec" | "ic", level: number, value: number) => ({
+      spec: { kind, level, basis: "relative_percent" as const, label: null },
+      value,
+      confidence_interval_low: null,
+      confidence_interval_high: null,
+      at_bound: false,
+    });
+    const rows = [
+      // mol-1: primary EC50=5 (would pass lt 50), EC90=80 (fails lt 50)
+      makeRow({
+        molecule_id: "mol-1",
+        fitted_value: 5,
+        intercept_values: [iv("ec", 50, 5), iv("ec", 90, 80)],
+      }),
+      // mol-2: primary EC50=2 (passes lt 50), EC90=10 (passes lt 50)
+      makeRow({
+        molecule_id: "mol-2",
+        fitted_value: 2,
+        intercept_values: [iv("ec", 50, 2), iv("ec", 90, 10)],
+      }),
+    ];
+    const criteria: HitCriterion[] = [
+      {
+        readout_name: "Resazurin",
+        operator: "lt",
+        value: 50,
+        intercept_key: { kind: "ec", level: 90 },
+      },
+    ];
+    const result = applyHitFilter(rows, criteria);
+    expect(result.map((r) => r.molecule_id)).toEqual(["mol-2"]);
+  });
+
+  it("with intercept_key set but no matching value on the row, the row is rejected", () => {
+    const iv = (kind: "ec" | "ic", level: number, value: number) => ({
+      spec: { kind, level, basis: "relative_percent" as const, label: null },
+      value,
+      confidence_interval_low: null,
+      confidence_interval_high: null,
+      at_bound: false,
+    });
+    const rows = [
+      makeRow({
+        molecule_id: "mol-legacy",
+        fitted_value: 5,
+        // EC50 only — protocol later added EC90 but this curve was never refit
+        intercept_values: [iv("ec", 50, 5)],
+      }),
+    ];
+    const criteria: HitCriterion[] = [
+      {
+        readout_name: "Resazurin",
+        operator: "lt",
+        value: 50,
+        intercept_key: { kind: "ec", level: 90 },
+      },
+    ];
+    const result = applyHitFilter(rows, criteria);
+    expect(result).toHaveLength(0);
+  });
+
   it("applies multiple criteria conjunctively (all must pass)", () => {
     const rows = [
       makeRow({ molecule_id: "mol-1", fitted_value: 5, curve_class: "full" }),   // passes both

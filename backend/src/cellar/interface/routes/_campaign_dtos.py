@@ -27,7 +27,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
 )
 from cellar.domain.research_organization.source_ref import ManualRef
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
 # ---------------------------------------------------------------------------
@@ -35,17 +35,34 @@ from cellar.domain.shared.hit_criterion import HitCriterion
 # ---------------------------------------------------------------------------
 
 
+class InterceptKeyDTO(BaseModel):
+    kind: str  # "ec" | "ic"
+    level: float  # (0, 100)
+
+    def to_domain(self) -> InterceptKey:
+        return InterceptKey(kind=self.kind, level=self.level)
+
+    @classmethod
+    def from_domain(cls, ik: InterceptKey) -> InterceptKeyDTO:
+        return cls(kind=ik.kind, level=ik.level)
+
+
 class HitCriterionDTO(BaseModel):
     readout_name: str
     operator: str
     # gt/lt/gte/lte → float; in → list[str]; between → list[float] (length 2).
     value: float | list[float] | list[str]
+    #: Targets a specific dose-response intercept (e.g. EC90). ``None`` means
+    #: "use the channel cell value as-is" — preserves legacy criteria, which
+    #: for a DR channel equals the curve's primary fitted value.
+    intercept_key: InterceptKeyDTO | None = None
 
     def to_domain(self) -> HitCriterion:
         return HitCriterion(
             readout_name=self.readout_name,
             operator=self.operator,
             value=self.value,
+            intercept_key=self.intercept_key.to_domain() if self.intercept_key else None,
         )
 
     @classmethod
@@ -54,6 +71,11 @@ class HitCriterionDTO(BaseModel):
             readout_name=hc.readout_name,
             operator=hc.operator,
             value=hc.value,
+            intercept_key=(
+                InterceptKeyDTO.from_domain(hc.intercept_key)
+                if hc.intercept_key
+                else None
+            ),
         )
 
 

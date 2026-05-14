@@ -120,6 +120,7 @@ class SQLAlchemyChannelResolutionQuery:
                 DoseResponseCurveModel.r_squared,
                 DoseResponseCurveModel.raw_data,
                 DoseResponseCurveModel.excluded_points,
+                DoseResponseCurveModel.intercept_values,
                 DoseResponseCurveModel.run_id,
                 RunModel.run_date,
                 RunModel.status,
@@ -169,6 +170,7 @@ class SQLAlchemyChannelResolutionQuery:
                 curve_r_squared=row.r_squared,
                 curve_raw_data=row.raw_data,
                 curve_excluded_points=row.excluded_points,
+                intercept_values=row.intercept_values,
             )
             for row in rows
         ]
@@ -204,6 +206,7 @@ class SQLAlchemyChannelResolutionQuery:
                     DoseResponseCurveModel.r_squared,
                     DoseResponseCurveModel.raw_data,
                     DoseResponseCurveModel.excluded_points,
+                    DoseResponseCurveModel.intercept_values,
                     DoseResponseCurveModel.run_id,
                     RunModel.run_date,
                     RunModel.status,
@@ -282,6 +285,7 @@ class SQLAlchemyChannelResolutionQuery:
                     curve_r_squared=row.r_squared,
                     curve_raw_data=row.raw_data,
                     curve_excluded_points=row.excluded_points,
+                    intercept_values=row.intercept_values,
                 )
             else:
                 qualifier_str = row.value_qualifier or "="

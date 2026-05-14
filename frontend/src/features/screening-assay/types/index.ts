@@ -672,10 +672,16 @@ export interface PlateMapResponse {
 
 // ─── Hit Criteria + Protocol Stats + Activity ───────────────────────────────
 
+export interface InterceptKey {
+  kind: "ec" | "ic";
+  level: number;
+}
+
 export interface HitCriterion {
   readout_name: string;
   operator: "gt" | "lt" | "gte" | "lte" | "in";
   value: number | string[];
+  intercept_key?: InterceptKey | null;
 }
 
 export interface RunCountsResponse {

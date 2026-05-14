@@ -1,4 +1,5 @@
 import { groupBy } from "@/shared/lib/group-by";
+import { findInterceptValue } from "../lib/intercept-label";
 import type { CurveClass, DoseResponseCurve, HitCriterion, InterceptValue } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -91,7 +92,14 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
   return rows;
 }
 
-/** Apply hit criteria filter to compound rows */
+/** Apply hit criteria filter to compound rows.
+ *
+ *  Numeric rules read a scalar from the row before comparing against the
+ *  threshold. A criterion with `intercept_key` set (e.g. `EC90`) looks up
+ *  the matching `(kind, level)` pair in `row.intercept_values`; the
+ *  legacy unkeyed path stays on `row.fitted_value` (= the primary intercept).
+ *  A missing intercept (legacy curve fit before the protocol's intercept
+ *  was added) makes the row fail the criterion. */
 export function applyHitFilter(
   rows: CompoundCurveRow[],
   criteria: HitCriterion[],
@@ -105,20 +113,32 @@ export function applyHitFilter(
         }
         return true;
       }
-      // For IC50/EC50 rules — match against fitted_value
+      const measured = rowValueForRule(row, rule);
+      if (measured === null) return false;
       const threshold = typeof rule.value === "number" ? rule.value : 0;
       switch (rule.operator) {
         case "gt":
-          return row.fitted_value > threshold;
+          return measured > threshold;
         case "lt":
-          return row.fitted_value < threshold;
+          return measured < threshold;
         case "gte":
-          return row.fitted_value >= threshold;
+          return measured >= threshold;
         case "lte":
-          return row.fitted_value <= threshold;
+          return measured <= threshold;
         default:
           return true;
       }
     }),
   );
+}
+
+function rowValueForRule(row: CompoundCurveRow, rule: HitCriterion): number | null {
+  if (!rule.intercept_key) return row.fitted_value;
+  const match = findInterceptValue(row.intercept_values, {
+    kind: rule.intercept_key.kind,
+    level: rule.intercept_key.level,
+    basis: "relative_percent",
+    label: null,
+  });
+  return match ? match.value : null;
 }

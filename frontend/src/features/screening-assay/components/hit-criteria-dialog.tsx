@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useUpdateProtocol } from "../hooks/use-protocols";
+import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
 import type { HitCriterion, ReadoutDefinition } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -57,7 +58,7 @@ interface HitCriteriaDialogProps {
 // ---------------------------------------------------------------------------
 
 function emptyRule(): HitCriterion {
-  return { readout_name: "", operator: "gt", value: 0 };
+  return { readout_name: "", operator: "gt", value: 0, intercept_key: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -101,24 +102,30 @@ export function HitCriteriaDialog({
     );
   };
 
-  const handleReadoutChange = (index: number, readoutName: string) => {
+  const handleOptionChange = (index: number, optionId: string) => {
+    const opt = options.find((o) => o.id === optionId);
+    if (!opt) return;
     const rule = rules[index];
-    // When switching to "Curve Class", default to "in" operator with empty list
-    if (readoutName === "Curve Class") {
+    if (opt.readout_name === "Curve Class") {
       updateRule(index, {
-        readout_name: readoutName,
+        readout_name: "Curve Class",
         operator: "in",
         value: [],
+        intercept_key: null,
       });
     } else if (rule.readout_name === "Curve Class") {
-      // Switching away from Curve Class — reset to numeric comparison
+      // Switching away from Curve Class — reset to a numeric comparison
       updateRule(index, {
-        readout_name: readoutName,
+        readout_name: opt.readout_name,
+        intercept_key: opt.intercept_key,
         operator: "gt",
         value: 0,
       });
     } else {
-      updateRule(index, { readout_name: readoutName });
+      updateRule(index, {
+        readout_name: opt.readout_name,
+        intercept_key: opt.intercept_key,
+      });
     }
   };
 
@@ -166,10 +173,10 @@ export function HitCriteriaDialog({
 
   // --- Derived state -------------------------------------------------------
 
-  const readoutOptions = [
-    ...readoutDefinitions.map((rd) => rd.name),
-    "Curve Class",
-  ];
+  const options = useMemo(
+    () => buildHitCriterionOptions(readoutDefinitions),
+    [readoutDefinitions],
+  );
 
   const isValid = rules.every(
     (r) =>
@@ -202,20 +209,20 @@ export function HitCriteriaDialog({
                 key={index}
                 className="flex items-end gap-2 rounded-md border p-3"
               >
-                {/* Readout selector */}
+                {/* Readout / intercept selector */}
                 <div className="flex-1 space-y-1">
                   <Label className="text-xs">Readout</Label>
                   <Select
-                    value={rule.readout_name}
-                    onValueChange={(v) => handleReadoutChange(index, v)}
+                    value={rule.readout_name === "" ? "" : optionIdForRule(rule, readoutDefinitions)}
+                    onValueChange={(v) => handleOptionChange(index, v)}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select readout" />
                     </SelectTrigger>
                     <SelectContent>
-                      {readoutOptions.map((name) => (
-                        <SelectItem key={name} value={name}>
-                          {name}
+                      {options.map((opt) => (
+                        <SelectItem key={opt.id} value={opt.id}>
+                          {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

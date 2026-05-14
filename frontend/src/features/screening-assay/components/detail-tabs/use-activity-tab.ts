@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { useCompoundFlags, useCreateFlag, useDeleteFlag } from "../../hooks/use-compound-flags";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
+import { interceptLabel } from "../../lib/intercept-label";
 import type {
   CompoundActivity,
   CompoundFlag as CompoundFlagType,
@@ -36,17 +37,32 @@ function applyFilters(items: CompoundActivity[], criteria: HitCriterion[]): Comp
         return true;
       }
       const readout = item.readouts[rule.readout_name];
-      if (!readout || readout.best == null) return false;
+      if (!readout) return false;
+      // Intercept-keyed criteria read from the curve's per-spec intercepts;
+      // legacy (unkeyed) criteria stay on the headline best/primary value.
+      let measured: number | null;
+      if (rule.intercept_key) {
+        const ivs = readout.curve_params?.intercept_values;
+        const match = ivs?.find(
+          (iv) =>
+            iv.spec.kind === rule.intercept_key!.kind &&
+            iv.spec.level === rule.intercept_key!.level,
+        );
+        measured = match?.value ?? null;
+      } else {
+        measured = readout.best;
+      }
+      if (measured == null) return false;
       const threshold = typeof rule.value === "number" ? rule.value : 0;
       switch (rule.operator) {
         case "gt":
-          return readout.best > threshold;
+          return measured > threshold;
         case "lt":
-          return readout.best < threshold;
+          return measured < threshold;
         case "gte":
-          return readout.best >= threshold;
+          return measured >= threshold;
         case "lte":
-          return readout.best <= threshold;
+          return measured <= threshold;
         default:
           return true;
       }
@@ -57,6 +73,21 @@ function applyFilters(items: CompoundActivity[], criteria: HitCriterion[]): Comp
 export function criterionLabel(rule: HitCriterion): string {
   const op = OPERATOR_LABELS[rule.operator] ?? rule.operator;
   const val = Array.isArray(rule.value) ? rule.value.join(", ") : rule.value;
+  if (rule.intercept_key) {
+    // Surface the intercept (e.g. "Resazurin EC90 < 50"). Uses the implicit
+    // KIND+LEVEL label since the protocol's `spec.label` isn't reachable
+    // from a chip with only the rule in hand; if the protocol relabeled an
+    // intercept ("Potency"), the chip still reads "EC90" — minor cosmetic
+    // gap, acceptable since the dialog (which has the spec list) renders
+    // the relabeled option name.
+    const ik = interceptLabel({
+      kind: rule.intercept_key.kind,
+      level: rule.intercept_key.level,
+      basis: "relative_percent",
+      label: null,
+    });
+    return `${rule.readout_name} ${ik} ${op} ${val}`;
+  }
   return `${rule.readout_name} ${op} ${val}`;
 }
 
