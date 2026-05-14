@@ -10,9 +10,11 @@ import { type ReactNode, useMemo } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
+import { findInterceptValue, interceptLabel } from "../lib/intercept-label";
 import { resolvePickListColor } from "../lib/pick-list-colors";
 import {
   type DoseResponseCurve,
+  type InterceptSpec,
   READOUT_NORMALIZATION_LABELS,
   type ReadoutData,
   type ReadoutDefinition,
@@ -250,9 +252,80 @@ export function ReadoutDataTable({
     ];
 
     for (const rd of readoutDefs) {
-      // Dose-response readouts: single column from the curves table.
+      // Dose-response readouts: one denormalized column per protocol
+      // intercept (EC50, EC90, ...). Header via `interceptLabel(spec)`,
+      // cell value via `findInterceptValue` (matched by (kind, level) so
+      // per-protocol label drift doesn't break the lookup). Primary
+      // intercept falls back to `curve.fitted_value` for legacy curves
+      // fit before `intercept_values` were persisted (spec §6).
       if (rd.data_type === "dose_response") {
+        const intercepts: InterceptSpec[] = rd.dose_response_config?.intercepts ?? [];
         const drHeader = rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
+        if (intercepts.length > 0) {
+          intercepts.forEach((spec, idx) => {
+            const isPrimary = idx === 0;
+            const header = `${rd.name} ${interceptLabel(spec)}${rd.unit ? ` (${rd.unit})` : ""}`;
+            cols.push({
+              headerName: header,
+              headerTooltip:
+                rd.description ||
+                "Dose-response intercept (derived) — same for every well of a compound",
+              colId: `${rd.id}::${spec.kind}::${spec.level}`,
+              width: 140,
+              cellClass: "text-right tabular-nums",
+              headerClass: "ag-right-aligned-header italic",
+              valueGetter: (p) => {
+                const curve = p.data?.curves.get(rd.id);
+                if (!curve) return null;
+                const iv = findInterceptValue(curve.intercept_values, spec);
+                if (iv) return iv.value;
+                return isPrimary ? curve.fitted_value : null;
+              },
+              cellRenderer: (params: { data: PivotRow | undefined }) => {
+                const curve = params.data?.curves.get(rd.id);
+                if (!curve) {
+                  return <span className="text-muted-foreground">{"—"}</span>;
+                }
+                const iv = findInterceptValue(curve.intercept_values, spec);
+                const value = iv?.value ?? (isPrimary ? curve.fitted_value : null);
+                if (value == null) {
+                  return (
+                    <span
+                      className="text-muted-foreground"
+                      title="No value for this intercept. Recompute the curve to refresh."
+                    >
+                      {"—"}
+                    </span>
+                  );
+                }
+                if (iv?.at_bound) {
+                  return (
+                    <Badge
+                      variant="outline"
+                      className="text-xs border-amber-500 text-amber-700"
+                    >
+                      <span className="font-mono">{value.toPrecision(4)}</span>
+                      <span className="ml-1">{"⚠︎"} at bound</span>
+                    </Badge>
+                  );
+                }
+                return (
+                  <span
+                    className={cn(curve.curve_class === "inactive" && "text-muted-foreground")}
+                    title={
+                      curve.curve_class
+                        ? `${curve.curve_class} · R² = ${curve.r_squared.toFixed(3)}`
+                        : undefined
+                    }
+                  >
+                    {value.toPrecision(4)} {curve.fitted_unit}
+                  </span>
+                );
+              },
+            });
+          });
+          continue;
+        }
         cols.push({
           headerName: drHeader,
           headerTooltip:
