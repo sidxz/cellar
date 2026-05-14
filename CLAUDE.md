@@ -183,34 +183,60 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
-### 2026-05-13 — Frontend cleanup (review punch list) on `fe2`
+### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
-**Plan:** `docs/superpowers/plans/2026-05-12-frontend-cleanup.md`
+**Branch:** `prot-2`, 5 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
 
-**Shipped (49 commits, 113 files touched, 4a089392..93ced7a2):**
-- Phase 1 — Shared primitives: `useDebounce`, `useHashTab`, `formatDate`/`formatDateTime`/`formatRelativeDate`, `formatFileSize`, `SearchInput`; extended `status-variants` (in_use/stored/merged/conflict/preclinical_candidate/development_candidate)
-- Phase 2 — Sweeps: SearchInput at 7 callsites; useDebounce ×2; StatusBadge collapsing 4 local switches; date utilities across 18 files; formatFileSize ×2; ConfirmDeleteDialog at 5 delete callsites; useHashTab unifying tab state on 5 detail pages + inventory-dashboard
-- Phase 3 — Cross-feature boundaries: `MOLECULES_KEY`, `CampaignList`, `CurveSnapshot`, `DoseResponseSparkline`, `CurveClassBadge`, `useProtocolSummaries` now exported via each feature's `index.ts`; 6 internal-path imports fixed
-- Phase 4 — screen-campaign realignment: `hooks/` separated from `lib/`; `useCampaignsByProject` → `useCampaigns(projectId?)`; `useMoleculesByIds` moved to chemical-registration; raw `AgGridReact` callsites routed through `DataGrid` (DataGrid extended with `ColGroupDef` support + `clearSelectionToken` prop); `campaign-builder.tsx` loading/error states aligned with `DetailShell`
-- Phase 5 — Antipattern fixes: server-state-sync effect dropped in registration wizard; state-sync effects in `molecule-selector`/`override-modal`/`add-from-runs-dialog` replaced with derived values; `window.location.href`/`window.location.hash` replaced with `useRouter`/`useHashTab`; search-page 11 useStates collapsed into a reducer; CSS group-hover replaces per-cell `useState(hover)` in results-grid; `audit-timeline` uses shared `EmptyState`
-- Phase 6 — God-module decomp:
-  - `design-tab.tsx` 2080→756 (-64%) + extracted use-readout-definition-form hook, readout-definition-dialog, condition-definition-dialog, design-tab-protocol-card
-  - `search-query-builder.tsx` 1554→285 (-82%) + extracted search-query-config + 4 criterion-row files (simple/resource/structure/advanced)
-  - `synthesis-request-detail.tsx` 1191→519 (-56%) + extracted use-synthesis-request-actions hook + synthesis-request-dialogs
-  - `activity-tab.tsx` 1021→658, `run-dr-results.tsx` 757→443 (extracted columns/transforms/use-activity-tab)
-  - `dose-response-chart.tsx` 1549→1054 (extracted math/constraints/controls)
-  - `run-import-wizard.tsx` 1291→960 (extracted run-import-mapping + use-run-import-wizard hook)
-  - `run-detail.tsx` 836→776 (extracted use-recompute-overrides hook)
-- Phase 7 — RHF + Zod form migration: 12 dialogs migrated to react-hook-form + zod (create-project, create-collection, organization, create-saved-search, registration-form-admin, ontology-slot-admin, custom-field-admin, api-key-admin, workspace-settings-form, data-source-detail, create-run-dialog, create-protocol-dialog)
-- Phase 8 — Promoted `CollectionPickerDialog` to shared with `simple?: boolean` prop (deleted both per-feature copies); `MoleculeThumbnail` kept (legitimate size/null-handling wrapper)
+**Spec:** `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 
-**Verification:** `pnpm exec tsc --noEmit` clean. `pnpm test` 106/106 pass. `pnpm lint` 753 pre-existing errors (–3 net from baseline, no new errors introduced). Branch is local; not pushed.
+**Shipped this session (in commit order):**
 
-**Deferred to next session:**
-- Browser smoke: dialogs (12 migrated), all detail-page tabs (hash links), Add-from-runs flow (state derivation refactor), inventory-dashboard navigation, search-page reducer
-- Task 35 — Orval regen + remove `as unknown as` casts (5 sites) — needs backend OpenAPI to expose `curve_snapshot` field and proper `recommended_hit_criteria` typing first
-- Optional follow-ups noted by sub-agents: extract `SummaryCard` from `dose-response-chart` (~890 lines after), extract step sub-components from `run-import-wizard` (~600 lines after), split `readout-definition-dialog.tsx` (904 lines) — none essential, all clean wins if pursued
+1. **`32da062c` — `refactor(screening): identify DR curves by readout-def, not curve_type`** (41 files, +925/−373)
+   - Migration 033: `dose_response_curves.readout_definition_id` NOT NULL FK + `ix_drc_resolver` index + `uq_drc_run_well_readout` unique constraint. Truncates the table and nulls `campaign_measurement.{source_curve_id, curve_snapshot}` (no safe synthetic backfill for multi-DR protocols sharing curve_type).
+   - Migration 034: `dose_response_curves.dose_response_config_snapshot` JSONB (additive, freezes the post-override config that drove each fit).
+   - Domain entity, SQLA model, repo, fitter, refit, create use-case + route DTOs all carry `readout_definition_id` end-to-end. `find_best_curves_for_molecules` now keys by readout-def.
+   - Channel resolver filters by `readout_definition_id` (multi-DR regression test in `tests/integration/research_organization/test_channel_resolution_query.py`).
+   - Three reader queries flipped from `curve_type` filtering to `readout_definition_id`: `molecule_reader._apply_drc_sort` (`drc:{readout_definition_id}` token), `_batch_query._selectivity_clause`, `_activity_query` (criterion shape uses explicit `source: "dr_curve" | "readout_data"` + `readout_definition_id`).
+   - `protocol_activity_reader` (DRAggRow / BestParamsRow) groups by readout-def, not curve_type.
+   - FE: search query builder, selectivity criterion, activity criterion shapes flipped. Orval regenerated. `tsc --noEmit` clean.
 
-**Next:** Browser smoke-test on the 12 form migrations and the major decomps (Phase 6+7 surfaces). Then push `fe2` and merge.
+2. **`19ed9253` — `chore(screening): script to refit all DR curves after migration 033`**
+   - `backend/scripts/refit_all_dose_response.py` — idempotent, resumable, supports `--workspace-id` / `--protocol-id` / `--dry-run`.
+   - Ran live on dev DB: 40 curves restored across 5 runs / 3 protocols. All rows carry `readout_definition_id` + `dose_response_config_snapshot`.
 
-Long-lived state (current branch, what's shipped, what's next, operational backlog) lives in `~/.claude` memory — see `MEMORY.md` for the index.
+3. **`0d8aae80` — `fix(screening): IC90/EC90 marker Y position needs level/100`**
+   - `dose-response-chart.tsx` was computing `bottom + level * (top - bottom)` for secondary intercept markers — `level` is a percentage (90 for EC90), not a fraction. EC90 marker landed at y≈9746, Plotly autoscaled to 10k%, curve looked flat. Fixed with `(level / 100)`.
+
+4. **`a31bf7cc` — `feat(screening): run DR table renders one column per protocol intercept`** (spec Surface #1)
+   - New helper `frontend/src/features/screening-assay/lib/intercept-label.ts`: `interceptLabel(spec)` + `findInterceptValue(values, spec)` + 9 unit tests.
+   - `run-dr-results-columns.tsx` is now data-driven: one column per protocol intercept; primary reads `row.fitted_value` (back-compat with legacy fits); secondaries read via `findInterceptValue`; missing match shows "—" with Recompute hint; `at_bound = true` renders amber chip.
+   - "Type" column dropped (column header *is* the intercept name now).
+
+5. **`5fe1e245` — `feat(screening): activity tabs render one column per protocol intercept`** (spec Surfaces #2 + #3)
+   - Backend: `BestParamsRow.intercept_values` carried up from SQL; `CurveParams.intercept_values` + `ReadoutDefInfo.intercepts` on the protocol-activity payload (`protocol_hub` route); `ProtocolActivitySummary.intercepts` + per-curve `intercept_values` on the molecule-activity payload (`molecules.py` `/activity` route).
+   - FE Surface #2: `screening-assay/components/detail-tabs/activity-tab-columns.tsx` `buildColumnDefs` branches DR vs numeric. DR readouts emit N intercept columns from `rd.intercepts`, each reading from the row's `curve_params.intercept_values`.
+   - FE Surface #3: `chemical-registration/components/detail-tabs/activity-tab.tsx` extracts a `CurveTable` that consumes the protocol's `intercepts`. One column per spec; cells matched on (kind, level) so protocol relabels survive.
+
+**Verification:**
+- Backend: 2422 → 2438 → 456 (final sweep of unit+integration+api after spec surfaces) green at each commit.
+- Frontend: 106 → 115 tests green. `pnpm exec tsc --noEmit` clean throughout.
+- Refit script ran successfully on dev DB; orval regen committed.
+- Browser smoke: NOT done. Worth verifying these surfaces visually:
+  - Run page → Dose-Response tab: should show EC50 + EC90 columns on `Mtb_WCA_mc2-7000_Resazurin`. 3 of 21 curves are legacy (no EC90 persisted) — those cells should render "—" with a Recompute hint.
+  - Protocol page → Activity tab: per-readout intercept columns + Mean + Class + Curve sparkline.
+  - Molecule detail → Activity tab: per-Card table with intercept columns matching each protocol's spec list.
+  - EC90 marker fix (from 0d8aae80): toggling "EC50 marker" on a curve dialog should no longer collapse the Y axis.
+
+**Remaining spec surfaces (in priority order):**
+- **#4 Search results grid** — needs `ActivityValue.intercept_values?` plumbed through the read model (`backend/.../research_organization/`); then sub-columns per intercept under each protocol column group in `results-grid.tsx`. Header text via `interceptLabel(spec)`; cell via `findInterceptValue`. This is the biggest of the remaining surfaces — requires a backend wire-shape change.
+- **#5 Compound detail sheet** — render full intercept list per curve (mirror the chip layout already in `dose-response-chart.tsx:118-148`). FE-only.
+- **#6 Readout-data denorm** — `readout-data-table.tsx` currently denormalizes `${curve_type} (uM)` onto each well row; after the change it should emit one such column per protocol intercept. Backend denorm layer needs to flatten each intercept into a separate field.
+- **#7 Hit-criteria builder** — `hit-criteria-dialog.tsx` hardcodes "Fitted Value" as the LHS option. Extend criterion model with `intercept_key: {kind, level}`; FE dropdown lists every protocol intercept by `interceptLabel(spec)`; legacy criteria read at `kind=primary.kind, level=primary.level`.
+- **#8 Exports** — run export, project export, search export all need per-intercept columns (header via `interceptLabel`; optional CI low/high sub-columns when at least one row has non-null CI).
+- **#9 Curve cards** — already correct (no work).
+
+**How to resume:** Reload Cellar, look at the three shipped surfaces in browser. If they render correctly, pick a remaining spec surface (#4 is highest value, #7 is highest scope). If something looks wrong, the helpers (`interceptLabel`/`findInterceptValue`) are the diagnostic anchors — they're the only place chemist-facing labels are produced and the only place cell lookups happen.
+
+**Open caveat:** Multi-DR protocols (a protocol declaring 2+ DOSE_RESPONSE readout-defs with their own intercept lists) still use the *first* DR readout's intercepts on every grid. Per-readout column groups are documented as a known limitation in the spec — defer until a real protocol surfaces it.
+
+Long-lived state (architecture decisions, branch state, operational backlog) lives in `~/.claude` memory — see `MEMORY.md` for the index, especially `feedback_drc_identity.md` (the "curves keyed by readout_definition_id" principle that motivated this whole refactor).
