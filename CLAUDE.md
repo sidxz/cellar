@@ -185,7 +185,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
-**Branch:** `prot-2`, 7 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
+**Branch:** `prot-2`, 9 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
 
 **Spec:** `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 
@@ -227,6 +227,11 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
    - The compound detail sheet already renders the chip-stack via `<DoseResponseChart />`, but the chart's own primary line used `CURVE_TYPE_LABELS[curve.curve_type]` (which post-033 is "descriptive only") and the secondary chips had an inline `spec.label ?? KIND+LEVEL` fallback. Both replaced with `interceptLabel(spec)` — single source of truth, per-protocol relabels now visible everywhere.
    - Pre-multi-intercept curves with no persisted `intercept_values` still fall back to the legacy `CURVE_TYPE_LABELS` lookup so they keep rendering "EC50" / "IC50" as before.
 
+8. **`c92f3d11` — `feat(screening): readout-data table denorms one column per protocol intercept`** (spec Surface #6)
+   - `readout-data-table.tsx` was emitting a single italic `${rd.name} (${unit})` column per DR readout-def, sourced from `curve.fitted_value`. Multi-intercept protocols (EC50 + EC90) showed only the primary on every well row.
+   - Now emits one column per declared intercept (header `${rd.name} ${interceptLabel(spec)}`, colId `${rd.id}::${kind}::${level}`, value via `findInterceptValue` with primary fallback to `curve.fitted_value`, amber chip on `at_bound`). Defensive fallback for DR readouts with no declared intercepts keeps the single anonymous column.
+   - No backend change — the denorm join lives in the FE `curveLookup` and `intercept_values` was already on `CurveDetail` since Surface #2.
+
 **Verification:**
 - Backend: 2422 → 2438 → 456 → 2424 green at each commit (final sweep after Surface #4 wire-shape).
 - Frontend: 106 → 115 → 122 tests green. `pnpm exec tsc --noEmit` clean throughout.
@@ -237,15 +242,15 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
   - Molecule detail → Activity tab: per-Card table with intercept columns matching each protocol's spec list.
   - Search results grid: per-protocol column groups with one sub-column per intercept (EC50 + EC90 on the Mtb_WCA protocol) + Plot column at the end. Legacy curves still primary-fallback to `value` (so 3 of 21 should fill EC50 but blank EC90).
   - Compound detail drawer (right-side sheet on a search row click): per-protocol DR chart shows primary intercept on its summary line + secondary intercept chips, both via `interceptLabel` (so a relabeled "Potency" / "Coverage" surfaces here too, not just on the run-DR table).
+  - Readout-data page: every well row now denorms one column per intercept (e.g. "Resazurin EC50 (µM)" + "Resazurin EC90 (µM)") instead of a single anonymous fitted_value column.
   - EC90 marker fix (from 0d8aae80): toggling "EC50 marker" on a curve dialog should no longer collapse the Y axis.
 
 **Remaining spec surfaces (in priority order):**
-- **#6 Readout-data denorm** — `readout-data-table.tsx` currently denormalizes `${curve_type} (uM)` onto each well row; after the change it should emit one such column per protocol intercept. Backend denorm layer needs to flatten each intercept into a separate field.
-- **#7 Hit-criteria builder** — `hit-criteria-dialog.tsx` hardcodes "Fitted Value" as the LHS option. Extend criterion model with `intercept_key: {kind, level}`; FE dropdown lists every protocol intercept by `interceptLabel(spec)`; legacy criteria read at `kind=primary.kind, level=primary.level`.
+- **#7 Hit-criteria builder** — `hit-criteria-dialog.tsx` hardcodes "Fitted Value" as the LHS option. Extend criterion model with `intercept_key: {kind, level}`; FE dropdown lists every protocol intercept by `interceptLabel(spec)`; legacy criteria read at `kind=primary.kind, level=primary.level`. Highest scope — domain model + persistence + API + FE.
 - **#8 Exports** — run export, project export, search export all need per-intercept columns (header via `interceptLabel`; optional CI low/high sub-columns when at least one row has non-null CI).
 - **#9 Curve cards** — already correct (no work).
 
-**How to resume:** Reload Cellar, look at the five shipped surfaces in browser. If they render correctly, pick a remaining spec surface (#7 is highest scope, #6 is the next backend wire-shape change). If something looks wrong, the helpers (`interceptLabel`/`findInterceptValue`) + the new `resolveColumns`/`buildDrcColumns` in `results-grid.tsx` are the diagnostic anchors — they're the only places chemist-facing labels are produced or cell lookups happen.
+**How to resume:** Reload Cellar, look at the six shipped surfaces in browser. If they render correctly, pick a remaining spec surface (#7 is highest scope; #8 is mostly backend column-emission). If something looks wrong, the helpers (`interceptLabel`/`findInterceptValue`) + the new `resolveColumns`/`buildDrcColumns` in `results-grid.tsx` + the per-intercept denorm loop in `readout-data-table.tsx` are the diagnostic anchors — they're the only places chemist-facing labels are produced or cell lookups happen.
 
 **Open caveat:** Multi-DR protocols (a protocol declaring 2+ DOSE_RESPONSE readout-defs with their own intercept lists) still use the *first* DR readout's intercepts on every grid. Per-readout column groups are documented as a known limitation in the spec — defer until a real protocol surfaces it.
 
