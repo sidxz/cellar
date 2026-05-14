@@ -185,7 +185,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
-**Branch:** `prot-2`, 14 commits ahead of `e807dd03` (the merged `fe2` HEAD). Browser-smoke passed 2026-05-14. Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
+**Branch:** `prot-2`, 17 commits ahead of `e807dd03` (the merged `fe2` HEAD). Browser-smoke passed 2026-05-14. Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
 
 **Spec:** `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 
@@ -264,7 +264,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 - **Channel-popover hit-threshold carry-forward** (Surface #7 follow-on) — `deriveChannelHitDefaults` at `screening-assay/lib/hit-criteria-defaults.ts` currently drops `intercept_key` when projecting a protocol recommendation onto a channel's form fields. The channel hit-threshold form (`screen-campaign/components/channel-popover.tsx`) doesn't model an intercept selector. Need to (a) thread `intercept_key` through `ChannelHitDefaults`, (b) add an intercept picker to the channel form (likely a simpler "use primary / use EC90 / ..." radio since each channel is single-readout), (c) save the channel's `hit_threshold.intercept_key`. Backlogged.
 
 **How to resume:**
-1. **Push** — `prot-2` is 14 commits ahead of `e807dd03`, smoked, nothing pushed. `git push -u origin prot-2` (or merge straight to `main` if you're done with the branch).
+1. **Push** — `prot-2` is 17 commits ahead of `e807dd03`, smoked, nothing pushed. `git push -u origin prot-2` (or merge straight to `main` if you're done with the branch).
 2. **Pick next surface.** Two well-scoped tickets remain:
    - **#8 Exports** (largest) — scoping pass first to find where run / project / search CSV+Excel exports are produced (no single builder module surfaced in this session's grep). Then per-intercept columns via `interceptLabel`; optional CI low/high sub-columns when at least one row has a non-null CI for the intercept.
    - **Channel-popover hit-threshold carry-forward** (smaller, the Surface #7 follow-on) — `deriveChannelHitDefaults` at `frontend/src/features/screening-assay/lib/hit-criteria-defaults.ts` drops `intercept_key` when projecting a protocol recommendation onto a channel form. Channel form (`screen-campaign/components/channel-popover.tsx`) needs an intercept selector (likely a radio: "primary / EC90 / IC90 / ..." per the channel's readout-def intercepts). Backend `CampaignChannel.hit_threshold.intercept_key` already round-trips; only UI work.
