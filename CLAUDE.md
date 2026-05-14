@@ -185,7 +185,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
-**Branch:** `prot-2`, 12 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
+**Branch:** `prot-2`, 13 commits ahead of `e807dd03` (the merged `fe2` HEAD). Nothing pushed. Dev DB migrated to head (`034_drc_config_snapshot`).
 
 **Spec:** `docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md`
 
@@ -244,9 +244,17 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
     - **Create dialog** (`create-protocol-dialog.tsx`): previously emitted `dose_response_config` with no `intercepts` field — new protocols always started with the implicit single 50% intercept. Added `dr_intercepts: InterceptSpec[]` to the form schema (default `[]`), rendered the editor in the DR-config block right after Curve Type / X / Y, included `intercepts` in the submit payload only when the chemist explicitly added ≥1 row (empty stays implicit, keeping the wire terse).
     - Curve Type kept as-is — post-033 it no longer carries identity (that's `readout_definition_id`) but still seeds the implicit primary intercept and picks IC-vs-EC direction; chemists read "IC50/EC50" as scientific terms, not identity tokens.
 
+11. **`db04e938` — `feat(screening): hit-criteria builder targets specific dose-response intercepts`** (spec Surface #7)
+    - **Domain.** `HitCriterion` (`backend/src/cellar/domain/shared/hit_criterion.py`) gains optional `intercept_key: InterceptKey | None`. New frozen VO `InterceptKey(kind, level)` adjacent to it — separate from the heavier `InterceptSpec` (which carries `basis` + `label` for protocol-design concerns); a *key* is just `(kind, level)`. `to_dict`/`from_dict` round-trip transparently; no migration since both carriers (`Protocol.recommended_hit_criteria`, `CampaignChannel.hit_threshold`) are JSONB.
+    - **Evaluator.** New `_threshold_input_value(c, threshold)` helper at `application/research_organization/channel_resolution.py` resolves the right scalar per-candidate. Three aggregating selection rules (LATEST_APPROVED_RUN, MEAN_ACROSS_RUNS, GEOMETRIC_MEAN) compute an `eval_value` alongside the measurement `value` — the stored cell value stays the primary aggregate while `hit_call` honors the criterion's intended intercept. Legacy criteria (no `intercept_key`) collapse to identity. `ResolvedCandidate.intercept_values` carries the curve JSONB end-to-end; SQL projection added in both `_fetch_curve_candidates` and `fetch_candidates_for_runs`.
+    - **API.** `HitCriterionDTO` (`interface/routes/_campaign_dtos.py`) mirrors the new field via a new `InterceptKeyDTO`. Orval regen propagated; FE hand-typed `HitCriterion` interface updated. Protocol routes for `recommended_hit_criteria` already serialized as `list[dict]` and round-trip via `HitCriterion.from_dict`/`to_dict`, so no route code change needed.
+    - **Dialog.** New helper `screening-assay/lib/hit-criteria-options.ts` turns `protocol.readout_definitions` into a flat option list — one entry per intercept for each DR readout (`"Resazurin EC50"`, `"Resazurin EC90"`), one entry per non-DR readout, plus `Curve Class`. `hit-criteria-dialog.tsx` consumes it; `optionIdForRule` maps existing rules back to option ids (legacy unkeyed DR rules map to the primary). Saving a rule that targets a primary intercept keeps `intercept_key=null` (terse wire shape for legacy / primary) — only secondary intercepts persist an explicit `{kind, level}`.
+    - **Filters.** `applyHitFilter` (run DR results) and `applyFilters` (protocol activity tab) honor `intercept_key` via `findInterceptValue`, falling back to `fitted_value` / `best` for unkeyed rules. Missing intercept on a legacy curve → row fails the criterion (same "no value, no pass" semantic). `criterionLabel` surfaces the intercept in chip text ("Resazurin EC90 < 50") via the implicit KIND+LEVEL label.
+    - **Out of scope** (intentionally deferred): `deriveChannelHitDefaults` strips `intercept_key` when projecting a protocol recommendation onto a campaign channel's hit-threshold form. The channel UI doesn't yet model an intercept selector. Follow-on for channel-popover.tsx.
+
 **Verification:**
-- Backend: 2422 → 2438 → 456 → 2424 green at each commit (final sweep after Surface #4 wire-shape).
-- Frontend: 106 → 115 → 122 → 127 tests green. `pnpm exec tsc --noEmit` clean throughout.
+- Backend: 2422 → 2438 → 456 → 2424 → 2452 green at each commit (final sweep after Surface #7).
+- Frontend: 106 → 115 → 122 → 127 → 138 tests green. `pnpm exec tsc --noEmit` clean throughout.
 - Refit script ran successfully on dev DB; orval regen committed.
 - Browser smoke: NOT done. Worth verifying these surfaces visually:
   - Run page → Dose-Response tab: should show EC50 + EC90 columns on `Mtb_WCA_mc2-7000_Resazurin`. 3 of 21 curves are legacy (no EC90 persisted) — those cells should render "—" with a Recompute hint.
@@ -256,21 +264,24 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
   - Compound detail drawer (right-side sheet on a search row click): per-protocol DR chart shows primary intercept on its summary line + secondary intercept chips, both via `interceptLabel` (so a relabeled "Potency" / "Coverage" surfaces here too, not just on the run-DR table).
   - Readout-data page: every well row now denorms one column per intercept (e.g. "Resazurin EC50 (µM)" + "Resazurin EC90 (µM)") instead of a single anonymous fitted_value column.
   - EC90 marker fix (from 0d8aae80): toggling "EC50 marker" on a curve dialog should no longer collapse the Y axis.
+  - **Surface #7 (new):** open the hit-criteria dialog on the Mtb_WCA protocol — "Readout" dropdown should now list "Resazurin EC50" + "Resazurin EC90" + "Curve Class" (instead of a single "Resazurin" entry). Authoring an "EC90 < 50" rule should filter the activity grid using the curve's EC90, not its primary EC50. The badge above the grid should read "Resazurin EC90 < 50". Re-opening the dialog on a previously-saved primary rule should pre-select the primary intercept option (round-trip with `intercept_key=null`).
 
 **Remaining spec surfaces (in priority order):**
-- **#7 Hit-criteria builder** — `hit-criteria-dialog.tsx` hardcodes "Fitted Value" as the LHS option. Extend criterion model with `intercept_key: {kind, level}`; FE dropdown lists every protocol intercept by `interceptLabel(spec)`; legacy criteria read at `kind=primary.kind, level=primary.level`. Highest scope — domain model + persistence + API + FE.
-- **#8 Exports** — run export, project export, search export all need per-intercept columns (header via `interceptLabel`; optional CI low/high sub-columns when at least one row has non-null CI).
+- **#8 Exports** — run export, project export, search export all need per-intercept columns (header via `interceptLabel`; optional CI low/high sub-columns when at least one row has non-null CI). Scoping pass first — no single export-builder module was located.
 - **#9 Curve cards** — already correct (no work).
+- **Channel-popover hit-threshold carry-forward** (Surface #7 follow-on) — `deriveChannelHitDefaults` at `screening-assay/lib/hit-criteria-defaults.ts` currently drops `intercept_key` when projecting a protocol recommendation onto a channel's form fields. The channel hit-threshold form (`screen-campaign/components/channel-popover.tsx`) doesn't model an intercept selector. Need to (a) thread `intercept_key` through `ChannelHitDefaults`, (b) add an intercept picker to the channel form (likely a simpler "use primary / use EC90 / ..." radio since each channel is single-readout), (c) save the channel's `hit_threshold.intercept_key`. Backlogged.
 
 **How to resume:**
-1. **Browser-smoke pass.** Six surfaces shipped this conversation (run DR table, protocol activity tab, molecule activity tab, search grid, search detail drawer, readout-data table) plus the protocol-design editor polish. Reload Cellar and walk each one against the Mtb_WCA_mc2-7000_Resazurin protocol — that's the live test case the work was built against. Two surfaces (drawer + grid grouping) had already-shipped bugs caught during smoke, so don't skip this.
-2. **Push** — `prot-2` is 12 commits ahead of `e807dd03`, nothing pushed yet. If smoke is clean, push.
-3. **Pick next surface.** #7 (hit-criteria builder) is highest-scope remaining — touches `HitCriterion` value object (`backend/src/cellar/domain/shared/hit_criterion.py:14`) + persistence (JSONB, no migration needed since `to_dict`/`from_dict` already round-trip), API DTOs, FE `hit-criteria-dialog.tsx`, and the campaign hit-call evaluator. Strategy: add optional `intercept_key: {kind, level} | None`; legacy criteria (null) treated as `(kind=primary.kind, level=primary.level)` at read time. #8 (exports) is a scoping pass first — no single export-builder module was found, suggests it's scattered or partial.
+1. **Browser-smoke pass.** Seven surfaces shipped this conversation (run DR table, protocol activity tab, molecule activity tab, search grid, search detail drawer, readout-data table, hit-criteria dialog) plus the protocol-design editor polish. Reload Cellar and walk each one against the Mtb_WCA_mc2-7000_Resazurin protocol — that's the live test case the work was built against. Two surfaces (drawer + grid grouping) had already-shipped bugs caught during smoke, so don't skip this. Focus extra attention on #7: hit-criteria dialog dropdown + activity-tab filter chips + filtered row counts when authoring an EC90 rule.
+2. **Push** — `prot-2` is 13 commits ahead of `e807dd03`, nothing pushed yet. If smoke is clean, push.
+3. **Pick next surface.** #8 (exports) is the largest remaining surface — start with a scoping pass to identify where run/project/search exports are produced (CSV / Excel builders). Channel-popover hit-threshold carry-forward (the Surface #7 follow-on) is smaller and well-scoped.
 
 **Diagnostic anchors if something looks wrong:**
 - `frontend/src/features/screening-assay/lib/intercept-label.ts` — only place chemist-facing intercept labels are produced or cell lookups happen.
+- `frontend/src/features/screening-assay/lib/hit-criteria-options.ts` — only place the hit-criteria dialog's option list is built or a rule is mapped back to an option id.
 - `frontend/src/features/research-organization/lib/protocol-column-id.ts` — only place `drc:<rd_id>` / `rd:<proto>:<rd>` colIds get joined back to their owning protocol. Both `results-grid.tsx` and `search-page.tsx` go through `resolveColumns`/`uniqueProtocolIds` here.
 - Backend serialization: `application/screening/molecule_activity_service.py::_serialize_intercept_values` — single helper feeds both the molecule-activity payload and the search-grid `ActivityValue.intercept_values`.
+- Backend criterion evaluation: `application/research_organization/channel_resolution.py::_threshold_input_value` — single helper resolves the scalar that gets compared against `HitCriterion.value`. Legacy unkeyed criteria identity-passthrough on `c.value`; intercept-keyed criteria look up `c.intercept_values` by `(kind, level)`.
 
 **Open caveat:** Multi-DR protocols (a protocol declaring 2+ DOSE_RESPONSE readout-defs with their own intercept lists) still use the *first* DR readout's intercepts on every grid. Per-readout column groups are documented as a known limitation in the spec — defer until a real protocol surfaces it.
 
