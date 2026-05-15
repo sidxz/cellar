@@ -399,8 +399,26 @@ export function ResultsGridV2({
               return <span className="text-muted-foreground">--</span>;
             }
             const q = m.value_qualifier;
-            if (q === "nd" || q === "excluded") {
-              return <span className="text-muted-foreground italic">{q}</span>;
+            // Match the ND treatment on every other DR grid surface:
+            // "ND" uppercase font-mono with a "Not Determined" tooltip.
+            // (Was lowercase italic "nd" — cosmetic inconsistency that
+            // chemists would read as a different qualifier kind.)
+            if (q === "nd") {
+              return (
+                <span
+                  className="font-mono text-muted-foreground"
+                  title="ND = Not Determined. The source curve was inactive, the intercept wasn't reached within the tested range, or no candidate is available for this cell."
+                >
+                  ND
+                </span>
+              );
+            }
+            if (q === "excluded") {
+              return (
+                <span className="text-muted-foreground italic" title="Excluded by hit-criteria filter or channel QC.">
+                  excluded
+                </span>
+              );
             }
             const prefix = q === "<" || q === ">" ? `${q} ` : "";
             return (
