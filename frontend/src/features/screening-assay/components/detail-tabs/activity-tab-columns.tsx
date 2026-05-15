@@ -3,7 +3,12 @@ import { Badge } from "@/shared/components/ui/badge";
 import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Star } from "lucide-react";
-import { findInterceptValue, interceptLabel } from "../../lib/intercept-label";
+import {
+  findInterceptValue,
+  formatInterceptDisplay,
+  interceptLabel,
+  maxDoseFromRawData,
+} from "../../lib/intercept-label";
 import type {
   CompoundActivity,
   CompoundFlag as CompoundFlagType,
@@ -265,25 +270,30 @@ function buildInterceptColumn(
       const rv = params.data?.readouts?.[rd.name];
       const iv = findInterceptValue(rv?.curve_params?.intercept_values, spec);
       const value = iv?.value ?? (isPrimary ? (rv?.best ?? null) : null);
-      if (value == null) {
+      const display = formatInterceptDisplay({
+        value,
+        at_bound: iv?.at_bound,
+        curve_class: rv?.curve_class,
+        max_dose: maxDoseFromRawData(rv?.data_points),
+      });
+      if (display.warning) {
         return (
-          <span
-            className="text-muted-foreground"
-            title="No value for this intercept. Recompute the curve to refresh."
+          <Badge
+            variant="outline"
+            className="text-xs border-amber-500 text-amber-700"
+            title={display.tooltip}
           >
-            —
-          </span>
-        );
-      }
-      if (iv?.at_bound) {
-        return (
-          <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
-            <span className="font-mono">{value.toPrecision(4)}</span>
-            <span className="ml-1">⚠︎ at bound</span>
+            <span className="font-mono">{display.text}</span>
           </Badge>
         );
       }
-      return <span className="font-mono">{value.toPrecision(4)}</span>;
+      const className =
+        display.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground";
+      return (
+        <span className={className} title={display.tooltip || undefined}>
+          {display.text}
+        </span>
+      );
     },
   };
 }
