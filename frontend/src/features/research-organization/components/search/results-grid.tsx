@@ -20,7 +20,9 @@ import {
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
 import {
   findInterceptValue,
+  formatInterceptDisplay,
   interceptLabel,
+  maxDoseFromRawData,
 } from "@/features/screening-assay/lib/intercept-label";
 import {
   type ResolvedColumn,
@@ -177,38 +179,44 @@ function renderInterceptCell(
 ): React.ReactNode {
   if (!av) return <span className="text-muted-foreground">&mdash;</span>;
   const iv = findInterceptValue(av.intercept_values, spec);
-  // Primary intercept falls back to `value` (== fitted_value) so legacy
-  // curves fit before intercept_values were persisted still render in the
-  // primary column.
   const value = iv?.value ?? (isPrimary ? av.value : null);
-  if (value == null) {
+  const display = formatInterceptDisplay({
+    value,
+    at_bound: iv?.at_bound,
+    curve_class: av.curve_params?.curve_class,
+    max_dose: maxDoseFromRawData(av.raw_data),
+  });
+  // ActivityValue can carry a wire-level qualifier (">", "<") from upstream
+  // — only prepend it when we're actually rendering a numeric scalar; ND /
+  // qualifier / missing cells already self-describe.
+  const q = av.qualifier && av.qualifier !== "=" && display.kind === "scalar" ? `${av.qualifier} ` : "";
+  const showUnit = display.kind === "scalar" || display.kind === "qualifier";
+  const unitSuffix = showUnit && av.unit ? ` ${av.unit}` : "";
+  if (display.warning) {
     return (
-      <span
-        className="text-muted-foreground"
-        title="No value for this intercept. Recompute the curve to refresh."
+      <Badge
+        variant="outline"
+        className="text-xs border-amber-500 text-amber-700"
+        title={display.tooltip}
       >
-        &mdash;
-      </span>
-    );
-  }
-  const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
-  if (iv?.at_bound) {
-    return (
-      <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
         <span className="font-mono">
           {q}
-          {value.toPrecision(4)}
+          {display.text}
+          {unitSuffix}
         </span>
-        <span className="ml-1">⚠︎ at bound</span>
       </Badge>
     );
   }
+  const isScalar = display.kind === "scalar";
   return (
-    <span className="inline-flex items-center font-mono text-xs">
+    <span
+      className={`inline-flex items-center font-mono text-xs${isScalar ? "" : " text-muted-foreground"}`}
+      title={display.tooltip || undefined}
+    >
       {q}
-      {value.toPrecision(4)}
-      {av.unit ? ` ${av.unit}` : ""}
-      {isPrimary ? (
+      {display.text}
+      {unitSuffix}
+      {isPrimary && isScalar ? (
         <CurveClassBadge
           curveClass={av.curve_params?.curve_class ?? null}
           compact
@@ -290,18 +298,33 @@ export function buildDrcColumns(
       valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
       cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
         const av = params.data?.activity?.[colId];
-        if (av?.value == null) {
+        if (!av) {
           return <span className="text-muted-foreground">&mdash;</span>;
         }
+        // No protocol-declared intercept list → no per-spec at_bound to read,
+        // so the helper only acts on curve_class / null value. Inactive
+        // curves still route to "ND" instead of a misleading scalar.
+        const display = formatInterceptDisplay({
+          value: av.value ?? null,
+          at_bound: undefined,
+          curve_class: av.curve_params?.curve_class,
+          max_dose: maxDoseFromRawData(av.raw_data),
+        });
+        const isScalar = display.kind === "scalar";
         return (
-          <span className="inline-flex items-center font-mono text-xs">
-            {av.value.toPrecision(4)}
-            {av.unit ? ` ${av.unit}` : ""}
-            <CurveClassBadge
-              curveClass={av.curve_params?.curve_class ?? null}
-              compact
-              renderNullAs="nothing"
-            />
+          <span
+            className={`inline-flex items-center font-mono text-xs${isScalar ? "" : " text-muted-foreground"}`}
+            title={display.tooltip || undefined}
+          >
+            {display.text}
+            {isScalar && av.unit ? ` ${av.unit}` : ""}
+            {isScalar ? (
+              <CurveClassBadge
+                curveClass={av.curve_params?.curve_class ?? null}
+                compact
+                renderNullAs="nothing"
+              />
+            ) : null}
           </span>
         );
       },
