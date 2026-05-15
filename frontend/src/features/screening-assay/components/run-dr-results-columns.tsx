@@ -1,7 +1,12 @@
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { findInterceptValue, interceptLabel } from "../lib/intercept-label";
+import {
+  findInterceptValue,
+  formatInterceptDisplay,
+  interceptLabel,
+  maxDoseFromRawData,
+} from "../lib/intercept-label";
 import type { CurveClass, InterceptSpec } from "../types";
 import { CurveClassBadge } from "./curve-class-badge";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
@@ -208,32 +213,36 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;
         const iv = findInterceptValue(params.data.intercept_values, spec);
-        // Primary fallback: legacy curves carry the headline on
-        // `fitted_value` even when `intercept_values` is null.
         const value = iv?.value ?? (idx === 0 ? params.data.fitted_value : null);
-        if (value == null) {
+        const display = formatInterceptDisplay({
+          value,
+          at_bound: iv?.at_bound,
+          curve_class: params.data.curve_class,
+          max_dose: maxDoseFromRawData(params.data.data_points),
+        });
+        const showUnit = display.kind === "scalar" || display.kind === "qualifier";
+        const unitSuffix =
+          showUnit && params.data.fitted_unit ? ` ${params.data.fitted_unit}` : "";
+        if (display.warning) {
           return (
-            <span
-              className="text-muted-foreground"
-              title="No value for this intercept. Recompute the curve to refresh."
+            <Badge
+              variant="outline"
+              className="text-xs border-amber-500 text-amber-700"
+              title={display.tooltip}
             >
-              —
-            </span>
-          );
-        }
-        if (iv?.at_bound) {
-          return (
-            <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
               <span className="font-mono">
-                {value.toPrecision(4)} {params.data.fitted_unit}
+                {display.text}
+                {unitSuffix}
               </span>
-              <span className="ml-1">⚠︎ at bound</span>
             </Badge>
           );
         }
+        const className =
+          display.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground";
         return (
-          <span className="font-mono">
-            {value.toPrecision(4)} {params.data.fitted_unit}
+          <span className={className} title={display.tooltip || undefined}>
+            {display.text}
+            {unitSuffix}
           </span>
         );
       },
