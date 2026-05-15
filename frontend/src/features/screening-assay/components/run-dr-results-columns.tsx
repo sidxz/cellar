@@ -201,14 +201,21 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
       // potent for IC/EC curves.
       ...(idx === 0 ? { sort: "asc" as const } : {}),
       // valueGetter feeds AG Grid's sort + filter; cellRenderer paints
-      // the chip / dash / at-bound state.
+      // the chip / dash / at-bound state. Both routes go through the
+      // same `formatInterceptDisplay` so the sort order matches the
+      // chemist's mental model (scalar < qualifier < ND/missing) instead
+      // of leaking the asymptote-bound scalar that the Hill fitter parks
+      // on `fitted_value` for inactive curves.
       valueGetter: (params) => {
         if (!params.data) return null;
-        // Primary intercept tracks `fitted_value` even on legacy curves
-        // that haven't been re-fit since intercept_values was added.
-        if (idx === 0) return params.data.fitted_value;
         const iv = findInterceptValue(params.data.intercept_values, spec);
-        return iv?.value ?? null;
+        const value = iv?.value ?? (idx === 0 ? params.data.fitted_value : null);
+        return formatInterceptDisplay({
+          value,
+          at_bound: iv?.at_bound,
+          curve_class: params.data.curve_class,
+          max_dose: maxDoseFromRawData(params.data.data_points),
+        }).sortValue;
       },
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;

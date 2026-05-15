@@ -172,7 +172,8 @@ describe("formatInterceptDisplay", () => {
     expect(out.kind).toBe("nd");
     expect(out.text).toBe("ND");
     expect(out.warning).toBe(false);
-    expect(out.tooltip).toMatch(/inactive/i);
+    expect(out.tooltip).toMatch(/not determined/i);
+    expect(out.sortValue).toBeNull();
   });
 
   it("returns '—' for missing value when class is not inactive", () => {
@@ -185,6 +186,7 @@ describe("formatInterceptDisplay", () => {
     expect(out.kind).toBe("missing");
     expect(out.text).toBe("—");
     expect(out.warning).toBe(false);
+    expect(out.sortValue).toBeNull();
   });
 
   it("returns qualifier when at_bound with a known max_dose", () => {
@@ -198,6 +200,7 @@ describe("formatInterceptDisplay", () => {
     expect(out.text).toBe("> 50.00");
     expect(out.warning).toBe(true);
     expect(out.tooltip).toMatch(/upper-bound|tested concentration|did not reach/i);
+    expect(out.sortValue).toBe(Number.POSITIVE_INFINITY);
   });
 
   it("falls back to ND when at_bound but max_dose is unavailable", () => {
@@ -209,6 +212,7 @@ describe("formatInterceptDisplay", () => {
     });
     expect(out.kind).toBe("nd");
     expect(out.text).toBe("ND");
+    expect(out.sortValue).toBeNull();
   });
 
   it("returns scalar with toPrecision(4) on a healthy fit", () => {
@@ -221,6 +225,7 @@ describe("formatInterceptDisplay", () => {
     expect(out.kind).toBe("scalar");
     expect(out.text).toBe("0.01310");
     expect(out.warning).toBe(false);
+    expect(out.sortValue).toBe(0.01310);
   });
 
   it("inactive overrides at_bound (worst signal wins)", () => {
@@ -231,5 +236,44 @@ describe("formatInterceptDisplay", () => {
       max_dose: 50,
     });
     expect(out.kind).toBe("nd");
+    expect(out.sortValue).toBeNull();
+  });
+
+  // Chemist's sort expectation: scalars in ascending potency, then
+  // qualifier rows (some response, weaker than tested range), then
+  // ND/missing at the bottom. AG Grid puts nulls last in asc by default,
+  // so this all falls out of the sortValue numeric ordering.
+  it("orders sortValues so chemist-sort works: scalar < qualifier < nd/missing", () => {
+    const scalar = formatInterceptDisplay({
+      value: 0.5,
+      at_bound: false,
+      curve_class: "full",
+      max_dose: 50,
+    }).sortValue;
+    const qualifier = formatInterceptDisplay({
+      value: 0.001,
+      at_bound: true,
+      curve_class: "full",
+      max_dose: 50,
+    }).sortValue;
+    const nd = formatInterceptDisplay({
+      value: 0.013,
+      at_bound: false,
+      curve_class: "inactive",
+      max_dose: 50,
+    }).sortValue;
+    const missing = formatInterceptDisplay({
+      value: null,
+      at_bound: false,
+      curve_class: "full",
+      max_dose: 50,
+    }).sortValue;
+
+    expect(scalar).toBe(0.5);
+    expect(qualifier).toBe(Number.POSITIVE_INFINITY);
+    expect(nd).toBeNull();
+    expect(missing).toBeNull();
+    // scalar < qualifier in ascending numeric order
+    expect((scalar as number) < (qualifier as number)).toBe(true);
   });
 });

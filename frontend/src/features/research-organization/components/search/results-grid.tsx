@@ -295,7 +295,16 @@ export function buildDrcColumns(
       headerName: rd?.name ?? "Curve",
       colId: `${colId}:value`,
       width: 130,
-      valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
+      valueGetter: (p) => {
+        const av = p.data?.activity?.[colId];
+        if (!av) return null;
+        return formatInterceptDisplay({
+          value: av.value ?? null,
+          at_bound: undefined,
+          curve_class: av.curve_params?.curve_class,
+          max_dose: maxDoseFromRawData(av.raw_data),
+        }).sortValue;
+      },
       cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
         const av = params.data?.activity?.[colId];
         if (!av) {
@@ -340,8 +349,13 @@ export function buildDrcColumns(
           const av = p.data?.activity?.[colId];
           if (!av) return null;
           const iv = findInterceptValue(av.intercept_values, spec);
-          if (iv) return iv.value;
-          return isPrimary ? (av.value ?? null) : null;
+          const value = iv?.value ?? (isPrimary ? (av.value ?? null) : null);
+          return formatInterceptDisplay({
+            value,
+            at_bound: iv?.at_bound,
+            curve_class: av.curve_params?.curve_class,
+            max_dose: maxDoseFromRawData(av.raw_data),
+          }).sortValue;
         },
         cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) =>
           renderInterceptCell(params.data?.activity?.[colId], spec, isPrimary),

@@ -113,16 +113,32 @@ export interface InterceptDisplay {
   text: string;
   tooltip: string;
   warning: boolean;
+  /**
+   * Value AG Grid (and any other sorter) should compare on.
+   *
+   * Mirrors `kind` so the sort order matches the chemist's mental model:
+   *   - `scalar`   → the value (lowest = most potent)
+   *   - `qualifier`→ +Infinity (some response, weaker than the tested
+   *     range — sorts after all finite scalars but before nulls)
+   *   - `nd`       → null (no information — sinks to the bottom)
+   *   - `missing`  → null (same; no value to compare)
+   *
+   * Without this, sorting EC50 ascending would put Inactive curves at
+   * the top of the table next to truly potent compounds, since the Hill
+   * fitter parks an arbitrary asymptote-bound scalar on `fitted_value`
+   * even when the curve doesn't represent real activity.
+   */
+  sortValue: number | null;
 }
 
 const TOOLTIP_INACTIVE =
-  "Inactive curve — no determination. The fit didn't represent a real response, so this intercept is not reported.";
+  "ND = Not Determined. Curve was classified inactive, so the fitted scalar isn't reported.";
 const TOOLTIP_MISSING =
   "No value for this intercept. Recompute the curve to refresh.";
 const TOOLTIP_QUALIFIER =
   "Response did not reach this intercept within the tested concentration range. Reported as an upper-bound qualifier.";
 const TOOLTIP_AT_BOUND_NO_RANGE =
-  "Fit hit a bound, and no tested concentration is available to report as an upper bound.";
+  "ND = Not Determined. Fit hit a bound, and no tested concentration is available to report as an upper bound.";
 
 /**
  * Decide how an intercept cell should display its value.
@@ -145,10 +161,22 @@ export function formatInterceptDisplay(args: {
   max_dose: number | null;
 }): InterceptDisplay {
   if (args.curve_class === "inactive") {
-    return { kind: "nd", text: "ND", tooltip: TOOLTIP_INACTIVE, warning: false };
+    return {
+      kind: "nd",
+      text: "ND",
+      tooltip: TOOLTIP_INACTIVE,
+      warning: false,
+      sortValue: null,
+    };
   }
   if (args.value == null) {
-    return { kind: "missing", text: "—", tooltip: TOOLTIP_MISSING, warning: false };
+    return {
+      kind: "missing",
+      text: "—",
+      tooltip: TOOLTIP_MISSING,
+      warning: false,
+      sortValue: null,
+    };
   }
   if (args.at_bound) {
     if (args.max_dose != null && Number.isFinite(args.max_dose) && args.max_dose > 0) {
@@ -157,11 +185,26 @@ export function formatInterceptDisplay(args: {
         text: `> ${args.max_dose.toPrecision(4)}`,
         tooltip: TOOLTIP_QUALIFIER,
         warning: true,
+        // Some response, weaker than tested range — sorts after every
+        // finite scalar in ascending order but ahead of nulls.
+        sortValue: Number.POSITIVE_INFINITY,
       };
     }
-    return { kind: "nd", text: "ND", tooltip: TOOLTIP_AT_BOUND_NO_RANGE, warning: false };
+    return {
+      kind: "nd",
+      text: "ND",
+      tooltip: TOOLTIP_AT_BOUND_NO_RANGE,
+      warning: false,
+      sortValue: null,
+    };
   }
-  return { kind: "scalar", text: args.value.toPrecision(4), tooltip: "", warning: false };
+  return {
+    kind: "scalar",
+    text: args.value.toPrecision(4),
+    tooltip: "",
+    warning: false,
+    sortValue: args.value,
+  };
 }
 
 /**

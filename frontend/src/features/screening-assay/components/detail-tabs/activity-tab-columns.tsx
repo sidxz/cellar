@@ -261,10 +261,15 @@ function buildInterceptColumn(
       const rv = params.data?.readouts?.[rd.name];
       if (!rv) return null;
       const iv = findInterceptValue(rv.curve_params?.intercept_values, spec);
-      if (iv) return iv.value;
-      // Primary intercept falls back to the headline `best` for legacy
-      // curves that don't carry persisted intercept_values.
-      return isPrimary ? (rv.best ?? null) : null;
+      // Same display rule the cellRenderer applies — keeps sort and
+      // display in lockstep (inactive → null, qualifier → +Infinity).
+      const value = iv?.value ?? (isPrimary ? (rv.best ?? null) : null);
+      return formatInterceptDisplay({
+        value,
+        at_bound: iv?.at_bound,
+        curve_class: rv.curve_class,
+        max_dose: maxDoseFromRawData(rv.data_points),
+      }).sortValue;
     },
     cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
       const rv = params.data?.readouts?.[rd.name];

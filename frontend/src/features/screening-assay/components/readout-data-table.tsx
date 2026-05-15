@@ -283,8 +283,15 @@ export function ReadoutDataTable({
                 const curve = p.data?.curves.get(rd.id);
                 if (!curve) return null;
                 const iv = findInterceptValue(curve.intercept_values, spec);
-                if (iv) return iv.value;
-                return isPrimary ? curve.fitted_value : null;
+                const value = iv?.value ?? (isPrimary ? curve.fitted_value : null);
+                return formatInterceptDisplay({
+                  value,
+                  at_bound: iv?.at_bound,
+                  curve_class: curve.curve_class,
+                  max_dose: maxDoseFromRawData(
+                    curve.raw_data as Array<{ x?: number; concentration?: number }> | null,
+                  ),
+                }).sortValue;
               },
               cellRenderer: (params: { data: PivotRow | undefined }) => {
                 const curve = params.data?.curves.get(rd.id);
