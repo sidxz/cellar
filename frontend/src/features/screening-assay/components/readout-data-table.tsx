@@ -10,7 +10,12 @@ import { type ReactNode, useMemo } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
-import { findInterceptValue, interceptLabel } from "../lib/intercept-label";
+import {
+  findInterceptValue,
+  formatInterceptDisplay,
+  interceptLabel,
+  maxDoseFromRawData,
+} from "../lib/intercept-label";
 import { resolvePickListColor } from "../lib/pick-list-colors";
 import {
   type DoseResponseCurve,
@@ -288,37 +293,46 @@ export function ReadoutDataTable({
                 }
                 const iv = findInterceptValue(curve.intercept_values, spec);
                 const value = iv?.value ?? (isPrimary ? curve.fitted_value : null);
-                if (value == null) {
-                  return (
-                    <span
-                      className="text-muted-foreground"
-                      title="No value for this intercept. Recompute the curve to refresh."
-                    >
-                      {"—"}
-                    </span>
-                  );
-                }
-                if (iv?.at_bound) {
+                const display = formatInterceptDisplay({
+                  value,
+                  at_bound: iv?.at_bound,
+                  curve_class: curve.curve_class,
+                  max_dose: maxDoseFromRawData(
+                    curve.raw_data as Array<{ x?: number; concentration?: number }> | null,
+                  ),
+                });
+                const showUnit = display.kind === "scalar" || display.kind === "qualifier";
+                const unitSuffix =
+                  showUnit && curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
+                if (display.warning) {
                   return (
                     <Badge
                       variant="outline"
                       className="text-xs border-amber-500 text-amber-700"
+                      title={display.tooltip}
                     >
-                      <span className="font-mono">{value.toPrecision(4)}</span>
-                      <span className="ml-1">{"⚠︎"} at bound</span>
+                      <span className="font-mono">
+                        {display.text}
+                        {unitSuffix}
+                      </span>
                     </Badge>
                   );
                 }
+                const baseTooltip =
+                  display.tooltip ||
+                  (curve.curve_class
+                    ? `${curve.curve_class} · R² = ${curve.r_squared.toFixed(3)}`
+                    : undefined);
                 return (
                   <span
-                    className={cn(curve.curve_class === "inactive" && "text-muted-foreground")}
-                    title={
-                      curve.curve_class
-                        ? `${curve.curve_class} · R² = ${curve.r_squared.toFixed(3)}`
-                        : undefined
-                    }
+                    className={cn(
+                      "font-mono",
+                      display.kind !== "scalar" && "text-muted-foreground",
+                    )}
+                    title={baseTooltip}
                   >
-                    {value.toPrecision(4)} {curve.fitted_unit}
+                    {display.text}
+                    {unitSuffix}
                   </span>
                 );
               },
