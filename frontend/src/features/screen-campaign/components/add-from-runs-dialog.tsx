@@ -63,7 +63,7 @@ import {
   type InterceptKey,
   type InterceptSpec,
 } from "@/features/screening-assay/types";
-import { interceptLabel } from "@/features/screening-assay/lib/intercept-label";
+import { interceptOptionLabel } from "@/features/screening-assay/lib/intercept-label";
 import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
 import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
@@ -205,18 +205,6 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       const normSuffix = primaryNorm
         ? ` (${READOUT_NORMALIZATION_LABELS[primaryNorm as keyof typeof READOUT_NORMALIZATION_LABELS] ?? primaryNorm})`
         : "";
-      // Channel label dedupe: if a chemist names their readout the same as
-      // its primary intercept label (e.g. readout "EC50" with intercepts
-      // EC50 + EC90 — a CDD-style habit), the naive `${rd.name} ${interceptLabel}`
-      // produces "EC50 EC50" / "EC50 EC90". Drop the rd.name prefix when
-      // it's redundant with the primary intercept's label so labels read
-      // as "EC50" / "EC90". Non-DR / single-intercept paths keep `rd.name`.
-      const intercepts = rd.dose_response_config?.intercepts ?? [];
-      const primaryLabel =
-        intercepts.length > 0 ? interceptLabel(intercepts[0]) : null;
-      const rdNameMatchesPrimary =
-        primaryLabel !== null && rd.name.toLowerCase() === primaryLabel.toLowerCase();
-
       // Wire convention (Surface #7): primary stores as `intercept_key=null`
       // so the binding tracks the protocol's current primary if intercepts
       // are reordered later. Non-primary stores explicit `{kind, level}`.
@@ -242,11 +230,13 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       );
       const hasThreshold = defaults.hit_operator !== "";
 
-      // Resolve the final label per the dedupe heuristic above.
+      // Channel label uses the shared dedupe-aware helper so a readout named
+      // "EC50" with intercepts [EC50, EC90] reads as "EC50" / "EC90", not
+      // "EC50 EC50" / "EC50 EC90". Non-DR / single-intercept paths keep
+      // `rd.name` (with normalization suffix).
+      const intercepts = rd.dose_response_config?.intercepts ?? [];
       const channelLabel = intercept
-        ? rdNameMatchesPrimary
-          ? interceptLabel(intercept)
-          : `${rd.name} ${interceptLabel(intercept)}`
+        ? interceptOptionLabel(rd.name, intercepts[0] ?? intercept, intercept)
         : `${rd.name}${normSuffix}`;
 
       return {

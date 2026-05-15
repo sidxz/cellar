@@ -226,29 +226,59 @@ export type RunScope =
   | { mode: "any" }
   | { mode: "latest" }
   | { mode: "all" }
-  | { mode: "specific"; run_id: string }
+  | {
+      mode: "specific";
+      /** Preferred multi-select shape: compound matches if it appears in any
+       *  of the listed runs (OR semantics). */
+      run_ids?: string[];
+      /** Legacy single-run shape kept for saved-search round-trip; new UI
+       *  emits `run_ids`. */
+      run_id?: string;
+    }
   | { mode: "date_range"; date_from?: string; date_to?: string }
   | { mode: "past_n_days"; days: number };
 
 export type RunScopeMode = RunScope["mode"];
 
+/** Bare `InterceptKey` mirror — see ``CurveInterceptSpec`` below for the
+ *  full spec. The where-condition only needs (kind, level) to disambiguate
+ *  which intercept on a multi-intercept DR readout it's filtering on. */
+export interface InterceptKey {
+  kind: "ic" | "ec";
+  level: number;
+}
+
 /** Which data table the condition reads from.
  *  - "dr_curve": the readout-def is a dose-response readout; the value
  *    is a fitted IC50/EC50/etc. from dose_response_curves.
  *  - "readout_data": the readout-def is a raw numeric readout; the value
- *    is an aggregated reading from readout_data. */
-export type ActivityWhereSource = "dr_curve" | "readout_data";
+ *    is an aggregated reading from readout_data.
+ *  - "curve_class": filters dose_response_curves.curve_class against a
+ *    list of allowed classes. Used by the "Curve Class" picker entry. */
+export type ActivityWhereSource = "dr_curve" | "readout_data" | "curve_class";
 
 /** A single where-condition on an activity criterion. Multiple conditions
  *  on the same criterion are ANDed together. */
 export interface ActivityWhereCondition {
   source: ActivityWhereSource;
+  /** Identifies the readout-def to filter on. Required for ``dr_curve`` /
+   *  ``readout_data``; ignored for ``curve_class`` (which spans all DR
+   *  curves in scope). */
   readout_definition_id: string;
-  /** Includes "between" — chemists routinely bracket potency. */
+  /** Includes "between" — chemists routinely bracket potency. Ignored when
+   *  source is ``curve_class``. */
   operator: PropertyOperator;
   value?: number;
   min?: number;
   max?: number;
+  /** For ``dr_curve`` sources: picks which intercept on a multi-intercept
+   *  fit (EC50, EC90, IC10, …) the operator/value applies to. ``null`` or
+   *  omitted = the readout-def's primary intercept (fast path:
+   *  ``fitted_value`` column). */
+  intercept_key?: InterceptKey | null;
+  /** For ``curve_class`` source: the allowed curve classes (multi-select).
+   *  E.g. ``["full", "partial"]`` to match well-fitted curves only. */
+  curve_classes?: string[];
 }
 
 export interface ActivityCriterion {

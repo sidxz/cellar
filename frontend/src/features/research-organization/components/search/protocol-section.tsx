@@ -5,7 +5,8 @@ import {
   useProtocol,
   useProtocolSummaries,
 } from "@/features/screening-assay/hooks/use-protocols";
-import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
+import { CURVE_CLASS_LABELS } from "@/features/screening-assay/types";
+import { Badge } from "@/shared/components/ui/badge";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Command,
@@ -28,6 +29,13 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  buildActivityWhereOptions,
+  CURVE_CLASS_OPTIONS,
+  parseWhereOptionId,
+  type WhereOption,
+  whereConditionOptionId,
+} from "../../lib/activity-where-options";
 import type {
   ActivityCriterion,
   ActivityWhereCondition,
@@ -83,31 +91,6 @@ function formatLastRun(iso: string | null): string {
 const RECENTS_LIMIT = 5;
 const RECENTS_MIN_TOTAL = 8; // only pin a recents group if the list is at least this long
 
-/** A DR readout-def usable as an activity-criterion column. Each row in the
- *  picker is an explicit readout — multi-DR protocols surface multiple rows
- *  (e.g. "Target IC50", "Counter IC50") instead of collapsing under one
- *  curve_type label. */
-interface DrReadoutOption {
-  id: string;
-  /** Display label: the readout-def name plus the curve_type suffix when
-   *  configured, e.g. ``Target potency (IC50)``. */
-  label: string;
-}
-
-function getProtocolDrReadouts(
-  protocol: import("@/features/screening-assay/types").Protocol | undefined,
-): DrReadoutOption[] {
-  if (!protocol?.readout_definitions) return [];
-  const options: DrReadoutOption[] = [];
-  for (const rd of protocol.readout_definitions) {
-    const ct = rd.dose_response_config?.curve_type;
-    if (!ct) continue;
-    const suffix = CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase();
-    options.push({ id: rd.id, label: `${rd.name} (${suffix})` });
-  }
-  return options;
-}
-
 export type ProtocolConjunction = "and" | "or";
 
 function defaultActivityCriterion(): ActivityCriterion {
@@ -134,17 +117,6 @@ function readWhere(c: ActivityCriterion): ActivityWhereCondition[] {
     return [cond];
   }
   return [];
-}
-
-/** Strip empty / incomplete where rows before sending to the backend. */
-function pruneWhere(where: ActivityWhereCondition[]): ActivityWhereCondition[] {
-  return where.filter((w) => {
-    if (!w.readout_definition_id) return false;
-    if (w.operator === "between") {
-      return w.min !== undefined && w.max !== undefined;
-    }
-    return w.value !== undefined && !Number.isNaN(w.value);
-  });
 }
 
 // ─── Protocol picker row ────────────────────────────────────────────────────
@@ -206,20 +178,13 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
 
 // ─── Activity where rows (multiple ANDed conditions) ───────────────────────
 
-interface NumericReadout {
-  id: string;
-  name: string;
-  unit?: string | null;
-}
-
 interface WhereListProps {
   where: ActivityWhereCondition[];
-  drReadouts: DrReadoutOption[];
-  numericReadouts: NumericReadout[];
+  options: WhereOption[];
   onChange: (next: ActivityWhereCondition[]) => void;
 }
 
-function WhereList({ where, drReadouts, numericReadouts, onChange }: WhereListProps) {
+function WhereList({ where, options, onChange }: WhereListProps) {
   function update(i: number, next: ActivityWhereCondition) {
     onChange(where.map((w, idx) => (idx === i ? next : w)));
   }
@@ -248,8 +213,7 @@ function WhereList({ where, drReadouts, numericReadouts, onChange }: WhereListPr
               key={i}
               cond={cond}
               isFirst={i === 0}
-              drReadouts={drReadouts}
-              numericReadouts={numericReadouts}
+              options={options}
               onChange={(next) => update(i, next)}
               onRemove={() => remove(i)}
             />
@@ -271,27 +235,17 @@ function WhereList({ where, drReadouts, numericReadouts, onChange }: WhereListPr
 interface WhereRowProps {
   cond: ActivityWhereCondition;
   isFirst: boolean;
-  drReadouts: DrReadoutOption[];
-  numericReadouts: NumericReadout[];
+  options: WhereOption[];
   onChange: (next: ActivityWhereCondition) => void;
   onRemove: () => void;
 }
 
-function WhereRow({
-  cond,
-  isFirst,
-  drReadouts,
-  numericReadouts,
-  onChange,
-  onRemove,
-}: WhereRowProps) {
-  // The picker exposes every DR readout-def and every numeric readout-def
-  // as its own entry; the row stores the readout-def id plus a `source`
-  // discriminator telling the backend which table to query.
-  const fieldValue = cond.readout_definition_id
-    ? `${cond.source ?? "dr_curve"}:${cond.readout_definition_id}`
-    : "";
+function WhereRow({ cond, isFirst, options, onChange, onRemove }: WhereRowProps) {
+  // The picker emits a stable option id; the row stores the (source,
+  // readout-def, intercept_key) triple plus an operator and value.
+  const fieldValue = whereConditionOptionId(cond);
   const isBetween = cond.operator === "between";
+  const isCurveClass = cond.source === "curve_class";
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
@@ -300,8 +254,8 @@ function WhereRow({
         {isFirst ? "where" : "and"}
       </span>
 
-      {/* Readout-def picker (DR readouts hit dose_response_curves; numeric
-          readouts hit readout_data) */}
+      {/* Readout-def + intercept picker (DR intercepts, numeric readouts,
+          and a Curve Class entry — all derived from the protocol). */}
       <Select
         value={fieldValue}
         onValueChange={(v) => {
@@ -309,128 +263,140 @@ function WhereRow({
             onChange({ ...cond, readout_definition_id: "" });
             return;
           }
-          const sep = v.indexOf(":");
-          const src = v.slice(0, sep) as "dr_curve" | "readout_data";
-          const rdId = v.slice(sep + 1);
-          onChange({ ...cond, source: src, readout_definition_id: rdId });
-        }}
-      >
-        <SelectTrigger className="h-8 w-44 text-sm shrink-0">
-          <SelectValue placeholder="select readout…" />
-        </SelectTrigger>
-        <SelectContent>
-          {drReadouts.length > 0 && (
-            <>
-              <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                Dose-response
-              </div>
-              {drReadouts.map((rd) => (
-                <SelectItem key={rd.id} value={`dr_curve:${rd.id}`}>
-                  {rd.label}
-                </SelectItem>
-              ))}
-            </>
-          )}
-          {numericReadouts.length > 0 && (
-            <>
-              <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                Numeric readouts
-              </div>
-              {numericReadouts.map((rd) => (
-                <SelectItem key={rd.id} value={`readout_data:${rd.id}`}>
-                  {rd.name}
-                  {rd.unit ? ` (${rd.unit})` : ""}
-                </SelectItem>
-              ))}
-            </>
-          )}
-          {drReadouts.length === 0 && numericReadouts.length === 0 && (
-            <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-              No readouts configured
-            </div>
-          )}
-        </SelectContent>
-      </Select>
-
-      {/* Operator */}
-      <Select
-        value={cond.operator}
-        onValueChange={(v) => {
-          const nextOp = v as PropertyOperator;
-          // Switch between value <-> min/max so stale fields don't go to backend.
-          if (nextOp === "between") {
+          const parsed = parseWhereOptionId(v);
+          if (!parsed) return;
+          // Reset operator + value/curve_classes when source category
+          // changes so stale fields don't leak to the backend.
+          if (parsed.source === "curve_class") {
             onChange({
               ...cond,
-              operator: nextOp,
+              ...parsed,
+              operator: "eq",
               value: undefined,
-              min: cond.min ?? cond.value ?? undefined,
-              max: cond.max ?? undefined,
+              min: undefined,
+              max: undefined,
+              curve_classes: cond.curve_classes ?? [],
             });
           } else {
             onChange({
               ...cond,
-              operator: nextOp,
-              value: cond.value ?? cond.min ?? undefined,
-              min: undefined,
-              max: undefined,
+              ...parsed,
+              operator: cond.operator === "eq" || isCurveClass ? "lt" : cond.operator,
+              curve_classes: undefined,
             });
           }
         }}
       >
-        <SelectTrigger className="h-8 w-24 text-sm shrink-0">
-          <SelectValue />
+        <SelectTrigger className="h-8 w-56 text-sm shrink-0">
+          <SelectValue placeholder="select readout…" />
         </SelectTrigger>
         <SelectContent>
-          {PROPERTY_OPERATORS.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
+          <WhereOptionList options={options} />
         </SelectContent>
       </Select>
 
-      {/* Value (or min/max for between) */}
-      {isBetween ? (
+      {isCurveClass ? (
         <>
-          <Input
-            type="number"
-            className="h-8 w-20 text-sm"
-            placeholder="min"
-            value={cond.min ?? ""}
-            onChange={(e) =>
+          {/* Curve-class is a categorical "is one of" filter — no operator
+              dropdown, just "is" + the multi-select chip group. */}
+          <span className="text-sm text-muted-foreground shrink-0">is</span>
+          <CurveClassChipGroup
+            value={cond.curve_classes ?? []}
+            onChange={(next) =>
               onChange({
                 ...cond,
-                min: e.target.value === "" ? undefined : Number(e.target.value),
-              })
-            }
-          />
-          <span className="text-xs text-muted-foreground">and</span>
-          <Input
-            type="number"
-            className="h-8 w-20 text-sm"
-            placeholder="max"
-            value={cond.max ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...cond,
-                max: e.target.value === "" ? undefined : Number(e.target.value),
+                curve_classes: next,
+                operator: "eq",
+                value: undefined,
+                min: undefined,
+                max: undefined,
               })
             }
           />
         </>
       ) : (
-        <Input
-          type="number"
-          className="h-8 w-20 text-sm"
-          placeholder="value"
-          value={cond.value ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...cond,
-              value: e.target.value === "" ? undefined : Number(e.target.value),
-            })
-          }
-        />
+        <>
+          {/* Operator */}
+          <Select
+            value={cond.operator}
+            onValueChange={(v) => {
+              const nextOp = v as PropertyOperator;
+              // Switch between value <-> min/max so stale fields don't go to backend.
+              if (nextOp === "between") {
+                onChange({
+                  ...cond,
+                  operator: nextOp,
+                  value: undefined,
+                  min: cond.min ?? cond.value ?? undefined,
+                  max: cond.max ?? undefined,
+                });
+              } else {
+                onChange({
+                  ...cond,
+                  operator: nextOp,
+                  value: cond.value ?? cond.min ?? undefined,
+                  min: undefined,
+                  max: undefined,
+                });
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-24 text-sm shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROPERTY_OPERATORS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Value (or min/max for between) */}
+          {isBetween ? (
+            <>
+              <Input
+                type="number"
+                className="h-8 w-20 text-sm"
+                placeholder="min"
+                value={cond.min ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...cond,
+                    min: e.target.value === "" ? undefined : Number(e.target.value),
+                  })
+                }
+              />
+              <span className="text-xs text-muted-foreground">and</span>
+              <Input
+                type="number"
+                className="h-8 w-20 text-sm"
+                placeholder="max"
+                value={cond.max ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...cond,
+                    max: e.target.value === "" ? undefined : Number(e.target.value),
+                  })
+                }
+              />
+            </>
+          ) : (
+            <Input
+              type="number"
+              className="h-8 w-20 text-sm"
+              placeholder="value"
+              value={cond.value ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...cond,
+                  value: e.target.value === "" ? undefined : Number(e.target.value),
+                })
+              }
+            />
+          )}
+        </>
       )}
 
       {/* Remove this condition */}
@@ -442,6 +408,94 @@ function WhereRow({
       >
         <Minus className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+function WhereOptionList({ options }: { options: WhereOption[] }) {
+  if (options.length === 0) {
+    return (
+      <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+        No readouts configured
+      </div>
+    );
+  }
+  const dr = options.filter((o) => o.group === "dose_response");
+  const numeric = options.filter((o) => o.group === "numeric_readout");
+  const curve = options.filter((o) => o.group === "curve_class");
+  return (
+    <>
+      {dr.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+            Dose-response
+          </div>
+          {dr.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </>
+      )}
+      {numeric.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+            Numeric readouts
+          </div>
+          {numeric.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.label}
+              {o.unit ? ` (${o.unit})` : ""}
+            </SelectItem>
+          ))}
+        </>
+      )}
+      {curve.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+            Curve quality
+          </div>
+          {curve.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+function CurveClassChipGroup({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const selected = new Set(value);
+  function toggle(v: string) {
+    if (selected.has(v)) onChange(value.filter((x) => x !== v));
+    else onChange([...value, v]);
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {CURVE_CLASS_OPTIONS.map((opt) => {
+        const active = selected.has(opt.value);
+        return (
+          <Badge
+            key={opt.value}
+            variant={active ? "default" : "outline"}
+            onClick={() => toggle(opt.value)}
+            className={cn(
+              "cursor-pointer select-none text-xs font-normal",
+              active ? "" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {CURVE_CLASS_LABELS[opt.value] ?? opt.label}
+          </Badge>
+        );
+      })}
     </div>
   );
 }
@@ -517,12 +571,8 @@ function ActivityRow({
 
   const selectedProtocol = protocols.find((p) => p.id === criterion.protocol_id);
 
-  const numericReadouts =
-    protocol?.readout_definitions?.filter(
-      (rd) => rd.data_type === "numeric" && !rd.dose_response_config,
-    ) ?? [];
+  const whereOptions = useMemo(() => buildActivityWhereOptions(protocol), [protocol]);
 
-  const drReadouts = getProtocolDrReadouts(protocol);
   const hasProtocol = Boolean(criterion.protocol_id);
   // Pristine rows don't surface validation — the row is a passive
   // "always-visible empty row" placeholder. Only flag invalid once the
@@ -705,8 +755,7 @@ function ActivityRow({
               ("compounds screened in this protocol/scope"). */}
           <WhereList
             where={whereList}
-            drReadouts={drReadouts}
-            numericReadouts={numericReadouts}
+            options={whereOptions}
             onChange={(next) => {
               // Drop the inline single-where fields once we manage where[].
               onChange({

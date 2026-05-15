@@ -22,7 +22,7 @@ import type {
   InterceptKey,
   ReadoutDefinition,
 } from "../types";
-import { interceptLabel } from "./intercept-label";
+import { interceptOptionLabel } from "./intercept-label";
 
 export interface HitCriterionOption {
   /** Stable id used as the Select value. */
@@ -66,11 +66,14 @@ export function buildHitCriterionOptions(
         });
         continue;
       }
+      const primary = specs[0];
       for (let i = 0; i < specs.length; i++) {
         const s = specs[i];
         out.push({
           id: interceptOptionId(rd.name, s.kind, s.level),
-          label: `${rd.name} ${interceptLabel(s)}`,
+          // Dedupe-aware: a readout named "EC50" with intercepts [EC50, EC90]
+          // shows as "EC50" / "EC90" rather than "EC50 EC50" / "EC50 EC90".
+          label: interceptOptionLabel(rd.name, primary, s),
           readout_name: rd.name,
           // Primary stays unkeyed so a saved rule survives a protocol relabel
           // and so legacy criteria don't grow an intercept_key just by being

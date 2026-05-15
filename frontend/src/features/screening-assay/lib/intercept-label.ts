@@ -64,6 +64,33 @@ export function interceptKeyLabel(key: InterceptKey): string {
   return formatKindLevel(key.kind, key.level);
 }
 
+/**
+ * Display label for "this readout-def's intercept N" — used by any picker
+ * or table that lists one row per `(readout-def, intercept)` pair.
+ *
+ * Dedupes the redundant case: when a chemist names a readout-def the same
+ * as its primary intercept (a CDD-style habit — readout "EC50" with
+ * intercepts EC50 + EC90), the naive `${rdName} ${interceptLabel(spec)}`
+ * produces "EC50 EC50" / "EC50 EC90". This helper drops the readout-def
+ * prefix in that case so the labels read as "EC50" / "EC90".
+ *
+ * Other shapes pass through untouched: "Resazurin" + EC50 stays
+ * "Resazurin EC50"; "Resazurin" + EC90 stays "Resazurin EC90".
+ */
+export function interceptOptionLabel(
+  rdName: string,
+  primary: InterceptSpec,
+  spec: InterceptSpec,
+): string {
+  const thisLabel = interceptLabel(spec);
+  const primaryLabel = interceptLabel(primary);
+  // Case-insensitive — the chemist may have typed "ec50" or "EC50".
+  if (rdName.toLowerCase() === primaryLabel.toLowerCase()) {
+    return thisLabel;
+  }
+  return `${rdName} ${thisLabel}`;
+}
+
 /** Stable, parseable id for an intercept — used as a form value /
  *  radio-group key. Stringified `${kind}:${level}` so the round-trip
  *  through `parseInterceptKeyId` is exact. */

@@ -327,6 +327,9 @@ export function SearchForm({
     const cleanedActivity = activityCriteria.map((c) => {
       if (!Array.isArray(c.where)) return c;
       const cleaned = c.where.filter((w) => {
+        if (w.source === "curve_class") {
+          return Array.isArray(w.curve_classes) && w.curve_classes.length > 0;
+        }
         if (!w.readout_definition_id) return false;
         if (w.operator === "between") {
           return w.min !== undefined && w.max !== undefined;

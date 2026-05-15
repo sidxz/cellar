@@ -14,6 +14,7 @@ import {
   findInterceptValue,
   formatInterceptDisplay,
   interceptLabel,
+  interceptOptionLabel,
   maxDoseFromRawData,
 } from "../lib/intercept-label";
 import { resolvePickListColor } from "../lib/pick-list-colors";
@@ -267,9 +268,14 @@ export function ReadoutDataTable({
         const intercepts: InterceptSpec[] = rd.dose_response_config?.intercepts ?? [];
         const drHeader = rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
         if (intercepts.length > 0) {
+          const primary = intercepts[0];
           intercepts.forEach((spec, idx) => {
             const isPrimary = idx === 0;
-            const header = `${rd.name} ${interceptLabel(spec)}${rd.unit ? ` (${rd.unit})` : ""}`;
+            // Dedupe-aware header — drops the rd-name prefix when it equals
+            // the primary intercept's label (e.g. readout "EC50" + intercepts
+            // [EC50, EC90] reads as "EC50" / "EC90", not "EC50 EC50").
+            const baseLabel = interceptOptionLabel(rd.name, primary, spec);
+            const header = rd.unit ? `${baseLabel} (${rd.unit})` : baseLabel;
             cols.push({
               headerName: header,
               headerTooltip:

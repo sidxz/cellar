@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, CircleDashed } from "lucide-react";
+import { Check, ChevronsUpDown, X } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -111,7 +112,7 @@ export function RunScopePicker({
     else if (next === "all") onChange({ mode: "all" });
     else if (next === "date_range") onChange({ mode: "date_range" });
     else if (next === "past_n_days") onChange({ mode: "past_n_days", days: 30 });
-    else if (next === "specific") onChange({ mode: "specific", run_id: "" });
+    else if (next === "specific") onChange({ mode: "specific", run_ids: [] });
   }
 
   return (
@@ -142,12 +143,20 @@ export function RunScopePicker({
       {value?.mode === "specific" && (
         <SpecificRunPicker
           protocolId={protocolId}
-          runId={value.run_id}
-          onPick={(rid) => onChange({ mode: "specific", run_id: rid })}
+          runIds={specificRunIds(value)}
+          onChange={(ids) => onChange({ mode: "specific", run_ids: ids })}
         />
       )}
     </div>
   );
+}
+
+/** Normalize legacy single-run `run_id` to the multi-select shape so the
+ *  picker only has to think in one model. */
+function specificRunIds(value: Extract<RunScope, { mode: "specific" }>): string[] {
+  if (value.run_ids && value.run_ids.length > 0) return value.run_ids;
+  if (value.run_id) return [value.run_id];
+  return [];
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
@@ -210,12 +219,12 @@ function PastNDaysInput({
 
 function SpecificRunPicker({
   protocolId,
-  runId,
-  onPick,
+  runIds,
+  onChange,
 }: {
   protocolId: string;
-  runId: string;
-  onPick: (id: string) => void;
+  runIds: string[];
+  onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const { data: runs, isLoading } = useRunsByProtocol(protocolId);
@@ -234,7 +243,26 @@ function SpecificRunPicker({
     );
   }, [runs]);
 
-  const selected = sortedRuns.find((r) => r.id === runId);
+  const selectedSet = useMemo(() => new Set(runIds), [runIds]);
+  const selectedRuns = useMemo(
+    () => sortedRuns.filter((r) => selectedSet.has(r.id)),
+    [sortedRuns, selectedSet],
+  );
+
+  function toggle(id: string) {
+    if (selectedSet.has(id)) {
+      onChange(runIds.filter((rid) => rid !== id));
+    } else {
+      onChange([...runIds, id]);
+    }
+  }
+
+  const triggerLabel = (() => {
+    if (selectedRuns.length === 0) return "Choose runs…";
+    if (selectedRuns.length === 1) return runIdentifier(selectedRuns[0]);
+    return `${selectedRuns.length} runs selected`;
+  })();
+  const invalid = runIds.length === 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -243,36 +271,29 @@ function SpecificRunPicker({
           type="button"
           className={cn(
             "flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
-            !runId && "border-destructive text-muted-foreground"
+            invalid && "border-destructive text-muted-foreground"
           )}
-          aria-invalid={!runId}
+          aria-invalid={invalid}
         >
-          {selected ? (
+          {selectedRuns.length === 1 ? (
             <span className="flex min-w-0 items-center gap-1.5">
               <span
                 className={cn(
                   "h-2 w-2 rounded-full shrink-0",
-                  statusColor(selected.status, selected.is_locked)
+                  statusColor(selectedRuns[0].status, selectedRuns[0].is_locked)
                 )}
                 aria-hidden
               />
-              <span className="truncate">{runIdentifier(selected)}</span>
-            </span>
-          ) : runId ? (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <CircleDashed className="h-3 w-3 shrink-0" />
-              <span className="truncate font-mono text-xs">
-                {runId.slice(0, 8)}…
-              </span>
+              <span className="truncate">{triggerLabel}</span>
             </span>
           ) : (
-            <span>Choose run…</span>
+            <span className="truncate">{triggerLabel}</span>
           )}
           <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="p-0 w-96 max-w-[calc(100vw-2rem)]"
+        className="p-0 w-[28rem] max-w-[calc(100vw-2rem)]"
         align="start"
       >
         <TooltipProvider delayDuration={250}>
@@ -291,6 +312,7 @@ function SpecificRunPicker({
                     memberById.get(run.operator) ?? "Unknown user";
                   const identifier = runIdentifier(run);
                   const conditions = conditionsSummary(run.conditions);
+                  const checked = selectedSet.has(run.id);
                   const haystack = [
                     run.run_date,
                     operatorName,
@@ -305,20 +327,19 @@ function SpecificRunPicker({
                     <CommandItem
                       key={run.id}
                       value={`${run.id} ${haystack}`}
-                      onSelect={() => {
-                        onPick(run.id);
-                        setOpen(false);
-                      }}
+                      // Keep the popover open so the chemist can pick
+                      // multiple runs without re-opening it each time.
+                      onSelect={() => toggle(run.id)}
                       className="text-sm py-1.5"
                     >
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div className="flex w-full min-w-0 items-center gap-2">
-                            <Check
-                              className={cn(
-                                "h-3 w-3 shrink-0",
-                                run.id === runId ? "opacity-100" : "opacity-0"
-                              )}
+                            <Checkbox
+                              checked={checked}
+                              tabIndex={-1}
+                              className="h-3.5 w-3.5 shrink-0 pointer-events-none"
+                              aria-hidden
                             />
                             <span
                               className={cn(
@@ -381,6 +402,22 @@ function SpecificRunPicker({
                 })}
               </CommandGroup>
             </CommandList>
+            {/* Footer — quick selection clears + count */}
+            <div className="flex items-center justify-between border-t border-border px-3 py-2 text-xs text-muted-foreground">
+              <span>
+                {runIds.length} of {sortedRuns.length} selected
+              </span>
+              {runIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onChange([])}
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                  clear
+                </button>
+              )}
+            </div>
           </Command>
         </TooltipProvider>
       </PopoverContent>

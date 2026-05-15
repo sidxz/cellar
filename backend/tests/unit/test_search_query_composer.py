@@ -741,6 +741,259 @@ class TestComposeCriteria:
             })
 
 
+# ── Multi-select run scope + intercept-key + curve_class tests ─────────────
+
+
+class TestActivityMultiRunSpecific:
+    """Multi-select runs: `run_scope: {mode: specific, run_ids: [...]}`."""
+
+    def test_specific_with_run_ids_multi_emits_in_clause(self) -> None:
+        proto = str(uuid.uuid4())
+        run_a = str(uuid.uuid4())
+        run_b = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "source": "dr_curve",
+                    "readout_definition_id": str(uuid.uuid4()),
+                    "operator": "lt",
+                    "value": 1.0,
+                    "run_scope": {"mode": "specific", "run_ids": [run_a, run_b]},
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # Two ids → `IN (...)`; bind params render as ``?`` / ``:run_id_1`` etc.
+        # but the SQL must include both an IN clause and the run_id column.
+        assert " IN " in sql.upper()
+        assert "run_id" in sql
+
+    def test_specific_with_run_ids_single_uses_equality(self) -> None:
+        """A single id list still compiles to an equality for plan stability."""
+        proto = str(uuid.uuid4())
+        run = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "source": "dr_curve",
+                    "readout_definition_id": str(uuid.uuid4()),
+                    "operator": "lt",
+                    "value": 1.0,
+                    "run_scope": {"mode": "specific", "run_ids": [run]},
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # Single id should compile to an equality on run_id (plan-friendlier
+        # than an IN list of one). The outer molecule-subquery uses ``IN``,
+        # but the run_id constraint itself should be `run_id = ?`.
+        assert "run_id =" in sql.lower() or "run_id  =" in sql.lower()
+
+    def test_specific_legacy_run_id_still_works(self) -> None:
+        """Saved-search round-trip: legacy single-id shape stays valid."""
+        proto = str(uuid.uuid4())
+        run = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "source": "dr_curve",
+                    "readout_definition_id": str(uuid.uuid4()),
+                    "operator": "lt",
+                    "value": 1.0,
+                    "run_scope": {"mode": "specific", "run_id": run},
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "run_id" in sql
+
+    def test_specific_empty_raises(self) -> None:
+        proto = str(uuid.uuid4())
+        with pytest.raises(ValueError, match="specific"):
+            _compose({
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": proto,
+                        "source": "dr_curve",
+                        "readout_definition_id": str(uuid.uuid4()),
+                        "operator": "lt",
+                        "value": 1.0,
+                        "run_scope": {"mode": "specific", "run_ids": []},
+                    }
+                ],
+                "logic": "and",
+            })
+
+
+class TestActivityInterceptKey:
+    """Filter on a secondary intercept (EC90 of an EC50-primary fit)."""
+
+    def test_intercept_key_uses_jsonb_lookup(self) -> None:
+        proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "where": [
+                        {
+                            "source": "dr_curve",
+                            "readout_definition_id": rd,
+                            "operator": "lt",
+                            "value": 50.0,
+                            "intercept_key": {"kind": "ec", "level": 90},
+                        }
+                    ],
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # The JSONB path: `jsonb_array_elements(intercept_values)` is the
+        # giveaway. With an intercept_key set we must NOT collapse onto
+        # `fitted_value` (that would silently return EC50 instead of EC90).
+        assert "jsonb_array_elements" in sql.lower()
+        assert "intercept_values" in sql
+
+    def test_intercept_key_null_uses_fitted_value(self) -> None:
+        """Primary intercept stays on the fast fitted_value path."""
+        proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "where": [
+                        {
+                            "source": "dr_curve",
+                            "readout_definition_id": rd,
+                            "operator": "lt",
+                            "value": 1.0,
+                            "intercept_key": None,
+                        }
+                    ],
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "fitted_value" in sql
+        assert "jsonb_array_elements" not in sql.lower()
+
+    def test_intercept_key_invalid_kind_raises(self) -> None:
+        proto = str(uuid.uuid4())
+        rd = str(uuid.uuid4())
+        with pytest.raises(ValueError, match="intercept_key"):
+            _compose({
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": proto,
+                        "where": [
+                            {
+                                "source": "dr_curve",
+                                "readout_definition_id": rd,
+                                "operator": "lt",
+                                "value": 1.0,
+                                "intercept_key": {"kind": "kd", "level": 50},
+                            }
+                        ],
+                    }
+                ],
+                "logic": "and",
+            })
+
+
+class TestActivityCurveClassFilter:
+    """Filter on curve_class — a categorical, no readout-def required."""
+
+    def test_curve_class_filter_emits_in_clause(self) -> None:
+        proto = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "where": [
+                        {
+                            "source": "curve_class",
+                            # readout_definition_id is empty — curve_class
+                            # spans every DR curve in scope.
+                            "readout_definition_id": "",
+                            "curve_classes": ["full", "partial"],
+                        }
+                    ],
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        # Class names render as bind params — assert structural elements.
+        assert "curve_class" in sql
+        assert " IN " in sql.upper()
+        # Backend filter must scope by protocol_id (so curve_class on protocol A
+        # doesn't accidentally match molecules screened on protocol B).
+        assert "protocol_id" in sql
+
+    def test_curve_class_filter_empty_list_raises(self) -> None:
+        proto = str(uuid.uuid4())
+        with pytest.raises(ValueError, match="curve_classes"):
+            _compose({
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": proto,
+                        "where": [
+                            {
+                                "source": "curve_class",
+                                "readout_definition_id": "",
+                                "curve_classes": [],
+                            }
+                        ],
+                    }
+                ],
+                "logic": "and",
+            })
+
+    def test_curve_class_filter_with_specific_run_scope(self) -> None:
+        """run_scope must apply to the curve_class subquery too."""
+        proto = str(uuid.uuid4())
+        run = str(uuid.uuid4())
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "activity",
+                    "protocol_id": proto,
+                    "where": [
+                        {
+                            "source": "curve_class",
+                            "readout_definition_id": "",
+                            "curve_classes": ["inactive"],
+                        }
+                    ],
+                    "run_scope": {"mode": "specific", "run_ids": [run]},
+                }
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile())
+        assert "curve_class" in sql
+        # run_scope must wire a run_id constraint into the curve_class subquery.
+        assert "run_id" in sql
+
+
 # ── New discriminated-union structure tests ────────────────────────────────
 
 

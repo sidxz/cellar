@@ -11,6 +11,8 @@ import uuid
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy import column
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
@@ -93,6 +95,8 @@ def _normalize_where(criterion: dict[str, Any]) -> list[dict[str, Any]]:
         inline["min"] = criterion["min"]
     if "max" in criterion:
         inline["max"] = criterion["max"]
+    if criterion.get("intercept_key") is not None:
+        inline["intercept_key"] = criterion["intercept_key"]
     return [inline]
 
 
@@ -103,17 +107,56 @@ def _activity_where_clause(
     run_scope: Any,
 ) -> ColumnElement:
     """Compose a single where-condition into a molecule-id subquery."""
+    source = cond.get("source", "dr_curve")
+
+    # Curve-class is a categorical filter against dose_response_curves.curve_class.
+    # It spans *every* DR curve in scope (no readout-def constraint) — matches
+    # any molecule that has at least one curve of the picked class in the
+    # protocol/scope. Coarser than the dr_curve / readout_data filters.
+    if source == "curve_class":
+        classes = cond.get("curve_classes") or []
+        if not isinstance(classes, list) or not classes:
+            msg = "curve_class source requires non-empty curve_classes list"
+            raise ValueError(msg)
+        base_filters: list[ColumnElement] = [
+            DoseResponseCurveModel.workspace_id == workspace_id,
+            DoseResponseCurveModel.protocol_id == protocol_id,
+            DoseResponseCurveModel.curve_class.in_(classes),
+        ]
+        scope_filter = _run_scope_filter(
+            run_scope, workspace_id, protocol_id, DoseResponseCurveModel.run_id
+        )
+        if scope_filter is not None:
+            base_filters.append(scope_filter)
+        return MoleculeModel.id.in_(
+            sa.select(DoseResponseCurveModel.molecule_id).where(*base_filters)
+        )
+
     rd_id = cond.get("readout_definition_id")
     if not rd_id:
         msg = "where condition needs readout_definition_id"
         raise ValueError(msg)
 
-    source = cond.get("source", "dr_curve")
     if source == "dr_curve":
-        data_col = DoseResponseCurveModel.fitted_value
+        # Pick the column to filter on. The primary intercept is the headline
+        # `fitted_value` (indexed, fast). Secondary intercepts (EC90 on an EC50-
+        # primary fit, etc.) live in the `intercept_values` JSONB array — keyed
+        # by (kind, level) per the spec at
+        # docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md.
+        ik = cond.get("intercept_key")
+        data_col: Any
+        if ik is None:
+            data_col = DoseResponseCurveModel.fitted_value
+        else:
+            kind = ik.get("kind") if isinstance(ik, dict) else None
+            level = ik.get("level") if isinstance(ik, dict) else None
+            if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
+                msg = f"Invalid intercept_key on activity where: {ik!r}"
+                raise ValueError(msg)
+            data_col = _jsonb_intercept_value(kind, float(level))
         molecule_col = DoseResponseCurveModel.molecule_id
         run_id_col = DoseResponseCurveModel.run_id
-        base_filters: list[ColumnElement] = [
+        base_filters = [
             DoseResponseCurveModel.workspace_id == workspace_id,
             DoseResponseCurveModel.readout_definition_id == rd_id,
         ]
@@ -162,6 +205,39 @@ def _activity_where_clause(
     return MoleculeModel.id.in_(sa.select(molecule_col).where(*base_filters, value_filter))
 
 
+def _jsonb_intercept_value(kind: str, level: float) -> ColumnElement:
+    """Build a SQL expression that pulls the numeric value of a specific
+    intercept (identified by (kind, level)) out of the curve's
+    ``intercept_values`` JSONB array.
+
+    Used for filtering on a secondary intercept (e.g. EC90 on an EC50-primary
+    fit). Returns NULL when the curve has no matching intercept, which makes
+    the comparison evaluate to NULL — those rows naturally drop out of the
+    IN-subquery without needing an explicit IS NOT NULL guard.
+
+    The expression is parameter-safe (kind/level are bind-params, not literals
+    spliced into the path) so PostgreSQL plans the array scan against the
+    column index.
+    """
+    # `column("value", JSONB())` types the table-valued result so the `[]`
+    # navigator works on the unpacked element. Without an explicit type the
+    # ColumnClause is unspec'd and `iv.c.value["spec"]` raises.
+    iv_col = column("value", JSONB())
+    iv = sa.func.jsonb_array_elements(
+        DoseResponseCurveModel.intercept_values
+    ).table_valued(iv_col)
+    return (
+        sa.select(sa.cast(iv.c.value["value"].astext, sa.Float))
+        .where(
+            iv.c.value["spec"]["kind"].astext == kind,
+            sa.cast(iv.c.value["spec"]["level"].astext, sa.Float) == level,
+        )
+        .limit(1)
+        .scalar_subquery()
+        .correlate(DoseResponseCurveModel)
+    )
+
+
 def _activity_presence_clause(
     workspace_id: uuid.UUID,
     protocol_id: Any,
@@ -179,11 +255,8 @@ def _activity_presence_clause(
     if isinstance(run_scope, dict):
         mode = run_scope.get("mode", "any")
         if mode == "specific":
-            run_id = run_scope.get("run_id")
-            if not run_id:
-                msg = "run_scope mode='specific' requires run_id"
-                raise ValueError(msg)
-            conds.append(ReadoutDataModel.run_id == run_id)
+            run_ids = _specific_run_ids(run_scope)
+            conds.append(ReadoutDataModel.run_id.in_(run_ids))
         elif mode == "date_range":
             from datetime import date as _date
 
@@ -248,11 +321,11 @@ def _run_scope_filter(
         return None
 
     if mode == "specific":
-        run_id = run_scope.get("run_id")
-        if not run_id:
-            msg = "run_scope mode='specific' requires run_id"
-            raise ValueError(msg)
-        return run_id_col == run_id
+        run_ids = _specific_run_ids(run_scope)
+        # Single id stays an `==` for plan stability; multi-id falls back to IN.
+        if len(run_ids) == 1:
+            return run_id_col == run_ids[0]
+        return run_id_col.in_(run_ids)
 
     if mode == "date_range":
         conds: list[ColumnElement] = [
@@ -300,4 +373,23 @@ def _run_scope_filter(
         return None
 
     msg = f"Unknown run_scope mode: {mode!r}"
+    raise ValueError(msg)
+
+
+def _specific_run_ids(run_scope: dict[str, Any]) -> list[Any]:
+    """Read the ``specific`` run-scope's run id list.
+
+    Accepts both the multi-select wire shape (``run_ids: [..]``) emitted by
+    the new search UI and the legacy single-id shape (``run_id: ...``) so
+    saved searches and direct API callers keep working without migration.
+
+    Raises ``ValueError`` when neither shape is provided.
+    """
+    raw = run_scope.get("run_ids")
+    if isinstance(raw, list) and raw:
+        return list(raw)
+    single = run_scope.get("run_id")
+    if single:
+        return [single]
+    msg = "run_scope mode='specific' requires run_id or run_ids"
     raise ValueError(msg)
