@@ -96,3 +96,96 @@ export function narrowInterceptKey(
   if (raw.kind !== "ec" && raw.kind !== "ic") return null;
   return { kind: raw.kind, level: raw.level };
 }
+
+/**
+ * Structured display result for an intercept cell.
+ *
+ * Renderers branch on `kind` to pick markup (`qualifier` uses an amber
+ * warning Badge; `scalar` / `nd` / `missing` use a plain span). `text` is
+ * the already-formatted numeric/qualifier string; the caller appends the
+ * unit only when `kind === "scalar"` or `"qualifier"` (an ND cell should
+ * never read "ND uM").
+ */
+export type InterceptDisplayKind = "scalar" | "qualifier" | "nd" | "missing";
+
+export interface InterceptDisplay {
+  kind: InterceptDisplayKind;
+  text: string;
+  tooltip: string;
+  warning: boolean;
+}
+
+const TOOLTIP_INACTIVE =
+  "Inactive curve — no determination. The fit didn't represent a real response, so this intercept is not reported.";
+const TOOLTIP_MISSING =
+  "No value for this intercept. Recompute the curve to refresh.";
+const TOOLTIP_QUALIFIER =
+  "Response did not reach this intercept within the tested concentration range. Reported as an upper-bound qualifier.";
+const TOOLTIP_AT_BOUND_NO_RANGE =
+  "Fit hit a bound, and no tested concentration is available to report as an upper bound.";
+
+/**
+ * Decide how an intercept cell should display its value.
+ *
+ *   - `curve_class === "inactive"` → "ND". The Hill fit doesn't represent
+ *     real activity, so we never report a scalar (industry: CDD, Genedata).
+ *   - `value == null`             → "—" with a recompute hint (intercept
+ *     was added to the protocol after this curve was fit).
+ *   - `at_bound === true`         → "> {max_dose}" qualifier when we know
+ *     the tested range; otherwise "ND" (we don't fabricate a bound).
+ *   - else                        → scalar `value.toPrecision(4)`.
+ *
+ * Unit-agnostic — callers append units only when `kind === "scalar" ||
+ * "qualifier"`.
+ */
+export function formatInterceptDisplay(args: {
+  value: number | null;
+  at_bound: boolean | undefined | null;
+  curve_class: string | null | undefined;
+  max_dose: number | null;
+}): InterceptDisplay {
+  if (args.curve_class === "inactive") {
+    return { kind: "nd", text: "ND", tooltip: TOOLTIP_INACTIVE, warning: false };
+  }
+  if (args.value == null) {
+    return { kind: "missing", text: "—", tooltip: TOOLTIP_MISSING, warning: false };
+  }
+  if (args.at_bound) {
+    if (args.max_dose != null && Number.isFinite(args.max_dose) && args.max_dose > 0) {
+      return {
+        kind: "qualifier",
+        text: `> ${args.max_dose.toPrecision(4)}`,
+        tooltip: TOOLTIP_QUALIFIER,
+        warning: true,
+      };
+    }
+    return { kind: "nd", text: "ND", tooltip: TOOLTIP_AT_BOUND_NO_RANGE, warning: false };
+  }
+  return { kind: "scalar", text: args.value.toPrecision(4), tooltip: "", warning: false };
+}
+
+/**
+ * Pull the largest positive concentration from a raw_data list. Accepts
+ * both `{x, y}` (the chart-normalized shape) and `{concentration,
+ * response}` (the persisted shape on `DoseResponseCurve.raw_data`).
+ *
+ * Returns null when the list is empty or every entry is non-positive /
+ * non-finite — caller falls back to "ND" rather than fabricating a
+ * qualifier.
+ */
+export function maxDoseFromRawData(
+  rawData:
+    | Array<{ x?: number; concentration?: number }>
+    | null
+    | undefined,
+): number | null {
+  if (!rawData || rawData.length === 0) return null;
+  let max = -Infinity;
+  for (const pt of rawData) {
+    const raw = pt.x ?? pt.concentration;
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0 && raw > max) {
+      max = raw;
+    }
+  }
+  return max === -Infinity ? null : max;
+}

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
 import {
   findInterceptValue,
+  formatInterceptDisplay,
   interceptKeyId,
   interceptKeyLabel,
   interceptLabel,
+  maxDoseFromRawData,
   parseInterceptKeyId,
 } from "./intercept-label";
 
@@ -118,5 +120,116 @@ describe("interceptKeyId / parseInterceptKeyId", () => {
     expect(parseInterceptKeyId("primary")).toBeNull();
     expect(parseInterceptKeyId("xx:50")).toBeNull();
     expect(parseInterceptKeyId("ec:nope")).toBeNull();
+  });
+});
+
+describe("maxDoseFromRawData", () => {
+  it("returns the largest positive x from {x,y} points", () => {
+    expect(
+      maxDoseFromRawData([
+        { x: 0.1, y: 5 },
+        { x: 10, y: 80 },
+        { x: 1, y: 40 },
+      ] as unknown as Array<{ x?: number; concentration?: number }>),
+    ).toBe(10);
+  });
+
+  it("accepts {concentration, response} shape too", () => {
+    expect(
+      maxDoseFromRawData([
+        { concentration: 0.5, response: 10 },
+        { concentration: 50, response: 90 },
+      ] as unknown as Array<{ x?: number; concentration?: number }>),
+    ).toBe(50);
+  });
+
+  it("ignores non-positive and non-finite x", () => {
+    expect(
+      maxDoseFromRawData([
+        { x: -1, y: 5 },
+        { x: 0, y: 5 },
+        { x: Number.NaN, y: 5 },
+        { x: 7, y: 5 },
+      ] as unknown as Array<{ x?: number; concentration?: number }>),
+    ).toBe(7);
+  });
+
+  it("returns null on empty / nullish input", () => {
+    expect(maxDoseFromRawData(null)).toBeNull();
+    expect(maxDoseFromRawData(undefined)).toBeNull();
+    expect(maxDoseFromRawData([])).toBeNull();
+  });
+});
+
+describe("formatInterceptDisplay", () => {
+  it("returns ND for inactive class regardless of value/at_bound", () => {
+    const out = formatInterceptDisplay({
+      value: 0.013,
+      at_bound: false,
+      curve_class: "inactive",
+      max_dose: 50,
+    });
+    expect(out.kind).toBe("nd");
+    expect(out.text).toBe("ND");
+    expect(out.warning).toBe(false);
+    expect(out.tooltip).toMatch(/inactive/i);
+  });
+
+  it("returns '—' for missing value when class is not inactive", () => {
+    const out = formatInterceptDisplay({
+      value: null,
+      at_bound: false,
+      curve_class: "full",
+      max_dose: 50,
+    });
+    expect(out.kind).toBe("missing");
+    expect(out.text).toBe("—");
+    expect(out.warning).toBe(false);
+  });
+
+  it("returns qualifier when at_bound with a known max_dose", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0001,
+      at_bound: true,
+      curve_class: "full",
+      max_dose: 50,
+    });
+    expect(out.kind).toBe("qualifier");
+    expect(out.text).toBe("> 50.00");
+    expect(out.warning).toBe(true);
+    expect(out.tooltip).toMatch(/upper-bound|tested concentration|did not reach/i);
+  });
+
+  it("falls back to ND when at_bound but max_dose is unavailable", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0001,
+      at_bound: true,
+      curve_class: "full",
+      max_dose: null,
+    });
+    expect(out.kind).toBe("nd");
+    expect(out.text).toBe("ND");
+  });
+
+  it("returns scalar with toPrecision(4) on a healthy fit", () => {
+    const out = formatInterceptDisplay({
+      value: 0.01310,
+      at_bound: false,
+      curve_class: "full",
+      max_dose: 50,
+    });
+    expect(out.kind).toBe("scalar");
+    expect(out.text).toBe("0.01310");
+    expect(out.warning).toBe(false);
+  });
+
+  it("inactive overrides at_bound (worst signal wins)", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0001,
+      at_bound: true,
+      curve_class: "inactive",
+      max_dose: 50,
+    });
+    expect(out.kind).toBe("nd");
   });
 });
