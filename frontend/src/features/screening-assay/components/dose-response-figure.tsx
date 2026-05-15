@@ -228,6 +228,11 @@ function buildPlotInputs(
 ): FigureInputs {
   const color =
     CURVE_QUALITY_COLORS[curve.curve_class ?? ""] ?? CURVE_DEFAULT_COLOR;
+  // Inactive curves don't represent a real dose-response — drawing a
+  // fitted sigmoid + a vertical line at the (meaningless) fitted_value
+  // implies a precision the data doesn't carry. Markers stay; the fit
+  // trace and the IC50 dash are suppressed.
+  const showFit = curve.curve_class !== "inactive";
 
   // Axis range: one decade past the data extremes; fall back to a
   // centred range around fitted_value when no raw points are present.
@@ -281,28 +286,30 @@ function buildPlotInputs(
     });
   }
 
-  // Fitted sigmoid via the canonical 4PL evaluator. Sampled across the
-  // axis range so the curve fills the visible plot rather than tapering
-  // off at the data extremes.
-  const fitted = generate4PLPoints(
-    {
-      top: curve.top,
-      bottom: curve.bottom,
-      fitted_value: curve.fitted_value,
-      hill_slope: curve.hill_slope,
-    },
-    xRange[0],
-    xRange[1],
-  );
-  traces.push({
-    x: fitted.x,
-    y: fitted.y,
-    mode: "lines",
-    type: "scatter",
-    line: { color, width: preset.curveWidth },
-    name: "Fit",
-    hoverinfo: "skip",
-  });
+  if (showFit) {
+    // Fitted sigmoid via the canonical 4PL evaluator. Sampled across the
+    // axis range so the curve fills the visible plot rather than tapering
+    // off at the data extremes.
+    const fitted = generate4PLPoints(
+      {
+        top: curve.top,
+        bottom: curve.bottom,
+        fitted_value: curve.fitted_value,
+        hill_slope: curve.hill_slope,
+      },
+      xRange[0],
+      xRange[1],
+    );
+    traces.push({
+      x: fitted.x,
+      y: fitted.y,
+      mode: "lines",
+      type: "scatter",
+      line: { color, width: preset.curveWidth },
+      name: "Fit",
+      hoverinfo: "skip",
+    });
+  }
 
   const layout = {
     margin: preset.margin,
@@ -335,20 +342,22 @@ function buildPlotInputs(
           }
         : undefined,
     },
-    shapes: [
-      // Vertical dashed line at the fitted IC50.
-      {
-        type: "line",
-        xref: "x",
-        x0: curve.fitted_value,
-        x1: curve.fitted_value,
-        yref: "paper",
-        y0: 0,
-        y1: 1,
-        line: { color: CHART_COLORS.warning, width: 1, dash: "dot" },
-        opacity: 0.7,
-      },
-    ],
+    shapes: showFit
+      ? [
+          // Vertical dashed line at the fitted IC50.
+          {
+            type: "line",
+            xref: "x",
+            x0: curve.fitted_value,
+            x1: curve.fitted_value,
+            yref: "paper",
+            y0: 0,
+            y1: 1,
+            line: { color: CHART_COLORS.warning, width: 1, dash: "dot" },
+            opacity: 0.7,
+          },
+        ]
+      : [],
   };
 
   return { traces, layout };
