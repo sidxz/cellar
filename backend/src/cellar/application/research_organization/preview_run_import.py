@@ -30,6 +30,7 @@ from cellar.application.research_organization.channel_resolution import (
     _build_curve_snapshot,
     _compute_hit_call,
     _intercept_scalar,
+    _resolve_intercept,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -158,10 +159,18 @@ def _apply_selection_rule(
 
     if rule == SelectionRule.LATEST_APPROVED_RUN:
         pick = rep
-        value = _intercept_scalar(pick, intercept_key) if intercept_key else pick.value
+        value, resolved_qualifier = _resolve_intercept(pick, intercept_key)
+        # Resolver-derived qualifier (ND / GT-from-at-bound) overrides the
+        # candidate's wire-level qualifier; see the matching note in
+        # channel_resolution.resolve().
+        qualifier = (
+            resolved_qualifier
+            if resolved_qualifier != ValueQualifier.EQ
+            else pick.qualifier
+        )
         return _Picked(
             value=value,
-            qualifier=pick.qualifier,
+            qualifier=qualifier,
             unit=pick.unit or "-",
             source_run_id=pick.run_id,
             source_curve_id=pick.curve_id,
@@ -174,16 +183,14 @@ def _apply_selection_rule(
             curve_snapshot=snapshot,
         )
     if rule == SelectionRule.MEAN_ACROSS_RUNS:
-        if intercept_key is None:
-            vals = [c.value for c in candidates]
-            value: float | None = sum(vals) / len(vals)
-        else:
-            ik_vals = [
-                v
-                for v in (_intercept_scalar(c, intercept_key) for c in candidates)
-                if v is not None
-            ]
-            value = sum(ik_vals) / len(ik_vals) if ik_vals else None
+        # _intercept_scalar already drops non-EQ candidates (Inactive,
+        # at_bound, missing intercept) — aggregates only the healthy ones.
+        ik_vals = [
+            v
+            for v in (_intercept_scalar(c, intercept_key) for c in candidates)
+            if v is not None
+        ]
+        value: float | None = sum(ik_vals) / len(ik_vals) if ik_vals else None
         return _Picked(
             value=value,
             qualifier=ValueQualifier.EQ,
@@ -199,14 +206,11 @@ def _apply_selection_rule(
             curve_snapshot=snapshot,
         )
     if rule == SelectionRule.GEOMETRIC_MEAN:
-        if intercept_key is None:
-            positives = [c.value for c in candidates if c.value > 0]
-        else:
-            positives = [
-                v
-                for v in (_intercept_scalar(c, intercept_key) for c in candidates)
-                if v is not None and v > 0
-            ]
+        positives = [
+            v
+            for v in (_intercept_scalar(c, intercept_key) for c in candidates)
+            if v is not None and v > 0
+        ]
         if not positives:
             return None
         return _Picked(

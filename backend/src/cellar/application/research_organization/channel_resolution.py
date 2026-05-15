@@ -144,30 +144,105 @@ def _is_qualified(c: ResolvedCandidate) -> bool:
     return c.qualifier in {ValueQualifier.LT, ValueQualifier.GT}
 
 
-def _intercept_scalar(
-    c: ResolvedCandidate, intercept_key: InterceptKey | None
-) -> float | None:
-    """Scalar for one candidate at the given intercept.
+def _max_dose_from_raw(raw_data: list[dict] | None) -> float | None:
+    """Largest positive concentration on a candidate's raw_data.
 
-    ``intercept_key=None`` returns ``c.value`` — the primary fitted value
-    for DR sources, the raw readout for RD sources. Otherwise looks up
-    the matching ``(kind, level)`` pair in ``c.intercept_values``; a
-    missing match (legacy fit, intercept added after the curve was fit)
-    yields None.
+    Used to phrase the upper-bound qualifier on at_bound rows
+    (``> {max_dose}``). Accepts the persisted ``{concentration, response}``
+    shape as well as the chart-normalized ``{x, y}`` shape; ignores
+    non-positive / non-finite x.
     """
+    if not raw_data:
+        return None
+    best: float | None = None
+    for pt in raw_data:
+        raw = pt.get("concentration") if "concentration" in pt else pt.get("x")
+        if not isinstance(raw, (int, float)):
+            continue
+        x = float(raw)
+        if not math.isfinite(x) or x <= 0:
+            continue
+        if best is None or x > best:
+            best = x
+    return best
+
+
+def _resolve_intercept(
+    c: ResolvedCandidate, intercept_key: InterceptKey | None
+) -> tuple[float | None, ValueQualifier]:
+    """Resolve one candidate's intercept to a (value, qualifier) cell.
+
+    Three outcomes:
+
+    - **(value, EQ)** — healthy fit; report the scalar.
+    - **(max_dose, GT)** — fit hit a bound (``iv.at_bound = True``) and we
+      know the highest concentration tested; we report ``> max_dose``
+      rather than the asymptote scalar the optimizer parked on ``value``.
+    - **(None, ND)** — the curve was classified Inactive, the intercept
+      wasn't present (legacy fit), or at_bound with no tested
+      concentration to anchor an upper bound. Callers emit an ND
+      measurement in this case.
+
+    ``intercept_key=None`` resolves the primary fit: ``c.value`` plus
+    any at_bound flag carried on ``intercept_values[0]``. The Hill
+    fitter's asymptote-bound scalars (which look like normal numbers but
+    don't represent real activity) are no longer surfaced as scalars on
+    the campaign grid as a result.
+    """
+    # Inactive curves never report a numeric value, regardless of the
+    # intercept — the fit doesn't represent a real response (industry
+    # convention: CDD / Genedata / Dotmatics).
+    if c.curve_class == "inactive":
+        return None, ValueQualifier.ND
+
     if intercept_key is None:
-        return c.value
+        # Primary intercept path. Check the primary's at_bound flag if
+        # intercept_values is present (post-033 curves); fall back to the
+        # legacy headline ``c.value`` otherwise.
+        ivs = c.intercept_values
+        if ivs:
+            primary = ivs[0]
+            if primary.get("at_bound") is True:
+                max_dose = _max_dose_from_raw(c.curve_raw_data)
+                if max_dose is not None:
+                    return max_dose, ValueQualifier.GT
+                return None, ValueQualifier.ND
+        return c.value, ValueQualifier.EQ
+
+    # Keyed intercept path — match (kind, level) inside intercept_values.
     ivs = c.intercept_values
     if not ivs:
-        return None
+        return None, ValueQualifier.ND
     target_kind = intercept_key.kind
     target_level = intercept_key.level
     for iv in ivs:
         spec = iv.get("spec") or {}
         if spec.get("kind") == target_kind and spec.get("level") == target_level:
+            if iv.get("at_bound") is True:
+                max_dose = _max_dose_from_raw(c.curve_raw_data)
+                if max_dose is not None:
+                    return max_dose, ValueQualifier.GT
+                return None, ValueQualifier.ND
             val = iv.get("value")
-            return float(val) if isinstance(val, (int, float)) else None
-    return None
+            if isinstance(val, (int, float)):
+                return float(val), ValueQualifier.EQ
+            return None, ValueQualifier.ND
+    return None, ValueQualifier.ND
+
+
+def _intercept_scalar(
+    c: ResolvedCandidate, intercept_key: InterceptKey | None
+) -> float | None:
+    """Numeric scalar suitable for aggregation / filtering.
+
+    Returns ``None`` for any candidate whose ``_resolve_intercept`` yields
+    a non-``EQ`` qualifier — i.e. Inactive curves, at_bound rows, and
+    missing intercepts are all dropped from MEAN / GEOMETRIC_MEAN
+    aggregates. Callers that need to emit a qualifier on the cell should
+    use ``_resolve_intercept`` directly.
+    """
+    value, qualifier = _resolve_intercept(c, intercept_key)
+    return value if qualifier == ValueQualifier.EQ else None
 
 
 def _threshold_input_value(
@@ -338,8 +413,18 @@ class ChannelResolver:
         value: float | None
         if channel.selection_rule == SelectionRule.LATEST_APPROVED_RUN:
             pick = max(candidates, key=lambda c: c.run_date or date.min)
-            value = _intercept_scalar(pick, ik) if ik else pick.value
-            qualifier = pick.qualifier
+            value, resolved_qualifier = _resolve_intercept(pick, ik)
+            # The candidate carries a wire-level qualifier from the raw
+            # source (e.g. ">100 µM" detection limit on a readout). The
+            # resolver-derived qualifier (ND / GT-from-at-bound) overrides
+            # the wire qualifier — they describe different things, and the
+            # display rule wins because the wire qualifier on a Hill-fit
+            # intercept value is rarely meaningful in the first place.
+            qualifier = (
+                resolved_qualifier
+                if resolved_qualifier != ValueQualifier.EQ
+                else pick.qualifier
+            )
             source_run = pick.run_id
             curve = pick.curve_id
             readout = pick.readout_id
@@ -348,16 +433,16 @@ class ChannelResolver:
             rdate = pick.run_date
             unit = pick.unit or _ND_UNIT_PLACEHOLDER
         elif channel.selection_rule == SelectionRule.MEAN_ACROSS_RUNS:
-            if ik is None:
-                vals = [c.value for c in candidates]
-                value = sum(vals) / len(vals)
-            else:
-                ik_vals = [
-                    v
-                    for v in (_intercept_scalar(c, ik) for c in candidates)
-                    if v is not None
-                ]
-                value = sum(ik_vals) / len(ik_vals) if ik_vals else None
+            # _intercept_scalar already drops non-EQ candidates (Inactive,
+            # at_bound, missing intercept), so aggregates stay honest:
+            # mixed-quality channels aggregate only the healthy candidates,
+            # and an all-Inactive channel becomes ND.
+            ik_vals = [
+                v
+                for v in (_intercept_scalar(c, ik) for c in candidates)
+                if v is not None
+            ]
+            value = sum(ik_vals) / len(ik_vals) if ik_vals else None
             qualifier = ValueQualifier.EQ
             source_run = curve = readout = None
             rdate = None
@@ -366,14 +451,11 @@ class ChannelResolver:
             # drawing still needs *something* to render.
             pick = max(candidates, key=lambda c: c.run_date or date.min)
         elif channel.selection_rule == SelectionRule.GEOMETRIC_MEAN:
-            if ik is None:
-                positives = [c.value for c in candidates if c.value > 0]
-            else:
-                positives = [
-                    v
-                    for v in (_intercept_scalar(c, ik) for c in candidates)
-                    if v is not None and v > 0
-                ]
+            positives = [
+                v
+                for v in (_intercept_scalar(c, ik) for c in candidates)
+                if v is not None and v > 0
+            ]
             value = (
                 math.exp(sum(math.log(v) for v in positives) / len(positives))
                 if positives
