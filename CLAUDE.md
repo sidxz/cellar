@@ -212,11 +212,17 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 | 17 | `00cf02bd` | feat(campaign): mirror protocol — bulk-create channels for every readout | New use case + `POST /channels/mirror-protocol` + `MirrorProtocolPopover`. Idempotent on `(protocol, rd, norm, ik)`. +6 BE tests. |
 | 18 | `570f67b6` | feat(campaign): expand-dialog renders via shared DoseResponseChart | `_build_curve_snapshot` writes `curve_type` + `intercept_values` + CI + warnings; new `snapshotToDoseResponseCurve` adapter; dialog rewritten ~100→~50 LOC. **Backfill script** (`rebuild_campaign_curve_snapshots.py`, `--include-closed` ran). +1 BE + 4 FE tests. |
 | 19 | `ec0eeb15` | fix(campaign): closed view defaults filter to Selected only | New `closedCampaignFilters()`; chemist's frame is "what made the cut". |
+| 20 | `4fd9a94c` | feat(screening): formatInterceptDisplay — single rule for ND / >max / scalar | New helper in `intercept-label.ts` (SoT); +10 unit tests. Industry-anchored (CDD / ChEMBL / Genedata / Prism). R² intentionally not a separate rule — folded into `curve_class`. |
+| 21 | `0e5ec227` | feat(screening): run DR grid renders ND / >max instead of fake scalars | Adopts helper. Fixes the screenshot case (CV-00982 EC50=0.01310 / EC90=0.002380 / R²=0 / Inactive). |
+| 22 | `f84da6f8` | feat(screening): activity tabs render ND / >max for inactive + at-bound | Both protocol-hub + molecule-detail Activity grids. Source paths: `rv.curve_class` + `rv.data_points` at the top level of `ReadoutValue`. |
+| 23 | `8b71f811` | feat(search): results grid honors the same ND / >max display rule | `renderInterceptCell` + the no-intercept fallback in `buildDrcColumns`. Wire qualifier (`av.qualifier > / <`) is suppressed in non-scalar cells. |
+| 24 | `94044efa` | feat(screening): readout-data table honors the ND / >max display rule | Last of the four DR intercept cell surfaces. |
+| 25 | `624c2b19` | feat(screening): DR thumbnail draws points only for Inactive curves | `DoseResponseFigure` gates the fit-trace + vertical-dash on `curve_class !== "inactive"`. +3 component tests (mocks Plot + chart-colors). Inherits everywhere via `DoseResponseSparkline` and the campaign expand-dialog. |
 
 **Verification at HEAD:**
-- Backend research_org subset = **218 passed** (was 211 pre-session); migration 035 on dev DB; live snapshot rebuild complete.
-- Frontend = **156 passed**, `pnpm exec tsc --noEmit` clean.
-- Browser smoke for Surfaces #1–#7 passed on 2026-05-14. Commits #12, #14, #15, #16, #17, #18, #19 still need fresh browser smokes.
+- Backend `screening_assay` + `research_organization` subset = **712 passed** (FE-only changes; defensive BE check). Migration 035 on dev DB; live snapshot rebuild complete.
+- Frontend = **169 passed** (+13 new this session), `pnpm exec tsc --noEmit` clean.
+- Browser smoke for Surfaces #1–#7 passed on 2026-05-14. Commits #12, #14, #15, #16, #17, #18, #19, **#20–#25** still need fresh browser smokes.
 
 **How to resume:**
 1. **Live smoke #16** on `Mtb_WCA_mc2-7000_Resazurin` against a fresh campaign — add-from-runs with `EC50 use_for_filter:ON, <50 µM` + `EC90 use_for_filter:OFF, no threshold`. Expect `22 mols · 2 hits` (CV-00967, CV-00983), distinct EC50 vs EC90 cell numbers, HIT badges only on the EC50 column. DB check: 2 rows on `campaign_channel` for Resazurin — EC50 row `intercept_key=NULL`, EC90 row `intercept_key={"kind":"ec","level":90.0}`. Then edit the EC90 channel to add `<100` threshold and re-render → EC90 cells gain HIT badges where appropriate.
@@ -224,10 +230,12 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 3. **Live smoke #18** on the existing closed `Mtb_WCA_mc2-7000_Resazurin` campaign — click a curve thumbnail. Expand dialog should render via `<DoseResponseChart>` with intercept chip strip (EC50 + EC90), CI strip, warning badges — bit-identical to the same compound in the search compound-detail sheet. Backfill already ran so closed-campaign snapshots carry the full shape.
 4. **Live smoke #19** — open the closed `Mtb_WCA_mc2-7000_Resazurin` campaign and confirm the filter bar opens with `Selected` chip pre-active and only the 2 selected molecules visible (rejected/deferred chips one click away).
 5. **Smoke #12 + #14 + #15** if not already done.
-6. **Push** — `prot-2` is local-only. After smokes pass: push and open a PR against `main`.
+6. **Live smoke #20–#25 (DR display honesty)** on `/assays/runs/0f1b3be3-bc65-44bf-882c-d08e7d4ff216#dose-response` (the screenshot URL) — CV-00982, CV-00971, CV-00968, CV-00966, CV-00973, CV-00976 all classified Inactive: their EC50/EC90 columns must read **ND** (font-mono, muted) with a tooltip "Inactive — no determination", and the Curve column thumbnails show **only data-point markers** (no fit line, no vertical dashed line). The single healthy curve in the run (whichever is non-Inactive) must be unchanged — scalar values + fit line + dash. Then visit the same compounds on the protocol-hub Activity tab, molecule-detail Activity tab, search results grid, and the Readout Data tab of the run — all four surfaces should match. Open the closed `Mtb_WCA_mc2-7000_Resazurin` campaign's expand-dialog on an Inactive row — same points-only treatment via `DoseResponseChart` (inherits from the shared figure).
+7. **Push** — `prot-2` is local-only. After smokes pass: push and open a PR against `main`.
 
 **Diagnostic anchors:**
-- `frontend/src/features/screening-assay/lib/intercept-label.ts` — only place chemist-facing intercept labels are produced or cell lookups happen. `narrowInterceptKey` is the wire→domain narrower for orval-generated `{kind: string, ...}` → hand-typed `InterceptKey`.
+- `frontend/src/features/screening-assay/lib/intercept-label.ts` — only place chemist-facing intercept labels are produced, cell lookups happen, **or the ND / >max / scalar display rule is decided** (`formatInterceptDisplay` + `maxDoseFromRawData`). `narrowInterceptKey` is the wire→domain narrower for orval-generated `{kind: string, ...}` → hand-typed `InterceptKey`.
+- `frontend/src/features/screening-assay/components/dose-response-figure.tsx` — `showFit = curve.curve_class !== "inactive"` gates both the 4PL fit trace and the vertical-dash shape; Inactive curves render points-only across every surface that uses this component (sparkline, run page, expand dialog, search detail).
 - `frontend/src/features/screening-assay/lib/hit-criteria-options.ts` — only place the hit-criteria dialog's option list is built or a rule is mapped back to an option id.
 - `frontend/src/features/research-organization/lib/protocol-column-id.ts` — only place `drc:<rd_id>` / `rd:<proto>:<rd>` colIds get joined back to their owning protocol.
 - `application/screening/molecule_activity_service.py::_serialize_intercept_values` — single helper feeds both the molecule-activity payload and the search-grid `ActivityValue.intercept_values`.
