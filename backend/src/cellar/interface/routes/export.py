@@ -1,50 +1,189 @@
-"""Molecule export endpoints (SDF)."""
+"""Unified export endpoints (CSV / SDF / XLSX / PDF) — and the legacy
+/molecules/export/sdf shim that now returns 410 Gone."""
 
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field
 
-from cellar.application.chemical_registration.export_sdf import (
-    ExportSDFQuery,
-    MAX_SDF_EXPORT,
+from cellar.application.export.cancel_export import CancelExportCommand
+from cellar.application.export.get_export_status import GetExportStatusQuery
+from cellar.application.export.list_exports import ListExportsQuery
+from cellar.application.export.start_export import StartExportCommand
+from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
+from cellar.interface.dependencies import AuthDep
+from cellar.interface.dependencies._export import (
+    CancelExportDep,
+    ExportJobRepositoryDep,
+    GetExportStatusDep,
+    ListExportsDep,
+    StartExportDep,
+    StorageDep,
 )
-from cellar.interface.dependencies import AuthDep, ExportMoleculesSDFDep
 from cellar.interface.error_handlers import result_to_response
 
-router = APIRouter(prefix="/api/v1/molecules/export", tags=["export"])
+router = APIRouter(prefix="/api/v1/exports", tags=["export"])
 
 
-class ExportSDFBody(BaseModel):
-    molecule_ids: list[uuid.UUID]
-
-    @field_validator("molecule_ids")
-    @classmethod
-    def check_limit(cls, v: list[uuid.UUID]) -> list[uuid.UUID]:
-        if len(v) > MAX_SDF_EXPORT:
-            msg = f"Maximum {MAX_SDF_EXPORT} molecules per export."
-            raise ValueError(msg)
-        return v
+# ---------------------------------------------------------------------------
+# Request / response models
+# ---------------------------------------------------------------------------
 
 
-@router.post("/sdf")
-async def export_sdf(
-    body: ExportSDFBody,
+class StartExportBody(BaseModel):
+    source: ExportSource = Field(default=ExportSource.SEARCH)
+    format: ExportFormat
+    filename_hint: str | None = None
+    payload: dict[str, Any]
+
+
+class StartExportResponse(BaseModel):
+    job_id: uuid.UUID
+
+
+class ExportStatusResponse(BaseModel):
+    id: uuid.UUID
+    status: ExportStatus
+    format: ExportFormat
+    row_count: int | None
+    progress: float | None
+    error_message: str | None
+    download_url: str | None
+    byte_size: int | None
+    filename: str | None
+    requested_at: datetime
+    completed_at: datetime | None
+    expires_at: datetime | None
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("", response_model=StartExportResponse, status_code=202)
+async def start_export(
+    body: StartExportBody,
     auth: AuthDep,
-    use_case: ExportMoleculesSDFDep,
-) -> Response:
-    command = ExportSDFQuery(
-        workspace_id=auth.workspace_id,
-        molecule_ids=body.molecule_ids,
+    uc: StartExportDep,
+) -> StartExportResponse:
+    """Initiate an async export job. Returns a job_id for polling."""
+    res = await uc(
+        StartExportCommand(
+            workspace_id=auth.workspace_id,
+            requested_by=auth.user_id,
+            source=body.source,
+            format=body.format,
+            payload=body.payload,
+            filename_hint=body.filename_hint,
+        ),
+        auth=auth,
     )
-    sdf_content = result_to_response(await use_case(command, auth=auth))
+    out = result_to_response(res)
+    return StartExportResponse(job_id=out.job_id)
+
+
+@router.get("", response_model=list[ExportStatusResponse])
+async def list_exports(
+    auth: AuthDep,
+    uc: ListExportsDep,
+    limit: int = Query(50, ge=1, le=200),
+) -> list[ExportStatusResponse]:
+    """List recent export jobs for the workspace, newest first."""
+    res = await uc(
+        ListExportsQuery(workspace_id=auth.workspace_id, limit=limit),
+        auth=auth,
+    )
+    views = result_to_response(res)
+    return [ExportStatusResponse(**v.__dict__) for v in views]
+
+
+@router.get("/{job_id}", response_model=ExportStatusResponse)
+async def get_export(
+    job_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetExportStatusDep,
+) -> ExportStatusResponse:
+    """Poll the status of a single export job."""
+    res = await uc(
+        GetExportStatusQuery(workspace_id=auth.workspace_id, job_id=job_id),
+        auth=auth,
+    )
+    view = result_to_response(res)
+    return ExportStatusResponse(**view.__dict__)
+
+
+@router.post("/{job_id}/cancel", status_code=204)
+async def cancel_export(
+    job_id: uuid.UUID,
+    auth: AuthDep,
+    uc: CancelExportDep,
+) -> Response:
+    """Request cancellation of an in-flight export job."""
+    res = await uc(
+        CancelExportCommand(workspace_id=auth.workspace_id, job_id=job_id),
+        auth=auth,
+    )
+    result_to_response(res)
+    return Response(status_code=204)
+
+
+@router.get("/{job_id}/download")
+async def download_export(
+    job_id: uuid.UUID,
+    auth: AuthDep,
+    status_uc: GetExportStatusDep,
+    repo: ExportJobRepositoryDep,
+    storage: StorageDep,
+) -> Response:
+    """Stream the completed export file. Returns 409 if not ready, 410 if expired."""
+    res = await status_uc(
+        GetExportStatusQuery(workspace_id=auth.workspace_id, job_id=job_id),
+        auth=auth,
+    )
+    view = result_to_response(res)
+
+    if view.status == ExportStatus.EXPIRED:
+        raise HTTPException(status_code=410, detail="Export expired — re-export the same query.")
+    if view.status != ExportStatus.READY:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Export not ready (status={view.status}).",
+        )
+
+    # Fetch the file_key — the status view intentionally omits it for security.
+    job = await repo.find_by_id_in_workspace(auth.workspace_id, job_id)
+    if not job or not job.file_key:
+        raise HTTPException(status_code=404, detail="Export file missing.")
+
+    data = await storage.download(job.file_key)
+    media_type = job.content_type or view.format.media_type
+    filename = job.filename or f"export{view.format.extension}"
     return Response(
-        content=sdf_content,
-        media_type="chemical/x-sdf",
-        headers={
-            "Content-Disposition": 'attachment; filename="export.sdf"',
-        },
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Legacy shim — kept for one release so existing FE callers get a clear error
+# instead of a 404 / 405.
+# ---------------------------------------------------------------------------
+
+legacy_router = APIRouter(prefix="/api/v1/molecules/export", tags=["export-legacy"])
+
+
+@legacy_router.post("/sdf", status_code=410)
+async def legacy_sdf_export() -> Response:
+    """Deprecated SDF export endpoint — use POST /api/v1/exports with format=sdf."""
+    return Response(
+        status_code=410,
+        content=b'{"detail":"Use POST /api/v1/exports with format=sdf, source=search."}',
+        media_type="application/json",
     )

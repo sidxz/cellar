@@ -23,6 +23,7 @@ from ._cdd_import import *  # noqa: F401, F403
 from ._chemical_registration import *  # noqa: F401, F403
 from ._core import *  # noqa: F401, F403
 from ._dashboard import *  # noqa: F401, F403
+from ._export import *  # noqa: F401, F403
 from ._inventory import *  # noqa: F401, F403
 from ._research_organization import *  # noqa: F401, F403
 from ._run_import import *  # noqa: F401, F403
@@ -37,6 +38,7 @@ from . import (
     _chemical_registration,
     _core,
     _dashboard,
+    _export,
     _inventory,
     _research_organization,
     _run_import,
@@ -50,6 +52,7 @@ __all__ = (
     + _audit.__all__
     + _workspace_config.__all__
     + _chemical_registration.__all__
+    + _export.__all__
     + _inventory.__all__
     + _screening.__all__
     + _research_organization.__all__

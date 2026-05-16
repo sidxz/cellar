@@ -74,6 +74,7 @@ class StartExport:
 
         async with self._uow:
             await self._repo.save(job)
+            await self._uow.commit()
 
         try:
             await self._orchestrator.start(

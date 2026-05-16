@@ -190,9 +190,11 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(vocab_router)
     from cellar.interface.routes.export import router as export_router
+    from cellar.interface.routes.export import legacy_router as export_legacy_router
 
     app.include_router(mol_router)
     app.include_router(export_router)
+    app.include_router(export_legacy_router)
     app.include_router(disclosure_router)
     app.include_router(merge_router)
     app.include_router(rel_router)

@@ -54,6 +54,7 @@ class CancelExport:
                 return Failure(NotFoundError("ExportJob", str(cmd.job_id)))
             job.request_cancel()
             await self._repo.save(job)
+            await self._uow.commit()
 
         try:
             await self._orchestrator.request_cancel(f"export-{job.id}")
