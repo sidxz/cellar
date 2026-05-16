@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from cellar.domain.shared.aggregation_types import (
+    QualifierHandling,
+    SelectionRule,
+    ValueQualifier,
+)
+
 
 class ProjectStatus(StrEnum):
     ACTIVE = "active"
@@ -33,24 +39,9 @@ class CampaignStatus(StrEnum):
     SUPERSEDED = "superseded"
 
 
-class SelectionRule(StrEnum):
-    LATEST_APPROVED_RUN = "latest_approved_run"
-    MEAN_ACROSS_RUNS = "mean_across_runs"
-    GEOMETRIC_MEAN = "geometric_mean"
-    MANUAL_PICK = "manual_pick"
-
-
 class ChannelSourceKind(StrEnum):
     READOUT_DATA = "readout_data"
     DOSE_RESPONSE_CURVE = "dose_response_curve"
-
-
-class ValueQualifier(StrEnum):
-    EQ = "="
-    LT = "<"
-    GT = ">"
-    ND = "nd"
-    EXCLUDED = "excluded"
 
 
 class HitCall(StrEnum):
@@ -65,7 +56,19 @@ class CampaignDecision(StrEnum):
     REJECTED = "rejected"
 
 
-class QualifierHandling(StrEnum):
-    INCLUDE_QUALIFIED = "include_qualified"
-    EXCLUDE_QUALIFIED = "exclude_qualified"
-    TREAT_AS_LIMIT = "treat_as_limit"
+# Re-exports — these symbols moved to screening_assay.aggregation_types but
+# campaign code still imports them from here; declare them in __all__ so the
+# re-export is explicit (and so F401 doesn't flag the import block).
+__all__ = [
+    "CampaignDecision",
+    "CampaignStatus",
+    "ChannelSourceKind",
+    "CollectionBooleanOp",
+    "CollectionVisibility",
+    "HitCall",
+    "ProjectStatus",
+    "QualifierHandling",
+    "SearchVisibility",
+    "SelectionRule",
+    "ValueQualifier",
+]

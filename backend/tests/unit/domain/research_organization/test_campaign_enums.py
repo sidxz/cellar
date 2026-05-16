@@ -21,6 +21,7 @@ def test_selection_rule_members():
         "mean_across_runs",
         "geometric_mean",
         "manual_pick",
+        "best_r_squared",
     }
 
 
