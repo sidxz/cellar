@@ -44,6 +44,12 @@ class SearchResultsRowStream:
         self.columns: list[ColumnSpec] = []  # populated lazily by _ensure_columns
 
     async def total_count(self) -> int:
+        # _ensure_columns shares the same lazy prerequisites (protocols lookup +
+        # first-page probe) and is idempotent.  Calling it here guarantees that
+        # ``self.columns`` is populated before any consumer reads it — in
+        # particular before ``RenderExport.__call__`` passes ``stream.columns``
+        # to the renderer, which happens right after ``await stream.total_count()``.
+        await self._ensure_columns()
         if self._cached_total is None:
             page = await self._fetch_page(cursor=None, limit=1)
             self._cached_total = page.total_count or 0
