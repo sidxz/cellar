@@ -27,11 +27,13 @@ from cellar.application.auth import AuthContext, require_editor
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ResolvedCandidate,
-    _build_aggregate_curve_snapshot,
-    _build_curve_snapshot,
     _compute_hit_call,
     _intercept_scalar,
     _resolve_intercept,
+)
+from cellar.application.screening.curve_snapshot import (
+    build_aggregate_curve_snapshot,
+    build_curve_snapshot,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -153,10 +155,10 @@ def _apply_selection_rule(
     pver_seed = candidates[0].protocol_version
 
     # Representative candidate for curve-shape snapshot (latest run by date).
-    # No-op for readout_data sources — _build_curve_snapshot returns None
+    # No-op for readout_data sources — build_curve_snapshot returns None
     # when the candidate carries no curve_top/bottom/hill_slope.
     rep = max(candidates, key=lambda c: c.run_date or date.min)
-    snapshot = _build_curve_snapshot(rep)
+    snapshot = build_curve_snapshot(rep)
 
     if rule == SelectionRule.LATEST_APPROVED_RUN:
         pick = rep
@@ -197,7 +199,7 @@ def _apply_selection_rule(
         # On ND (no healthy contributors), fall back to the rep snapshot so
         # the curve column still renders the latest curve.
         agg_snapshot = (
-            _build_aggregate_curve_snapshot(
+            build_aggregate_curve_snapshot(
                 candidates, aggregate_value=value, aggregate_label="mean"
             )
             if value is not None
@@ -238,7 +240,7 @@ def _apply_selection_rule(
             run_date=None,
             contributing_run_ids=contributing,
             replicate_count=n,
-            curve_snapshot=_build_aggregate_curve_snapshot(
+            curve_snapshot=build_aggregate_curve_snapshot(
                 candidates, aggregate_value=gmean_value, aggregate_label="gmean"
             ),
         )
