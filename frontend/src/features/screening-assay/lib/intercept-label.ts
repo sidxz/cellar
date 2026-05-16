@@ -8,6 +8,7 @@
  * anywhere in the frontend should contain the string literals "EC50",
  * "EC90", "IC50", "IC90", etc.
  */
+import type { AggregationMode } from "@/features/research-organization/lib/use-aggregation-mode";
 import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
 
 /** Canonical chemist-facing format for an intercept identified only by
@@ -156,6 +157,18 @@ export interface InterceptDisplay {
    * even when the curve doesn't represent real activity.
    */
   sortValue: number | null;
+  // ---- NEW: multi-run decoration ----
+  /** Alias for `text`. Prefer this name in new code; `text` kept for
+   *  back-compat with the 3 existing callers (run-dr-results-columns,
+   *  readout-data-table, activity-tab-columns) until Task 12's
+   *  <InterceptCell /> replaces them on the search grid. */
+  primary: string;
+  /** Subscript run count + mode-conditional fold-range chip. Null when
+   *  runCount <= 1 AND no fold-range chip applies. */
+  decoration: {
+    runCountSubscript: string | null;
+    foldRangeChip: string | null;
+  } | null;
 }
 
 const TOOLTIP_INACTIVE =
@@ -166,6 +179,18 @@ const TOOLTIP_QUALIFIER =
   "Response did not reach this intercept within the tested concentration range. Reported as an upper-bound qualifier.";
 const TOOLTIP_AT_BOUND_NO_RANGE =
   "ND = Not Determined. Fit hit a bound, and no tested concentration is available to report as an upper bound.";
+
+/** Map of ASCII digits → Unicode subscript digits, used for chemistry-style
+ *  run-count typography (`H₂O`-style "₃" superimposed on the cell value to
+ *  surface multi-run aggregation depth without stealing column width). */
+const SUBSCRIPT_DIGITS: Record<string, string> = {
+  "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
+  "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+};
+
+function toSubscript(n: number): string {
+  return String(n).split("").map((d) => SUBSCRIPT_DIGITS[d] ?? d).join("");
+}
 
 /**
  * Decide how an intercept cell should display its value.
@@ -180,34 +205,55 @@ const TOOLTIP_AT_BOUND_NO_RANGE =
  *
  * Unit-agnostic — callers append units only when `kind === "scalar" ||
  * "qualifier"`.
+ *
+ * Multi-run decoration (optional): when the cell summarizes ≥2 runs, the
+ * returned `decoration` carries a subscript count (always) and a fold-range
+ * chip (only when the aggregation `mode` is `gmean` or `mean`, i.e. an
+ * actual aggregate — `latest` / `best_r2` pick a single source curve and
+ * don't have a meaningful spread to report). `warning` is OR'd with
+ * `disagreement` so a scalar cell can still flash amber when the underlying
+ * runs disagree on classification (e.g. one run Inactive, another Active).
  */
 export function formatInterceptDisplay(args: {
   value: number | null;
   at_bound: boolean | undefined | null;
   curve_class: string | null | undefined;
   max_dose: number | null;
+  // ---- NEW: multi-run aggregation context (all optional, defaults
+  // preserve current single-run behavior) ----
+  runCount?: number;
+  mode?: AggregationMode;
+  foldRange?: number | null;
+  disagreement?: boolean;
 }): InterceptDisplay {
+  const runCount = args.runCount ?? 1;
+  const mode = args.mode ?? "latest";
+  const foldRange = args.foldRange ?? null;
+  const disagreement = args.disagreement ?? false;
+
+  // Compute the existing kind / text / tooltip / warning / sortValue per
+  // the current display rules.
+  let base: Omit<InterceptDisplay, "primary" | "decoration">;
+
   if (args.curve_class === "inactive") {
-    return {
+    base = {
       kind: "nd",
       text: "ND",
       tooltip: TOOLTIP_INACTIVE,
       warning: false,
       sortValue: null,
     };
-  }
-  if (args.value == null) {
-    return {
+  } else if (args.value == null) {
+    base = {
       kind: "missing",
       text: "—",
       tooltip: TOOLTIP_MISSING,
       warning: false,
       sortValue: null,
     };
-  }
-  if (args.at_bound) {
+  } else if (args.at_bound) {
     if (args.max_dose != null && Number.isFinite(args.max_dose) && args.max_dose > 0) {
-      return {
+      base = {
         kind: "qualifier",
         text: `> ${args.max_dose.toPrecision(4)}`,
         tooltip: TOOLTIP_QUALIFIER,
@@ -216,21 +262,48 @@ export function formatInterceptDisplay(args: {
         // finite scalar in ascending order but ahead of nulls.
         sortValue: Number.POSITIVE_INFINITY,
       };
+    } else {
+      base = {
+        kind: "nd",
+        text: "ND",
+        tooltip: TOOLTIP_AT_BOUND_NO_RANGE,
+        warning: false,
+        sortValue: null,
+      };
     }
-    return {
-      kind: "nd",
-      text: "ND",
-      tooltip: TOOLTIP_AT_BOUND_NO_RANGE,
+  } else {
+    base = {
+      kind: "scalar",
+      text: args.value.toPrecision(4),
+      tooltip: "",
       warning: false,
-      sortValue: null,
+      sortValue: args.value,
     };
   }
+
+  // Multi-run decoration: subscript run-count (when ≥2 runs) + mode-
+  // conditional fold-range chip. `latest` / `best_r2` pick a single source
+  // curve so a fold-range chip would be misleading — only `gmean` / `mean`
+  // are true aggregates with a meaningful spread.
+  const showFoldRange =
+    foldRange !== null && (mode === "gmean" || mode === "mean") && runCount >= 2;
+  const decoration =
+    runCount >= 2 || showFoldRange
+      ? {
+          runCountSubscript: runCount >= 2 ? toSubscript(runCount) : null,
+          foldRangeChip: showFoldRange ? `×${Math.round(foldRange)}` : null,
+        }
+      : null;
+
   return {
-    kind: "scalar",
-    text: args.value.toPrecision(4),
-    tooltip: "",
-    warning: false,
-    sortValue: args.value,
+    ...base,
+    // Alias for `text` — Task 12's <InterceptCell /> reads `.primary`;
+    // existing callers stay on `.text`.
+    primary: base.text,
+    decoration,
+    // Underlying-run disagreement can flag a scalar cell amber too, not
+    // just qualifier cells.
+    warning: base.warning || disagreement,
   };
 }
 

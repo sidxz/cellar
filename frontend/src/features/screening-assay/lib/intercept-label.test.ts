@@ -277,3 +277,100 @@ describe("formatInterceptDisplay", () => {
     expect((scalar as number) < (qualifier as number)).toBe(true);
   });
 });
+
+describe("formatInterceptDisplay multi-run extension", () => {
+  // The function's existing 4-input shape stays valid; these tests
+  // exercise the new optional inputs (runCount, mode, foldRange, disagreement)
+  // and the new outputs (primary alias, decoration).
+
+  it("primary aliases text for scalar cells", () => {
+    const out = formatInterceptDisplay({
+      value: 0.12,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+    });
+    expect(out.primary).toBe(out.text);
+    expect(out.primary).toBe("0.1200");
+  });
+
+  it("decoration is null for single-run cells", () => {
+    const out = formatInterceptDisplay({
+      value: 0.12,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+    });
+    expect(out.decoration).toBeNull();
+  });
+
+  it("adds run-count subscript when runCount >= 2", () => {
+    const out = formatInterceptDisplay({
+      value: 0.18,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+      runCount: 3,
+    });
+    expect(out.decoration?.runCountSubscript).toBe("₃");
+    expect(out.decoration?.foldRangeChip).toBeNull();
+  });
+
+  it("adds fold-range chip in gmean mode but not in latest mode", () => {
+    const gmean = formatInterceptDisplay({
+      value: 0.18,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+      runCount: 4,
+      mode: "gmean",
+      foldRange: 4.2,
+    });
+    expect(gmean.decoration?.foldRangeChip).toBe("×4");
+
+    const latest = formatInterceptDisplay({
+      value: 0.18,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+      runCount: 4,
+      mode: "latest",
+      foldRange: 4.2,
+    });
+    expect(latest.decoration?.foldRangeChip).toBeNull();
+  });
+
+  it("warning triggers when disagreement true (even on scalar cell)", () => {
+    const out = formatInterceptDisplay({
+      value: 0.18,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+      disagreement: true,
+    });
+    expect(out.warning).toBe(true);
+  });
+
+  it("warning still triggers on qualifier cells regardless of disagreement", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0001,
+      at_bound: true,
+      curve_class: "active",
+      max_dose: 100,
+      disagreement: false,
+    });
+    expect(out.kind).toBe("qualifier");
+    expect(out.warning).toBe(true);  // qualifier always warns
+  });
+
+  it("subscript renders for multi-digit run counts", () => {
+    const out = formatInterceptDisplay({
+      value: 0.18,
+      at_bound: false,
+      curve_class: "active",
+      max_dose: 100,
+      runCount: 12,
+    });
+    expect(out.decoration?.runCountSubscript).toBe("₁₂");
+  });
+});
