@@ -32,6 +32,24 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
     # Custom query methods
     # ------------------------------------------------------------------
 
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Run]:
+        """Bulk-fetch runs by id, scoped to workspace.
+
+        Returns ``{run.id: run, ...}`` so the search-grid aggregator can join
+        each fetched ``DoseResponseCurve`` back to its owning Run aggregate
+        without an N+1. Missing ids are silently dropped.
+        """
+        if not ids:
+            return {}
+        stmt = select(RunModel).where(
+            RunModel.workspace_id == workspace_id,
+            RunModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return {m.id: self._to_domain_tracked(m) for m in result.scalars().all()}
+
     async def find_by_protocol(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[Run]:
         """List all runs for a protocol in a workspace, newest first."""
         stmt = (

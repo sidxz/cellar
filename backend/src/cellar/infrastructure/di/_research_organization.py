@@ -328,6 +328,7 @@ def register_research_organization(container: Container) -> None:
                 readout_repo=SQLAlchemyReadoutDataRepository(uow),
                 curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
                 protocol_repo=SQLAlchemyProtocolRepository(uow),
+                run_repo=SQLAlchemyRunRepository(uow),
             ),
         )
 

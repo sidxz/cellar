@@ -107,6 +107,17 @@ class RunRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Run | None: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Run]:
+        """Bulk-fetch runs by id, scoped to workspace.
+
+        Returns ``{run.id: run, ...}`` so adapters can join ``DoseResponseCurve``
+        rows back to their owning runs in O(1) without an N+1 over
+        ``find_by_id_in_workspace``. Missing ids are silently dropped.
+        """
+        ...
+
     async def find_by_protocol(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[Run]: ...
