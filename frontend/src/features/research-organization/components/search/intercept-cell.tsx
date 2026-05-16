@@ -53,6 +53,53 @@ function findAggregate(av: ActivityValue, ik: InterceptKey | null) {
   );
 }
 
+/** Exponent N such that 1 unit = 10⁻ᴺ M.
+ *  pX = -log10(value × 10⁻ᴺ) = N − log10(value). */
+function unitToMolarExponent(unit: string | null | undefined): number {
+  if (!unit) return 6; // assume µM — the dominant unit on this codebase
+  switch (unit.trim().toLowerCase()) {
+    case "m": return 0;
+    case "mm": return 3;
+    case "um":
+    case "µm":
+    case "μm": return 6;
+    case "nm": return 9;
+    case "pm": return 12;
+    case "fm": return 15;
+    default: return 6;
+  }
+}
+
+/** Chemist-facing label for the log-domain summary: pIC50 / pEC90 / etc.
+ *  For aggregate spec `{kind: "primary"}`, falls back to `av.curve_type`
+ *  (e.g. "ic50" → "pIC50"). Returns "pX" only as a last-resort. */
+function pXLabel(
+  aggregateSpec: { kind: string; level?: number } | null,
+  fallbackCurveType: string | null,
+): string {
+  if (
+    aggregateSpec &&
+    aggregateSpec.kind !== "primary" &&
+    aggregateSpec.level != null
+  ) {
+    const lvl =
+      aggregateSpec.level % 1 === 0
+        ? String(aggregateSpec.level)
+        : aggregateSpec.level.toFixed(1);
+    return `p${aggregateSpec.kind.toUpperCase()}${lvl}`;
+  }
+  if (fallbackCurveType) return `p${fallbackCurveType.toUpperCase()}`;
+  return "pX";
+}
+
+/** Format the fold-range as `×N` — integer when ≥10, one decimal otherwise.
+ *  Matches the inline chip's compact, scannable form. */
+function formatFoldRange(foldRange: number): string {
+  return foldRange >= 10
+    ? `×${Math.round(foldRange)}`
+    : `×${foldRange.toFixed(1)}`;
+}
+
 export function InterceptCell({ av, spec, isPrimary, mode }: InterceptCellProps) {
   const [open, setOpen] = useState(false);
 
@@ -169,13 +216,69 @@ export function InterceptCell({ av, spec, isPrimary, mode }: InterceptCellProps)
     </span>
   );
 
+  // ---- Inline aggregate summary lines (muted, below the headline) ----
+  // Chemistry convention: papers report `IC50 = X ± Y µM (n=N)` or
+  // `pIC50 = X ± Y`. Showing both right under the headline lets a chemist
+  // copy-paste into a presentation without opening the per-run drill-in.
+  //
+  // Skip these lines when the headline isn't a scalar (an ND / `>max`
+  // cell has nothing to summarize) or when this is a single-run cell.
+  const stats = aggregate?.aggregate_stats;
+  const isScalarHeadline = display.kind === "scalar";
+  const showAggregateLines =
+    runCount >= 2 && stats !== null && stats !== undefined && isScalarHeadline;
+  const isAggregateMode = mode === "gmean" || mode === "mean";
+
+  // In gmean/mean modes the headline already IS the geometric mean (with the
+  // ×N chip in the decoration); the gmean line would be a redundant restate.
+  // In Latest / Best R² modes the headline is a single picked value, so the
+  // gmean line surfaces the spread context the chemist needs to trust it.
+  const showGmeanLine =
+    showAggregateLines &&
+    !isAggregateMode &&
+    stats?.geometric_mean != null &&
+    stats?.fold_range != null;
+
+  const showPxLine =
+    showAggregateLines &&
+    stats?.log_value_mean != null &&
+    stats?.log_value_sd != null;
+
+  const gmeanLine = showGmeanLine ? (
+    <div className="font-mono text-[10px] text-muted-foreground tabular-nums">
+      gmean {stats!.geometric_mean!.toPrecision(3)} · {formatFoldRange(stats!.fold_range!)}
+    </div>
+  ) : null;
+
+  const pxLine = showPxLine ? (
+    <div className="font-mono text-[10px] text-muted-foreground tabular-nums">
+      {pXLabel(aggregate?.spec ?? null, av.curve_type)}{" "}
+      {(unitToMolarExponent(av.unit) - stats!.log_value_mean!).toFixed(2)} ±{" "}
+      {stats!.log_value_sd!.toFixed(2)}
+    </div>
+  ) : null;
+
+  // Stack the headline + muted lines vertically only when there's something
+  // to stack — single-run / non-scalar cells keep their original one-line
+  // shape so the grid stays scannable.
+  const stackedBody =
+    gmeanLine || pxLine ? (
+      <div className="flex flex-col gap-0.5 items-start">
+        {cellBody}
+        {gmeanLine}
+        {pxLine}
+      </div>
+    ) : (
+      cellBody
+    );
+
   if (!hasDrillIn) {
-    return cellBody;
+    return stackedBody;
   }
 
   // Multi-run drill-in via Popover (click-to-open; HoverCard isn't in
-  // this codebase). Trigger wraps the cell body in a button so it's
-  // keyboard-accessible.
+  // this codebase). Trigger wraps the entire stacked body so clicking
+  // anywhere in the cell opens the per-run table.
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -184,7 +287,7 @@ export function InterceptCell({ av, spec, isPrimary, mode }: InterceptCellProps)
           className="cursor-pointer rounded p-0 text-left hover:bg-muted/30"
           aria-label="Show run history"
         >
-          {cellBody}
+          {stackedBody}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-96 p-3" align="start">

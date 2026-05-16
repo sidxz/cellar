@@ -74,6 +74,106 @@ describe("<InterceptCell />", () => {
     expect(screen.getByLabelText(/runs disagree/i)).toBeTruthy();
   });
 
+  it("multi-run Latest cell shows muted gmean + pX summary lines under headline", () => {
+    const av: ActivityValue = {
+      ...baseAv,
+      run_count: 3,
+      intercept_aggregates: [
+        {
+          spec: { kind: "ic", level: 50.0 },
+          selected_value: 0.10,
+          selected_qualifier: "=",
+          aggregate_stats: {
+            geometric_mean: 0.18,
+            fold_range: 4.2,
+            log_value_mean: -0.74, // log10(0.18); pIC50 (µM) = 6 - (-0.74) = 6.74
+            log_value_sd: 0.30,
+          },
+          disagreement_flag: false,
+        },
+      ],
+    };
+    render(
+      <InterceptCell
+        av={av}
+        spec={{ kind: "ic", level: 50.0 }}
+        isPrimary={false}
+        mode="latest"
+      />,
+    );
+    // gmean line: shows geometric mean with 3 sig figs + fold-range chip
+    expect(screen.getByText(/gmean.*0\.180.*×4\.2/)).toBeTruthy();
+    // pX line: label is pIC50, value 6.74, ± 0.30
+    expect(screen.getByText(/pIC50.*6\.74.*±.*0\.30/)).toBeTruthy();
+  });
+
+  it("multi-run Geometric mean cell skips the gmean line (it's the headline) but keeps pX", () => {
+    const av: ActivityValue = {
+      ...baseAv,
+      run_count: 3,
+      intercept_aggregates: [
+        {
+          spec: { kind: "ec", level: 90.0 },
+          selected_value: 0.45,
+          selected_qualifier: "=",
+          aggregate_stats: {
+            geometric_mean: 0.45,
+            fold_range: 4.0,
+            log_value_mean: -0.35,
+            log_value_sd: 0.20,
+          },
+          disagreement_flag: false,
+        },
+      ],
+    };
+    render(
+      <InterceptCell
+        av={av}
+        spec={{ kind: "ec", level: 90.0 }}
+        isPrimary={false}
+        mode="gmean"
+      />,
+    );
+    // No gmean line — it's redundant when the headline IS the geometric mean
+    expect(screen.queryByText(/gmean/)).toBeNull();
+    // pX line still shows with pEC90 label (kind=ec, level=90)
+    expect(screen.getByText(/pEC90.*6\.35.*±.*0\.20/)).toBeTruthy();
+  });
+
+  it("multi-run ND cell skips the aggregate summary lines (nothing to summarize)", () => {
+    const av: ActivityValue = {
+      ...baseAv,
+      value: null,
+      curve_params: { curve_class: "inactive" } as ActivityValue["curve_params"],
+      run_count: 5,
+      intercept_aggregates: [
+        {
+          spec: { kind: "primary" },
+          selected_value: null,
+          selected_qualifier: "nd",
+          // BE returns all-None stats when no EQ run contributes
+          aggregate_stats: {
+            geometric_mean: null,
+            fold_range: null,
+            log_value_mean: null,
+            log_value_sd: null,
+          },
+          disagreement_flag: false,
+        },
+      ],
+    };
+    render(<InterceptCell av={av} spec={null} isPrimary={true} mode="latest" />);
+    expect(screen.queryByText(/gmean/)).toBeNull();
+    expect(screen.queryByText(/pIC|pEC|pX/)).toBeNull();
+  });
+
+  it("single-run cell shows no aggregate summary lines", () => {
+    // run_count=1 default; nothing to aggregate, no muted lines
+    render(<InterceptCell av={baseAv} spec={null} isPrimary={true} mode="latest" />);
+    expect(screen.queryByText(/gmean/)).toBeNull();
+    expect(screen.queryByText(/±/)).toBeNull();
+  });
+
   it("opens popover with per-run table on click", async () => {
     const av: ActivityValue = {
       ...baseAv,
