@@ -14,6 +14,14 @@ import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
+import {
+  aggregateValue,
+  pickRepresentative,
+} from "../../lib/compound-detail-selection";
+import {
+  AGGREGATION_LABELS,
+  useAggregationMode,
+} from "../../lib/use-aggregation-mode";
 import type { CurveDetail, ProtocolCurveGroup } from "../../types";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
@@ -41,7 +49,15 @@ interface CompoundDetailSheetProps {
 // `DoseResponseCurve` shape. Workspace-/molecule-id placeholders are fine —
 // the chart uses them only for query-key uniqueness and never reads them.
 
-function adaptCurve(curve: CurveDetail, protocolId: string, molecule: Molecule): DoseResponseCurve {
+function adaptCurve(
+  curve: CurveDetail,
+  protocolId: string,
+  molecule: Molecule,
+  overlay?: {
+    additional_curves?: Array<Record<string, unknown>> | null;
+    aggregate?: { marker_x: number; marker_label: string; unit: string } | null;
+  },
+): DoseResponseCurve {
   return {
     id: curve.curve_id,
     workspace_id: molecule.workspace_id,
@@ -73,8 +89,11 @@ function adaptCurve(curve: CurveDetail, protocolId: string, molecule: Molecule):
     excluded_points: curve.excluded_points ?? null,
     fit_quality_warnings: curve.fit_quality_warnings ?? [],
     intercept_values: curve.intercept_values ?? [],
+    additional_curves: overlay?.additional_curves ?? null,
+    aggregate: overlay?.aggregate ?? null,
   };
 }
+
 
 // ─── ProtocolCard ─────────────────────────────────────────────────────────
 
@@ -86,20 +105,77 @@ interface ProtocolCardProps {
 
 function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  // Drawer honors the toolbar's aggregation mode so the chart matches
+  // the grid cell value end-to-end. Reads URL state directly via the
+  // shared hook — no prop drilling.
+  const { mode } = useAggregationMode();
 
-  // Pick best curve by R-squared — search detail shows the headline value;
-  // the run page is where chemists drill into individual runs / replicates.
-  const sortedCurves = useMemo(
-    () => [...group.curves].sort((a, b) => b.r_squared - a.r_squared),
-    [group.curves],
-  );
-  const bestCurve = sortedCurves[0];
-  const adaptedCurve = useMemo(
-    () => (bestCurve ? adaptCurve(bestCurve, group.protocol_id, molecule) : null),
-    [bestCurve, group.protocol_id, molecule],
-  );
+  const { adaptedCurve, repCurve, aggValue } = useMemo(() => {
+    const rep = pickRepresentative(group.curves, mode);
+    if (!rep) return { adaptedCurve: null, repCurve: null, aggValue: null };
 
-  if (!bestCurve || !adaptedCurve) return null;
+    // For aggregate modes, build the overlay (additional contributors +
+    // amber marker) so the chart draws the same treatment as the grid
+    // cell's sparkline (Step 3 of the multi-run work). Non-aggregate modes
+    // get a plain rep-only chart.
+    let agg: number | null = null;
+    let overlay: Parameters<typeof adaptCurve>[3] | undefined;
+    if (mode === "gmean" || mode === "mean") {
+      agg = aggregateValue(group.curves, mode);
+      if (agg !== null) {
+        const additional = group.curves
+          .filter((c) => c.curve_id !== rep.curve_id)
+          .map((c) => ({
+            fitted_value: c.fitted_value,
+            top: c.top,
+            bottom: c.bottom,
+            hill_slope: c.hill_slope,
+            r_squared: c.r_squared,
+            curve_class: c.curve_class,
+            raw_data: c.raw_data,
+            intercept_values: c.intercept_values,
+            curve_type: c.curve_type,
+            run_date: c.run_date ?? "",
+            run_id: c.run_id,
+          }));
+        overlay = {
+          additional_curves: additional,
+          aggregate: {
+            marker_x: agg,
+            marker_label: mode === "gmean" ? "gmean" : "mean",
+            unit: rep.fitted_unit,
+          },
+        };
+      }
+    }
+    return {
+      adaptedCurve: adaptCurve(rep, group.protocol_id, molecule, overlay),
+      repCurve: rep,
+      aggValue: agg,
+    };
+  }, [group.curves, group.protocol_id, molecule, mode]);
+
+  if (!repCurve || !adaptedCurve) return null;
+
+  // Header subtext describing what's drawn — chemists need to know
+  // whether the curve they're staring at is the rep, the best, or just
+  // a shape reference behind an aggregate marker.
+  const headerText = (() => {
+    if (group.curves.length <= 1) return null;
+    const n = group.curves.length;
+    if (mode === "best_r2") {
+      return `${n} runs — showing best (R² = ${repCurve.r_squared.toFixed(3)})`;
+    }
+    if (mode === "latest") {
+      const d = repCurve.run_date ?? "—";
+      return `${n} runs — showing latest run (${d})`;
+    }
+    if (aggValue !== null) {
+      const label = AGGREGATION_LABELS[mode].toLowerCase();
+      return `${n} runs — ${label} = ${aggValue.toPrecision(3)} ${repCurve.fitted_unit}`;
+    }
+    return `${n} runs — ${AGGREGATION_LABELS[mode].toLowerCase()}`;
+  })();
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -110,7 +186,7 @@ function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardP
       >
         <div className="min-w-0 space-y-0.5">
           <p className="truncate text-sm font-medium">{group.protocol_name}</p>
-          <p className="text-xs text-muted-foreground">{bestCurve.curve_type}</p>
+          <p className="text-xs text-muted-foreground">{repCurve.curve_type}</p>
         </div>
         {expanded ? (
           <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -124,11 +200,8 @@ function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardP
         // otherwise refuse to shrink below their content width — without it
         // the side-panel chart pushes past the sheet's right edge.
         <div className="min-w-0 space-y-3 border-t border-border px-4 py-3">
-          {group.curves.length > 1 && (
-            <p className="text-xs text-muted-foreground">
-              {group.curves.length} runs &mdash; showing best (R&sup2; ={" "}
-              {bestCurve.r_squared.toFixed(3)})
-            </p>
+          {headerText && (
+            <p className="text-xs text-muted-foreground">{headerText}</p>
           )}
           <DoseResponseChart curves={[adaptedCurve]} isInteractive={false} />
         </div>

@@ -543,6 +543,10 @@ export interface CurveInterceptValue {
 export interface CurveDetail {
   curve_id: string;
   run_id: string;
+  /** Date of the owning run (ISO date string from the BE). Drives the
+   *  drawer's selection logic when the toolbar picks "latest". Nullable —
+   *  a curve whose run was deleted out-of-band would surface here as null. */
+  run_date: string | null;
   batch_id: string;
   /** The DR readout-def this curve was fitted from. Identity on multi-DR
    *  protocols where two DRs may share a curve_type. */
