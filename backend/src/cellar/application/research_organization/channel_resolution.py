@@ -25,11 +25,14 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from cellar.application.screening.run_aggregation import (
-    AggregateResult,
     ResolvedRun,
     _max_dose_from_raw,
     apply_selection_rule,
+)
+from cellar.application.screening.run_aggregation import (
     intercept_scalar as _intercept_scalar,
+)
+from cellar.application.screening.run_aggregation import (
     resolve_intercept as _resolve_intercept,
 )
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -39,15 +42,32 @@ from cellar.domain.research_organization.campaign_measurement import (
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     HitCall,
-    QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.hit_criterion import HitCriterion
 
 # Back-compat alias — channel_resolution callers still type ResolvedCandidate.
 # Remove in a follow-up commit once consumers migrate.
 ResolvedCandidate = ResolvedRun
+
+# Public surface + intentionally re-exported helpers. The leading-underscore
+# names below are re-exported so existing callers (preview_run_import,
+# add_results_from_runs, scripts/rebuild_campaign_curve_snapshots, and the
+# channel_resolver test module) can keep importing them from this module
+# without an SDK-style migration. Without ``__all__``, ruff's --fix would
+# strip these on the next sweep.
+__all__ = [
+    "ChannelResolutionQuery",
+    "ChannelResolver",
+    "ResolvedCandidate",
+    # Re-exported for tests / channel-side callers
+    "_build_curve_snapshot",
+    "_compute_hit_call",
+    "_intercept_scalar",
+    "_max_dose_from_raw",
+    "_resolve_intercept",
+]
 
 # Placeholder unit used for ND cells when no candidate is available to
 # contribute one. The domain forbids empty units; this keeps invariants
@@ -95,13 +115,7 @@ def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     if qc.get("require_approved", False) and not c.run_approved:
         return False
     min_z = qc.get("min_z_prime")
-    if min_z is not None and (c.z_prime is None or c.z_prime < min_z):
-        return False
-    return True
-
-
-def _is_qualified(c: ResolvedCandidate) -> bool:
-    return c.qualifier in {ValueQualifier.LT, ValueQualifier.GT}
+    return not (min_z is not None and (c.z_prime is None or c.z_prime < min_z))
 
 
 def _threshold_input_value(

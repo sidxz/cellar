@@ -190,20 +190,11 @@ def _filter_by_qualifier_handling(
         return list(runs)
     if handling == QualifierHandling.TREAT_AS_LIMIT:
         raise NotImplementedError(
-            "TREAT_AS_LIMIT semantics aren't defined in the shared aggregator yet "
-            "(channel_resolution may handle this differently). "
-            "Pass EXCLUDE_QUALIFIED or INCLUDE_QUALIFIED until search/campaign agree on a unified rule."
+            "TREAT_AS_LIMIT semantics aren't implemented anywhere yet. "
+            "Pass EXCLUDE_QUALIFIED or INCLUDE_QUALIFIED until search/campaign "
+            "agree on a unified rule."
         )
     raise NotImplementedError(f"Unknown QualifierHandling: {handling!r}")
-
-
-def _eq_runs(
-    runs: list[ResolvedRun], intercept_key: InterceptKey | None
-) -> list[ResolvedRun]:
-    """Subset of runs whose intercept resolves to an EQ scalar."""
-    return [
-        r for r in runs if resolve_intercept(r, intercept_key)[1] == ValueQualifier.EQ
-    ]
 
 
 def _resolvable_runs(
@@ -230,7 +221,7 @@ def _latest_by_date(runs: list[ResolvedRun]) -> ResolvedRun:
     return max(runs, key=lambda r: r.run_date or date.min)
 
 
-def _pick_one_eq(
+def _pick_one_resolvable(
     runs: list[ResolvedRun],
     intercept_key: InterceptKey | None,
     key_fn,
@@ -239,9 +230,10 @@ def _pick_one_eq(
 
     Used by LATEST_APPROVED_RUN (key_fn = run_date) and BEST_R_SQUARED
     (key_fn = curve_r_squared). Both EQ and GT-from-at_bound runs are
-    eligible — an at_bound run carries a real upper-bound measurement
-    and should win on date / r² over an EQ run if it sorts that way.
-    Only ND-resolving runs (Inactive, missing intercept) are filtered.
+    eligible (hence the "resolvable" — not "eq" — name) — an at_bound run
+    carries a real upper-bound measurement and should win on date / r²
+    over an EQ run if it sorts that way. Only ND-resolving runs (Inactive,
+    missing intercept) are filtered.
     """
     resolvable = _resolvable_runs(runs, intercept_key)
     if not resolvable:
@@ -272,6 +264,15 @@ def _aggregate_eq(
 
     Used by MEAN_ACROSS_RUNS (require_positive=False, agg_fn=mean) and
     GEOMETRIC_MEAN (require_positive=True, agg_fn=geomean).
+
+    Note: ``representative_run`` is the latest-by-date EQ contributor — NOT
+    the latest of any qualified candidate. This differs subtly from the
+    pre-refactor channel_resolution.py code, which used the latest of any
+    post-QC candidate (including Inactive ones). The new behavior is a
+    defensible improvement: the snapshot reflects a curve that actually
+    contributed to the aggregate value, rather than an unrelated curve
+    that happened to be the most recent. Surfaces only on aggregate
+    channels with mixed EQ/Inactive runs.
     """
     pairs = [(r, intercept_scalar(r, intercept_key)) for r in runs]
     qualifying = [
@@ -320,7 +321,7 @@ def apply_selection_rule(
         )
 
     if rule == SelectionRule.LATEST_APPROVED_RUN:
-        return _pick_one_eq(
+        return _pick_one_resolvable(
             filtered, intercept_key, key_fn=lambda r: r.run_date or date.min
         )
 
@@ -328,7 +329,7 @@ def apply_selection_rule(
         # `r.curve_r_squared if not None else -inf` (not `or -inf`) so a
         # legal r²=0.0 (a flat trace) doesn't tie with `None` runs and
         # lose to whatever order Python's `max` happens to pick.
-        return _pick_one_eq(
+        return _pick_one_resolvable(
             filtered,
             intercept_key,
             key_fn=lambda r: r.curve_r_squared if r.curve_r_squared is not None else -math.inf,
