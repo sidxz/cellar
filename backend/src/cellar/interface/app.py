@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
         from cellar.application.cdd_import.cdd_plate_import_orchestrator import (
             CddPlateImportOrchestrator,
         )
+        from cellar.application.export.orchestration import ExportOrchestrator
         from cellar.infrastructure.temporal.orchestrators import (
             NullBulkRegistrationOrchestrator,
             NullCddMoleculeImportOrchestrator,
@@ -79,6 +80,10 @@ def create_app() -> FastAPI:
             TemporalBulkRegistrationOrchestrator,
             TemporalCddMoleculeImportOrchestrator,
             TemporalCddPlateImportOrchestrator,
+        )
+        from cellar.infrastructure.temporal.orchestrators.export import (
+            NullExportOrchestrator,
+            TemporalExportOrchestrator,
         )
 
         if app.state.temporal_client is not None:
@@ -91,16 +96,23 @@ def create_app() -> FastAPI:
             bulk_orch: BulkRegistrationOrchestrator = TemporalBulkRegistrationOrchestrator(
                 app.state.temporal_client
             )
+            export_orch: ExportOrchestrator = TemporalExportOrchestrator(
+                app.state.temporal_client
+            )
         else:
             mol_orch = NullCddMoleculeImportOrchestrator()
             plate_orch = NullCddPlateImportOrchestrator()
             bulk_orch = NullBulkRegistrationOrchestrator()
+            from cellar.application.export.render_export import RenderExport
+
+            export_orch = NullExportOrchestrator(container[RenderExport])
 
         from lagom import Singleton
 
         container.define(CddMoleculeImportOrchestrator, Singleton(lambda: mol_orch))
         container.define(CddPlateImportOrchestrator, Singleton(lambda: plate_orch))
         container.define(BulkRegistrationOrchestrator, Singleton(lambda: bulk_orch))
+        container.define(ExportOrchestrator, Singleton(lambda: export_orch))
 
         # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
         async with sentinel.lifespan(app):
