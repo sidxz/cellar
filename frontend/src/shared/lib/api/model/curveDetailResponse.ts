@@ -4,6 +4,7 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { CurveDetailResponseRunDate } from './curveDetailResponseRunDate';
 import type { CurveDetailResponseCurveClass } from './curveDetailResponseCurveClass';
 import type { CurveDetailResponseConfidenceIntervalLow } from './curveDetailResponseConfidenceIntervalLow';
 import type { CurveDetailResponseConfidenceIntervalHigh } from './curveDetailResponseConfidenceIntervalHigh';
@@ -14,6 +15,7 @@ import type { InterceptValueResponse } from './interceptValueResponse';
 export interface CurveDetailResponse {
   curve_id: string;
   run_id: string;
+  run_date?: CurveDetailResponseRunDate;
   batch_id: string;
   readout_definition_id: string;
   curve_type: string;

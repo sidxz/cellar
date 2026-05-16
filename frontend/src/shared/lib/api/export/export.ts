@@ -5,18 +5,30 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
-  useMutation
+  useMutation,
+  useQuery
 } from '@tanstack/react-query';
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
   QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
-  UseMutationResult
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
-  ExportSDFBody,
-  HTTPValidationError
+  ExportStatusResponse,
+  HTTPValidationError,
+  ListExportsApiV1ExportsGetParams,
+  StartExportBody,
+  StartExportResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -25,29 +37,30 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
- * @summary Export Sdf
+ * Initiate an async export job. Returns a job_id for polling.
+ * @summary Start Export
  */
-export const exportSdfApiV1MoleculesExportSdfPost = (
-    exportSDFBody: ExportSDFBody,
+export const startExportApiV1ExportsPost = (
+    startExportBody: StartExportBody,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<unknown>(
-      {url: `/api/v1/molecules/export/sdf`, method: 'POST',
+      return customInstance<StartExportResponse>(
+      {url: `/api/v1/exports`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: exportSDFBody, signal
+      data: startExportBody, signal
     },
       );
     }
   
 
 
-export const getExportSdfApiV1MoleculesExportSdfPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportSdfApiV1MoleculesExportSdfPost>>, TError,{data: ExportSDFBody}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof exportSdfApiV1MoleculesExportSdfPost>>, TError,{data: ExportSDFBody}, TContext> => {
+export const getStartExportApiV1ExportsPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startExportApiV1ExportsPost>>, TError,{data: StartExportBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof startExportApiV1ExportsPost>>, TError,{data: StartExportBody}, TContext> => {
 
-const mutationKey = ['exportSdfApiV1MoleculesExportSdfPost'];
+const mutationKey = ['startExportApiV1ExportsPost'];
 const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -57,10 +70,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportSdfApiV1MoleculesExportSdfPost>>, {data: ExportSDFBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startExportApiV1ExportsPost>>, {data: StartExportBody}> = (props) => {
           const {data} = props ?? {};
 
-          return  exportSdfApiV1MoleculesExportSdfPost(data,)
+          return  startExportApiV1ExportsPost(data,)
         }
 
         
@@ -68,24 +81,366 @@ const {mutation: mutationOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ExportSdfApiV1MoleculesExportSdfPostMutationResult = NonNullable<Awaited<ReturnType<typeof exportSdfApiV1MoleculesExportSdfPost>>>
-    export type ExportSdfApiV1MoleculesExportSdfPostMutationBody = ExportSDFBody
-    export type ExportSdfApiV1MoleculesExportSdfPostMutationError = HTTPValidationError
+    export type StartExportApiV1ExportsPostMutationResult = NonNullable<Awaited<ReturnType<typeof startExportApiV1ExportsPost>>>
+    export type StartExportApiV1ExportsPostMutationBody = StartExportBody
+    export type StartExportApiV1ExportsPostMutationError = HTTPValidationError
 
     /**
- * @summary Export Sdf
+ * @summary Start Export
  */
-export const useExportSdfApiV1MoleculesExportSdfPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportSdfApiV1MoleculesExportSdfPost>>, TError,{data: ExportSDFBody}, TContext>, }
+export const useStartExportApiV1ExportsPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startExportApiV1ExportsPost>>, TError,{data: StartExportBody}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof exportSdfApiV1MoleculesExportSdfPost>>,
+        Awaited<ReturnType<typeof startExportApiV1ExportsPost>>,
         TError,
-        {data: ExportSDFBody},
+        {data: StartExportBody},
         TContext
       > => {
 
-      const mutationOptions = getExportSdfApiV1MoleculesExportSdfPostMutationOptions(options);
+      const mutationOptions = getStartExportApiV1ExportsPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
+    /**
+ * List recent export jobs for the workspace, newest first.
+ * @summary List Exports
+ */
+export const listExportsApiV1ExportsGet = (
+    params?: ListExportsApiV1ExportsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ExportStatusResponse[]>(
+      {url: `/api/v1/exports`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getListExportsApiV1ExportsGetQueryKey = (params?: ListExportsApiV1ExportsGetParams,) => {
+    return [
+    `/api/v1/exports`, ...(params ? [params]: [])
+    ] as const;
+    }
+
     
+export const getListExportsApiV1ExportsGetQueryOptions = <TData = Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError = HTTPValidationError>(params?: ListExportsApiV1ExportsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListExportsApiV1ExportsGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>> = ({ signal }) => listExportsApiV1ExportsGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListExportsApiV1ExportsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>>
+export type ListExportsApiV1ExportsGetQueryError = HTTPValidationError
+
+
+export function useListExportsApiV1ExportsGet<TData = Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListExportsApiV1ExportsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListExportsApiV1ExportsGet<TData = Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError = HTTPValidationError>(
+ params?: ListExportsApiV1ExportsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListExportsApiV1ExportsGet<TData = Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError = HTTPValidationError>(
+ params?: ListExportsApiV1ExportsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Exports
+ */
+
+export function useListExportsApiV1ExportsGet<TData = Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError = HTTPValidationError>(
+ params?: ListExportsApiV1ExportsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExportsApiV1ExportsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListExportsApiV1ExportsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Poll the status of a single export job.
+ * @summary Get Export
+ */
+export const getExportApiV1ExportsJobIdGet = (
+    jobId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ExportStatusResponse>(
+      {url: `/api/v1/exports/${jobId}`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetExportApiV1ExportsJobIdGetQueryKey = (jobId?: string,) => {
+    return [
+    `/api/v1/exports/${jobId}`
+    ] as const;
+    }
+
+    
+export const getGetExportApiV1ExportsJobIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError = HTTPValidationError>(jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExportApiV1ExportsJobIdGetQueryKey(jobId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>> = ({ signal }) => getExportApiV1ExportsJobIdGet(jobId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(jobId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetExportApiV1ExportsJobIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>>
+export type GetExportApiV1ExportsJobIdGetQueryError = HTTPValidationError
+
+
+export function useGetExportApiV1ExportsJobIdGet<TData = Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError = HTTPValidationError>(
+ jobId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExportApiV1ExportsJobIdGet<TData = Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError = HTTPValidationError>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExportApiV1ExportsJobIdGet<TData = Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError = HTTPValidationError>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Export
+ */
+
+export function useGetExportApiV1ExportsJobIdGet<TData = Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError = HTTPValidationError>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExportApiV1ExportsJobIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetExportApiV1ExportsJobIdGetQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Request cancellation of an in-flight export job.
+ * @summary Cancel Export
+ */
+export const cancelExportApiV1ExportsJobIdCancelPost = (
+    jobId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/exports/${jobId}/cancel`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getCancelExportApiV1ExportsJobIdCancelPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelExportApiV1ExportsJobIdCancelPost>>, TError,{jobId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof cancelExportApiV1ExportsJobIdCancelPost>>, TError,{jobId: string}, TContext> => {
+
+const mutationKey = ['cancelExportApiV1ExportsJobIdCancelPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelExportApiV1ExportsJobIdCancelPost>>, {jobId: string}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  cancelExportApiV1ExportsJobIdCancelPost(jobId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelExportApiV1ExportsJobIdCancelPostMutationResult = NonNullable<Awaited<ReturnType<typeof cancelExportApiV1ExportsJobIdCancelPost>>>
+    
+    export type CancelExportApiV1ExportsJobIdCancelPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Cancel Export
+ */
+export const useCancelExportApiV1ExportsJobIdCancelPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelExportApiV1ExportsJobIdCancelPost>>, TError,{jobId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof cancelExportApiV1ExportsJobIdCancelPost>>,
+        TError,
+        {jobId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getCancelExportApiV1ExportsJobIdCancelPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Stream the completed export file. Returns 409 if not ready, 410 if expired.
+ * @summary Download Export
+ */
+export const downloadExportApiV1ExportsJobIdDownloadGet = (
+    jobId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<unknown>(
+      {url: `/api/v1/exports/${jobId}/download`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getDownloadExportApiV1ExportsJobIdDownloadGetQueryKey = (jobId?: string,) => {
+    return [
+    `/api/v1/exports/${jobId}/download`
+    ] as const;
+    }
+
+    
+export const getDownloadExportApiV1ExportsJobIdDownloadGetQueryOptions = <TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError = HTTPValidationError>(jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadExportApiV1ExportsJobIdDownloadGetQueryKey(jobId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>> = ({ signal }) => downloadExportApiV1ExportsJobIdDownloadGet(jobId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(jobId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DownloadExportApiV1ExportsJobIdDownloadGetQueryResult = NonNullable<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>>
+export type DownloadExportApiV1ExportsJobIdDownloadGetQueryError = HTTPValidationError
+
+
+export function useDownloadExportApiV1ExportsJobIdDownloadGet<TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError = HTTPValidationError>(
+ jobId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>,
+          TError,
+          Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDownloadExportApiV1ExportsJobIdDownloadGet<TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError = HTTPValidationError>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>,
+          TError,
+          Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDownloadExportApiV1ExportsJobIdDownloadGet<TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError = HTTPValidationError>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download Export
+ */
+
+export function useDownloadExportApiV1ExportsJobIdDownloadGet<TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError = HTTPValidationError>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsJobIdDownloadGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDownloadExportApiV1ExportsJobIdDownloadGetQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
