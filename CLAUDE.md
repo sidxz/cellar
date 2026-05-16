@@ -183,6 +183,92 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-16 — Unified export pipeline shipped on prot-2
+
+**Branch:** `prot-2`. 21 implementation commits since plan commit `b20796b7` (T1–T20) + 1 test-infra fix (T21). Nothing pushed. **Browser smoke pending** (BE 2611 tests pass, FE 287 tests pass, tsc clean).
+
+**Spec:** `docs/superpowers/specs/2026-05-16-unified-export-design.md`. **Plan:** `docs/superpowers/plans/2026-05-16-unified-export.md` (21 tasks shipped via subagent-driven execution).
+
+**Behavior change:** Export on `/search` now runs ALWAYS-ASYNC on the backend (Temporal workflow → fsspec storage → polled by the FE → auto-download). Exports the FULL result set, not just the page loaded in the AG Grid. Four formats: CSV (machine-tabular), SDF (RDKit SDWriter + per-activity data tags), XLSX (numeric cells + embedded matplotlib sparkline PNGs up to 5K rows), PDF (WeasyPrint + Jinja landscape template, capped at 5K rows). Old `POST /api/v1/molecules/export/sdf` returns 410 with a redirect message. Old FE-only `data-grid/export-toolbar.tsx` deleted; 4 grid callers stripped of `exportFilename` / `excelEnhancer` props (export buttons gone from those grids; they'll be re-wired to the BE pipeline in follow-up PRs). T21 also added `TEMPORAL_DISABLED=1` to the API test conftest so `NullExportOrchestrator` is wired during tests (the Protocol cannot be reflection-built by Lagom).
+
+**Commits shipped this session** (hash + title):
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `445153e9` | feat(domain): ExportJob aggregate + repository protocol |
+| 2 | `03fb97c5` | fix(domain): tighten ExportJob state-machine guards + Protocol typing |
+| 3 | `6d085524` | feat(persistence): migration 036 — export_jobs table |
+| 4 | `5408c8dd` | feat(persistence): ExportJob SQLAlchemy model + repo impl |
+| 5 | `b34d3c1a` | feat(di): wire export domain repository |
+| 6 | `ada19928` | feat(export): RowStream protocol + ColumnSpec + ExportRow |
+| 7 | `e04def21` | feat(export): SearchResultsRowStream — cursored re-runs of ExecuteSearch |
+| 8 | `4c7c7d85` | feat(export): CSV renderer + ExportRenderer protocol |
+| 9 | `04a67177` | feat(export): SDF renderer (RDKit SDWriter + per-activity data tags) |
+| 10 | `d5f0c48e` | feat(export): XLSX renderer — numeric cells + embedded sparklines ≤5K rows |
+| 11 | `ecb595db` | feat(export): PDF renderer (WeasyPrint + Jinja template) |
+| 12 | `c97a8fd0` | feat(export): RenderExport runner — streams batches, writes via fsspec, marks job ready |
+| 13 | `72819490` | feat(export): start/get/cancel/list/purge use cases |
+| 14 | `17dfdc62` | feat(temporal): ExportWorkflow + activity + orchestrator (Temporal + Null) |
+| 15 | `b7dc1f51` | feat(di): wire export use cases + orchestrator + render runner |
+| 16 | `efe06053` | feat(api): /api/v1/exports endpoints + legacy SDF 410 shim |
+| 17 | `453d3bc5` | chore(api): regenerate orval client for /api/v1/exports |
+| 18 | `fc4f481b` | feat(export): useExport hook + types (poll → trigger download) |
+| 19 | `2f6ba60c` | feat(export): shared ExportToolbar + Sonner progress toast |
+| 20 | `7228969c` | feat(search): wire new ExportToolbar — exports run server-side over full result set |
+| 21 | `d12da589` | refactor(data-grid): drop FE-only export toolbar in favor of shared BE-driven one |
+
+**T21 (this session — test-infra):**
+- `tests/api/conftest.py` — added `os.environ["TEMPORAL_DISABLED"] = "1"` so the Lagom container binds `NullExportOrchestrator` during API tests instead of failing to reflect-build the `ExportOrchestrator` Protocol. This was the only failing test (`test_export.py::TestStartExport::test_returns_job_id`); all 15 API export tests now pass.
+
+**Surfaces touched:**
+- `/search` results grid — primary user-visible change: new `<ExportToolbar />` in toolbarActions; replaces old FE-only excel/csv and the 10K-cap SDF endpoint.
+- 4 other grids lost their export buttons in T21 (run-dr-results, readout-data-table, activity-tab, molecule-list); will be re-wired to the BE pipeline in follow-up PRs.
+- BE: new `domain/export/`, `application/export/`, `infrastructure/temporal/{workflows,activities,orchestrators}/export.py`, `infrastructure/persistence/sqlalchemy/export/`, migration 036, REST routes at `/api/v1/exports*`, legacy `/molecules/export/sdf` → 410.
+- FE: new `shared/components/export/{types.ts, use-export.ts, export-toolbar.tsx, export-job-toast.tsx}`.
+
+**Smoke checklist (pending — please run before push):**
+
+| Scenario | Expected |
+|---|---|
+| Search returns 50 mols → Export → CSV | Toast spins ~1s; .csv downloads; opens cleanly; numbers are numbers; ND for inactive intercepts. |
+| Same search → Export → SDF | .sdf opens in any chemistry viewer; each entry has `> <Mtb_WCA::EC50>` tags. |
+| Same search → Export → Excel | .xlsx opens in Excel; numeric cells right-aligned; sparkline images appear in the Plot column (≤5K rows). |
+| Same search → Export → PDF | .pdf opens; landscape; query summary + footer page numbers visible. |
+| Search returns 2,500 mols → Excel | Progress toast climbs to 100%; file ~10–25 MB; opens. |
+| Search returns 10,000 mols → PDF | Job marks `failed` with `"exceeds 5000 cap"` toast. |
+| Click Cancel mid-export | Toast switches to "cancelled". |
+| Close browser tab mid-export, re-poll later | Job still completes server-side; re-downloadable from `GET /api/v1/exports/{id}/download` (no UI tray yet — call from devtools). |
+| Legacy `POST /api/v1/molecules/export/sdf` from old client | Returns 410 with JSON pointing at the new endpoint. |
+
+**How to resume:**
+1. Spin up the dev stack: `docker compose up -d && cd frontend && pnpm dev`. Verify Temporal worker is up (`docker compose logs temporal-worker | tail`).
+2. Open `/search`, run any query that returns ≥3 results, click Export → CSV. Toast should show progress; file should download.
+3. Walk the smoke checklist above. If anything breaks, capture the failed job's row from `select * from export_jobs order by requested_at desc limit 5;` for diagnostics.
+4. If all smokes pass, push `prot-2` and open a PR against `main`.
+
+**Open follow-ups (post-merge):**
+- Port runs / batches / activity / collection grids to the new shared toolbar (each its own PR — they lost their export buttons in T21).
+- Build the "Recent Exports" tray UI consuming `GET /api/v1/exports` (data is there, no UI yet).
+- Schedule `PurgeExpiredExports` (the use case exists; needs a Temporal scheduled workflow or cron).
+- S3 / MinIO swap of fsspec when storage volume warrants.
+
+**Diagnostic anchors:**
+- `backend/src/cellar/application/export/render_export.py::RenderExport` — single in-process runner. Both the Temporal activity and the Null-orchestrator fire-and-forget path invoke this. Streams row_stream → renderer → fsspec upload → mark_ready.
+- `backend/src/cellar/application/export/row_streams/search_results.py::SearchResultsRowStream` — re-runs `ExecuteSearch` per page via cursor; builds dynamic columns from `protocol_columns` tokens (`drc:` + `rd:`); emits one `image_curve` column per DR readout.
+- `backend/src/cellar/application/export/renderers/{csv,sdf,excel,pdf}_renderer.py` — one renderer per format. Each consumes the same `ColumnSpec[]` + `ExportRow` shapes; CSV/SDF skip `image_curve` columns.
+- `backend/src/cellar/application/export/renderers/sparkline.py::render_sparkline_png` — single matplotlib helper shared by XLSX (PNG) and (TODO) PDF (SVG). 4PL fit gated on `curve_class != "inactive"`, matching the FE `DoseResponseFigure`.
+- `backend/src/cellar/infrastructure/temporal/workflows/export.py::ExportWorkflow` — single activity, 30-min start-to-close timeout, 3 retries. No continue-as-new today (5K-row PDF cap + workflow scope keep history small; revisit if XLSX/CSV exports start pushing >50K rows).
+- `backend/src/cellar/interface/routes/export.py` — POST `/api/v1/exports`, GET `/api/v1/exports/{id}`, POST `/api/v1/exports/{id}/cancel`, GET `/api/v1/exports`, GET `/api/v1/exports/{id}/download` + legacy `POST /api/v1/molecules/export/sdf` → 410.
+- `frontend/src/shared/components/export/use-export.ts::useExport` — single hook every export caller uses. Polls 500ms then 2s backoff; triggers `<a download>` on ready; reset clears state.
+- `frontend/src/shared/components/export/export-toolbar.tsx::ExportToolbar` — single dropdown. Consumers hand it a `buildRequest(format) => ExportRequest | null`.
+
+**Open caveats:**
+- No "Recent Exports" tray UI; chemists who close their browser mid-export can re-download by hitting `GET /api/v1/exports/{id}/download` directly (or polling `GET /api/v1/exports` from devtools).
+- Continue-as-new isn't wired on `ExportWorkflow` — the 30-min activity timeout caps how big a single export can get. For real `>100K`-row exports we'd batch the activity.
+- PDF renderer materializes all rows into memory before WeasyPrint (forced by WeasyPrint's API). CSV/SDF/XLSX stream batch-by-batch.
+- The `application/orchestration` package has a pre-existing typo (`WorkflowOrchestratorUnavailable` imports it via re-export). Untouched.
+- Sparklines in XLSX/PDF read `row.raw["activity"]["curve_snapshot"]`, but `SearchResultsRowStream._row_for` builds `raw["activity"]` from the activity_data dict that `ExecuteSearch` returns — that dict already carries `curve_snapshot` from the existing `_build_curve_snapshot` shared module. **Validate during smoke that sparkline PNGs actually render in the XLSX** — if cells are blank, the activity dict shape doesn't carry `curve_snapshot` at the right depth and the renderer needs a one-line fix.
+
 ### 2026-05-15 — Multi-run aggregation in search & Activity surfaces on `prot-2`
 
 **Branch:** `prot-2`. 15 commits ahead of the 2026-05-14 handoff HEAD (`465f3daa`); `git rev-list --count 465f3daa..HEAD` = 15. Nothing pushed. **Browser smoke pending** (test grid + tests passed: BE 2539, FE 214, tsc clean).

@@ -11,6 +11,9 @@ from collections.abc import AsyncIterator
 os.environ["SENTINEL_SERVICE_KEY"] = "test-key-for-api-tests"
 os.environ["SENTINEL_URL"] = "https://sentinel.example.com"
 os.environ["SENTINEL_SERVICE_NAME"] = "cellar"
+# Disable Temporal so the DI container binds NullExportOrchestrator (and the other Null
+# orchestrators) without needing a running Temporal server.
+os.environ["TEMPORAL_DISABLED"] = "1"
 
 import pytest
 from httpx import ASGITransport, AsyncClient
