@@ -57,6 +57,11 @@ class ResolvedRun:
     curve_hill_slope: float | None = None
     curve_r_squared: float | None = None
     curve_raw_data: list[dict] | None = None
+    # Per-point exclusion flags carried separately from raw_data so the
+    # campaign's expand-dialog can draw the excluded markers. The search /
+    # molecule-activity adapters don't populate this (None is fine — the
+    # campaign-side _build_curve_snapshot guards on truthiness).
+    curve_excluded_points: list[dict] | None = None
     intercept_values: list[dict] | None = None
     curve_type: str | None = None
     curve_confidence_interval_low: float | None = None
@@ -201,6 +206,25 @@ def _eq_runs(
     ]
 
 
+def _resolvable_runs(
+    runs: list[ResolvedRun], intercept_key: InterceptKey | None
+) -> list[ResolvedRun]:
+    """Subset of runs whose intercept resolves to a numeric value.
+
+    Includes both EQ (healthy fit) and GT (at_bound → >max_dose) outcomes;
+    excludes ND (inactive, missing intercept, at_bound with no max_dose).
+
+    Used by the "pick one" rules (LATEST_APPROVED_RUN, BEST_R_SQUARED)
+    where an at_bound row IS a real measurement and should surface as a
+    GT-qualified cell. The aggregating rules (MEAN, GEOMETRIC_MEAN) use
+    ``intercept_scalar`` instead, which keeps only EQ rows — non-scalar
+    rows can't participate honestly in an arithmetic / log-space average.
+    """
+    return [
+        r for r in runs if resolve_intercept(r, intercept_key)[0] is not None
+    ]
+
+
 def _latest_by_date(runs: list[ResolvedRun]) -> ResolvedRun:
     """Pick the run with the largest run_date; treats missing dates as date.min."""
     return max(runs, key=lambda r: r.run_date or date.min)
@@ -211,20 +235,23 @@ def _pick_one_eq(
     intercept_key: InterceptKey | None,
     key_fn,
 ) -> AggregateResult:
-    """Pick the single EQ run that maximizes ``key_fn``; ND if no EQ runs.
+    """Pick the single resolvable run that maximizes ``key_fn``; ND otherwise.
 
     Used by LATEST_APPROVED_RUN (key_fn = run_date) and BEST_R_SQUARED
-    (key_fn = curve_r_squared).
+    (key_fn = curve_r_squared). Both EQ and GT-from-at_bound runs are
+    eligible — an at_bound run carries a real upper-bound measurement
+    and should win on date / r² over an EQ run if it sorts that way.
+    Only ND-resolving runs (Inactive, missing intercept) are filtered.
     """
-    eq = _eq_runs(runs, intercept_key)
-    if not eq:
+    resolvable = _resolvable_runs(runs, intercept_key)
+    if not resolvable:
         return AggregateResult(
             value=None,
             qualifier=ValueQualifier.ND,
             contributing_run_ids=[],
             representative_run=_latest_by_date(runs),
         )
-    pick = max(eq, key=key_fn)
+    pick = max(resolvable, key=key_fn)
     value, qualifier = resolve_intercept(pick, intercept_key)
     return AggregateResult(
         value=value,
