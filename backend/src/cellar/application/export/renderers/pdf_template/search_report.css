@@ -1,0 +1,17 @@
+/* backend/src/cellar/application/export/renderers/pdf_template/search_report.css */
+@page {
+  size: A4 landscape;
+  margin: 1cm;
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #666; }
+}
+body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 9px; color: #222; }
+.page-header { margin-bottom: 0.5em; }
+.page-header h1 { font-size: 13px; margin: 0 0 0.2em 0; }
+.page-header .meta { color: #777; margin: 0; font-size: 9px; }
+table { width: 100%; border-collapse: collapse; }
+thead { display: table-header-group; }
+th, td { border-bottom: 1px solid #e2e2e2; padding: 4px 6px; text-align: left; vertical-align: top; }
+th { background: #f6f6f6; font-weight: 600; }
+tr { page-break-inside: avoid; }
+.cell-number { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-qualifier { color: #777; font-style: italic; }
