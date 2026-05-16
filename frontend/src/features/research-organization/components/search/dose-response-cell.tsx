@@ -37,6 +37,12 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
     r_squared: value.r_squared,
     curve_class: value.curve_params.curve_class ?? null,
     raw_data: value.raw_data,
+    // Aggregate-mode overlay — when the cell collapses N runs via mean /
+    // gmean, the BE writes the other contributors + an explicit marker so
+    // the chart can overlay them muted and draw a single vertical line at
+    // the cell's aggregate value. Absent on LATEST / BEST_R_SQUARED cells.
+    additional_curves: value.additional_curves ?? null,
+    aggregate: value.aggregate ?? null,
   };
 
   return <DoseResponseFigure curve={curve} size="cell" unit={value.unit ?? null} />;

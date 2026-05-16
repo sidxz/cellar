@@ -17,6 +17,7 @@ import uuid
 from typing import Any
 
 from cellar.application.screening import _condense_raw_data
+from cellar.application.screening.curve_snapshot import build_aggregate_curve_snapshot
 from cellar.application.screening.run_aggregation import (
     AggregateResult,
     ResolvedRun,
@@ -567,6 +568,35 @@ class MoleculeActivityService:
         # column's primary EC90 selection).
         intercepts_payload = rep.intercept_values
 
+        # In aggregate modes the FE chart's per-curve intercept dashed line
+        # would point at the rep's intercept, not the cell's aggregate value.
+        # Carry the other contributors + an explicit marker so the chart can
+        # overlay them muted and draw a single vertical line at the cell.
+        # ``build_aggregate_curve_snapshot`` returns a full snapshot keyed
+        # off the rep curve; we lift only the *extras* (the rep curve's own
+        # drawable shape is already on this ActivityValue via raw_data /
+        # curve_params / intercept_values).
+        additional_curves: list[dict[str, Any]] | None = None
+        aggregate_marker: dict[str, Any] | None = None
+        is_aggregate = selection_rule in {
+            SelectionRule.MEAN_ACROSS_RUNS,
+            SelectionRule.GEOMETRIC_MEAN,
+        }
+        if is_aggregate and primary_result.value is not None:
+            marker_label = (
+                "gmean"
+                if selection_rule == SelectionRule.GEOMETRIC_MEAN
+                else "mean"
+            )
+            snap = build_aggregate_curve_snapshot(
+                resolved_runs,
+                aggregate_value=primary_result.value,
+                aggregate_label=marker_label,
+            )
+            if snap is not None:
+                additional_curves = snap.get("additional_curves") or None
+                aggregate_marker = snap.get("aggregate")
+
         return ActivityValue(
             value=primary_result.value,
             qualifier=cell_qualifier,
@@ -597,6 +627,8 @@ class MoleculeActivityService:
                 if intercept_aggregates
                 else False
             ),
+            additional_curves=additional_curves,
+            aggregate=aggregate_marker,
         )
 
 

@@ -612,3 +612,154 @@ class TestEnrichMoleculesMultiRunAggregation:
         av = out[MOL_ID][col_spec]
         assert av.run_count == 15
         assert av.runs is not None and len(av.runs) == 10
+
+    # ─── Aggregate-mode chart overlay ────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_geometric_mean_emits_aggregate_overlay(self) -> None:
+        """GEOMETRIC_MEAN cells carry additional_curves[] + aggregate marker.
+
+        The FE chart needs every contributing curve so it can overlay them
+        muted and draw a single vertical marker at the cell's gmean (rather
+        than the rep curve's intercept dashed line, which would point at
+        the latest run's intercept, not the aggregate).
+        """
+        # Need raw_data on every curve for build_curve_snapshot to produce
+        # a non-None snapshot (it gates on top/bottom/hill_slope being
+        # present, which _make_curve already provides).
+        raw = [{"x": 0.1, "y": 90}, {"x": 1.0, "y": 50}, {"x": 10.0, "y": 10}]
+        curves, runs = _seed_runs(
+            [
+                (date(2026, 4, 1), 0.10),
+                (date(2026, 3, 1), 0.20),
+                (date(2026, 1, 1), 0.40),
+            ]
+        )
+        for c in curves:
+            object.__setattr__(c, "raw_data", list(raw))
+        service = _make_service(
+            curve_repo=_curve_repo_for(curves),
+            run_repo=_run_repo_for(runs),
+        )
+        col_spec = f"drc:{RD_ID}"
+
+        out = await service.enrich_molecules(
+            WS,
+            [MOL_ID],
+            [col_spec],
+            selection_rule=SelectionRule.GEOMETRIC_MEAN,
+        )
+
+        av = out[MOL_ID][col_spec]
+        # The cell's value is the gmean — the chart's marker should point here.
+        assert av.aggregate is not None
+        assert av.aggregate["marker_x"] == pytest.approx(0.20, rel=1e-3)
+        assert av.aggregate["marker_label"] == "gmean"
+        # 3 runs → 1 rep + 2 additional contributors carried on the wire.
+        assert av.additional_curves is not None
+        assert len(av.additional_curves) == 2
+        # Each carries run identity for keying + chronological label.
+        for entry in av.additional_curves:
+            assert "run_id" in entry
+            assert "run_date" in entry
+
+    @pytest.mark.asyncio
+    async def test_mean_emits_aggregate_overlay_with_mean_label(self) -> None:
+        """MEAN_ACROSS_RUNS marker label is "mean" (not "gmean")."""
+        raw = [{"x": 0.1, "y": 90}, {"x": 1.0, "y": 50}, {"x": 10.0, "y": 10}]
+        curves, runs = _seed_runs(
+            [
+                (date(2026, 4, 1), 0.10),
+                (date(2026, 3, 1), 0.20),
+            ]
+        )
+        for c in curves:
+            object.__setattr__(c, "raw_data", list(raw))
+        service = _make_service(
+            curve_repo=_curve_repo_for(curves),
+            run_repo=_run_repo_for(runs),
+        )
+        col_spec = f"drc:{RD_ID}"
+
+        out = await service.enrich_molecules(
+            WS,
+            [MOL_ID],
+            [col_spec],
+            selection_rule=SelectionRule.MEAN_ACROSS_RUNS,
+        )
+
+        av = out[MOL_ID][col_spec]
+        assert av.aggregate is not None
+        assert av.aggregate["marker_label"] == "mean"
+        assert av.additional_curves is not None
+        assert len(av.additional_curves) == 1
+
+    @pytest.mark.asyncio
+    async def test_latest_approved_run_omits_aggregate_overlay(self) -> None:
+        """LATEST_APPROVED_RUN doesn't aggregate → no overlay fields on the wire.
+
+        The per-curve intercept dashed line correctly represents the cell
+        value in this mode (because the cell IS the rep curve), so the
+        chart should draw the standard rep-only treatment.
+        """
+        curves, runs = _seed_runs(
+            [
+                (date(2026, 4, 1), 0.10),
+                (date(2026, 3, 1), 0.20),
+            ]
+        )
+        service = _make_service(
+            curve_repo=_curve_repo_for(curves),
+            run_repo=_run_repo_for(runs),
+        )
+        col_spec = f"drc:{RD_ID}"
+
+        out = await service.enrich_molecules(
+            WS,
+            [MOL_ID],
+            [col_spec],
+            # Default rule is LATEST_APPROVED_RUN.
+        )
+
+        av = out[MOL_ID][col_spec]
+        assert av.additional_curves is None
+        assert av.aggregate is None
+
+    @pytest.mark.asyncio
+    async def test_aggregate_overlay_skips_readout_data_sources(self) -> None:
+        """Cells whose rep has no curve shape can't carry an overlay.
+
+        build_curve_snapshot guards on top/bottom/hill_slope being present.
+        If they're missing (readout_data source, or a defensive fallback),
+        the aggregate overlay falls back to None on both fields rather
+        than carrying a half-shaped snapshot.
+        """
+        curves, runs = _seed_runs(
+            [
+                (date(2026, 4, 1), 0.10),
+                (date(2026, 3, 1), 0.20),
+            ]
+        )
+        # Strip curve shape from every curve → rep snapshot is None.
+        for c in curves:
+            object.__setattr__(c, "top", None)
+            object.__setattr__(c, "bottom", None)
+            object.__setattr__(c, "hill_slope", None)
+        service = _make_service(
+            curve_repo=_curve_repo_for(curves),
+            run_repo=_run_repo_for(runs),
+        )
+        col_spec = f"drc:{RD_ID}"
+
+        out = await service.enrich_molecules(
+            WS,
+            [MOL_ID],
+            [col_spec],
+            selection_rule=SelectionRule.GEOMETRIC_MEAN,
+        )
+
+        av = out[MOL_ID][col_spec]
+        # Cell still has a gmean value — only the overlay is suppressed.
+        assert av.value == pytest.approx(0.1414, rel=1e-2)
+        assert av.additional_curves is None
+        assert av.aggregate is None

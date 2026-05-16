@@ -104,6 +104,16 @@ class ActivityValue:
     runs: list[RunSummary] | None = None
     intercept_aggregates: list[InterceptAggregate] | None = None
     disagreement_flag: bool = False
+    # ---- multi-run aggregate overlay (MEAN_ACROSS_RUNS / GEOMETRIC_MEAN) ----
+    # When the cell aggregates multiple curves, the FE chart needs the OTHER
+    # contributors so it can overlay them muted, plus an explicit marker for
+    # the cell's aggregate value (the rep curve's per-intercept dashed line
+    # points at the rep's intercept, not the aggregate). The representative
+    # curve's own drawable shape is already on this object via ``raw_data`` /
+    # ``curve_params`` / ``intercept_values`` — these two fields carry the
+    # *extras* needed for an aggregate overlay. None on non-aggregate rules.
+    additional_curves: list[dict[str, Any]] | None = None
+    aggregate: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -1,3 +1,7 @@
+import type {
+  AdditionalCurve,
+  AggregateMarker,
+} from "@/features/screening-assay/components/dose-response-figure";
 import type { SelectionRule } from "@/shared/lib/api/model";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -468,6 +472,16 @@ export interface ActivityValue {
   intercept_aggregates?: InterceptAggregate[] | null;
   /** True when collapsed runs disagree by >threshold fold (BE-driven). */
   disagreement_flag?: boolean;
+  /** Non-representative contributing curves in aggregate modes
+   *  (MEAN_ACROSS_RUNS / GEOMETRIC_MEAN). The cell's chart overlays them
+   *  muted underneath the representative curve. Absent on
+   *  LATEST_APPROVED_RUN / BEST_R_SQUARED. Mirrors CurveSnapshot's field. */
+  additional_curves?: AdditionalCurve[] | null;
+  /** Aggregate marker — present only on MEAN_ACROSS_RUNS / GEOMETRIC_MEAN
+   *  cells. The chart draws a single vertical line at marker_x and
+   *  suppresses the per-curve intercept dashed lines (per-run fitted_values
+   *  don't equal the cell value in aggregate modes). Mirrors CurveSnapshot. */
+  aggregate?: AggregateMarker | null;
 }
 
 // ─── Report Configuration ───────────────────────────────────────────────────
