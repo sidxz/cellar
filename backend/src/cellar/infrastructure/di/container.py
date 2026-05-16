@@ -20,6 +20,7 @@ from cellar.infrastructure.di._cdd_import import register_cdd_import
 from cellar.infrastructure.di._chemical_registration import register_chemical_registration
 from cellar.infrastructure.di._core import register_core
 from cellar.infrastructure.di._dashboard import register_dashboard
+from cellar.infrastructure.di._export import register_export
 from cellar.infrastructure.di._inventory import register_inventory
 from cellar.infrastructure.di._research_organization import register_research_organization
 from cellar.infrastructure.di._screening import register_screening
@@ -44,5 +45,6 @@ def create_container(db_settings: DatabaseSettings | None = None) -> Container:
     register_attachment(container)
     register_dashboard(container)
     register_cdd_import(container)
+    register_export(container)
 
     return container
