@@ -183,6 +183,99 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-15 — Multi-run aggregation in search & Activity surfaces on `prot-2`
+
+**Branch:** `prot-2`. 15 commits ahead of the 2026-05-14 handoff HEAD (`465f3daa`); `git rev-list --count 465f3daa..HEAD` = 15. Nothing pushed. **Browser smoke pending** (test grid + tests passed: BE 2539, FE 214, tsc clean).
+
+**Spec:** `docs/superpowers/specs/2026-05-15-multi-run-aggregation-plan.md` (15 tasks shipped via subagent-driven execution, two-stage review per task).
+
+**Behavior change:** the search results grid + molecule/protocol Activity tabs no longer silently pick the best-R² curve when a compound has multiple runs in a protocol. Default is now LATEST_APPROVED_RUN (matches campaign default + chemist mental model). Toolbar lets chemists switch to Geometric mean / Mean / Best R².
+
+**Commits shipped this session** (hash + title; full details via `git log`):
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `1bf5c9ed` | refactor(domain): lift selection-rule types to shared; add AggregateStats |
+| 2 | `a5465647` | docs(domain): clarify enums.py re-export points to shared, not screening_assay |
+| 3 | `60e744e9` | feat(screening): shared run-aggregation module — selection rules + chemistry-honest stats |
+| 4 | `474a8b33` | refactor(screening): run_aggregation polish from code review |
+| 5 | `3b843276` | refactor(campaign): channel_resolver delegates to shared run_aggregation |
+| 6 | `428b00b6` | refactor(screening): Task 3 code-review polish |
+| 7 | `ba8bda68` | feat(domain): ActivityValue carries multi-run aggregation context |
+| 8 | `f7a85584` | feat(screening): RunScope VO + find_all_curves_for_molecules repo method |
+| 9 | `39473a2c` | feat(search): enrich_molecules aggregates over all in-scope runs |
+| 10 | `6d40aa29` | feat(search): API exposes aggregation rule + per-criterion run_scope |
+| 11 | `0cb34230` | feat(search): AggregationMode type + URL state hook |
+| 12 | `7d21be55` | feat(search): toolbar AggregationControl picks selection rule |
+| 13 | `029e0a74` | feat(screening): formatInterceptDisplay carries multi-run decoration |
+| 14 | `b030ada9` | feat(search): InterceptCell with Popover drill-in for multi-run cells |
+| 15 | `7c8cccab` | feat(search): saved searches persist aggregation rule via query payload |
+
+**Surfaces touched:**
+- Search results grid (research_organization) — primary user-visible change
+- Molecule detail Activity tab + Protocol hub Activity tab — share the same `enrich_molecules` so they pick up the new behavior automatically
+- Saved searches — round-trip the new `aggregation` field embedded in `query` JSONB
+- Campaign behavior unchanged — channel resolver shares the same aggregator but its own selection rule, qualifier handling, and snapshot machinery
+
+**Per-cell wire shape additions on `ActivityValue`:**
+- `run_count: int` (default 1)
+- `selection_rule: str | None`
+- `runs: list[RunSummary] | None` — capped at 10 most recent for tooltip drill-in
+- `intercept_aggregates: list[InterceptAggregate]` — per-intercept selected_value/qualifier/stats/disagreement
+- `disagreement_flag: bool` — ⚠ trigger from log-range >1 OR mixed Inactive
+
+**Cell visual contract:**
+- `value · unit` — baseline
+- `value · unit · ₙ` — multi-run (subscript = run count)
+- `value · unit · ₙ · ×N` — gmean/mean mode (chip = fold-range)
+- `value · unit · ₙ · ⚠` — disagreement (log-range >1 OR mixed Inactive)
+- `ND · ₙ` — all-Inactive
+- Click on a multi-run cell opens a Popover with per-run table (date · value · R² · class) + stats footer (geometric mean · fold-range · log10-value mean ± sample SD)
+
+**Smoke checklist (pending — please run before push):**
+
+| Scenario | Expected |
+|---|---|
+| Open search with default mode | Toolbar shows "Show: Latest run". URL has no `?agg=` param. |
+| Compound with 1 run | Cell shows just `value · unit`. No subscript, no warning, no Popover trigger. |
+| Compound with 3 runs (all active, tight) | Cell: `value · unit · ₃`. Click opens Popover with 3 dated rows + stats footer. |
+| Compound with 4 runs, 1 Inactive | Cell: `value · unit · ₄ · ⚠`. Popover shows the Inactive run as ND. |
+| Compound with 3 runs spanning >1 log unit | Cell: `value · unit · ₃ · ⚠`. Stats footer shows fold-range > 10. |
+| Compound with all runs Inactive | Cell: `ND · ₅`. |
+| Switch toolbar to Geometric mean | Cells refetch. Multi-run cells show `gmean · unit · ×N · ₃`. URL: `?agg=gmean`. |
+| Switch back to Latest | URL strips `?agg=`. Cells return to latest values. |
+| Set per-criterion run_scope to "Last 3 runs" | Cell run-count caps at 3 across compounds. |
+| Save the search with non-default aggregation | Reload the saved search → toolbar shows the same mode. |
+| Open the same compound's molecule-detail Activity tab | Cells use the same display + tooltip behavior (default Latest). |
+| Open a campaign that channels from this protocol | Campaign cells are unchanged (still the campaign's own selection_rule). |
+
+**Diagnostic anchors:**
+- `application/screening/run_aggregation.py` — single source of truth for selection rules + chemistry-honest variance stats. Both campaign resolver and search aggregator consume it. `_pick_one_resolvable` (renamed from `_pick_one_eq`) admits EQ + GT-from-at_bound; aggregating rules use `intercept_scalar` (EQ-only). Sample SD via Bessel's correction (n-1 divisor).
+- `domain/shared/aggregation_types.py` — real home of `SelectionRule` (now includes `BEST_R_SQUARED`), `QualifierHandling` (kept `TREAT_AS_LIMIT`), `ValueQualifier` (kept `EXCLUDED`; chemistry-symbol values `=`/`</`/`>` preserved), `AggregateStats`. Lifted to `shared/` because the import-linter Bounded Context Independence contract forbids `research_organization → screening_assay` imports. Re-exports at `domain.research_organization.enums` and `domain.screening_assay.aggregation_types` so existing imports keep working.
+- `application/screening/molecule_activity_service.py` — `enrich_molecules` accepts `selection_rule`, `qualifier_handling`, `run_scopes` keyword args. Default = `LATEST_APPROVED_RUN` + `EXCLUDE_QUALIFIED`. `_build_resolved_runs` adapts `DoseResponseCurve + Run` to `ResolvedRun`. `runs[]` capped at 10 most recent for the tooltip; aggregate stats computed over ALL in-scope runs.
+- `domain/screening_assay/run_scope.py` — tagged-union VO covering all/last_n/since/between/run_ids. `last_n` applied per-(mol, rd) after grouping (not as a global SQL LIMIT).
+- `infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py::find_all_curves_for_molecules` — joins to `RunModel` for run_date filtering; returns `{mol: {rd: [curves desc]}}`.
+- `application/research_organization/execute_search.py::_collect_run_scopes` — walks the criteria tree to find per-protocol-criterion run_scopes; applies them uniformly to all DR columns (single-criterion case) or last-wins (multi-criterion). `_parse_run_scope` matches the FE's `{mode: ...}` wire shape (latest / past_n_days / specific / date_range / any / all).
+- `interface/routes/search.py::ExecuteSearchBody.aggregation` — typed as `SelectionRule`, defaults to `LATEST_APPROVED_RUN`. Passes through `ExecuteSearchQuery.aggregation`.
+- `frontend/src/features/research-organization/lib/use-aggregation-mode.ts` — URL state hook + wire mappers. Short form (`latest`/`gmean`/`mean`/`best_r2`) omitted from URL at default. Includes pub/sub for cross-subscriber sync (added during Task 9 because `window.history.replaceState` doesn't notify `useSearchParams` consumers).
+- `frontend/src/features/research-organization/components/search/intercept-cell.tsx` — `<InterceptCell />` wraps the existing display logic + adds subscript / fold-range chip / `<AlertTriangle>` disagreement glyph / Popover drill-in. Single-run cells skip the Popover.
+- `frontend/src/features/research-organization/components/search/run-history-tooltip.tsx` — per-run table + stats footer rendered inside the Popover.
+- `frontend/src/features/screening-assay/lib/intercept-label.ts::formatInterceptDisplay` — extended additively with optional `runCount`/`mode`/`foldRange`/`disagreement` inputs + new `primary`/`decoration` outputs. The 3 production callers (`run-dr-results-columns`, `readout-data-table`, `activity-tab-columns`) read `.text`/`.kind`/`.warning` unchanged.
+- `domain/screening_assay/activity_types.py` — `ActivityValue` extended with multi-run fields; new `RunSummary`, `InterceptAggregate` dataclasses. `AggregateStats` imported from `aggregation_types` (no duplication).
+
+**Open caveats / known limitations:**
+- `_filter_by_qualifier_handling` raises `NotImplementedError` on `TREAT_AS_LIMIT` (no defined semantics in shared aggregator). Use `EXCLUDE_QUALIFIED` or `INCLUDE_QUALIFIED` until search/campaign agree on a unified rule.
+- Intercept-spec discovery uses the union of `(kind, level)` from candidate curves' `intercept_values` (pragmatic — avoids a separate protocol-side fetch). Edge case: intercepts at levels exactly 0 or 100 are silently dropped by `InterceptKey.__post_init__` validation. Doesn't affect real protocols.
+- `_pick_one_resolvable` admits EQ + GT-from-at_bound for LATEST_APPROVED_RUN / BEST_R_SQUARED, so an at_bound LATEST run surfaces as `>max_dose` (not ND). Aggregating rules still drop non-EQ. This was a code-review fix to preserve campaign behavior.
+- Popover drill-in is click-trigger (not hover) — HoverCard isn't in this codebase; Popover was the simplest replacement. Click-trigger is also keyboard-accessible. If chemists want hover, a follow-up can wrap the trigger.
+- Dead code: `renderInterceptCell` at `results-grid.tsx:188` is now unreferenced. Left in place for one cleanup commit.
+- Subtle: aggregate-mode `representative_run` now picks from EQ contributors only (was: latest of any post-QC candidate). New behavior is more defensible (snapshot reflects what actually contributed). Surfaces only on aggregate channels with mixed EQ/Inactive runs — flagged in commit `474a8b33`.
+
+**How to resume:**
+1. Run the smoke checklist above on the dev stack (`docker compose up -d && cd frontend && pnpm dev`). Recommended fixture: a protocol where at least one compound has 3+ runs (e.g. `Mtb_WCA_mc2-7000_Resazurin` if available).
+2. Push `prot-2` and open a PR against `main`.
+3. Optional cleanup commit: remove dead `renderInterceptCell` from `results-grid.tsx` once the smoke confirms `<InterceptCell />` handles all cases.
+
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
 **Branch:** `prot-2`, `git rev-list --count e807dd03..HEAD` commits ahead of the merged `fe2` HEAD. Nothing pushed yet. Dev DB at head migration `035_cc_intercept_key`. Live snapshot rebuild has been run (`rebuild_campaign_curve_snapshots.py --include-closed`) so existing closed campaigns now carry the full chart shape.
