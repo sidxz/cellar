@@ -56,9 +56,13 @@ class CampaignDecision(StrEnum):
     REJECTED = "rejected"
 
 
-# Re-exports — these symbols moved to screening_assay.aggregation_types but
-# campaign code still imports them from here; declare them in __all__ so the
-# re-export is explicit (and so F401 doesn't flag the import block).
+# Re-exports — the canonical definitions live in domain.shared.aggregation_types
+# (consumed by both research_organization and screening_assay; the bounded-
+# context-independence contract requires the canonical home to be in shared).
+# A screening-side ergonomic alias also exists at
+# domain.screening_assay.aggregation_types. Campaign code still imports these
+# names from here; declare them in __all__ so the re-export is explicit (and
+# so F401 doesn't flag the import block).
 __all__ = [
     "CampaignDecision",
     "CampaignStatus",
