@@ -285,6 +285,39 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 **Browser smoke for the follow-up:** open a closed campaign with a MEAN or GMEAN channel that has 2+ contributing runs. Thumbnail should show: primary fit (solid, full opacity) + N muted dashed sibling fits + a single solid amber vertical line at the cell's aggregate value (NOT at the rep's fitted_value). LATEST-mode and single-run cells unchanged.
 
+### Open follow-ups (handoff to fresh session)
+
+The overlay/marker treatment from commits 17–18 lives only in the campaign Curve column's thumbnail. Two surfaces still show the misleading rep-only curve when an aggregate is displayed. Both fixes are pure additive work on top of the now-shipped BE shape (`curve_snapshot.additional_curves[]` + `aggregate.{marker_x, marker_label, unit}`).
+
+**Follow-up A: Campaign expand-dialog (FE-only)**
+
+When chemist clicks the Curve thumbnail on an aggregate-mode cell, the modal that opens still renders the rep curve only — no overlay, no aggregate marker.
+
+- Surface: `frontend/src/features/screen-campaign/components/grid/curve-expand-dialog.tsx`
+- Path: `<CurveExpandDialog>` → `snapshotToDoseResponseCurve(snap, ctx)` → `<DoseResponseChart>`
+- Files to touch:
+  - `frontend/src/features/screen-campaign/lib/snapshot-adapter.ts` — `snapshotToDoseResponseCurve` currently drops `snap.additional_curves` + `snap.aggregate`. Extend the returned `DoseResponseCurve` (or wrap with overlay info) so the chart receives them.
+  - `frontend/src/features/screening-assay/types/index.ts` — extend `DoseResponseCurve` with optional `additional_curves?: AdditionalCurve[]` + `aggregate?: AggregateMarker` mirroring what `CurveSnapshot` already has.
+  - `frontend/src/features/screening-assay/components/dose-response-chart.tsx` (1063 LOC) — has its own Plotly rendering separate from `DoseResponseFigure`. Apply the same logic Task 18 added to `buildPlotInputs`: muted dashed sigmoid per non-inactive `additional_curve`, single solid line at `aggregate.marker_x` in aggregate mode (suppress the per-curve intercept dashes). The SummaryCard headline label could also surface "mean" / "gmean" + N when `aggregate` is present.
+- Reference implementation: see `dose-response-figure.tsx::buildPlotInputs` post-commit `e16285a1` for the exact overlay + shape construction pattern.
+- Out of scope: BE shape (already shipped).
+
+**Follow-up B: Search results grid (BE + FE)**
+
+When chemist switches the search toolbar's aggregation to "Geometric mean" or "Arithmetic mean" with multi-run compounds, the per-cell Plot thumbnail still shows the rep curve only. The cell-value summary (gmean ± SD, pIC50, etc.) IS correct — only the chart is stale.
+
+- Surface: `frontend/src/features/research-organization/components/search/results-grid.tsx` — the DR column's cellRenderer renders a chart via `<DoseResponseSparkline>` / `<DoseResponseFigure>` (shared with campaigns, so once BE writes the fields the FE renders them automatically — see Task 18).
+- **Key BE gap:** `MoleculeActivityService.enrich_molecules` builds `ActivityValue.raw_data` + `ActivityValue.curve_params` from the representative `ResolvedRun` only. It does NOT populate `additional_curves` or `aggregate` on the wire when `selection_rule` is MEAN/GMEAN.
+- Files to touch:
+  - `backend/src/cellar/application/research_organization/channel_resolution.py` — **lift `_build_aggregate_curve_snapshot` to a shared module** so both campaigns and search can use it. Suggested home: `backend/src/cellar/application/screening/curve_snapshot.py` (new). Keep a back-compat re-export in `channel_resolution.py`.
+  - `backend/src/cellar/application/screening/molecule_activity_service.py` — when `selection_rule in {MEAN_ACROSS_RUNS, GEOMETRIC_MEAN}`, call the lifted `build_aggregate_curve_snapshot(candidates, aggregate_value=..., aggregate_label=...)` and add the result to the wire payload. Likely needs a new field on `ActivityValue` (`curve_overlay?: {additional_curves, aggregate}`) — or extend `curve_params` + `raw_data` shape.
+  - `backend/src/cellar/domain/screening_assay/activity_types.py` — add the new field to `ActivityValue` dataclass.
+  - `frontend/src/features/research-organization/types/index.ts` — mirror the new wire field on the FE `ActivityValue` interface.
+  - `frontend/src/features/research-organization/components/search/results-grid.tsx` — pass the new field into the chart sparkline.
+- Tests: extend `tests/unit/application/screening/test_molecule_activity_service.py` to cover MEAN/GMEAN modes writing the overlay; FE tests for the new wire field passthrough.
+
+**Bonus low-cost fix:** the lift to a shared `curve_snapshot.py` cleans up the cross-context dependency that `preview_run_import.py` already has on `channel_resolution.py`. Worth doing for code hygiene even before Follow-up B.
+
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
 **Branch:** `prot-2`, `git rev-list --count e807dd03..HEAD` commits ahead of the merged `fe2` HEAD. Nothing pushed yet. Dev DB at head migration `035_cc_intercept_key`. Live snapshot rebuild has been run (`rebuild_campaign_curve_snapshots.py --include-closed`) so existing closed campaigns now carry the full chart shape.
