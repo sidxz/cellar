@@ -11,9 +11,19 @@ import type { SearchQuery, ActivityValue, SortField, SortDir, SavedSearch } from
 import { useExecuteSearch, type EnrichedSearchResponse } from "../hooks/use-search";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { useReportConfig } from "../hooks/use-report-config";
-import { uniqueProtocolIds } from "../lib/protocol-column-id";
+import {
+  toBackendProtocolColumns,
+  uniqueProtocolIds,
+} from "../lib/protocol-column-id";
+import {
+  aggregationModeToWire,
+  useAggregationMode,
+} from "../lib/use-aggregation-mode";
 import { SearchForm } from "./search/search-form";
-import { ResultsToolbar } from "./search/results-toolbar";
+import {
+  ResultsToolbarActions,
+  ResultsToolbarLeft,
+} from "./search/results-toolbar";
 import { ResultsGrid } from "./search/results-grid";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
@@ -64,6 +74,7 @@ type SearchAction =
       nextCursor: string | null;
       totalCount: number | null;
     }
+  | { type: "setProtocolColumns"; protocolColumns: string[] }
   | { type: "setSort"; sortBy: SortField | undefined; sortDir: SortDir }
   | { type: "setGridSelection"; ids: Set<string> }
   | { type: "select"; molecule: EnrichedMolecule; index: number }
@@ -111,6 +122,11 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         nextCursor: action.nextCursor,
         totalCount: action.totalCount,
       };
+    case "setProtocolColumns":
+      // Customizer-driven update to which columns the grid renders. The
+      // customizer reads its check-state from `state.protocolColumns`, so
+      // this is the single SoT — no separate `readoutColumns` shadow state.
+      return { ...state, protocolColumns: action.protocolColumns };
     case "setSort":
       return { ...state, sortBy: action.sortBy, sortDir: action.sortDir };
     case "setGridSelection":
@@ -168,23 +184,9 @@ function SearchPageInner() {
   const { data: savedSearches } = useSavedSearches();
   const { config: reportConfig, loadFromSavedSearch } = useReportConfig();
   const { exportSdf } = useSdfExport();
-
-  // ── Derive extra rd: columns from report config readout selections ────
-  const readoutExtraColumns = useMemo(() => {
-    const cols: string[] = [];
-    for (const [protoId, rdIds] of Object.entries(reportConfig.visibleFields.readoutColumns)) {
-      for (const rdId of rdIds) {
-        cols.push(`rd:${protoId}:${rdId}`);
-      }
-    }
-    return cols;
-  }, [reportConfig.visibleFields.readoutColumns]);
-
-  // ── Merged protocol columns (search-derived + report config readouts) ──
-  const mergedProtocolColumns = useMemo(() => {
-    const set = new Set([...protocolColumns, ...readoutExtraColumns]);
-    return [...set];
-  }, [protocolColumns, readoutExtraColumns]);
+  // URL-synced aggregation mode. The toolbar's <AggregationControl /> owns
+  // the writer; the page only reads + injects into the request body.
+  const { mode: aggregationMode } = useAggregationMode();
 
   // ── Derived: visible protocol IDs for detail panel ─────────────────────
   // Resolves each protocol-column token to its owning protocol.
@@ -193,8 +195,8 @@ function SearchPageInner() {
   // `uniqueProtocolIds` keeps the detail drawer's "Selected vs Others"
   // split honest for DR-only column sets.
   const visibleProtocolIds = useMemo(
-    () => uniqueProtocolIds(mergedProtocolColumns, protocols ?? []),
-    [mergedProtocolColumns, protocols],
+    () => uniqueProtocolIds(protocolColumns, protocols ?? []),
+    [protocolColumns, protocols],
   );
 
   // ── Enrichment helper ──────────────────────────────────────────────────
@@ -212,11 +214,16 @@ function SearchPageInner() {
     (query: SearchQuery, columns: string[]) => {
       dispatch({ type: "searchStart", query, protocolColumns: columns });
 
-      // Merge search-derived columns with report config readout selections
-      const allColumns = [...new Set([...columns, ...readoutExtraColumns])];
+      // BE only understands the canonical `drc:<rd>` / `rd:<proto>:<rd>`
+      // shapes. Narrowed `drc:<rd>:kind:level` tokens (introduced by the
+      // customizer for per-intercept visibility) collapse to their parent
+      // here so the activity-service doesn't crash trying to parse a
+      // 4-segment drc token as a UUID.
+      const backendCols = toBackendProtocolColumns(columns);
       const input = {
         query,
-        ...(allColumns.length > 0 ? { protocol_columns: allColumns } : {}),
+        ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
+        aggregation: aggregationModeToWire(aggregationMode),
       };
 
       searchMutation.mutate(
@@ -237,15 +244,17 @@ function SearchPageInner() {
         },
       );
     },
-    [searchMutation, sortBy, sortDir, enrichItems, readoutExtraColumns],
+    [searchMutation, sortBy, sortDir, enrichItems, aggregationMode],
   );
 
   // ── handleLoadMore ─────────────────────────────────────────────────────
   const handleLoadMore = useCallback(() => {
     if (!currentQuery || !nextCursor) return;
+    const backendCols = toBackendProtocolColumns(protocolColumns);
     const input = {
       query: currentQuery,
-      ...(mergedProtocolColumns.length > 0 ? { protocol_columns: mergedProtocolColumns } : {}),
+      ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
+      aggregation: aggregationModeToWire(aggregationMode),
     };
 
     searchMutation.mutate(
@@ -261,15 +270,17 @@ function SearchPageInner() {
         },
       },
     );
-  }, [currentQuery, nextCursor, searchMutation, mergedProtocolColumns, sortBy, sortDir, enrichItems]);
+  }, [currentQuery, nextCursor, searchMutation, protocolColumns, sortBy, sortDir, enrichItems, aggregationMode]);
 
-  // ── Re-fetch with current merged columns (called from report customizer) ─
+  // ── Re-fetch with current columns (called from report customizer +
+  // when the aggregation mode changes) ──────────────────────────────────
   const handleUpdateReport = useCallback(() => {
     if (!currentQuery || !hasSearched) return;
-    const allColumns = [...new Set([...protocolColumns, ...readoutExtraColumns])];
+    const backendCols = toBackendProtocolColumns(protocolColumns);
     const input = {
       query: currentQuery,
-      ...(allColumns.length > 0 ? { protocol_columns: allColumns } : {}),
+      ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
+      aggregation: aggregationModeToWire(aggregationMode),
     };
     searchMutation.mutate(
       { input, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
@@ -285,7 +296,42 @@ function SearchPageInner() {
       },
     );
     setReportOpen(false);
-  }, [currentQuery, hasSearched, protocolColumns, readoutExtraColumns, searchMutation, sortBy, sortDir, enrichItems]);
+  }, [currentQuery, hasSearched, protocolColumns, searchMutation, sortBy, sortDir, enrichItems, aggregationMode]);
+
+  const handleSetProtocolColumns = useCallback((next: string[]) => {
+    dispatch({ type: "setProtocolColumns", protocolColumns: next });
+  }, []);
+
+  // ── Re-trigger search when aggregation mode changes ────────────────────
+  // Mode change is BE-driven (the selection rule lives in the request
+  // body), so flipping `?agg=` must re-fetch with the new rule. Skips
+  // the very first render so we don't double-fire on initial mount.
+  const previousAggregationModeRef = useRef(aggregationMode);
+  useEffect(() => {
+    if (previousAggregationModeRef.current === aggregationMode) return;
+    previousAggregationModeRef.current = aggregationMode;
+    if (!currentQuery || !hasSearched) return;
+
+    const backendCols = toBackendProtocolColumns(protocolColumns);
+    const input = {
+      query: currentQuery,
+      ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
+      aggregation: aggregationModeToWire(aggregationMode),
+    };
+    searchMutation.mutate(
+      { input, limit: SEARCH_PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir },
+      {
+        onSuccess: (data) => {
+          dispatch({
+            type: "searchComplete",
+            results: enrichItems(data),
+            nextCursor: data.next_cursor,
+            totalCount: data.total_count,
+          });
+        },
+      },
+    );
+  }, [aggregationMode, currentQuery, hasSearched, protocolColumns, searchMutation, sortBy, sortDir, enrichItems]);
 
   // ── Load saved search from URL ─────────────────────────────────────────
   const savedSearchLoadedRef = useRef<string | null>(null);
@@ -306,14 +352,16 @@ function SearchPageInner() {
     const query = saved.query as unknown as SearchQuery;
     if (!query?.criteria) return;
 
-    // Inline the search instead of going through handleSearch — its closure
-    // captures readoutExtraColumns from a render that loadFromSavedSearch
-    // above is about to invalidate, which can lose the mutation's onSuccess.
+    // Inline the search instead of going through handleSearch so the
+    // saved-search load flow stays self-contained and doesn't depend on a
+    // closure that loadFromSavedSearch is about to invalidate.
     dispatch({ type: "searchStart", query, protocolColumns: restoredColumns });
 
+    const backendCols = toBackendProtocolColumns(restoredColumns);
     const input = {
       query,
-      ...(restoredColumns.length > 0 ? { protocol_columns: restoredColumns } : {}),
+      ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
+      aggregation: aggregationModeToWire(aggregationMode),
     };
 
     runSearch(
@@ -333,7 +381,7 @@ function SearchPageInner() {
         },
       },
     );
-  }, [savedSearchId, savedSearches, loadFromSavedSearch, runSearch, enrichItems]);
+  }, [savedSearchId, savedSearches, loadFromSavedSearch, runSearch, enrichItems, aggregationMode]);
 
   // ── SDF export ─────────────────────────────────────────────────────────
   const handleExportSdf = useCallback(() => {
@@ -395,26 +443,35 @@ function SearchPageInner() {
           protocols={protocols ?? []}
         />
 
-        {/* Results area */}
+        {/* Results area. The toolbar (result count, select, action buttons,
+            Export) lives inline on the grid's own toolbar row so the page
+            doesn't burn an extra row for Export. */}
         {hasSearched && (
           <>
-            <ResultsToolbar
-              resultCount={totalCount}
-              selectedCount={gridSelectedIds.size}
-              onSelectAll={handleSelectAll}
-              onSelectNone={handleSelectNone}
-              onAddToCollection={handleAddToCollection}
-              onCustomizeReport={() => setReportOpen(true)}
-              onSaveSearch={() => setSaveOpen(true)}
-            />
             <ResultsGrid
               results={results}
-              protocolColumns={mergedProtocolColumns}
+              protocolColumns={protocolColumns}
               protocols={protocols ?? []}
               reportConfig={reportConfig}
               loading={searchMutation.isPending && results.length === 0}
               onRowClick={handleRowClick}
               selectedIds={gridSelectedIds}
+              toolbarLeft={
+                <ResultsToolbarLeft
+                  resultCount={totalCount}
+                  selectedCount={gridSelectedIds.size}
+                  onSelectAll={handleSelectAll}
+                  onSelectNone={handleSelectNone}
+                />
+              }
+              toolbarActions={
+                <ResultsToolbarActions
+                  selectedCount={gridSelectedIds.size}
+                  onAddToCollection={handleAddToCollection}
+                  onCustomizeReport={() => setReportOpen(true)}
+                  onSaveSearch={() => setSaveOpen(true)}
+                />
+              }
               onSelectionChange={(ids) => dispatch({ type: "setGridSelection", ids })}
               onExportSdf={handleExportSdf}
             />
@@ -454,6 +511,8 @@ function SearchPageInner() {
         onUpdate={handleUpdateReport}
         protocols={protocols ?? []}
         activeProtocolIds={visibleProtocolIds}
+        protocolColumns={protocolColumns}
+        onProtocolColumnsChange={handleSetProtocolColumns}
       />
 
       {currentQuery && (
@@ -461,7 +520,7 @@ function SearchPageInner() {
           open={saveOpen}
           onClose={() => setSaveOpen(false)}
           query={currentQuery}
-          protocolColumns={mergedProtocolColumns}
+          protocolColumns={protocolColumns}
           reportConfig={reportConfig}
         />
       )}

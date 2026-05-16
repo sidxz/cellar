@@ -1,29 +1,38 @@
 "use client";
 
+/**
+ * Two sibling render-only fragments composing the search-page toolbar:
+ *
+ *   - {@link ResultsToolbarLeft}: result count + select-all/none status line.
+ *   - {@link ResultsToolbarActions}: action buttons (Add to Collection /
+ *     Customize Report / Save Search).
+ *
+ * Both are slotted into the underlying DataGrid's toolbar via its
+ * `toolbarLeft` and `toolbarActions` props so they share the same row as
+ * the Export dropdown — no separate page-level toolbar row, no extra
+ * vertical space for Export.
+ */
+
 import { ListPlus, Settings2, BookmarkPlus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { useAggregationMode } from "../../lib/use-aggregation-mode";
+import { AggregationControl } from "./aggregation-control";
 
-interface ResultsToolbarProps {
+interface ResultsToolbarLeftProps {
   resultCount: number | null;
   selectedCount: number;
   onSelectAll: () => void;
   onSelectNone: () => void;
-  onAddToCollection: () => void;
-  onCustomizeReport: () => void;
-  onSaveSearch: () => void;
 }
 
-export function ResultsToolbar({
+export function ResultsToolbarLeft({
   resultCount,
   selectedCount,
   onSelectAll,
   onSelectNone,
-  onAddToCollection,
-  onCustomizeReport,
-  onSaveSearch,
-}: ResultsToolbarProps) {
+}: ResultsToolbarLeftProps) {
   return (
-    <div className="flex items-center gap-3 py-2">
+    <>
       <span className="text-sm text-muted-foreground">
         <strong className="text-foreground">
           {resultCount?.toLocaleString() ?? "–"}
@@ -53,34 +62,63 @@ export function ResultsToolbar({
           none
         </button>
       </span>
+    </>
+  );
+}
 
-      <div className="flex-1" />
+interface ResultsToolbarActionsProps {
+  selectedCount: number;
+  onAddToCollection: () => void;
+  onCustomizeReport: () => void;
+  onSaveSearch: () => void;
+}
 
-      <div className="flex gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-sm gap-1.5"
-          disabled={selectedCount === 0}
-          onClick={onAddToCollection}
-        >
-          <ListPlus className="h-3.5 w-3.5" />
-          Add to Collection
-        </Button>
-        <Button variant="outline" size="sm" className="h-8 text-sm gap-1.5" onClick={onCustomizeReport}>
-          <Settings2 className="h-3.5 w-3.5" />
-          Customize Report
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-sm gap-1.5 border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
-          onClick={onSaveSearch}
-        >
-          <BookmarkPlus className="h-3.5 w-3.5" />
-          Save Search
-        </Button>
-      </div>
-    </div>
+export function ResultsToolbarActions({
+  selectedCount,
+  onAddToCollection,
+  onCustomizeReport,
+  onSaveSearch,
+}: ResultsToolbarActionsProps) {
+  // URL-synced aggregation mode lives in the toolbar — the page reads the
+  // same hook independently for the search body, so we don't have to
+  // plumb mode/setMode through props. The hook is a thin URL-state
+  // wrapper (no remote calls), so duplicate subscriptions are cheap.
+  const { mode: aggregationMode, setMode: setAggregationMode } =
+    useAggregationMode();
+  return (
+    <>
+      <AggregationControl
+        mode={aggregationMode}
+        onChange={setAggregationMode}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-sm gap-1.5"
+        disabled={selectedCount === 0}
+        onClick={onAddToCollection}
+      >
+        <ListPlus className="h-3.5 w-3.5" />
+        Add to Collection
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-sm gap-1.5"
+        onClick={onCustomizeReport}
+      >
+        <Settings2 className="h-3.5 w-3.5" />
+        Customize Report
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-sm gap-1.5 border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
+        onClick={onSaveSearch}
+      >
+        <BookmarkPlus className="h-3.5 w-3.5" />
+        Save Search
+      </Button>
+    </>
   );
 }

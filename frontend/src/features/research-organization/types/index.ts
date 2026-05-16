@@ -1,3 +1,5 @@
+import type { SelectionRule } from "@/shared/lib/api/model";
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export type ProjectStatus = "active" | "archived";
@@ -397,6 +399,43 @@ export interface ExecuteSearchInput {
   query?: SearchQuery;
   saved_search_id?: string;
   protocol_columns?: string[];
+  /** Multi-run aggregation rule. Omitted -> BE default
+   *  (`latest_approved_run`). Drives how `_intercept_scalar` collapses
+   *  per-(compound, intercept) rows across all in-scope runs. */
+  aggregation?: SelectionRule;
+}
+
+// ─── Multi-run aggregation context (BE shape — see Tasks 5-7) ──────────────
+
+export interface AggregateStats {
+  geometric_mean: number | null;
+  fold_range: number | null;
+  log_value_mean: number | null;
+  log_value_sd: number | null;
+}
+
+export interface RunSummary {
+  run_id: string;
+  run_date: string;
+  curve_id: string;
+  curve_class: string | null;
+  r_squared: number | null;
+  intercept_values: Array<{
+    spec: { kind: string; level: number };
+    value: number | null;
+    at_bound?: boolean;
+  }>;
+}
+
+export interface InterceptAggregate {
+  /** {kind: "primary"} for the channel's primary intercept; otherwise
+   *  matches an `InterceptSpec` shape from screening-assay. */
+  spec: { kind: string; level?: number };
+  selected_value: number | null;
+  /** "=" | "<" | ">" | "nd" | "excluded" — same shape as `ActivityValue.qualifier`. */
+  selected_qualifier: string;
+  aggregate_stats: AggregateStats | null;
+  disagreement_flag: boolean;
 }
 
 export interface ActivityValue {
@@ -417,6 +456,18 @@ export interface ActivityValue {
    *  ActivityValues; may be null on legacy DR curves fitted before
    *  intercepts were persisted. */
   intercept_values?: CurveInterceptValue[] | null;
+  // ─── Multi-run aggregation context (BE Tasks 5-7 wire shape) ──────────
+  /** Number of runs collapsed into this cell. Absent / 1 -> single-run. */
+  run_count?: number;
+  /** Wire `SelectionRule` string echoed back so the cell can render the
+   *  rule chip without re-reading URL state. */
+  selection_rule?: string | null;
+  /** Per-run breakdown for "runs" tooltip / detail drawer. */
+  runs?: RunSummary[] | null;
+  /** Per-intercept aggregate breakdown (selected_value, fold_range, ...) */
+  intercept_aggregates?: InterceptAggregate[] | null;
+  /** True when collapsed runs disagree by >threshold fold (BE-driven). */
+  disagreement_flag?: boolean;
 }
 
 // ─── Report Configuration ───────────────────────────────────────────────────
@@ -441,8 +492,6 @@ export interface VisibleFields {
   molecule: string[];
   batch: string[];
   protocols: Record<string, string[]>;
-  /** Per-protocol readout definition IDs to show as columns (protocol_id → rd def ids) */
-  readoutColumns: Record<string, string[]>;
 }
 
 // ─── Curve Parameters ───────────────────────────────────────────────────────
