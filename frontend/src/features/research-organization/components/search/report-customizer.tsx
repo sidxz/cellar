@@ -22,6 +22,11 @@ import {
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
 import { useReportConfig } from "../../hooks/use-report-config";
+import { expandParentTokens } from "../../lib/protocol-column-id";
+import {
+  buildReadoutCustomizerEntries,
+  replaceProtocolEntries,
+} from "../../lib/readout-customizer-entries";
 import type { Protocol } from "@/features/screening-assay/types";
 import type { DetailLevel, PlotScale, ImageSize } from "../../types";
 
@@ -88,6 +93,13 @@ interface ReportCustomizerProps {
   onUpdate: () => void;
   protocols: Protocol[];
   activeProtocolIds: string[];
+  /** Current set of column-id tokens the grid is rendering. Drives the
+   *  check-state of the Readouts groups so checks always reflect what's
+   *  actually on screen — no separate shadow state. */
+  protocolColumns: string[];
+  /** Toggle handler — caller updates the search reducer so the grid
+   *  re-renders with the new column set. */
+  onProtocolColumnsChange: (next: string[]) => void;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -98,8 +110,10 @@ export function ReportCustomizer({
   onUpdate,
   protocols,
   activeProtocolIds,
+  protocolColumns,
+  onProtocolColumnsChange,
 }: ReportCustomizerProps) {
-  const { config, updateConfig, setVisibleFields, setProtocolFields, setReadoutColumns } =
+  const { config, updateConfig, setVisibleFields, setProtocolFields } =
     useReportConfig();
   const { visibleFields } = config;
 
@@ -282,11 +296,24 @@ export function ReportCustomizer({
               {activeProtocolIds.map((protocolId) => {
                 const protocol = protocols.find((p) => p.id === protocolId);
                 const protocolName = protocol?.name ?? "Unknown Protocol";
-                const readoutDefs = (protocol?.readout_definitions ?? []).map(
-                  (rd) => ({
-                    key: rd.id,
-                    label: rd.name + (rd.unit ? ` (${rd.unit})` : ""),
-                  }),
+                // One entry per DR intercept + one per numeric readout. The
+                // entry's key is the actual grid column-id token, so the
+                // check-state reconciles with what's actually rendered.
+                const readoutEntries = buildReadoutCustomizerEntries(
+                  protocol,
+                  protocolId,
+                );
+                const entryKeys = new Set(readoutEntries.map((e) => e.key));
+                // Expand any parent `drc:<rd>` token to the full per-intercept
+                // set so a plain `set.has(entryKey)` lookup reflects every
+                // intercept the grid is rendering. Without this, a filter-
+                // emitted parent token would only "check" the primary entry.
+                const expandedColumns = expandParentTokens(
+                  protocolColumns,
+                  protocols,
+                );
+                const visibleEntryKeys = expandedColumns.filter((c) =>
+                  entryKeys.has(c),
                 );
                 return (
                   <div key={protocolId} className="space-y-0">
@@ -298,13 +325,19 @@ export function ReportCustomizer({
                         setProtocolFields(protocolId, fields)
                       }
                     />
-                    {readoutDefs.length > 0 && (
+                    {readoutEntries.length > 0 && (
                       <FieldGroup
                         title={`${protocolName} — Readouts`}
-                        fields={readoutDefs}
-                        selected={visibleFields.readoutColumns[protocolId] ?? []}
-                        onChange={(rdIds) =>
-                          setReadoutColumns(protocolId, rdIds)
+                        fields={readoutEntries}
+                        selected={visibleEntryKeys}
+                        onChange={(nextKeysForThisProto) =>
+                          onProtocolColumnsChange(
+                            replaceProtocolEntries(
+                              expandedColumns,
+                              entryKeys,
+                              nextKeysForThisProto,
+                            ),
+                          )
                         }
                       />
                     )}

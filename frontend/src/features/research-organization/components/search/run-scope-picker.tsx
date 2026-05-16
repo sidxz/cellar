@@ -117,7 +117,7 @@ export function RunScopePicker({
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-sm text-muted-foreground shrink-0 w-10">runs</span>
+      <span className="text-sm text-muted-foreground shrink-0 w-16">runs</span>
 
       <Select value={mode} onValueChange={(v) => setMode(v as RunScopeMode)}>
         <SelectTrigger className="h-8 w-32 text-sm shrink-0">

@@ -68,6 +68,12 @@ export interface DataGridProps<TData = unknown>
    *  When provided, the toolbar is rendered even in loading/empty states so
    *  the action remains reachable when the table has no rows yet. */
   toolbarActions?: ReactNode;
+  /** Content rendered on the LEFT side of the toolbar row, where the quick-
+   *  filter search would otherwise live. Use this when the search input is
+   *  suppressed (`searchPlaceholder={false}`) and the page wants to put
+   *  status text or other left-aligned controls there — e.g. the search
+   *  results count + select-all/none on /search. */
+  toolbarLeft?: ReactNode;
   /**
    * When this value changes to a truthy value, the grid calls `api.deselectAll()`.
    * Useful for syncing external clear-selection events (e.g. after a new search).
@@ -94,6 +100,7 @@ export function DataGrid<TData = unknown>({
   suppressSelectColumn,
   searchPlaceholder = "Filter...",
   toolbarActions,
+  toolbarLeft,
   clearSelectionToken,
   ...rest
 }: DataGridProps<TData>) {
@@ -192,7 +199,8 @@ export function DataGrid<TData = unknown>({
   const hasRows = !!rowData?.length;
   const showSearch = searchPlaceholder !== false && hasRows;
   const showExport = !!exportFilename && hasRows;
-  const renderToolbar = showSearch || showExport || !!toolbarActions;
+  const renderToolbar =
+    showSearch || showExport || !!toolbarActions || !!toolbarLeft;
 
   const toolbar = renderToolbar ? (
     <div className="mb-2 flex items-center gap-2">
@@ -206,6 +214,8 @@ export function DataGrid<TData = unknown>({
             className="h-9 pl-8"
           />
         </div>
+      ) : toolbarLeft ? (
+        <div className="flex items-center gap-3">{toolbarLeft}</div>
       ) : null}
       <div className="ml-auto flex items-center gap-2">
         {toolbarActions}

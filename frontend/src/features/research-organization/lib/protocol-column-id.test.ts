@@ -3,7 +3,12 @@ import type {
   Protocol,
   ReadoutDefinition,
 } from "@/features/screening-assay/types";
-import { resolveColumns, uniqueProtocolIds } from "./protocol-column-id";
+import {
+  expandParentTokens,
+  resolveColumns,
+  toBackendProtocolColumns,
+  uniqueProtocolIds,
+} from "./protocol-column-id";
 
 const PROTO_A = "11111111-1111-1111-1111-111111111111";
 const PROTO_B = "22222222-2222-2222-2222-222222222222";
@@ -74,8 +79,123 @@ describe("resolveColumns (shared)", () => {
   it("preserves token order while joining each colId to its proto", () => {
     const colIds = [`drc:${RD_A_DR}`, `rd:${PROTO_B}:${RD_B_DR}`];
     expect(resolveColumns(colIds, PROTOCOLS)).toEqual([
-      { colId: `drc:${RD_A_DR}`, prefix: "drc", protocolId: PROTO_A, readoutDefId: RD_A_DR },
-      { colId: `rd:${PROTO_B}:${RD_B_DR}`, prefix: "rd", protocolId: PROTO_B, readoutDefId: RD_B_DR },
+      {
+        colId: `drc:${RD_A_DR}`,
+        prefix: "drc",
+        protocolId: PROTO_A,
+        readoutDefId: RD_A_DR,
+        interceptKey: null,
+      },
+      {
+        colId: `rd:${PROTO_B}:${RD_B_DR}`,
+        prefix: "rd",
+        protocolId: PROTO_B,
+        readoutDefId: RD_B_DR,
+        interceptKey: null,
+      },
     ]);
+  });
+
+  it("parses 4-segment drc:<rd>:<kind>:<level> as a narrowed intercept", () => {
+    const resolved = resolveColumns([`drc:${RD_A_DR}:ec:90`], PROTOCOLS);
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]).toMatchObject({
+      colId: `drc:${RD_A_DR}:ec:90`,
+      prefix: "drc",
+      protocolId: PROTO_A,
+      readoutDefId: RD_A_DR,
+      interceptKey: { kind: "ec", level: 90 },
+    });
+  });
+
+  it("falls back to null interceptKey on a malformed 4th segment", () => {
+    const resolved = resolveColumns([`drc:${RD_A_DR}:wat:50`], PROTOCOLS);
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].interceptKey).toBeNull();
+  });
+});
+
+describe("expandParentTokens", () => {
+  // A DR protocol whose only DR readout declares EC50 + EC90.
+  const RD_DR = "11112222-3333-4444-5555-666677778888";
+  const drProtocol: Protocol = {
+    id: "p1",
+    name: "P1",
+    readout_definitions: [
+      rd({
+        id: RD_DR,
+        data_type: "dose_response",
+        dose_response_config: {
+          curve_type: "ec50",
+          intercepts: [
+            { kind: "ec", level: 50, basis: "relative_percent" },
+            { kind: "ec", level: 90, basis: "relative_percent" },
+          ],
+        } as unknown as ReadoutDefinition["dose_response_config"],
+      }),
+    ],
+  } as unknown as Protocol;
+
+  it("expands `drc:<rd>` to one narrowed token per intercept", () => {
+    expect(expandParentTokens([`drc:${RD_DR}`], [drProtocol])).toEqual([
+      `drc:${RD_DR}:ec:50`,
+      `drc:${RD_DR}:ec:90`,
+    ]);
+  });
+
+  it("passes through already-narrowed tokens unchanged", () => {
+    expect(expandParentTokens([`drc:${RD_DR}:ec:90`], [drProtocol])).toEqual([
+      `drc:${RD_DR}:ec:90`,
+    ]);
+  });
+
+  it("passes through `rd:` tokens unchanged", () => {
+    expect(expandParentTokens([`rd:p:rd`], [drProtocol])).toEqual([`rd:p:rd`]);
+  });
+
+  it("leaves parent tokens for rd-defs with no declared intercepts as-is", () => {
+    const legacy: Protocol = {
+      id: "p1",
+      name: "P1",
+      readout_definitions: [
+        rd({
+          id: RD_DR,
+          data_type: "dose_response",
+          dose_response_config: {
+            curve_type: "ic50",
+            intercepts: [],
+          } as unknown as ReadoutDefinition["dose_response_config"],
+        }),
+      ],
+    } as unknown as Protocol;
+    expect(expandParentTokens([`drc:${RD_DR}`], [legacy])).toEqual([
+      `drc:${RD_DR}`,
+    ]);
+  });
+});
+
+describe("toBackendProtocolColumns", () => {
+  const RD = "11112222-3333-4444-5555-666677778888";
+
+  it("collapses every drc shape down to the parent and dedupes", () => {
+    // The BE only understands `drc:<rd>`. Narrowed tokens (introduced by the
+    // customizer for per-intercept visibility) collapse here so the activity
+    // service doesn't try to parse them as a UUID.
+    expect(
+      toBackendProtocolColumns([
+        `drc:${RD}:ec:50`,
+        `drc:${RD}:ec:90`,
+        `drc:${RD}`,
+      ]),
+    ).toEqual([`drc:${RD}`]);
+  });
+
+  it("preserves `rd:` tokens and their normalization suffix", () => {
+    expect(
+      toBackendProtocolColumns([
+        `rd:p1:rd1`,
+        `rd:p1:rd2:percent_inhibition`,
+      ]),
+    ).toEqual([`rd:p1:rd1`, `rd:p1:rd2:percent_inhibition`]);
   });
 });

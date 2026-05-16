@@ -6,6 +6,7 @@ import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Protocol } from "@/features/screening-assay/types";
 import { useSearchCount } from "../../hooks/use-search-count";
+import { drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
   ActivityCriterion,
   GroupCriterion,
@@ -169,9 +170,9 @@ function deriveProtocolColumns(
     for (const cond of conds) {
       if (!cond.readout_definition_id) continue;
       if (cond.source === "readout_data") {
-        add(`rd:${c.protocol_id}:${cond.readout_definition_id}`);
+        add(rdColId(c.protocol_id, cond.readout_definition_id));
       } else {
-        add(`drc:${cond.readout_definition_id}`);
+        add(drcColId(cond.readout_definition_id));
       }
       addedAny = true;
     }
@@ -216,7 +217,7 @@ function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): stri
   const drcCols: string[] = [];
   for (const rd of ordered) {
     if (rd.data_type === "dose_response") {
-      drcCols.push(`drc:${rd.id}`);
+      drcCols.push(drcColId(rd.id));
     }
   }
   if (drcCols.length > 0) return drcCols;
@@ -225,10 +226,14 @@ function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): stri
   for (const rd of ordered) {
     if (rd.data_type !== "numeric") continue;
     const primaryNorm = rd.normalizations?.find((n) => n !== "none");
+    // The 4-segment `rd:<proto>:<rd>:<norm>` shape lives only on this
+    // default-columns path; everywhere else stays on the 3-segment form.
+    // Keep the inline template here rather than adding a `rdNormColId`
+    // formatter just for this one site.
     if (primaryNorm) {
-      rdCols.push(`rd:${protocolId}:${rd.id}:${primaryNorm}`);
+      rdCols.push(`${rdColId(protocolId, rd.id)}:${primaryNorm}`);
     } else {
-      rdCols.push(`rd:${protocolId}:${rd.id}`);
+      rdCols.push(rdColId(protocolId, rd.id));
     }
   }
   return rdCols;

@@ -21,7 +21,10 @@
  * legacy saved searches keep round-tripping unchanged; only secondary
  * intercepts persist an explicit `{kind, level}` key.
  */
-import { interceptOptionLabel } from "@/features/screening-assay/lib/intercept-label";
+import {
+  interceptOptionLabel,
+  narrowInterceptKey,
+} from "@/features/screening-assay/lib/intercept-label";
 import {
   CURVE_CLASS_LABELS,
   type CurveClass,
@@ -172,13 +175,14 @@ export function parseWhereOptionId(id: string): Pick<
       return { source: "dr_curve", readout_definition_id: rdId, intercept_key: null };
     }
     if (parts.length === 4) {
-      const kind = parts[2];
       const level = Number(parts[3]);
-      if ((kind !== "ec" && kind !== "ic") || Number.isNaN(level)) return null;
+      if (Number.isNaN(level)) return null;
+      const intercept_key = narrowInterceptKey({ kind: parts[2], level });
+      if (!intercept_key) return null;
       return {
         source: "dr_curve",
         readout_definition_id: rdId,
-        intercept_key: { kind, level },
+        intercept_key,
       };
     }
     return null;

@@ -250,7 +250,7 @@ function WhereRow({ cond, isFirst, options, onChange, onRemove }: WhereRowProps)
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {/* Conjunction label — first row says "where", subsequent rows say "and" */}
-      <span className="text-sm text-muted-foreground shrink-0 w-10">
+      <span className="text-sm text-muted-foreground shrink-0 w-16">
         {isFirst ? "where" : "and"}
       </span>
 
@@ -614,8 +614,10 @@ function ActivityRow({
           <span className="w-[4.5rem] shrink-0" />
         )}
 
-        {/* "In" label */}
-        <span className="text-sm text-muted-foreground shrink-0">Protocol</span>
+        {/* "In" label — fixed width keeps Protocol/runs/where labels in the
+            same vertical line so the sub-rows read as a clean two-column
+            "label | control" stack. */}
+        <span className="text-sm text-muted-foreground shrink-0 w-16">Protocol</span>
 
         {/* Protocol picker (rich rows: status dot + name + target + run stats) */}
         <Popover open={protocolOpen} onOpenChange={setProtocolOpen}>
@@ -741,9 +743,12 @@ function ActivityRow({
         </Popover>
       </div>
 
-      {/* Sub-rows: runs (default "any") then optional where-clause. */}
+      {/* Sub-rows: runs (default "any") then optional where-clause. The
+          left indent matches the Protocol label's starting x — remove (20px)
+          + gap (6px) + conjunction/spacer (72px) + gap (6px) = 104px — so
+          all three labels (Protocol/runs/where) and their controls align. */}
       {hasProtocol && (
-        <div className="ml-[70px] space-y-1.5">
+        <div className="ml-[104px] space-y-1.5">
           {/* runs — always visible, defaults to "Any run" when omitted */}
           <RunScopePicker
             protocolId={criterion.protocol_id}
@@ -771,7 +776,7 @@ function ActivityRow({
         </div>
       )}
 
-      {protocolInvalid && <p className="ml-[70px] text-xs text-destructive">Choose a protocol.</p>}
+      {protocolInvalid && <p className="ml-[104px] text-xs text-destructive">Choose a protocol.</p>}
     </div>
   );
 }
