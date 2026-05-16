@@ -25,11 +25,17 @@ import {
   maxDoseFromRawData,
 } from "@/features/screening-assay/lib/intercept-label";
 import {
+  drcColId,
   type ResolvedColumn,
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
+import {
+  type AggregationMode,
+  useAggregationMode,
+} from "../../lib/use-aggregation-mode";
 import type { ActivityValue, ReportConfig } from "../../types";
 import { DoseResponseCell } from "./dose-response-cell";
+import { InterceptCell } from "./intercept-cell";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +55,13 @@ interface ResultsGridProps {
    *  (selected vs. full result set) — see `handleExportSdf` in
    *  search-page.tsx. */
   onExportSdf?: () => void;
+  /** Content for the LEFT side of the grid's toolbar row — e.g. result
+   *  count + select-all/none on /search. Shares the row with the export
+   *  dropdown so the toolbar collapses to one line instead of two. */
+  toolbarLeft?: React.ReactNode;
+  /** Action buttons rendered between `toolbarLeft` and the Export dropdown
+   *  on the toolbar row. */
+  toolbarActions?: React.ReactNode;
 }
 
 // ─── Row height by image size ───────────────────────────────────────────────
@@ -275,14 +288,31 @@ function buildReadoutColumn(
  *  entry on the readout-def. Primary intercept reads `av.value` as a
  *  fallback for legacy curves; secondaries fall back to "—" with a
  *  Recompute hint. Plot column sits at the end of the readout-def's
- *  child set. */
+ *  child set.
+ *
+ *  ``visibleIntercepts`` narrows the rendered set to a chemist-picked
+ *  subset (matched by ``(kind, level)``). Omitted / null = render every
+ *  intercept the protocol declares (today's default). Empty array =
+ *  render none (caller should suppress the whole group instead — empty
+ *  is treated as "render all" here as a defensive fallback).
+ */
 export function buildDrcColumns(
   colId: string,
   proto: Protocol | undefined,
   readoutDefId: string,
+  visibleIntercepts?: ReadonlyArray<{ kind: string; level: number }> | null,
+  aggregationMode: AggregationMode = "latest",
 ): ColDef<EnrichedMolecule>[] {
   const rd = proto?.readout_definitions?.find((r) => r.id === readoutDefId);
-  const intercepts = rd?.dose_response_config?.intercepts ?? [];
+  const allIntercepts = rd?.dose_response_config?.intercepts ?? [];
+  const intercepts =
+    visibleIntercepts && visibleIntercepts.length > 0
+      ? allIntercepts.filter((spec) =>
+          visibleIntercepts.some(
+            (ik) => ik.kind === spec.kind && ik.level === spec.level,
+          ),
+        )
+      : allIntercepts;
 
   const cols: ColDef<EnrichedMolecule>[] = [];
 
@@ -357,8 +387,14 @@ export function buildDrcColumns(
             max_dose: maxDoseFromRawData(av.raw_data),
           }).sortValue;
         },
-        cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) =>
-          renderInterceptCell(params.data?.activity?.[colId], spec, isPrimary),
+        cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => (
+          <InterceptCell
+            av={params.data?.activity?.[colId]}
+            spec={spec}
+            isPrimary={isPrimary}
+            mode={aggregationMode}
+          />
+        ),
       });
     });
   }
@@ -382,6 +418,7 @@ export function buildDrcColumns(
 function buildProtocolColumnGroups(
   protocolColumns: string[],
   protocols: Protocol[],
+  aggregationMode: AggregationMode = "latest",
 ): ColGroupDef[] {
   const resolved = resolveColumns(protocolColumns, protocols);
   const grouped = groupBy(resolved, (r) => r.protocolId);
@@ -392,6 +429,16 @@ function buildProtocolColumnGroups(
     const headerName = proto?.name ?? "Protocol";
 
     const children: ColDef<EnrichedMolecule>[] = [];
+    // DR tokens for the same readout-def may arrive as either a parent
+    // `drc:<rd_id>` (= render all intercepts) or as one or more narrowed
+    // `drc:<rd_id>:<kind>:<level>` (= render only this intercept). Collapse
+    // per rd-id so we emit ONE column block per readout-def with the
+    // combined intercept-visibility set.
+    const drcByRdId = new Map<
+      string,
+      { parentColId: string; visible: Array<{ kind: string; level: number }> | null }
+    >();
+
     for (const entry of entries) {
       if (entry.prefix === "rd") {
         const parts = entry.colId.split(":");
@@ -405,10 +452,27 @@ function buildProtocolColumnGroups(
           ),
         );
       } else {
-        children.push(
-          ...buildDrcColumns(entry.colId, proto, entry.readoutDefId ?? ""),
-        );
+        const rdId = entry.readoutDefId ?? "";
+        const parentColId = drcColId(rdId);
+        const existing = drcByRdId.get(rdId);
+        if (entry.interceptKey === null) {
+          // Parent token short-circuits to "render all" — clear any
+          // previously-accumulated narrowing.
+          drcByRdId.set(rdId, { parentColId, visible: null });
+        } else if (!existing) {
+          drcByRdId.set(rdId, { parentColId, visible: [entry.interceptKey] });
+        } else if (existing.visible !== null) {
+          existing.visible.push(entry.interceptKey);
+        }
       }
+    }
+
+    for (const { parentColId, visible } of drcByRdId.values()) {
+      const rdId = parentColId.split(":")[1];
+      const proto2 = protocols.find((p) => p.id === protoId);
+      children.push(
+        ...buildDrcColumns(parentColId, proto2, rdId, visible, aggregationMode),
+      );
     }
 
     groups.push({
@@ -477,6 +541,8 @@ export function ResultsGrid({
   selectedIds,
   onSelectionChange,
   onExportSdf,
+  toolbarLeft,
+  toolbarActions,
 }: ResultsGridProps) {
   const rowHeight = ROW_HEIGHTS[reportConfig.imageSize] ?? 150;
 
@@ -488,11 +554,22 @@ export function ResultsGrid({
     [results],
   );
 
+  // Aggregation mode picked from `?agg=` is read here so DR intercept cells
+  // know whether to render the fold-range chip (gmean/mean only) — the value
+  // is closed over by the cellRenderer factories and `aggregationMode` is
+  // listed as a memo dep so the column block rebuilds when the toolbar
+  // flips modes.
+  const { mode: aggregationMode } = useAggregationMode();
+
   const columnDefs = useMemo<(ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[]>(() => {
     const molecule = buildMoleculeColumn(reportConfig.imageSize);
     const sim = hasSimilarityScores ? [buildSimilarityColumn()] : [];
     const props = buildPropertyColumns(reportConfig.visibleFields.properties);
-    const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols);
+    const protoGroups = buildProtocolColumnGroups(
+      protocolColumns,
+      protocols,
+      aggregationMode,
+    );
     return [molecule, ...sim, ...props, ...protoGroups];
   }, [
     reportConfig.imageSize,
@@ -500,6 +577,7 @@ export function ResultsGrid({
     protocolColumns,
     protocols,
     hasSimilarityScores,
+    aggregationMode,
   ]);
 
   // When the parent resets selection (selectedIds.size → 0), DataGrid's
@@ -543,6 +621,8 @@ export function ResultsGrid({
         enableMultiSelect
         suppressSelectColumn
         searchPlaceholder={false}
+        toolbarLeft={toolbarLeft}
+        toolbarActions={toolbarActions}
         exportFilename="cellar-search"
         extraExportItems={extraExportItems}
         onRowClick={onRowClick}
