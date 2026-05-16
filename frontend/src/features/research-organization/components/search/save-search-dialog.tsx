@@ -25,6 +25,10 @@ import {
   useUpdateSavedSearch,
 } from "../../hooks/use-saved-searches";
 import { useProjects } from "../../hooks/use-projects";
+import {
+  aggregationModeToWire,
+  useAggregationMode,
+} from "../../lib/use-aggregation-mode";
 import type {
   SavedSearch,
   SearchQuery,
@@ -63,6 +67,10 @@ export function SaveSearchDialog({
   const { data: projects = [] } = useProjects();
   const createMutation = useCreateSavedSearch();
   const updateMutation = useUpdateSavedSearch(existingSearch?.id ?? "");
+  // Aggregation mode is stored inside the query JSONB blob so saved
+  // searches round-trip the active selection rule alongside their
+  // filter criteria (Task 14).
+  const { mode: aggregationMode } = useAggregationMode();
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
@@ -87,12 +95,21 @@ export function SaveSearchDialog({
       protocolColumns,
     };
 
+    // Embed the current aggregation rule inside the query JSONB so the
+    // saved search restores it on load. Always written (even for the
+    // default "latest") so an older saved search edited under a
+    // non-default mode is unambiguous after re-save.
+    const queryWithAggregation = {
+      ...(query as unknown as Record<string, unknown>),
+      aggregation: aggregationModeToWire(aggregationMode),
+    };
+
     if (isUpdate) {
       updateMutation.mutate(
         {
           name,
           description: description || null,
-          query: query as unknown as Record<string, unknown>,
+          query: queryWithAggregation,
           columns,
           visibility,
           project_id: visibility === "project" ? projectId : null,
@@ -104,7 +121,7 @@ export function SaveSearchDialog({
         {
           name,
           description: description || null,
-          query: query as unknown as Record<string, unknown>,
+          query: queryWithAggregation,
           columns,
           visibility,
           project_id: visibility === "project" ? projectId : null,

@@ -18,6 +18,7 @@ import {
 import {
   aggregationModeToWire,
   useAggregationMode,
+  wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
 import { SearchForm } from "./search/search-form";
 import {
@@ -185,8 +186,11 @@ function SearchPageInner() {
   const { config: reportConfig, loadFromSavedSearch } = useReportConfig();
   const { exportSdf } = useSdfExport();
   // URL-synced aggregation mode. The toolbar's <AggregationControl /> owns
-  // the writer; the page only reads + injects into the request body.
-  const { mode: aggregationMode } = useAggregationMode();
+  // the writer; the page reads + injects into the request body, and also
+  // calls `setMode` on the saved-search load path so the URL chip and the
+  // request body stay in lock-step with the persisted rule.
+  const { mode: aggregationMode, setMode: setAggregationMode } =
+    useAggregationMode();
 
   // ── Derived: visible protocol IDs for detail panel ─────────────────────
   // Resolves each protocol-column token to its owning protocol.
@@ -349,19 +353,42 @@ function SearchPageInner() {
 
     const cols = saved.columns as { protocolColumns?: string[] } | null;
     const restoredColumns = cols?.protocolColumns ?? [];
-    const query = saved.query as unknown as SearchQuery;
+    const rawQuery = saved.query as Record<string, unknown>;
+    // The aggregation rule is co-located inside the saved `query` blob
+    // (Task 14). Old saved searches (pre-Task 14) won't have this key
+    // and fall back to "latest" — matching the FE default.
+    const savedAggregation = rawQuery?.aggregation;
+    const nextAggregationMode =
+      typeof savedAggregation === "string"
+        ? wireToAggregationMode(savedAggregation)
+        : "latest";
+    // Strip the aggregation field out before handing the query to the BE
+    // — the search query schema doesn't include it as a criterion (it
+    // travels as a top-level `input.aggregation` instead).
+    const { aggregation: _aggregation, ...queryWithoutAggregation } = rawQuery;
+    const query = queryWithoutAggregation as unknown as SearchQuery;
     if (!query?.criteria) return;
+
+    // Mirror the persisted mode into the URL so the toolbar chip + the
+    // page's `aggregationMode` reader observe the rule the saved search
+    // ran under. Pin the ref BEFORE updating URL state so the
+    // `aggregationMode`-watching re-trigger effect doesn't double-fire
+    // on the next render.
+    previousAggregationModeRef.current = nextAggregationMode;
+    setAggregationMode(nextAggregationMode);
 
     // Inline the search instead of going through handleSearch so the
     // saved-search load flow stays self-contained and doesn't depend on a
-    // closure that loadFromSavedSearch is about to invalidate.
+    // closure that loadFromSavedSearch is about to invalidate. Uses
+    // `nextAggregationMode` directly — the closure's `aggregationMode`
+    // still reflects the pre-load URL value on this tick.
     dispatch({ type: "searchStart", query, protocolColumns: restoredColumns });
 
     const backendCols = toBackendProtocolColumns(restoredColumns);
     const input = {
       query,
       ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
-      aggregation: aggregationModeToWire(aggregationMode),
+      aggregation: aggregationModeToWire(nextAggregationMode),
     };
 
     runSearch(
@@ -381,7 +408,14 @@ function SearchPageInner() {
         },
       },
     );
-  }, [savedSearchId, savedSearches, loadFromSavedSearch, runSearch, enrichItems, aggregationMode]);
+  }, [
+    savedSearchId,
+    savedSearches,
+    loadFromSavedSearch,
+    runSearch,
+    enrichItems,
+    setAggregationMode,
+  ]);
 
   // ── SDF export ─────────────────────────────────────────────────────────
   const handleExportSdf = useCallback(() => {
