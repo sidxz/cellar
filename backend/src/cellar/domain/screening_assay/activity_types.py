@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
+
+from cellar.domain.screening_assay.aggregation_types import AggregateStats
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,41 @@ class CurveParams:
 
 
 @dataclass(frozen=True)
+class RunSummary:
+    """One row in the cell tooltip's per-run table.
+
+    Carries enough to render date / intercept value / qualifier / R² /
+    curve class without a back-trip. ``intercept_values`` is the full
+    per-curve list so the tooltip can show every intercept's per-run
+    history, not just the column's primary one.
+    """
+
+    run_id: uuid.UUID
+    run_date: date
+    curve_id: uuid.UUID
+    curve_class: str | None
+    r_squared: float | None
+    intercept_values: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class InterceptAggregate:
+    """Per-intercept aggregation context. One per intercept the column shows.
+
+    ``spec`` mirrors ``intercept_values[i].spec`` so cells can match by
+    (kind, level). ``selected_value`` and ``selected_qualifier`` are the
+    BE's already-applied truth — the FE renders them directly without
+    re-deriving ND/GT from curve_class.
+    """
+
+    spec: dict[str, Any]
+    selected_value: float | None
+    selected_qualifier: str
+    aggregate_stats: AggregateStats | None
+    disagreement_flag: bool
+
+
+@dataclass(frozen=True)
 class ActivityValue:
     """Single activity value for display in search results or molecule detail."""
 
@@ -60,6 +98,12 @@ class ActivityValue:
     # plain dict with keys ``spec`` (kind/level/basis/label), ``value``,
     # ``confidence_interval_low``, ``confidence_interval_high``, ``at_bound``.
     intercept_values: list[dict[str, Any]] | None = None
+    # ---- NEW: multi-run aggregation context ----
+    run_count: int = 1
+    selection_rule: str | None = None
+    runs: list[RunSummary] | None = None
+    intercept_aggregates: list[InterceptAggregate] | None = None
+    disagreement_flag: bool = False
 
 
 @dataclass(frozen=True)
