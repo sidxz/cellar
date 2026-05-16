@@ -11,6 +11,7 @@ from cellar.application.export.cancel_export import CancelExport
 from cellar.application.export.get_export_status import GetExportStatus
 from cellar.application.export.list_exports import ListExports
 from cellar.application.export.orchestration import ExportOrchestrator
+from cellar.application.export.prepare_export_download import PrepareExportDownload
 from cellar.application.export.purge_expired_exports import PurgeExpiredExports
 from cellar.application.export.render_export import RenderExport
 from cellar.application.export.row_streams.search_results import SearchResultsRowStream
@@ -142,8 +143,14 @@ def register_export(container: Container) -> None:
         repo = SqlAlchemyExportJobRepository(uow)
         return PurgeExpiredExports(uow, repo, c[FsspecStorageClient])
 
+    def _prepare_export_download(c: Container) -> PrepareExportDownload:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        repo = SqlAlchemyExportJobRepository(uow)
+        return PrepareExportDownload(uow, repo)
+
     container.define(StartExport, _start_export)
     container.define(GetExportStatus, _get_export_status)
     container.define(CancelExport, _cancel_export)
     container.define(ListExports, _list_exports)
     container.define(PurgeExpiredExports, _purge_expired_exports)
+    container.define(PrepareExportDownload, _prepare_export_download)

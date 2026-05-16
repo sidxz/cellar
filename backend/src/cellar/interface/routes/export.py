@@ -7,21 +7,22 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from cellar.application.export.cancel_export import CancelExportCommand
 from cellar.application.export.get_export_status import GetExportStatusQuery
 from cellar.application.export.list_exports import ListExportsQuery
+from cellar.application.export.prepare_export_download import PrepareExportDownloadQuery
 from cellar.application.export.start_export import StartExportCommand
 from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
 from cellar.interface.dependencies import AuthDep
 from cellar.interface.dependencies._export import (
     CancelExportDep,
-    ExportJobRepositoryDep,
     GetExportStatusDep,
     ListExportsDep,
+    PrepareExportDownloadDep,
     StartExportDep,
     StorageDep,
 )
@@ -137,37 +138,20 @@ async def cancel_export(
 async def download_export(
     job_id: uuid.UUID,
     auth: AuthDep,
-    status_uc: GetExportStatusDep,
-    repo: ExportJobRepositoryDep,
+    prepare_uc: PrepareExportDownloadDep,
     storage: StorageDep,
 ) -> Response:
     """Stream the completed export file. Returns 409 if not ready, 410 if expired."""
-    res = await status_uc(
-        GetExportStatusQuery(workspace_id=auth.workspace_id, job_id=job_id),
+    res = await prepare_uc(
+        PrepareExportDownloadQuery(workspace_id=auth.workspace_id, job_id=job_id),
         auth=auth,
     )
-    view = result_to_response(res)
-
-    if view.status == ExportStatus.EXPIRED:
-        raise HTTPException(status_code=410, detail="Export expired — re-export the same query.")
-    if view.status != ExportStatus.READY:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Export not ready (status={view.status}).",
-        )
-
-    # Fetch the file_key — the status view intentionally omits it for security.
-    job = await repo.find_by_id_in_workspace(auth.workspace_id, job_id)
-    if not job or not job.file_key:
-        raise HTTPException(status_code=404, detail="Export file missing.")
-
-    data = await storage.download(job.file_key)
-    media_type = job.content_type or view.format.media_type
-    filename = job.filename or f"export{view.format.extension}"
+    info = result_to_response(res)
+    data = await storage.download(info.file_key)
     return Response(
         content=data,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        media_type=info.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{info.filename}"'},
     )
 
 

@@ -6,7 +6,8 @@ DomainError
 ├── ConcurrencyConflictError
 ├── ValidationError
 ├── AuthorizationError
-└── DataLockedError
+├── DataLockedError
+└── GoneError
 """
 
 from __future__ import annotations
@@ -94,4 +95,13 @@ class ServiceUnavailableError(DomainError):
     Maps to HTTP 503. Use sparingly — most failures should be domain-specific
     errors (NotFound, Conflict, etc.); this is for genuine "the dependency
     isn't there right now" situations such as a missing workflow engine.
+    """
+
+
+class GoneError(DomainError):
+    """Raised when a resource existed but has been permanently removed.
+
+    Maps to HTTP 410. Use for resources with a defined expiry lifecycle
+    (e.g. expired export jobs, purged data) where the client should not
+    retry the same request.
     """

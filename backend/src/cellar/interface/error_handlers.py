@@ -18,6 +18,7 @@ from cellar.domain.shared.errors import (
     ConflictError,
     DataLockedError,
     DomainError,
+    GoneError,
     NotFoundError,
     ServiceUnavailableError,
     ValidationError,
@@ -31,6 +32,7 @@ _ERROR_STATUS_MAP: dict[type[DomainError], int] = {
     ConcurrencyConflictError: 409,
     AuthorizationError: 403,
     DataLockedError: 423,
+    GoneError: 410,
     ServiceUnavailableError: 503,
 }
 
