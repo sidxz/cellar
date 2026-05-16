@@ -118,3 +118,34 @@ def test_mark_expired_requires_ready():
     job.mark_expired()
     assert job.status == ExportStatus.EXPIRED
     assert job.file_key is None  # storage swept
+
+
+def test_mark_ready_requires_running():
+    job = _make()
+    with pytest.raises(ConflictError):
+        job.mark_ready("k", 1, "text/csv", datetime.now(UTC))
+
+
+def test_mark_failed_rejects_terminal():
+    job = _make()
+    job.mark_running()
+    job.mark_failed("x")
+    with pytest.raises(ConflictError):
+        job.mark_failed("again")
+
+
+def test_mark_cancelled_requires_cancel_requested():
+    job = _make()
+    job.mark_running()
+    with pytest.raises(ConflictError):
+        job.mark_cancelled()
+
+
+def test_set_row_count_and_progress_reject_terminal():
+    job = _make()
+    job.mark_running()
+    job.mark_failed("x")
+    with pytest.raises(ConflictError):
+        job.set_row_count(10)
+    with pytest.raises(ConflictError):
+        job.report_progress(0.5)

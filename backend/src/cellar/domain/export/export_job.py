@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, UTC
+from typing import Any
 
 from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
 from cellar.domain.shared.entity import AggregateRoot
@@ -35,7 +36,7 @@ class ExportJob(AggregateRoot):
         requested_by: uuid.UUID,
         source: ExportSource,
         format: ExportFormat,
-        query_snapshot: dict,
+        query_snapshot: dict[str, Any],
         filename: str,
         status: ExportStatus = ExportStatus.PENDING,
         row_count: int | None = None,
@@ -84,7 +85,7 @@ class ExportJob(AggregateRoot):
         requested_by: uuid.UUID,
         source: ExportSource,
         format: ExportFormat,
-        query_snapshot: dict,
+        query_snapshot: dict[str, Any],
         filename: str,
     ) -> "ExportJob":
         return cls(
@@ -109,10 +110,14 @@ class ExportJob(AggregateRoot):
         self.version += 1
 
     def set_row_count(self, n: int) -> None:
+        if self.status in _TERMINAL:
+            raise ConflictError(f"Cannot set row count on job in status {self.status}")
         self.row_count = max(int(n), 0)
         self.version += 1
 
     def report_progress(self, p: float) -> None:
+        if self.status in _TERMINAL:
+            raise ConflictError(f"Cannot report progress on job in status {self.status}")
         self.progress = max(0.0, min(1.0, float(p)))
         self.version += 1
 
@@ -123,6 +128,8 @@ class ExportJob(AggregateRoot):
         content_type: str,
         expires_at: datetime,
     ) -> None:
+        if self.status != ExportStatus.RUNNING:
+            raise ConflictError(f"Cannot mark job ready in status {self.status}")
         self.status = ExportStatus.READY
         self.file_key = file_key
         self.byte_size = byte_size
@@ -133,6 +140,8 @@ class ExportJob(AggregateRoot):
         self.version += 1
 
     def mark_failed(self, error: str) -> None:
+        if self.status in _TERMINAL:
+            raise ConflictError(f"Cannot mark job failed in status {self.status}")
         self.status = ExportStatus.FAILED
         self.error_message = error
         self.completed_at = datetime.now(UTC)
@@ -145,6 +154,8 @@ class ExportJob(AggregateRoot):
         self.version += 1
 
     def mark_cancelled(self) -> None:
+        if self.status != ExportStatus.CANCEL_REQUESTED:
+            raise ConflictError(f"Cannot mark job cancelled in status {self.status}")
         self.status = ExportStatus.CANCELLED
         self.completed_at = datetime.now(UTC)
         self.version += 1

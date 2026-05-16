@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from cellar.domain.export.export_job import ExportJob
 
 
+@runtime_checkable
 class ExportJobRepository(Protocol):
     async def save(self, job: ExportJob) -> None: ...
 
