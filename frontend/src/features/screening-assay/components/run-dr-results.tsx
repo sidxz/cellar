@@ -1,7 +1,6 @@
 "use client";
 
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import type { ExcelEnhancer } from "@/shared/components/data-grid/export-toolbar";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -10,8 +9,7 @@ import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
-import { renderCurveToBase64 } from "@/shared/lib/export/curve-image";
-import { fetchStructureImages } from "@/shared/lib/export/structure-image";
+
 import type { SelectionChangedEvent } from "ag-grid-community";
 import { Eye, Filter, FlaskConical, Settings2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -115,103 +113,6 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   }, [protocol]);
 
   const columnDefs = useMemo(() => buildColumnDefs(protocolIntercepts), [protocolIntercepts]);
-
-  // Excel enhancer — fill image columns + add SMILES/Synonyms + raw data sheet
-  const excelEnhancer: ExcelEnhancer = useCallback(
-    async (workbook, worksheet, rows: CompoundCurveRow[]) => {
-      // Helper: find column index (0-based) by header text
-      const findCol = (name: string) => {
-        const row1 = worksheet.getRow(1);
-        for (let c = 1; c <= worksheet.columnCount; c++) {
-          if (row1.getCell(c).value === name) return c - 1;
-        }
-        return -1;
-      };
-
-      // Batch-fetch structure images from backend
-      const allSmiles = rows.map((r) => r.smiles).filter((s): s is string => !!s);
-      const structImages = await fetchStructureImages(allSmiles, 150, 100);
-
-      // Fill existing "Structure" column with images
-      const structColIdx = findCol("Structure");
-      if (structColIdx >= 0) {
-        worksheet.getColumn(structColIdx + 1).width = 22;
-        for (let r = 0; r < rows.length; r++) {
-          const smiles = rows[r].smiles;
-          if (smiles && structImages[smiles]) {
-            const imgId = workbook.addImage({
-              base64: structImages[smiles],
-              extension: "png",
-            });
-            worksheet.addImage(imgId, {
-              tl: { col: structColIdx, row: r + 1 },
-              ext: { width: 150, height: 80 },
-            });
-          }
-        }
-      }
-
-      // Fill existing "Curve" column with sparkline images
-      const curveColIdx = findCol("Curve");
-      if (curveColIdx >= 0) {
-        worksheet.getColumn(curveColIdx + 1).width = 30;
-        for (let r = 0; r < rows.length; r++) {
-          const row = rows[r];
-          const base64 = renderCurveToBase64(
-            {
-              hill_slope: row.hill_slope,
-              top: row.top,
-              bottom: row.bottom,
-              fitted_value: row.fitted_value,
-            },
-            row.data_points,
-          );
-          if (!base64) continue;
-          const imageId = workbook.addImage({ base64, extension: "png" });
-          worksheet.addImage(imageId, {
-            tl: { col: curveColIdx, row: r + 1 },
-            ext: { width: 200, height: 60 },
-          });
-        }
-      }
-
-      // Consistent row heights
-      for (let r = 2; r <= rows.length + 1; r++) {
-        worksheet.getRow(r).height = 65;
-      }
-
-      // Append SMILES and Synonyms as new text columns
-      const lastCol = worksheet.columnCount;
-      const smilesCol = lastCol + 1;
-      const synonymsCol = lastCol + 2;
-      worksheet.getRow(1).getCell(smilesCol).value = "SMILES";
-      worksheet.getRow(1).getCell(synonymsCol).value = "Synonyms";
-      for (let r = 0; r < rows.length; r++) {
-        const row = rows[r];
-        worksheet.getRow(r + 2).getCell(smilesCol).value = row.smiles ?? "";
-        worksheet.getRow(r + 2).getCell(synonymsCol).value = row.synonyms.join("; ");
-      }
-      worksheet.getColumn(smilesCol).width = 40;
-      worksheet.getColumn(synonymsCol).width = 30;
-
-      // Raw data points sheet — exports use the canonical reg id as the
-      // compound label for analyst consistency.
-      const rawSheet = workbook.addWorksheet("Raw Data Points");
-      rawSheet.addRow(["Compound", "SMILES", "Concentration", "Response"]);
-      for (const row of rows) {
-        if (row.data_points) {
-          for (const pt of row.data_points) {
-            rawSheet.addRow([row.registration_number, row.smiles ?? "", pt.x, pt.y]);
-          }
-        }
-      }
-      rawSheet.getColumn(1).width = 20;
-      rawSheet.getColumn(2).width = 40;
-      rawSheet.getColumn(3).width = 15;
-      rawSheet.getColumn(4).width = 15;
-    },
-    [],
-  );
 
   // Detail panel: curves for the viewed compound
   const viewingCurves = viewing?.all_curves ?? null;
@@ -345,8 +246,6 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
         enableMultiSelect
         onSelectionChanged={handleSelectionChanged}
         getRowId={(params) => params.data.molecule_id}
-        exportFilename={`run-${run.id.slice(0, 8)}-dose-response`}
-        excelEnhancer={excelEnhancer}
         emptyState={
           <EmptyState
             icon={Filter}

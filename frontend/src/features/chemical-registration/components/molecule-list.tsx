@@ -167,7 +167,6 @@ export function MoleculeList() {
           columnDefs={columnDefs}
           loading={isLoading}
           height="calc(100vh - 280px)"
-          exportFilename="compounds"
           onRowClick={(mol) => {
             router.push(`/compounds/${mol.id}`);
           }}

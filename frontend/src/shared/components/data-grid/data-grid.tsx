@@ -16,11 +16,6 @@ import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import { Search } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cellarTheme } from "./ag-grid-theme";
-import {
-  type ExcelEnhancer,
-  ExportToolbar,
-  type ExtraExportItem,
-} from "./export-toolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -38,13 +33,6 @@ export interface DataGridProps<TData = unknown>
   height?: string | number;
   /** Suppress built-in column filters. Default: false */
   suppressFilters?: boolean;
-  /** When provided, renders CSV + Excel export buttons above the grid */
-  exportFilename?: string;
-  /** Optional enhancer for Excel exports — adds images, extra sheets, etc. */
-  excelEnhancer?: ExcelEnhancer;
-  /** Extra dropdown items appended after Excel + CSV — for feature-specific
-   *  formats (e.g. SDF structure export on the search grid). */
-  extraExportItems?: ExtraExportItem[];
   /** When provided, persists column state (width, order, visibility) to localStorage. */
   preferencesKey?: string;
   /** Render prop for selection toolbar. Shown above grid when rows are selected.
@@ -91,9 +79,6 @@ export function DataGrid<TData = unknown>({
   onRowClick,
   height = "400px",
   suppressFilters = false,
-  exportFilename,
-  excelEnhancer,
-  extraExportItems,
   preferencesKey,
   selectionToolbar,
   enableMultiSelect,
@@ -198,9 +183,7 @@ export function DataGrid<TData = unknown>({
 
   const hasRows = !!rowData?.length;
   const showSearch = searchPlaceholder !== false && hasRows;
-  const showExport = !!exportFilename && hasRows;
-  const renderToolbar =
-    showSearch || showExport || !!toolbarActions || !!toolbarLeft;
+  const renderToolbar = showSearch || !!toolbarActions || !!toolbarLeft;
 
   const toolbar = renderToolbar ? (
     <div className="mb-2 flex items-center gap-2">
@@ -219,14 +202,6 @@ export function DataGrid<TData = unknown>({
       ) : null}
       <div className="ml-auto flex items-center gap-2">
         {toolbarActions}
-        {showExport ? (
-          <ExportToolbar
-            gridRef={gridRef}
-            filename={exportFilename!}
-            excelEnhancer={excelEnhancer}
-            extraItems={extraExportItems}
-          />
-        ) : null}
       </div>
     </div>
   ) : null;

@@ -486,7 +486,6 @@ export function ReadoutDataTable({
         loading={isLoading}
         height="500px"
         suppressFilters
-        exportFilename={`readout-data-${runId}`}
         toolbarActions={toolbarActions}
         getRowId={(params) => params.data.key}
         emptyState={
