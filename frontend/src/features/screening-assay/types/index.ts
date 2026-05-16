@@ -448,6 +448,17 @@ export interface DoseResponseCurve {
    *  Legacy single-intercept curves omit this; consumers fall back to
    *  `fitted_value` for the headline number. */
   intercept_values?: InterceptValue[];
+  /** Non-representative contributing curves on aggregate-mode cells
+   *  (MEAN_ACROSS_RUNS / GEOMETRIC_MEAN). The chart overlays them muted
+   *  underneath the primary. Absent on LATEST / BEST_R_SQUARED.
+   *  Loose record shape because the chart re-types via AdditionalCurve at
+   *  the binding edge. */
+  additional_curves?: Array<Record<string, unknown>> | null;
+  /** Aggregate marker — present only on aggregate-mode cells. Carries
+   *  marker_x / marker_label / unit so the chart can draw a single
+   *  vertical line at the cell value and suppress the per-curve
+   *  intercept dashed lines (rep's intercept ≠ aggregate value). */
+  aggregate?: { marker_x: number; marker_label: string; unit: string } | null;
 }
 
 // ─── Plate Template ─────────────────────────────────────────────────────────

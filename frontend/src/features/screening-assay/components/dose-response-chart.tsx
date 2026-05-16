@@ -18,6 +18,7 @@ import {
   X_AXIS_FLOOR,
   X_AXIS_MAX_RATIO,
   X_AXIS_MIN_RATIO,
+  generate4PLPoints,
 } from "../lib/dose-response-display";
 import { interceptLabel } from "../lib/intercept-label";
 import {
@@ -447,12 +448,33 @@ export function DoseResponseChart({
     }
 
     // Filter out NaN/non-positive values: log10 explodes on them and
-    // `fitted_value` may be NaN/0 for degenerate fits.
+    // `fitted_value` may be NaN/0 for degenerate fits. Aggregate-mode
+    // overlays also contribute their fitted_value + raw_data so the
+    // axis range doesn't truncate sibling runs whose EC50 sits outside
+    // the rep's range.
     const finiteFitted = Number.isFinite(curve.fitted_value) && curve.fitted_value > 0;
+    const additionalXs: number[] = [];
+    for (const ac of curve.additional_curves ?? []) {
+      const acFitted = (ac as { fitted_value?: number }).fitted_value;
+      if (typeof acFitted === "number" && Number.isFinite(acFitted) && acFitted > 0) {
+        additionalXs.push(acFitted);
+      }
+      const acRaw = (ac as { raw_data?: Array<Record<string, unknown>> | null }).raw_data;
+      if (Array.isArray(acRaw)) {
+        for (const pt of acRaw) {
+          const xv = (pt as { x?: number; concentration?: number }).x ??
+            (pt as { x?: number; concentration?: number }).concentration;
+          if (typeof xv === "number" && Number.isFinite(xv) && xv > 0) {
+            additionalXs.push(xv);
+          }
+        }
+      }
+    }
     const allX = [
       ...serverIncluded.x,
       ...serverExcluded.x,
       ...(finiteFitted ? [curve.fitted_value] : []),
+      ...additionalXs,
     ].filter((v) => Number.isFinite(v) && v > 0);
     let xMin: number;
     let xMax: number;
@@ -633,6 +655,57 @@ export function DoseResponseChart({
         hoverinfo: "skip",
       });
     }
+
+    // Aggregate-mode overlay: muted dashed sigmoids for each non-rep
+    // contributor so the chemist can see whether the runs agree. Same
+    // color as the primary so the family reads as one cluster; only
+    // opacity + dash style distinguish. Skip inactive sibling fits —
+    // drawing a sigmoid for a curve that doesn't represent a real
+    // response would mislead.
+    for (const acRaw of curve.additional_curves ?? []) {
+      const ac = acRaw as {
+        fitted_value?: number;
+        top?: number;
+        bottom?: number;
+        hill_slope?: number;
+        curve_class?: string | null;
+        run_date?: string | null;
+      };
+      if (ac.curve_class === "inactive") continue;
+      if (
+        typeof ac.fitted_value !== "number" ||
+        typeof ac.top !== "number" ||
+        typeof ac.bottom !== "number" ||
+        typeof ac.hill_slope !== "number" ||
+        !Number.isFinite(ac.fitted_value) ||
+        ac.fitted_value <= 0
+      ) {
+        continue;
+      }
+      const { x: ovX, y: ovY } = generate4PLPoints(
+        {
+          top: ac.top,
+          bottom: ac.bottom,
+          fitted_value: ac.fitted_value,
+          hill_slope: ac.hill_slope,
+        },
+        xMin,
+        xMax,
+      );
+      const runLabel = ac.run_date ? `Run ${ac.run_date}` : "Contributing run";
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: runLabel,
+        legendgroup: group,
+        x: ovX,
+        y: ovY,
+        line: { color, width: 1.5, dash: "dot" },
+        opacity: 0.35,
+        showlegend: false,
+        hovertemplate: `${runLabel}<br>fitted_value=${ac.fitted_value.toPrecision(3)}<extra></extra>`,
+      });
+    }
   }
 
   // ── Plotly click handler ────────────────────────────────────────────────────
@@ -704,9 +777,17 @@ export function DoseResponseChart({
     const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
     const degenerate = isDegenerateFit(curve);
 
+    // Aggregate-mode cells carry their own marker at the cell's
+    // gmean/mean. The rep curve's fitted_value points at the latest
+    // run's intercept (not the aggregate) — drawing a cross-hair there
+    // would mislead, so suppress every per-curve annotation in
+    // aggregate mode and rely on the single amber marker below.
+    const isAggregateMode =
+      curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
+
     // Cross-hair: dotted lines + marker + label at (EC50, midpoint).
     // Suppress for inactive/degenerate fits — the EC50 isn't meaningful.
-    if (showCrossHair && !degenerate) {
+    if (showCrossHair && !degenerate && !isAggregateMode) {
       shapes.push({
         type: "line",
         xref: "paper",
@@ -768,6 +849,7 @@ export function DoseResponseChart({
     if (
       showCrossHair &&
       !degenerate &&
+      !isAggregateMode &&
       curve.intercept_values &&
       curve.intercept_values.length > 1
     ) {
@@ -824,6 +906,41 @@ export function DoseResponseChart({
           yshift: 2,
         });
       }
+    }
+
+    // Aggregate-mode marker: single solid amber line at the cell's
+    // aggregate value (gmean / mean). Replaces the per-curve cross-hair
+    // because the rep curve's fitted_value doesn't equal the cell value
+    // in aggregate modes — drawing a phantom intercept at the wrong
+    // place is exactly the bug we're fixing.
+    if (isAggregateMode && showCrossHair) {
+      const aggMx = curve.aggregate!.marker_x;
+      const aggLabel = curve.aggregate!.marker_label;
+      shapes.push({
+        type: "line",
+        xref: "x",
+        x0: aggMx,
+        x1: aggMx,
+        yref: "paper",
+        y0: 0,
+        y1: 1,
+        line: { color: CHART_COLORS.warning, width: 1.5 },
+        opacity: 0.95,
+      });
+      annotations.push({
+        x: Math.log10(aggMx),
+        y: midY,
+        xref: "x",
+        yref: "y",
+        text: `<b>${aggLabel} = ${aggMx.toPrecision(3)}${unitLabel}</b>`,
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 0.8,
+        arrowcolor: CHART_COLORS.warning,
+        ax: 0,
+        ay: -35,
+        font: { color: CHART_COLORS.warning, size: 11 },
+      });
     }
 
     // Plateau lines: horizontal dashed at top and bottom asymptotes

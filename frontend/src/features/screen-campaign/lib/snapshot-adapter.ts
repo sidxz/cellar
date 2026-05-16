@@ -82,5 +82,13 @@ export function snapshotToDoseResponseCurve(
       (snap.excluded_points ?? null) as Array<Record<string, unknown>> | null,
     fit_quality_warnings: snap.fit_quality_warnings ?? [],
     intercept_values,
+    // Aggregate-mode overlay carried through the snapshot so the expand
+    // dialog's <DoseResponseChart> can draw the contributing curves muted
+    // and place a single vertical marker at the cell's aggregate value
+    // (rather than the rep curve's per-intercept dashed line, which
+    // points at the latest run's intercept — not the aggregate).
+    additional_curves:
+      (snap.additional_curves ?? null) as Array<Record<string, unknown>> | null,
+    aggregate: snap.aggregate ?? null,
   };
 }
