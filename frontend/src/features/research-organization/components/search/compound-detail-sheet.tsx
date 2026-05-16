@@ -16,13 +16,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
 import {
   aggregateValue,
+  filterCurvesByRunScope,
   pickRepresentative,
 } from "../../lib/compound-detail-selection";
 import {
   AGGREGATION_LABELS,
+  collectRunScopesByProtocol,
   useAggregationMode,
 } from "../../lib/use-aggregation-mode";
-import type { CurveDetail, ProtocolCurveGroup } from "../../types";
+import type {
+  CurveDetail,
+  ProtocolCurveGroup,
+  RunScope,
+  SearchQuery,
+} from "../../types";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
@@ -38,6 +45,15 @@ interface CompoundDetailSheetProps {
   totalCount: number;
   onNavigate: (direction: "prev" | "next") => void;
   onClose: () => void;
+  /**
+   * The executed search query. Used to derive per-protocol `run_scope`
+   * filters so the drawer's curve list (fetched separately via
+   * `useMoleculeActivityDetail`) honors the same narrowing that produced
+   * the grid cell. Without this the drawer can show curves from runs the
+   * search excluded — chemists noticed the mismatch the moment the
+   * toolbar started saying "Single run per compound."
+   */
+  currentQuery: SearchQuery | null;
 }
 
 // ─── CurveDetail → DoseResponseCurve adapter ──────────────────────────────
@@ -100,18 +116,35 @@ function adaptCurve(
 interface ProtocolCardProps {
   group: ProtocolCurveGroup;
   molecule: Molecule;
+  /** Per-protocol `run_scope` from the search criterion; applied to the
+   *  drawer's full curve list so the chart matches the grid cell. */
+  scope?: RunScope;
   defaultExpanded?: boolean;
 }
 
-function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardProps) {
+function ProtocolCard({
+  group,
+  molecule,
+  scope,
+  defaultExpanded = true,
+}: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // Drawer honors the toolbar's aggregation mode so the chart matches
   // the grid cell value end-to-end. Reads URL state directly via the
   // shared hook — no prop drilling.
   const { mode } = useAggregationMode();
 
+  // Narrow to the in-scope curves BEFORE pickRepresentative / aggregateValue.
+  // Without this the drawer's chart picks from runs the search criterion
+  // excluded, contradicting the grid cell. Memoized so the chart doesn't
+  // re-derive on every render — only when scope or curves actually change.
+  const inScopeCurves = useMemo(
+    () => filterCurvesByRunScope(group.curves, scope),
+    [group.curves, scope],
+  );
+
   const { adaptedCurve, repCurve, aggValue } = useMemo(() => {
-    const rep = pickRepresentative(group.curves, mode);
+    const rep = pickRepresentative(inScopeCurves, mode);
     if (!rep) return { adaptedCurve: null, repCurve: null, aggValue: null };
 
     // For aggregate modes, build the overlay (additional contributors +
@@ -121,9 +154,9 @@ function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardP
     let agg: number | null = null;
     let overlay: Parameters<typeof adaptCurve>[3] | undefined;
     if (mode === "gmean" || mode === "mean") {
-      agg = aggregateValue(group.curves, mode);
+      agg = aggregateValue(inScopeCurves, mode);
       if (agg !== null) {
-        const additional = group.curves
+        const additional = inScopeCurves
           .filter((c) => c.curve_id !== rep.curve_id)
           .map((c) => ({
             fitted_value: c.fitted_value,
@@ -153,28 +186,38 @@ function ProtocolCard({ group, molecule, defaultExpanded = true }: ProtocolCardP
       repCurve: rep,
       aggValue: agg,
     };
-  }, [group.curves, group.protocol_id, molecule, mode]);
+  }, [inScopeCurves, group.protocol_id, molecule, mode]);
 
   if (!repCurve || !adaptedCurve) return null;
 
-  // Header subtext describing what's drawn — chemists need to know
-  // whether the curve they're staring at is the rep, the best, or just
-  // a shape reference behind an aggregate marker.
+  // Header subtext describing what's drawn. The "in scope" prefix kicks in
+  // whenever the search criterion's run_scope actually narrowed the
+  // candidate list, so the chemist can see at a glance that the drawer is
+  // honoring the same runs filter as the grid cell.
+  const totalCurves = group.curves.length;
+  const nScope = inScopeCurves.length;
+  const scoped = scope !== undefined && nScope < totalCurves;
   const headerText = (() => {
-    if (group.curves.length <= 1) return null;
-    const n = group.curves.length;
+    if (nScope === 0) return "No runs in scope";
+    if (nScope === 1) {
+      const d = repCurve.run_date ?? "—";
+      return scoped
+        ? `1 run in scope — Run ${d}`
+        : `Run ${d}`;
+    }
+    const noun = scoped ? `${nScope} of ${totalCurves} runs in scope` : `${nScope} runs`;
     if (mode === "best_r2") {
-      return `${n} runs — showing best (R² = ${repCurve.r_squared.toFixed(3)})`;
+      return `${noun} — showing best (R² = ${repCurve.r_squared.toFixed(3)})`;
     }
     if (mode === "latest") {
       const d = repCurve.run_date ?? "—";
-      return `${n} runs — showing latest run (${d})`;
+      return `${noun} — showing latest run (${d})`;
     }
     if (aggValue !== null) {
       const label = AGGREGATION_LABELS[mode].toLowerCase();
-      return `${n} runs — ${label} = ${aggValue.toPrecision(3)} ${repCurve.fitted_unit}`;
+      return `${noun} — ${label} = ${aggValue.toPrecision(3)} ${repCurve.fitted_unit}`;
     }
-    return `${n} runs — ${AGGREGATION_LABELS[mode].toLowerCase()}`;
+    return `${noun} — ${AGGREGATION_LABELS[mode].toLowerCase()}`;
   })();
 
   return (
@@ -219,10 +262,18 @@ export function CompoundDetailSheet({
   totalCount,
   onNavigate,
   onClose,
+  currentQuery,
 }: CompoundDetailSheetProps) {
   const [othersExpanded, setOthersExpanded] = useState(false);
 
   const { data: activityDetail, isLoading } = useMoleculeActivityDetail(molecule?.id ?? null);
+
+  // Per-protocol run_scope from the executed search. Derived once per query
+  // change; ProtocolCard reads its own entry to filter the curves it draws.
+  const runScopesByProtocol = useMemo(
+    () => collectRunScopesByProtocol(currentQuery?.criteria ?? []),
+    [currentQuery],
+  );
 
   // Reset expanded state when molecule changes
   useEffect(() => {
@@ -414,6 +465,7 @@ export function CompoundDetailSheet({
                           key={group.protocol_id}
                           group={group}
                           molecule={molecule}
+                          scope={runScopesByProtocol.get(group.protocol_id)}
                           defaultExpanded
                         />
                       ))}
@@ -446,6 +498,10 @@ export function CompoundDetailSheet({
                           key={group.protocol_id}
                           group={group}
                           molecule={molecule}
+                          // "Other" protocols weren't in the search query, so
+                          // they carry no scope — chemist sees the full curve
+                          // history for the drilldown.
+                          scope={runScopesByProtocol.get(group.protocol_id)}
                           defaultExpanded={false}
                         />
                       ))}

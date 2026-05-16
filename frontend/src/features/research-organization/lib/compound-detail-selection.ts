@@ -16,7 +16,7 @@
  *                 value is computed across all non-inactive contributors
  *                 and exposed as an amber marker via the overlay.
  */
-import type { CurveDetail } from "../types";
+import type { CurveDetail, RunScope } from "../types";
 import type { AggregationMode } from "./use-aggregation-mode";
 
 /** Pick the curve to plot as the headline / rep, based on toolbar mode.
@@ -65,4 +65,78 @@ export function aggregateValue(
     return Math.pow(10, logMean);
   }
   return xs.reduce((acc, v) => acc + v, 0) / xs.length;
+}
+
+/**
+ * Narrow a curve list to the runs allowed by a `RunScope`. The drawer
+ * fetches every curve for a molecule via `GetMoleculeActivityDetail` and
+ * then needs to honor the search criterion's per-protocol scope so its
+ * pick (and the chart it draws) matches the grid cell.
+ *
+ * Modes:
+ *  - `undefined` / `any` / `all` → no filter (return input).
+ *  - `specific {run_ids[]}` (or legacy `run_id`) → keep curves with
+ *    matching `run_id`. Empty selection returns `[]` (an invalid scope
+ *    means nothing is in-scope; defensive, mirrors the picker's invalid
+ *    state).
+ *  - `latest` → keep ALL curves from the most recent `run_date` (a
+ *    multi-DR run yields multiple curves per run, all of which belong).
+ *    Curves with null `run_date` cannot win and are dropped.
+ *  - `past_n_days` → keep curves whose `run_date >= today - N days`.
+ *  - `date_range` → keep curves within the inclusive `[date_from, date_to]`
+ *    window; either bound omitted is unbounded on that side; both omitted
+ *    is a no-op (parity with the BE's `RunScope.all()` fallback).
+ *
+ * Null `run_date` is dropped from any date-based filter; passes through
+ * untouched on `any` / `all` / `undefined`.
+ */
+export function filterCurvesByRunScope(
+  curves: CurveDetail[],
+  scope: RunScope | undefined,
+): CurveDetail[] {
+  if (!scope) return curves;
+  if (scope.mode === "any" || scope.mode === "all") return curves;
+
+  if (scope.mode === "specific") {
+    const ids = new Set<string>();
+    for (const id of scope.run_ids ?? []) ids.add(id);
+    if (scope.run_id) ids.add(scope.run_id);
+    if (ids.size === 0) return [];
+    return curves.filter((c) => ids.has(c.run_id));
+  }
+
+  if (scope.mode === "latest") {
+    let latestDate: string | null = null;
+    let latestRunId: string | null = null;
+    for (const c of curves) {
+      if (c.run_date === null) continue;
+      if (latestDate === null || c.run_date > latestDate) {
+        latestDate = c.run_date;
+        latestRunId = c.run_id;
+      }
+    }
+    if (latestRunId === null) return [];
+    return curves.filter((c) => c.run_id === latestRunId);
+  }
+
+  if (scope.mode === "past_n_days") {
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - scope.days);
+    const thresholdStr = threshold.toISOString().slice(0, 10);
+    return curves.filter(
+      (c) => c.run_date !== null && c.run_date >= thresholdStr,
+    );
+  }
+
+  if (scope.mode === "date_range") {
+    if (!scope.date_from && !scope.date_to) return curves;
+    return curves.filter((c) => {
+      if (c.run_date === null) return false;
+      if (scope.date_from && c.run_date < scope.date_from) return false;
+      if (scope.date_to && c.run_date > scope.date_to) return false;
+      return true;
+    });
+  }
+
+  return curves;
 }

@@ -17,6 +17,7 @@ import {
 } from "../lib/protocol-column-id";
 import {
   aggregationModeToWire,
+  computeScopeForcesSingleRun,
   useAggregationMode,
   wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
@@ -201,6 +202,18 @@ function SearchPageInner() {
   const visibleProtocolIds = useMemo(
     () => uniqueProtocolIds(protocolColumns, protocols ?? []),
     [protocolColumns, protocols],
+  );
+
+  // ── Derived: should the toolbar Summarize: dropdown be hidden? ──────────
+  // True iff every active activity criterion narrows its run scope to one
+  // run, in which case every cell deterministically reduces to one value
+  // and the dropdown is a no-op. Driven off the *executed* query so the
+  // toolbar swap lines up with the cells actually on screen — editing the
+  // search form without re-running keeps the previous toolbar state until
+  // the next Search.
+  const scopeForcesSingleRun = useMemo(
+    () => computeScopeForcesSingleRun(currentQuery?.criteria ?? []),
+    [currentQuery],
   );
 
   // ── Enrichment helper ──────────────────────────────────────────────────
@@ -504,6 +517,7 @@ function SearchPageInner() {
                   onAddToCollection={handleAddToCollection}
                   onCustomizeReport={() => setReportOpen(true)}
                   onSaveSearch={() => setSaveOpen(true)}
+                  scopeForcesSingleRun={scopeForcesSingleRun}
                 />
               }
               onSelectionChange={(ids) => dispatch({ type: "setGridSelection", ids })}
@@ -537,6 +551,7 @@ function SearchPageInner() {
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
         onClose={() => dispatch({ type: "clearSelection" })}
+        currentQuery={currentQuery}
       />
 
       <ReportCustomizer

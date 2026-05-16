@@ -44,4 +44,15 @@ describe("AggregationControl", () => {
     expect(screen.getAllByText(/Arithmetic mean/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Best fit/).length).toBeGreaterThan(0);
   });
+
+  // The `disabled` prop swaps the dropdown for a static label (used when
+  // every activity criterion narrows scope to one run and any aggregation
+  // rule is a no-op). The behavior contract: no interactive combobox is
+  // rendered, so chemists can't trigger a useless re-fetch.
+  it("renders no combobox when disabled (so onChange can never fire)", () => {
+    const onChange = vi.fn();
+    render(<AggregationControl mode="gmean" onChange={onChange} disabled />);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

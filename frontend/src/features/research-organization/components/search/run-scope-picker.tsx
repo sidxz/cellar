@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronsUpDown, CheckIcon, X } from "lucide-react";
+import { Select as SelectPrimitive } from "radix-ui";
 import { Input } from "@/shared/components/ui/input";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
@@ -36,14 +36,91 @@ import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import type { Run, RunStatus } from "@/features/screening-assay/types";
 import type { RunScope, RunScopeMode } from "../../types";
 
-const MODE_OPTIONS: { value: RunScopeMode; label: string }[] = [
-  { value: "any", label: "Any run" },
-  { value: "latest", label: "Latest run" },
-  { value: "all", label: "All runs" },
-  { value: "date_range", label: "Date range" },
-  { value: "past_n_days", label: "Past N days" },
-  { value: "specific", label: "Specific run" },
+// Ordered broad → narrow so the menu reads as a continuum of run-set
+// restriction. Labels favor chemist-natural English ("Any run" / "Every run"
+// parallel construction; "Last N days" reads more naturally than "Past N
+// days"). Descriptions are rendered as a muted sub-line so the meaning is
+// scannable without a hover tooltip. The wire-shape `value` strings are
+// unchanged — `mode: "all"` still persists in saved searches even though
+// its label is now "Every run".
+const MODE_OPTIONS: {
+  value: RunScopeMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "any",
+    label: "Any run",
+    description: "Match if at least one run satisfies the criterion.",
+  },
+  {
+    value: "all",
+    label: "Every run",
+    description:
+      "Match only if every run for this protocol satisfies the criterion.",
+  },
+  {
+    value: "latest",
+    label: "Latest run",
+    description:
+      "Restrict to the single most recent approved run for this protocol.",
+  },
+  {
+    value: "past_n_days",
+    label: "Last N days",
+    description: "Restrict to runs from the last N days.",
+  },
+  {
+    value: "date_range",
+    label: "Date range",
+    description:
+      "Restrict to runs whose run date falls within the chosen window.",
+  },
+  {
+    value: "specific",
+    label: "Specific run",
+    description: "Restrict to a hand-picked list of runs.",
+  },
 ];
+
+/**
+ * Mode option rendered via Radix primitives — `<SelectPrimitive.ItemText>`
+ * wraps ONLY the label, which is what `<SelectValue />` reads to populate
+ * the trigger. The description renders as a sibling outside ItemText so it
+ * appears only in the open menu, never collapsed into the trigger row.
+ * shadcn's `<SelectItem>` auto-wraps every child in ItemText, which would
+ * cause the description to bleed into the trigger; using the Radix
+ * primitive directly is the lowest-friction way to honor that contract
+ * without patching the shared component.
+ */
+function ScopeOption({
+  option,
+}: {
+  option: (typeof MODE_OPTIONS)[number];
+}) {
+  return (
+    <SelectPrimitive.Item
+      value={option.value}
+      className={cn(
+        "relative flex w-full cursor-default select-none items-start gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none",
+        "focus:bg-accent focus:text-accent-foreground",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      )}
+    >
+      <span className="absolute right-2 top-2 flex h-3.5 w-3.5 items-center justify-center">
+        <SelectPrimitive.ItemIndicator>
+          <CheckIcon className="h-4 w-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+      <div className="flex flex-col gap-0.5">
+        <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+        <span className="text-xs text-muted-foreground">
+          {option.description}
+        </span>
+      </div>
+    </SelectPrimitive.Item>
+  );
+}
 
 /** Status dot driven by run.status + is_locked. */
 function statusColor(status: RunStatus, isLocked: boolean): string {
@@ -123,11 +200,9 @@ export function RunScopePicker({
         <SelectTrigger className="h-8 w-32 text-sm shrink-0">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="min-w-[20rem]">
           {MODE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value} className="text-sm">
-              {opt.label}
-            </SelectItem>
+            <ScopeOption key={opt.value} option={opt} />
           ))}
         </SelectContent>
       </Select>

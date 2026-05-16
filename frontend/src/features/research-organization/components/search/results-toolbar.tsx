@@ -71,6 +71,14 @@ interface ResultsToolbarActionsProps {
   onAddToCollection: () => void;
   onCustomizeReport: () => void;
   onSaveSearch: () => void;
+  /**
+   * True when the active query has narrowed every activity criterion to one
+   * run, so the aggregation dropdown is a no-op on every cell. The page
+   * computes this from `currentQuery.criteria` via `computeScopeForcesSingleRun`
+   * and forwards it down so the toolbar can swap the dropdown for a muted
+   * static label.
+   */
+  scopeForcesSingleRun?: boolean;
 }
 
 export function ResultsToolbarActions({
@@ -78,6 +86,7 @@ export function ResultsToolbarActions({
   onAddToCollection,
   onCustomizeReport,
   onSaveSearch,
+  scopeForcesSingleRun,
 }: ResultsToolbarActionsProps) {
   // URL-synced aggregation mode lives in the toolbar — the page reads the
   // same hook independently for the search body, so we don't have to
@@ -90,6 +99,7 @@ export function ResultsToolbarActions({
       <AggregationControl
         mode={aggregationMode}
         onChange={setAggregationMode}
+        disabled={scopeForcesSingleRun}
       />
       <Button
         variant="outline"
