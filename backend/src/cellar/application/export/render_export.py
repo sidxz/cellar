@@ -69,6 +69,7 @@ class RenderExport:
             if job.status == ExportStatus.PENDING:
                 job.mark_running()
                 await self.repo.save(job)
+                await self.uow.commit()
 
         try:
             stream = self._build_stream(job)
@@ -80,6 +81,7 @@ class RenderExport:
                 job = await self.repo.find_by_id_in_workspace(workspace_id, job_id)
                 job.set_row_count(total)
                 await self.repo.save(job)
+                await self.uow.commit()
 
             ext = job.format.extension
             with NamedTemporaryFile(suffix=ext, delete=False) as tf:
@@ -117,6 +119,7 @@ class RenderExport:
                     expires_at=datetime.now(UTC) + timedelta(days=_TTL_DAYS),
                 )
                 await self.repo.save(job)
+                await self.uow.commit()
 
         except Exception as exc:  # noqa: BLE001
             logger.exception("export.failed", job_id=str(job_id))
@@ -125,6 +128,7 @@ class RenderExport:
                 if job is not None:
                     job.mark_failed(str(exc))
                     await self.repo.save(job)
+                    await self.uow.commit()
             raise
 
     def _build_stream(self, job: ExportJob) -> RowStream:
@@ -168,3 +172,4 @@ async def _progressing(
                     continue
                 job.report_progress(rows_done / total)
                 await repo.save(job)
+                await uow.commit()

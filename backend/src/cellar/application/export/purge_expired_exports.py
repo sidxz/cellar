@@ -49,6 +49,7 @@ class PurgeExpiredExports:
                     continue  # deleted between list and re-fetch; skip
                 fresh.mark_expired()
                 await self._repo.save(fresh)
+                await self._uow.commit()
 
             purged += 1
 
