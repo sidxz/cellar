@@ -7,6 +7,12 @@ vi.mock("@/shared/lib/api/custom-instance", () => ({
   customInstance: (...args: unknown[]) => mockCustomInstance(...args),
 }));
 
+// Mock downloadFile so tests don't require a live auth session or blob URLs.
+const mockDownloadFile = vi.fn();
+vi.mock("@/shared/lib/api/download", () => ({
+  downloadFile: (...args: unknown[]) => mockDownloadFile(...args),
+}));
+
 import { useExport } from "./use-export";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -34,6 +40,8 @@ function makeJob(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.useFakeTimers();
   mockCustomInstance.mockReset();
+  mockDownloadFile.mockReset();
+  mockDownloadFile.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -83,8 +91,6 @@ describe("useExport", () => {
         }),
       );
 
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-
     const { result } = renderHook(() => useExport());
 
     // Kick off: POST fires, poll() called immediately (no timer), first GET fires.
@@ -101,7 +107,12 @@ describe("useExport", () => {
     expect(result.current.job?.status).toBe("ready");
     expect(result.current.isPending).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(clickSpy).toHaveBeenCalledOnce();
+    expect(mockDownloadFile).toHaveBeenCalledOnce();
+    expect(mockDownloadFile).toHaveBeenCalledWith({
+      url: "/api/v1/exports/j1/download",
+      method: "GET",
+      filename: "export.csv",
+    });
   });
 
   it("sets error on failed status", async () => {

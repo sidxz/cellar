@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { downloadFile } from "@/shared/lib/api/download";
 import type { ExportRequest, ExportJob } from "./types";
 
 const TERMINAL_STATUSES = new Set(["ready", "failed", "cancelled", "expired"]);
@@ -37,7 +38,7 @@ export function useExport(): UseExportReturn {
         });
         setJob(next);
         if (next.status === "ready") {
-          triggerDownload(next);
+          await triggerDownload(next);
           return;
         }
         if (TERMINAL_STATUSES.has(next.status)) {
@@ -100,12 +101,7 @@ export function useExport(): UseExportReturn {
   };
 }
 
-function triggerDownload(job: ExportJob) {
+async function triggerDownload(job: ExportJob) {
   if (!job.download_url || !job.filename) return;
-  const a = document.createElement("a");
-  a.href = job.download_url;
-  a.download = job.filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  await downloadFile({ url: job.download_url, method: "GET", filename: job.filename });
 }
