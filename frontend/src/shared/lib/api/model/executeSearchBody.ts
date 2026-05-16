@@ -7,9 +7,11 @@
 import type { ExecuteSearchBodyQuery } from './executeSearchBodyQuery';
 import type { ExecuteSearchBodySavedSearchId } from './executeSearchBodySavedSearchId';
 import type { ExecuteSearchBodyProtocolColumns } from './executeSearchBodyProtocolColumns';
+import type { SelectionRule } from './selectionRule';
 
 export interface ExecuteSearchBody {
   query?: ExecuteSearchBodyQuery;
   saved_search_id?: ExecuteSearchBodySavedSearchId;
   protocol_columns?: ExecuteSearchBodyProtocolColumns;
+  aggregation?: SelectionRule;
 }

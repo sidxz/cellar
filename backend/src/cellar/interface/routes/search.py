@@ -12,6 +12,7 @@ from cellar.application.research_organization.count_search import CountSearchQue
 from cellar.application.research_organization.execute_search import ExecuteSearchQuery
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.sar_analysis.search_modes import SearchMode
+from cellar.domain.shared.aggregation_types import SelectionRule
 from cellar.interface.dependencies import AuthDep, CountSearchDep, ExecuteSearchDep
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import clamp_limit, parse_cursor
@@ -131,6 +132,11 @@ class ExecuteSearchBody(BaseModel):
     query: dict[str, Any] | None = None
     saved_search_id: uuid.UUID | None = None
     protocol_columns: list[str] | None = None
+    # Selection rule the activity-enrichment aggregator applies when
+    # multiple in-scope runs exist for the same (compound, intercept) cell.
+    # Default is ``LATEST_APPROVED_RUN`` — matches the campaign default and
+    # the chemist mental model of "what would I see right now".
+    aggregation: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
 
     @model_validator(mode="after")
     def _validate_structure_clauses(self) -> "ExecuteSearchBody":
@@ -173,6 +179,7 @@ async def execute_search(
         saved_search_id=body.saved_search_id,
         query=body.query,
         protocol_columns=body.protocol_columns,
+        aggregation=body.aggregation,
         cursor_id=parse_cursor(cursor),
         limit=clamp_limit(limit),
         sort_by=sort_by,

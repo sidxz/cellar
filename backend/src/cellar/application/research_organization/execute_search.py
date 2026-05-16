@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict, dataclass
+from datetime import date, timedelta
 from typing import Any
 
 from returns.result import Failure, Result, Success
@@ -16,6 +17,8 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.research_organization.repository import SavedSearchRepository
+from cellar.domain.screening_assay.run_scope import RunScope
+from cellar.domain.shared.aggregation_types import SelectionRule
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
 
@@ -25,6 +28,7 @@ class ExecuteSearchQuery(Query):
     saved_search_id: uuid.UUID | None = None
     query: dict[str, Any] | None = None
     protocol_columns: list[str] | None = None
+    aggregation: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
     cursor_id: uuid.UUID | None = None
     limit: int = 50
     project_ids: list[uuid.UUID] | None = None
@@ -140,8 +144,21 @@ class ExecuteSearch:
             activity_data = None
             if input.protocol_columns and self._activity_service and molecules:
                 mol_ids = [m.id for m in molecules]
+                # Per-column run scopes — pulled from each activity criterion
+                # and keyed by ``drc:<rd_id>`` to feed enrich_molecules.
+                drc_cols = [
+                    c for c in (input.protocol_columns or []) if c.startswith("drc:")
+                ]
+                criteria = (
+                    query_dict.get("criteria", []) if query_dict else []
+                )
+                run_scopes = _collect_run_scopes(criteria, drc_cols)
                 activity_data_raw = await self._activity_service.enrich_molecules(
-                    input.workspace_id, mol_ids, input.protocol_columns
+                    input.workspace_id,
+                    mol_ids,
+                    input.protocol_columns,
+                    selection_rule=input.aggregation,
+                    run_scopes=run_scopes or None,
                 )
                 # Convert UUID keys to strings and ActivityValue to dicts for JSON
                 activity_data = {
@@ -177,3 +194,119 @@ def _query_has_similarity(criteria: list[dict]) -> bool:
             if _query_has_similarity(c.get("criteria", [])):
                 return True
     return False
+
+
+def _collect_run_scopes(
+    criteria: list[dict],
+    drc_col_keys: list[str],
+) -> dict[str, RunScope]:
+    """Map each requested ``drc:<rd_id>`` col_key to its criterion's run_scope.
+
+    A search has at most one activity criterion per protocol on the same
+    query, and the FE explicitly lists the drc col_keys it wants in
+    ``protocol_columns``. Each drc col_key corresponds to a readout-def
+    on some protocol; we attach the scope from the matching activity
+    criterion. Criteria without an explicit ``run_scope`` (or with
+    ``mode=any``) contribute nothing and the cell falls back to
+    ``RunScope.all()`` in ``enrich_molecules``.
+
+    Pragmatic mapping: without an async DB lookup we can't pair every
+    drc col_key with its owning protocol, so:
+      * single activity criterion with a scope → apply uniformly to all
+        requested drc col_keys (the common chemist workflow).
+      * multiple criteria with scopes → the LAST one in tree-walk order
+        wins (deterministic, since dict preserves insertion order). In
+        practice chemists rarely mix multiple scoped activity criteria
+        on the same search; the conservative narrowing is the safer
+        default if they do.
+    """
+    scopes: dict[str, RunScope] = {}
+    activity_scopes_by_protocol: dict[str, RunScope] = {}
+
+    def walk(crits: list[dict]) -> None:
+        for c in crits:
+            ctype = c.get("type")
+            if ctype == "activity":
+                proto_id = c.get("protocol_id")
+                rs_raw = c.get("run_scope")
+                if proto_id is None or not rs_raw:
+                    continue
+                parsed = _parse_run_scope(rs_raw)
+                if parsed.is_all():
+                    continue
+                activity_scopes_by_protocol[str(proto_id)] = parsed
+            elif ctype == "group":
+                walk(c.get("criteria", []))
+
+    walk(criteria)
+    if not activity_scopes_by_protocol or not drc_col_keys:
+        return {}
+
+    if len(activity_scopes_by_protocol) == 1:
+        scope = next(iter(activity_scopes_by_protocol.values()))
+    else:
+        # Multiple criteria with scopes — the LAST is preserved by
+        # insertion order. Documented above.
+        scope = next(reversed(activity_scopes_by_protocol.values()))
+
+    for col_key in drc_col_keys:
+        scopes[col_key] = scope
+    return scopes
+
+
+def _parse_run_scope(raw: dict[str, Any]) -> RunScope:
+    """Adapt the wire-shape ``run_scope`` dict to the domain ``RunScope``.
+
+    Wire shape is the ``mode``-keyed dict the FE already sends and the
+    activity composer already parses for SQL filtering. We translate
+    each mode to the domain's smart constructor so the enrichment
+    service and the SQL composer apply the same scope:
+
+      * ``mode="any"`` (or ``"all"``) → ``RunScope.all()``
+      * ``mode="latest"`` → ``RunScope.last_n(1)``
+      * ``mode="past_n_days", days=N`` → ``RunScope.since(today - N days)``
+      * ``mode="specific", run_ids=[...]`` (or legacy ``run_id``) →
+        ``RunScope.run_ids(...)``
+      * ``mode="date_range", date_from=..., date_to=...`` →
+        ``RunScope.between(...)``
+
+    Unknown / malformed modes silently fall back to ``RunScope.all()``
+    rather than raising: the SQL composer's stricter validation will
+    surface a 422 to the user, and we don't want the enrichment to
+    blow up after the rows already loaded.
+    """
+    mode = raw.get("mode")
+    if mode in (None, "any", "all"):
+        return RunScope.all()
+    if mode == "latest":
+        return RunScope.last_n(1)
+    if mode == "past_n_days":
+        try:
+            days = int(raw.get("days", 30))
+        except (TypeError, ValueError):
+            return RunScope.all()
+        return RunScope.since(date.today() - timedelta(days=max(days, 0)))
+    if mode == "specific":
+        raw_ids = raw.get("run_ids")
+        if not raw_ids:
+            single = raw.get("run_id")
+            raw_ids = [single] if single else []
+        try:
+            ids = [uuid.UUID(str(x)) for x in raw_ids]
+        except (TypeError, ValueError):
+            return RunScope.all()
+        return RunScope.run_ids(ids) if ids else RunScope.all()
+    if mode == "date_range":
+        df = raw.get("date_from")
+        dt = raw.get("date_to")
+        try:
+            d_from = date.fromisoformat(df) if df else None
+            d_to = date.fromisoformat(dt) if dt else None
+        except (TypeError, ValueError):
+            return RunScope.all()
+        if d_from is not None and d_to is not None:
+            return RunScope.between(d_from, d_to)
+        if d_from is not None:
+            return RunScope.since(d_from)
+        return RunScope.all()
+    return RunScope.all()
