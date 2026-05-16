@@ -27,6 +27,7 @@ from cellar.application.auth import AuthContext, require_editor
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ResolvedCandidate,
+    _build_aggregate_curve_snapshot,
     _build_curve_snapshot,
     _compute_hit_call,
     _intercept_scalar,
@@ -191,6 +192,17 @@ def _apply_selection_rule(
             if v is not None
         ]
         value: float | None = sum(ik_vals) / len(ik_vals) if ik_vals else None
+        # Aggregate-mode snapshot extension: when we have a real value, the
+        # chart needs every contributor's curve shape + the marker position.
+        # On ND (no healthy contributors), fall back to the rep snapshot so
+        # the curve column still renders the latest curve.
+        agg_snapshot = (
+            _build_aggregate_curve_snapshot(
+                candidates, aggregate_value=value, aggregate_label="mean"
+            )
+            if value is not None
+            else snapshot
+        )
         return _Picked(
             value=value,
             qualifier=ValueQualifier.EQ,
@@ -203,7 +215,7 @@ def _apply_selection_rule(
             run_date=None,
             contributing_run_ids=contributing,
             replicate_count=n,
-            curve_snapshot=snapshot,
+            curve_snapshot=agg_snapshot,
         )
     if rule == SelectionRule.GEOMETRIC_MEAN:
         positives = [
@@ -213,8 +225,9 @@ def _apply_selection_rule(
         ]
         if not positives:
             return None
+        gmean_value = math.exp(sum(math.log(v) for v in positives) / len(positives))
         return _Picked(
-            value=math.exp(sum(math.log(v) for v in positives) / len(positives)),
+            value=gmean_value,
             qualifier=ValueQualifier.EQ,
             unit=unit_seed,
             source_run_id=None,
@@ -225,7 +238,9 @@ def _apply_selection_rule(
             run_date=None,
             contributing_run_ids=contributing,
             replicate_count=n,
-            curve_snapshot=snapshot,
+            curve_snapshot=_build_aggregate_curve_snapshot(
+                candidates, aggregate_value=gmean_value, aggregate_label="gmean"
+            ),
         )
     # MANUAL_PICK — ND placeholder
     return None

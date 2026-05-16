@@ -109,6 +109,38 @@ def _candidate(
     )
 
 
+def _dr_curve_candidate(
+    *,
+    value: float,
+    run_id: uuid.UUID,
+    run_date: date,
+    unit: str = "uM",
+    curve_class: str = "full",
+) -> ResolvedCandidate:
+    """ResolvedCandidate with DR curve shape so _build_curve_snapshot returns
+    a populated dict (not None). Used by aggregate-snapshot tests below."""
+    return ResolvedCandidate(
+        value=value,
+        qualifier=ValueQualifier.EQ,
+        unit=unit,
+        run_id=run_id,
+        run_date=run_date,
+        run_approved=True,
+        z_prime=0.7,
+        protocol_name="Proto",
+        protocol_version=1,
+        curve_id=uuid.uuid4(),
+        readout_id=None,
+        curve_class=curve_class,
+        curve_top=100.0,
+        curve_bottom=0.0,
+        curve_hill_slope=-1.0,
+        curve_r_squared=0.9,
+        curve_raw_data=[{"concentration": 0.1, "response": 10}],
+        intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": value}],
+    )
+
+
 def _make_mol(id_: uuid.UUID, *, reg: str = "CVT-0001", smiles: str | None = "C") -> SimpleNamespace:
     return SimpleNamespace(
         id=id_,
@@ -916,6 +948,153 @@ class TestPreviewRunImport:
 
         assert doc["summary"]["hits"] == 2
         assert doc["summary"]["non_hits"] == 0
+
+    @pytest.mark.asyncio
+    async def test_mean_aggregate_cell_carries_additional_curves_and_marker(self) -> None:
+        """Aggregate-mode cells (MEAN_ACROSS_RUNS) in the preview document
+        must carry curve_snapshot with additional_curves (other contributors)
+        + aggregate (marker) — same shape ChannelResolver produces at
+        close-time so the FE rendering is uniform across preview + closed
+        campaign surfaces.
+
+        Note: PreviewRunImport's response document doesn't surface
+        curve_snapshot on each cell today (it's a separate FE concern), but
+        the underlying _Picked.curve_snapshot does carry it. This test
+        reaches into the use case's internals via _apply_selection_rule
+        directly to verify the shape.
+        """
+        from cellar.application.research_organization.preview_run_import import (
+            _apply_selection_rule,
+        )
+
+        # Build 3 DR candidates with curve shape across 3 dates.
+        r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        candidates = [
+            _dr_curve_candidate(
+                value=4.0, run_id=r1, run_date=date(2026, 1, 1),
+            ),
+            _dr_curve_candidate(
+                value=8.0, run_id=r2, run_date=date(2026, 3, 1),
+            ),
+            _dr_curve_candidate(
+                value=12.0, run_id=r3, run_date=date(2026, 4, 1),  # rep
+            ),
+        ]
+        picked = _apply_selection_rule(
+            candidates, SelectionRule.MEAN_ACROSS_RUNS, intercept_key=None
+        )
+        assert picked is not None
+        assert picked.value == pytest.approx(8.0)
+        assert picked.curve_snapshot is not None
+        snap = picked.curve_snapshot
+        # Rep (latest April) at top level.
+        assert snap["fitted_value"] == 12.0
+        # 2 others, sorted desc by run_date.
+        assert len(snap["additional_curves"]) == 2
+        assert snap["additional_curves"][0]["fitted_value"] == 8.0  # March
+        assert snap["additional_curves"][1]["fitted_value"] == 4.0  # January
+        assert snap["additional_curves"][0]["run_date"] == "2026-03-01"
+        assert snap["additional_curves"][1]["run_date"] == "2026-01-01"
+        # Aggregate marker matches the picked value.
+        assert snap["aggregate"]["marker_x"] == pytest.approx(8.0)
+        assert snap["aggregate"]["marker_label"] == "mean"
+
+    @pytest.mark.asyncio
+    async def test_geometric_mean_aggregate_cell_uses_gmean_label(self) -> None:
+        """GEOMETRIC_MEAN picks get marker_label='gmean'."""
+        from cellar.application.research_organization.preview_run_import import (
+            _apply_selection_rule,
+        )
+
+        r1, r2 = uuid.uuid4(), uuid.uuid4()
+        candidates = [
+            _dr_curve_candidate(value=10.0, run_id=r1, run_date=date(2026, 1, 1)),
+            _dr_curve_candidate(value=1000.0, run_id=r2, run_date=date(2026, 5, 1)),
+        ]
+        picked = _apply_selection_rule(
+            candidates, SelectionRule.GEOMETRIC_MEAN, intercept_key=None
+        )
+        assert picked is not None
+        assert picked.value == pytest.approx(100.0)
+        assert picked.curve_snapshot is not None
+        assert picked.curve_snapshot["aggregate"]["marker_label"] == "gmean"
+        assert picked.curve_snapshot["aggregate"]["marker_x"] == pytest.approx(100.0)
+
+    @pytest.mark.asyncio
+    async def test_mean_aggregate_cell_falls_back_to_rep_snapshot_on_nd(self) -> None:
+        """When all candidates are Inactive (value=None), the snapshot still
+        carries the latest curve's shape so the curve column renders SOMETHING
+        — just without the additional_curves / aggregate fields."""
+        from cellar.application.research_organization.preview_run_import import (
+            _apply_selection_rule,
+        )
+
+        candidates = [
+            _dr_curve_candidate(
+                value=10.0,
+                run_id=uuid.uuid4(),
+                run_date=date(2026, 1, 1),
+                curve_class="inactive",
+            ),
+            _dr_curve_candidate(
+                value=20.0,
+                run_id=uuid.uuid4(),
+                run_date=date(2026, 5, 1),
+                curve_class="inactive",
+            ),
+        ]
+        picked = _apply_selection_rule(
+            candidates, SelectionRule.MEAN_ACROSS_RUNS, intercept_key=None
+        )
+        assert picked is not None
+        assert picked.value is None  # all inactive -> ND aggregate
+        # Snapshot falls back to the legacy single-curve shape (the rep) so
+        # the curve column still renders.
+        assert picked.curve_snapshot is not None
+        assert "additional_curves" not in picked.curve_snapshot
+        assert "aggregate" not in picked.curve_snapshot
+        assert picked.curve_snapshot["fitted_value"] == 20.0  # rep = latest
+
+    @pytest.mark.asyncio
+    async def test_latest_mode_cell_keeps_legacy_snapshot_shape(self) -> None:
+        """LATEST_APPROVED_RUN cells: no aggregate fields on the snapshot
+        (the cell value IS a single curve's value; nothing to overlay)."""
+        from cellar.application.research_organization.preview_run_import import (
+            _apply_selection_rule,
+        )
+
+        candidates = [
+            _dr_curve_candidate(value=10.0, run_id=uuid.uuid4(), run_date=date(2026, 1, 1)),
+            _dr_curve_candidate(value=20.0, run_id=uuid.uuid4(), run_date=date(2026, 5, 1)),
+        ]
+        picked = _apply_selection_rule(
+            candidates, SelectionRule.LATEST_APPROVED_RUN, intercept_key=None
+        )
+        assert picked is not None
+        assert picked.value == 20.0  # latest
+        assert picked.curve_snapshot is not None
+        assert "additional_curves" not in picked.curve_snapshot
+        assert "aggregate" not in picked.curve_snapshot
+
+    @pytest.mark.asyncio
+    async def test_readout_data_aggregate_cell_has_no_snapshot(self) -> None:
+        """Readout-data sources have no curve shape -> aggregate snapshot is
+        None (same as LATEST cell on a readout_data source)."""
+        from cellar.application.research_organization.preview_run_import import (
+            _apply_selection_rule,
+        )
+
+        # _candidate() returns a ResolvedCandidate WITHOUT curve_top/etc.
+        candidates = [
+            _candidate(value=10.0, run_id=uuid.uuid4(), run_date=date(2026, 1, 1)),
+            _candidate(value=20.0, run_id=uuid.uuid4(), run_date=date(2026, 5, 1)),
+        ]
+        picked = _apply_selection_rule(
+            candidates, SelectionRule.MEAN_ACROSS_RUNS, intercept_key=None
+        )
+        assert picked is not None
+        assert picked.value == 15.0
+        assert picked.curve_snapshot is None  # no curve shape -> no snapshot
 
     @pytest.mark.asyncio
     async def test_qc_pass_false_for_unapproved_or_low_z_prime(self) -> None:

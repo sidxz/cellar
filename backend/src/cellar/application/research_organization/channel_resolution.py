@@ -22,6 +22,7 @@ contribute one.
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Protocol, runtime_checkable
 
 from cellar.application.screening.run_aggregation import (
@@ -62,6 +63,7 @@ __all__ = [
     "ChannelResolver",
     "ResolvedCandidate",
     # Re-exported for tests / channel-side callers
+    "_build_aggregate_curve_snapshot",
     "_build_curve_snapshot",
     "_compute_hit_call",
     "_intercept_scalar",
@@ -246,6 +248,56 @@ def _build_curve_snapshot(c: ResolvedCandidate) -> dict | None:
     return snap
 
 
+def _build_aggregate_curve_snapshot(
+    candidates: list[ResolvedCandidate],
+    *,
+    aggregate_value: float,
+    aggregate_label: str,
+) -> dict | None:
+    """Build a curve_snapshot for an aggregate-mode cell.
+
+    Top-level keys mirror the representative (latest-by-date) candidate's
+    snapshot. ``additional_curves`` carries the other contributors so the
+    chart can overlay them muted; each carries ``run_date`` + ``run_id``
+    so the chart can key + label per-run on hover. ``aggregate`` carries
+    the marker position the chart draws (in aggregate modes, the per-curve
+    intercept dashed lines don't represent the cell value; the chart should
+    suppress them and fall back to this single marker).
+
+    Returns ``None`` when the representative candidate has no curve shape
+    (e.g. readout_data sources) — same fallback as ``_build_curve_snapshot``
+    so the measurement carries no snapshot at all and the FE renders "—"
+    in the curve column.
+    """
+    if not candidates:
+        return None
+    rep = max(candidates, key=lambda c: c.run_date or date.min)
+    rep_snap = _build_curve_snapshot(rep)
+    if rep_snap is None:
+        return None  # readout_data source — no curves to overlay
+
+    additional: list[dict] = []
+    for c in sorted(
+        (c for c in candidates if c.run_id != rep.run_id),
+        key=lambda c: c.run_date or date.min,
+        reverse=True,
+    ):
+        snap = _build_curve_snapshot(c)
+        if snap is None:
+            continue
+        snap["run_date"] = c.run_date.isoformat() if c.run_date else None
+        snap["run_id"] = str(c.run_id)
+        additional.append(snap)
+
+    rep_snap["additional_curves"] = additional
+    rep_snap["aggregate"] = {
+        "marker_x": aggregate_value,
+        "marker_label": aggregate_label,
+        "unit": rep.unit or "",
+    }
+    return rep_snap
+
+
 class ChannelResolver:
     """Application service that resolves one (channel, molecule) cell."""
 
@@ -316,6 +368,27 @@ class ChannelResolver:
         source_curve = None if is_aggregate else pick.curve_id
         source_readout = None if is_aggregate else pick.readout_id
 
+        # In aggregate modes the displayed cell value is the aggregate, but
+        # the latest-curve snapshot's per-curve intercept dashed line points
+        # at the latest run's intercept (not the aggregate). Carry every
+        # post-QC contributor + the aggregate marker so the chart can
+        # overlay the curves muted and draw a single vertical line at the
+        # cell value. Non-aggregate cells keep the legacy single-snapshot
+        # shape (additional_curves / aggregate absent).
+        if is_aggregate:
+            marker_label = (
+                "gmean"
+                if channel.selection_rule == SelectionRule.GEOMETRIC_MEAN
+                else "mean"
+            )
+            curve_snapshot = _build_aggregate_curve_snapshot(
+                candidates,
+                aggregate_value=result.value,
+                aggregate_label=marker_label,
+            )
+        else:
+            curve_snapshot = _build_curve_snapshot(pick)
+
         return CampaignMeasurement(
             result_id=result_id,
             channel_id=channel.id,
@@ -329,5 +402,5 @@ class ChannelResolver:
             protocol_name_snapshot=pick.protocol_name,
             protocol_version_snapshot=pick.protocol_version,
             run_date_snapshot=pick.run_date,
-            curve_snapshot=_build_curve_snapshot(pick),
+            curve_snapshot=curve_snapshot,
         )

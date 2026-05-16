@@ -10,6 +10,7 @@ import pytest
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
     ResolvedCandidate,
+    _build_aggregate_curve_snapshot,
     _max_dose_from_raw,
     _resolve_intercept,
 )
@@ -575,3 +576,240 @@ async def test_mean_across_runs_all_inactive_emits_nd():
     )
     assert m.value is None
     assert m.value_qualifier == ValueQualifier.ND
+
+
+# ---------------------------------------------------------------------------
+# Aggregate-mode curve_snapshot — overlay + marker shape
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAggregateCurveSnapshot:
+    """Pure-function tests on _build_aggregate_curve_snapshot."""
+
+    def test_aggregate_snapshot_carries_additional_curves_and_marker(self):
+        """MEAN mode resolver produces a snapshot with additional_curves + aggregate."""
+        candidates = [
+            _dr_candidate(
+                4.0,
+                run_date=date(2026, 1, 1),
+                intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 4.0}],
+            ),
+            _dr_candidate(
+                8.0,
+                run_date=date(2026, 3, 1),
+                intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 8.0}],
+            ),
+            _dr_candidate(
+                12.0,
+                run_date=date(2026, 4, 1),  # rep — latest
+                intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 12.0}],
+            ),
+        ]
+        snap = _build_aggregate_curve_snapshot(
+            candidates, aggregate_value=8.0, aggregate_label="mean"
+        )
+        assert snap is not None
+        # Top-level snapshot is from the latest candidate (rep).
+        assert snap["fitted_value"] == 12.0
+        # 2 additional curves (non-rep), sorted desc by date.
+        assert len(snap["additional_curves"]) == 2
+        assert snap["additional_curves"][0]["fitted_value"] == 8.0  # March
+        assert snap["additional_curves"][1]["fitted_value"] == 4.0  # January
+        # Each additional carries run_date + run_id strings.
+        assert snap["additional_curves"][0]["run_date"] == "2026-03-01"
+        assert snap["additional_curves"][1]["run_date"] == "2026-01-01"
+        assert isinstance(snap["additional_curves"][0]["run_id"], str)
+        assert isinstance(snap["additional_curves"][1]["run_id"], str)
+        # Aggregate marker.
+        assert snap["aggregate"]["marker_x"] == 8.0
+        assert snap["aggregate"]["marker_label"] == "mean"
+        assert snap["aggregate"]["unit"] == "uM"  # _dr_candidate's seed unit
+
+    def test_aggregate_snapshot_single_candidate_has_empty_additional_curves(self):
+        """One candidate -> additional_curves is empty list, not None."""
+        candidates = [
+            _dr_candidate(5.0, run_date=date(2026, 1, 1)),
+        ]
+        snap = _build_aggregate_curve_snapshot(
+            candidates, aggregate_value=5.0, aggregate_label="mean"
+        )
+        assert snap is not None
+        assert snap["additional_curves"] == []
+        assert snap["aggregate"]["marker_x"] == 5.0
+        assert snap["aggregate"]["marker_label"] == "mean"
+
+    def test_aggregate_snapshot_returns_none_for_readout_data_source(self):
+        """No curve shape on candidates -> overall snapshot is None.
+
+        Matches existing _build_curve_snapshot behavior: when the rep's
+        snapshot returns None, we return None too (no snapshot at all,
+        same as today — FE renders "—" in the curve column).
+        """
+        # Build a candidate WITHOUT curve_top/bottom/hill_slope (the fields
+        # _build_curve_snapshot guards on) — that's the readout_data shape.
+        candidates = [
+            ResolvedCandidate(
+                value=5.0,
+                qualifier=ValueQualifier.EQ,
+                unit="nM",
+                run_id=uuid.uuid4(),
+                run_date=date(2026, 1, 1),
+                run_approved=True,
+                z_prime=0.7,
+                protocol_name="X",
+                protocol_version=1,
+                curve_id=None,
+                readout_id=uuid.uuid4(),
+                # No curve_top/bottom/hill_slope -> _build_curve_snapshot returns None.
+            )
+        ]
+        snap = _build_aggregate_curve_snapshot(
+            candidates, aggregate_value=5.0, aggregate_label="mean"
+        )
+        assert snap is None
+
+    def test_aggregate_snapshot_empty_candidates_returns_none(self):
+        """Defensive: zero candidates -> None."""
+        assert (
+            _build_aggregate_curve_snapshot(
+                [], aggregate_value=5.0, aggregate_label="mean"
+            )
+            is None
+        )
+
+    def test_aggregate_snapshot_label_gmean(self):
+        candidates = [_dr_candidate(10.0, run_date=date(2026, 1, 1))]
+        snap = _build_aggregate_curve_snapshot(
+            candidates, aggregate_value=10.0, aggregate_label="gmean"
+        )
+        assert snap is not None
+        assert snap["aggregate"]["marker_label"] == "gmean"
+
+    def test_aggregate_snapshot_skips_additional_curves_without_shape(self):
+        """If a non-rep contributor lacks curve shape (mixed source kinds —
+        unlikely but defensible), the helper drops it from additional_curves
+        rather than raising."""
+        rep_with_shape = _dr_candidate(12.0, run_date=date(2026, 4, 1))
+        # A "non-rep" candidate that ISN'T a DR curve — no curve shape.
+        non_rep_without_shape = ResolvedCandidate(
+            value=4.0,
+            qualifier=ValueQualifier.EQ,
+            unit="uM",
+            run_id=uuid.uuid4(),
+            run_date=date(2026, 1, 1),
+            run_approved=True,
+            z_prime=0.7,
+            protocol_name="X",
+            protocol_version=1,
+            curve_id=None,
+            readout_id=uuid.uuid4(),
+        )
+        snap = _build_aggregate_curve_snapshot(
+            [non_rep_without_shape, rep_with_shape],
+            aggregate_value=8.0,
+            aggregate_label="mean",
+        )
+        assert snap is not None
+        # Rep has shape so the overall snapshot is built; the shapeless
+        # non-rep is silently dropped from the overlay list.
+        assert snap["fitted_value"] == 12.0
+        assert snap["additional_curves"] == []
+
+
+@pytest.mark.asyncio
+async def test_resolver_mean_mode_writes_aggregate_snapshot_on_measurement():
+    """End-to-end: ChannelResolver under MEAN_ACROSS_RUNS produces a
+    CampaignMeasurement whose curve_snapshot carries the additional_curves
+    overlay + aggregate marker, not just the latest curve."""
+    ch = _channel(SelectionRule.MEAN_ACROSS_RUNS)
+    candidates = [
+        _dr_candidate(
+            10.0,
+            run_date=date(2026, 1, 1),
+            intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 10.0}],
+        ),
+        _dr_candidate(
+            20.0,
+            run_date=date(2026, 5, 1),  # latest -> rep
+            intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 20.0}],
+        ),
+    ]
+    resolver = ChannelResolver(_FakeQuery(candidates))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value == 15.0
+    assert m.curve_snapshot is not None
+    # The top-level snapshot is the latest curve (May).
+    assert m.curve_snapshot["fitted_value"] == 20.0
+    # The January curve is overlayed as additional.
+    assert len(m.curve_snapshot["additional_curves"]) == 1
+    assert m.curve_snapshot["additional_curves"][0]["fitted_value"] == 10.0
+    assert m.curve_snapshot["additional_curves"][0]["run_date"] == "2026-01-01"
+    # Aggregate marker = cell value.
+    assert m.curve_snapshot["aggregate"]["marker_x"] == 15.0
+    assert m.curve_snapshot["aggregate"]["marker_label"] == "mean"
+
+
+@pytest.mark.asyncio
+async def test_resolver_geometric_mean_mode_writes_gmean_aggregate_snapshot():
+    """GEOMETRIC_MEAN cells get marker_label='gmean' (not 'mean')."""
+    ch = _channel(SelectionRule.GEOMETRIC_MEAN)
+    candidates = [
+        _dr_candidate(
+            10.0,
+            run_date=date(2026, 1, 1),
+            intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 10.0}],
+        ),
+        _dr_candidate(
+            1000.0,
+            run_date=date(2026, 5, 1),
+            intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 1000.0}],
+        ),
+    ]
+    resolver = ChannelResolver(_FakeQuery(candidates))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value == pytest.approx(100.0)
+    assert m.curve_snapshot is not None
+    assert m.curve_snapshot["aggregate"]["marker_label"] == "gmean"
+    assert m.curve_snapshot["aggregate"]["marker_x"] == pytest.approx(100.0)
+
+
+@pytest.mark.asyncio
+async def test_resolver_latest_mode_snapshot_has_no_aggregate_fields():
+    """Non-aggregate cells keep the legacy snapshot shape — no additional_curves,
+    no aggregate field (FE chart adapter distinguishes single-curve from
+    overlay rendering by these key's presence)."""
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    candidates = [
+        _dr_candidate(
+            10.0,
+            run_date=date(2026, 1, 1),
+            intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 10.0}],
+        ),
+        _dr_candidate(
+            20.0,
+            run_date=date(2026, 5, 1),
+            intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": 20.0}],
+        ),
+    ]
+    resolver = ChannelResolver(_FakeQuery(candidates))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.curve_snapshot is not None
+    # Latest cell's snapshot is the legacy single-curve shape.
+    assert "additional_curves" not in m.curve_snapshot
+    assert "aggregate" not in m.curve_snapshot
+    assert m.curve_snapshot["fitted_value"] == 20.0
