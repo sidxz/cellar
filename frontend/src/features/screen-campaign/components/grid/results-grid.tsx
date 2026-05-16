@@ -510,6 +510,8 @@ export function ResultsGridV2({
                     curveClass={(snapshot.curve_class as CurveClass | null) ?? null}
                     width={220}
                     height={140}
+                    additionalCurves={snapshot.additional_curves ?? null}
+                    aggregate={snapshot.aggregate ?? null}
                   />
                 </button>
               );

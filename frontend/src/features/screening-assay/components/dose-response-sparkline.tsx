@@ -16,6 +16,8 @@
 import type { CurveClass, CurveParams } from "../types";
 import {
   DoseResponseFigure,
+  type AdditionalCurve,
+  type AggregateMarker,
   type CurveSnapshot,
 } from "./dose-response-figure";
 
@@ -25,6 +27,14 @@ interface DoseResponseSparklineProps {
   curveClass?: CurveClass | null;
   width?: number;
   height?: number;
+  /** Optional aggregate-mode overlay — additional contributing curves
+   *  drawn muted under the primary so the chemist sees per-run spread.
+   *  Pass `CampaignMeasurement.curve_snapshot.additional_curves`. */
+  additionalCurves?: AdditionalCurve[] | null;
+  /** Optional aggregate marker — vertical line at the cell's aggregated
+   *  value. When present, per-curve intercept dashes are suppressed.
+   *  Pass `CampaignMeasurement.curve_snapshot.aggregate`. */
+  aggregate?: AggregateMarker | null;
 }
 
 export function DoseResponseSparkline({
@@ -33,6 +43,8 @@ export function DoseResponseSparkline({
   curveClass,
   width,
   height,
+  additionalCurves,
+  aggregate,
 }: DoseResponseSparklineProps) {
   const curve: CurveSnapshot = {
     fitted_value: params.fitted_value,
@@ -42,6 +54,8 @@ export function DoseResponseSparkline({
     r_squared: params.r_squared,
     curve_class: curveClass ?? null,
     raw_data: dataPoints ?? null,
+    additional_curves: additionalCurves ?? null,
+    aggregate: aggregate ?? null,
   };
 
   return (

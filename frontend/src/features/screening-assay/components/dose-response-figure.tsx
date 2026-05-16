@@ -63,6 +63,44 @@ export interface CurveSnapshot {
   /** Machine-readable fit-quality codes (`"ec50_at_bound"`, …). Rendered
    *  as amber badges in the SummaryCard. */
   fit_quality_warnings?: string[] | null;
+  /** Non-representative contributing curves (aggregate modes only —
+   *  MEAN_ACROSS_RUNS / GEOMETRIC_MEAN). Drawn muted underneath the
+   *  primary so the chemist sees the per-run spread. Absent on
+   *  LATEST / BEST_R_SQUARED snapshots. */
+  additional_curves?: AdditionalCurve[] | null;
+  /** Aggregate marker — present only on MEAN_ACROSS_RUNS / GEOMETRIC_MEAN
+   *  cells. When present, the chart's vertical reference line is drawn
+   *  at marker_x and the per-curve intercept dashed lines are suppressed
+   *  (per-run fitted_values don't equal the cell value in aggregate
+   *  modes — only this marker does). */
+  aggregate?: AggregateMarker | null;
+}
+
+/** Additional contributing curve carried on aggregate-mode snapshots so
+ *  the chart can overlay all runs the chemist averaged. Shape mirrors
+ *  CurveSnapshot's fit-shape fields plus run identity for keying. */
+export interface AdditionalCurve {
+  fitted_value: number;
+  top: number;
+  bottom: number;
+  hill_slope: number;
+  r_squared?: number | null;
+  curve_class?: string | null;
+  raw_data?: CurvePoint[] | null;
+  intercept_values?: Array<Record<string, unknown>> | null;
+  curve_type?: string | null;
+  run_date: string;
+  run_id: string;
+}
+
+/** Aggregate marker info carried on MEAN_ACROSS_RUNS / GEOMETRIC_MEAN
+ *  snapshots. The chart draws a single vertical line at marker_x and
+ *  suppresses the per-curve intercept lines (the per-curve fitted_value
+ *  doesn't represent the cell value in aggregate modes). */
+export interface AggregateMarker {
+  marker_x: number;
+  marker_label: string; // "mean" or "gmean"
+  unit: string;
 }
 
 export type FigureSize = "sparkline" | "cell" | "expand" | "full";
@@ -311,6 +349,80 @@ function buildPlotInputs(
     });
   }
 
+  // Aggregate-mode overlay: muted fitted sigmoids for each non-rep
+  // contributor so the chemist can see whether the runs agree. No
+  // markers — adding 3× raw_data clouds clutters the thumbnail without
+  // adding signal (the primary's markers already anchor the y-axis).
+  // Same color as the primary so the family reads as one cluster; only
+  // opacity + dash style distinguish.
+  const additionalCurves = curve.additional_curves ?? [];
+  for (const ac of additionalCurves) {
+    // Skip inactives — drawing a fit line for a curve that doesn't
+    // represent a real response would mislead the chemist into thinking
+    // there's a sigmoid where there isn't one.
+    if (ac.curve_class === "inactive") continue;
+    if (!Number.isFinite(ac.fitted_value) || ac.fitted_value <= 0) continue;
+    const fittedAc = generate4PLPoints(
+      {
+        top: ac.top,
+        bottom: ac.bottom,
+        fitted_value: ac.fitted_value,
+        hill_slope: ac.hill_slope,
+      },
+      xRange[0],
+      xRange[1],
+    );
+    traces.push({
+      x: fittedAc.x,
+      y: fittedAc.y,
+      mode: "lines",
+      type: "scatter",
+      line: { color, width: Math.max(1, preset.curveWidth - 0.5), dash: "dot" },
+      opacity: 0.35,
+      name: `Run ${ac.run_date}`,
+      hovertemplate: `Run ${ac.run_date}<br>fitted_value=${ac.fitted_value.toPrecision(3)}<extra></extra>`,
+      showlegend: false,
+    });
+  }
+
+  // Vertical reference line(s).
+  //  - Aggregate mode: ONE solid line at aggregate.marker_x. Per-curve
+  //    intercept dashes are suppressed — they'd point at per-run
+  //    fitted_values that don't equal the cell's aggregated value, which
+  //    is exactly what confused chemists in the first place.
+  //  - LATEST / BEST_R_SQUARED (non-aggregate, non-inactive): existing
+  //    dashed line at the curve's own fitted_value.
+  //  - Inactive single-curve: no shapes (showFit=false).
+  const isAggregateMode =
+    curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shapes: any[] = [];
+  if (isAggregateMode) {
+    shapes.push({
+      type: "line",
+      xref: "x",
+      x0: curve.aggregate!.marker_x,
+      x1: curve.aggregate!.marker_x,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      line: { color: CHART_COLORS.warning, width: 1.5 },
+      opacity: 0.95,
+    });
+  } else if (showFit) {
+    shapes.push({
+      type: "line",
+      xref: "x",
+      x0: curve.fitted_value,
+      x1: curve.fitted_value,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      line: { color: CHART_COLORS.warning, width: 1, dash: "dot" },
+      opacity: 0.7,
+    });
+  }
+
   const layout = {
     margin: preset.margin,
     paper_bgcolor: "transparent",
@@ -342,22 +454,7 @@ function buildPlotInputs(
           }
         : undefined,
     },
-    shapes: showFit
-      ? [
-          // Vertical dashed line at the fitted IC50.
-          {
-            type: "line",
-            xref: "x",
-            x0: curve.fitted_value,
-            x1: curve.fitted_value,
-            yref: "paper",
-            y0: 0,
-            y1: 1,
-            line: { color: CHART_COLORS.warning, width: 1, dash: "dot" },
-            opacity: 0.7,
-          },
-        ]
-      : [],
+    shapes,
   };
 
   return { traces, layout };
@@ -365,11 +462,22 @@ function buildPlotInputs(
 
 /** Visible x-axis range: pad one decade past the raw-data extremes (log
  *  scale). Falls back to ×0.01..×100 around fitted_value when no raw
- *  points are available. */
+ *  points are available. In aggregate mode, additional curves' raw_data
+ *  and fitted_values are folded in so the overlay isn't truncated when
+ *  a sibling run's EC50 sits outside the rep's range. */
 function computeXRange(curve: CurveSnapshot): [number, number] {
-  const xs = (curve.raw_data ?? [])
-    .map((p) => p.x)
-    .filter((x): x is number => Number.isFinite(x) && x > 0);
+  const xs: number[] = [];
+  for (const p of curve.raw_data ?? []) {
+    if (Number.isFinite(p.x) && p.x > 0) xs.push(p.x);
+  }
+  for (const ac of curve.additional_curves ?? []) {
+    if (Number.isFinite(ac.fitted_value) && ac.fitted_value > 0) {
+      xs.push(ac.fitted_value);
+    }
+    for (const p of ac.raw_data ?? []) {
+      if (Number.isFinite(p.x) && p.x > 0) xs.push(p.x);
+    }
+  }
   if (xs.length > 0) {
     const min = Math.min(...xs);
     const max = Math.max(...xs);
