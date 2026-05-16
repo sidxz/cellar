@@ -13,6 +13,7 @@ from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
+from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.screening_assay.target import Target
 
 
@@ -183,6 +184,21 @@ class DoseResponseCurveRepository(Protocol):
         molecule_ids: list[uuid.UUID],
         readout_definition_ids: list[uuid.UUID] | None = None,
     ) -> dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]]: ...
+    async def find_all_curves_for_molecules(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        readout_definition_ids: list[uuid.UUID] | None = None,
+        run_scope: RunScope | None = None,
+    ) -> dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]]:
+        """Return ALL curves keyed by (molecule_id, readout_definition_id).
+
+        Returns ``{molecule_id: {readout_definition_id: [curves sorted by run_date desc]}}``.
+        Used by the search aggregator and Activity tabs to feed multi-run
+        selection rules. ``run_scope=None`` means all runs.
+        """
+        ...
+
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> DoseResponseCurve | None: ...

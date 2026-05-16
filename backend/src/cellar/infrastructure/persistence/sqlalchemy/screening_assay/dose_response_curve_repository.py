@@ -18,8 +18,10 @@ from cellar.domain.screening_assay.enums import (
     InterceptBasis,
     InterceptKind,
 )
+from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
+    RunModel,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -213,6 +215,69 @@ class SQLAlchemyDoseResponseCurveRepository:
         out: dict[uuid.UUID, dict[uuid.UUID, DoseResponseCurve]] = {}
         for curve in curves:
             out.setdefault(curve.molecule_id, {})[curve.readout_definition_id] = curve
+
+        return out
+
+    async def find_all_curves_for_molecules(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        readout_definition_ids: list[uuid.UUID] | None = None,
+        run_scope: RunScope | None = None,
+    ) -> dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]]:
+        """Return ALL curves keyed by (mol, rd), sorted run_date desc.
+
+        Joins to RunModel for run_date filtering. The shared aggregator
+        decides which to keep (LATEST / GEOMETRIC_MEAN / etc.); this
+        method only narrows the wire payload to in-scope runs.
+
+        ``last_n`` is applied per-(mol, rd) AFTER grouping (not as a
+        global SQL LIMIT) so a chemist asking "last 3 runs" gets the
+        latest 3 PER COMPOUND, not the latest 3 globally.
+        """
+        if not molecule_ids:
+            return {}
+
+        stmt = (
+            select(DoseResponseCurveModel)
+            .join(RunModel, RunModel.id == DoseResponseCurveModel.run_id)
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.molecule_id.in_(molecule_ids),
+            )
+        )
+        if readout_definition_ids:
+            stmt = stmt.where(
+                DoseResponseCurveModel.readout_definition_id.in_(readout_definition_ids)
+            )
+
+        if run_scope is not None and not run_scope.is_all():
+            if run_scope.explicit_run_ids:
+                stmt = stmt.where(RunModel.id.in_(run_scope.explicit_run_ids))
+            if run_scope.since_date is not None:
+                stmt = stmt.where(RunModel.run_date >= run_scope.since_date)
+            if run_scope.from_date is not None and run_scope.to_date is not None:
+                stmt = stmt.where(
+                    RunModel.run_date.between(run_scope.from_date, run_scope.to_date)
+                )
+
+        stmt = stmt.order_by(RunModel.run_date.desc())
+
+        result = await self._uow.session.execute(stmt)
+        curves = [self._to_domain(m) for m in result.scalars().all()]
+
+        out: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
+        for curve in curves:
+            out.setdefault(curve.molecule_id, {}).setdefault(
+                curve.readout_definition_id, []
+            ).append(curve)
+
+        # last_n is per-(mol, rd), applied after grouping.
+        if run_scope is not None and run_scope.last_n_count is not None:
+            n = run_scope.last_n_count
+            for mol_id in out:
+                for rd_id in out[mol_id]:
+                    out[mol_id][rd_id] = out[mol_id][rd_id][:n]
 
         return out
 
