@@ -66,6 +66,35 @@ async def run_worker() -> None:
     )
     from cellar.infrastructure.temporal.workflows.cdd_plate_import import CddPlateImportWorkflow
     from cellar.infrastructure.temporal.workflows.cdd_vault_import import CddVaultImportWorkflow
+    from cellar.infrastructure.temporal.workflows.export import ExportWorkflow
+
+    from cellar.application.chemical_registration.molecule_reader import MoleculeReader
+    from cellar.application.export.render_export import RenderExport
+    from cellar.application.export.row_streams.search_results import SearchResultsRowStream
+    from cellar.application.research_organization.execute_search import ExecuteSearch
+    from cellar.application.screening.get_protocol import ListProtocols, ListProtocolsQuery
+    from cellar.application.screening.molecule_activity_service import MoleculeActivityService
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+        SQLAlchemyDoseResponseCurveRepository,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+        SQLAlchemyProtocolRepository,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+        SQLAlchemyReadoutDataRepository,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+        SQLAlchemyRunRepository,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.export.export_job_repository import (
+        SqlAlchemyExportJobRepository,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
+        SQLAlchemySavedSearchRepository,
+    )
+    from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+    from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
+    from cellar.infrastructure.temporal.activities.export import ExportActivities
 
     session_factory = container[async_sessionmaker]
     dispatcher = container[EventDispatcher]
@@ -73,6 +102,56 @@ async def run_worker() -> None:
     cdd_client = container[CddVaultClient]
     structure_processor = container[StructureProcessorProtocol]
     side_effect_registry = container[MergeSideEffectRegistry]
+
+    # --- Export activity ---
+    # RenderExport is a dataclass-callable. It manages its own UoW lifecycle
+    # (multiple `async with self.uow` blocks across the pipeline). The repo
+    # must share the same UoW instance so it writes through the same session.
+    # build_search_stream constructs fresh per-job instances (matching the
+    # request-scoped DI pattern used in the API).
+    _molecule_reader = container[MoleculeReader]
+    _storage = container[FsspecStorageClient]
+    _export_uow = AsyncUnitOfWork(session_factory)
+    _export_repo = SqlAlchemyExportJobRepository(_export_uow)
+
+    def _build_search_stream(job):  # type: ignore[no-untyped-def]
+        uow = AsyncUnitOfWork(session_factory)
+        execute_search = ExecuteSearch(
+            uow,
+            _molecule_reader,
+            SQLAlchemySavedSearchRepository(uow),
+            activity_service=MoleculeActivityService(
+                uow=uow,
+                readout_repo=SQLAlchemyReadoutDataRepository(uow),
+                curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+                protocol_repo=SQLAlchemyProtocolRepository(uow),
+                run_repo=SQLAlchemyRunRepository(uow),
+            ),
+        )
+
+        async def _protocols_reader(workspace_id):  # type: ignore[no-untyped-def]
+            from returns.result import Success
+
+            uow2 = AsyncUnitOfWork(session_factory)
+            lp = ListProtocols(uow2, SQLAlchemyProtocolRepository(uow2))
+            result = await lp(ListProtocolsQuery(workspace_id=workspace_id), auth=None)
+            return result.unwrap().items if isinstance(result, Success) else []
+
+        return SearchResultsRowStream(
+            workspace_id=job.workspace_id,
+            payload=job.query_snapshot,
+            execute_search=execute_search,
+            protocols_reader=_protocols_reader,
+            requested_by=job.requested_by,
+        )
+
+    render_export = RenderExport(
+        uow=_export_uow,
+        repo=_export_repo,
+        storage=_storage,
+        build_search_stream=_build_search_stream,
+    )
+    export_activities = ExportActivities(render_export)
 
     tracking = BulkTrackingActivities(session_factory, dispatcher)
     cdd_fetch = CddFetchActivities(session_factory, secret_provider, cdd_client)
@@ -85,8 +164,10 @@ async def run_worker() -> None:
     worker = Worker(
         client,
         task_queue=settings.task_queue,
-        workflows=[CddVaultImportWorkflow, BulkRegistrationWorkflow, CddPlateImportWorkflow],
+        workflows=[CddVaultImportWorkflow, BulkRegistrationWorkflow, CddPlateImportWorkflow, ExportWorkflow],
         activities=[
+            # Export
+            export_activities.run_export,
             # BulkRegistration tracking
             tracking.create_bulk_registration,
             tracking.update_bulk_reg_progress,
