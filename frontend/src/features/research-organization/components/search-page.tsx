@@ -6,8 +6,8 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
-import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
 import type { SearchQuery, ActivityValue, SortField, SortDir, SavedSearch } from "../types";
+import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
 import { useExecuteSearch, type EnrichedSearchResponse } from "../hooks/use-search";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { useReportConfig } from "../hooks/use-report-config";
@@ -185,7 +185,6 @@ function SearchPageInner() {
   const { data: protocols } = useProtocols();
   const { data: savedSearches } = useSavedSearches();
   const { config: reportConfig, loadFromSavedSearch } = useReportConfig();
-  const { exportSdf } = useSdfExport();
   // URL-synced aggregation mode. The toolbar's <AggregationControl /> owns
   // the writer; the page reads + injects into the request body, and also
   // calls `setMode` on the saved-search load path so the URL chip and the
@@ -430,14 +429,30 @@ function SearchPageInner() {
     setAggregationMode,
   ]);
 
-  // ── SDF export ─────────────────────────────────────────────────────────
-  const handleExportSdf = useCallback(() => {
-    if (!results.length) return;
-    const ids = gridSelectedIds.size > 0
-      ? Array.from(gridSelectedIds)
-      : results.map((m) => m.id);
-    exportSdf(ids, "search-results.sdf");
-  }, [results, gridSelectedIds, exportSdf]);
+  // ── Export request builder ─────────────────────────────────────────────
+  // Produces a fully-parameterised ExportRequest closure for the shared
+  // ExportToolbar. Returns null if no search has been run yet (the toolbar
+  // disables the button in that case).
+  const buildExportRequest = useCallback(
+    (format: ExportFormat): ExportRequest | null => {
+      if (!currentQuery) return null;
+      const backendCols = toBackendProtocolColumns(protocolColumns);
+      return {
+        source: "search",
+        format,
+        filename_hint: `cellar-search-${new Date().toISOString().slice(0, 10)}`,
+        payload: {
+          query: currentQuery,
+          ...(backendCols.length ? { protocol_columns: backendCols } : {}),
+          aggregation: aggregationModeToWire(aggregationMode),
+          ...(projectIds.length ? { project_ids: projectIds } : {}),
+          sort_by: sortBy,
+          sort_dir: sortDir,
+        },
+      };
+    },
+    [currentQuery, protocolColumns, aggregationMode, projectIds, sortBy, sortDir],
+  );
 
   // ── Add to collection ──────────────────────────────────────────────────
   const handleAddToCollection = useCallback(() => {
@@ -521,7 +536,7 @@ function SearchPageInner() {
                 />
               }
               onSelectionChange={(ids) => dispatch({ type: "setGridSelection", ids })}
-              onExportSdf={handleExportSdf}
+              buildExportRequest={buildExportRequest}
             />
             {nextCursor && (
               <div className="flex justify-center py-3">

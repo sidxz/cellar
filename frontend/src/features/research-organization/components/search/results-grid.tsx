@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { ExportToolbar as SharedExportToolbar } from "@/shared/components/export/export-toolbar";
+import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
 import {
   type ColDef,
   type ColGroupDef,
@@ -50,11 +52,11 @@ interface ResultsGridProps {
   onRowClick: (molecule: EnrichedMolecule) => void;
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
-  /** When provided, an "SDF" entry is appended to the export dropdown
-   *  alongside Excel + CSV. The caller decides which molecules to export
-   *  (selected vs. full result set) — see `handleExportSdf` in
-   *  search-page.tsx. */
-  onExportSdf?: () => void;
+  /** When provided, renders the shared ExportToolbar in the grid toolbar
+   *  alongside the other action buttons. The closure captures the current
+   *  query / columns / aggregation so exports always reflect what is on
+   *  screen. */
+  buildExportRequest?: (format: ExportFormat) => ExportRequest | null;
   /** Content for the LEFT side of the grid's toolbar row — e.g. result
    *  count + select-all/none on /search. Shares the row with the export
    *  dropdown so the toolbar collapses to one line instead of two. */
@@ -540,7 +542,7 @@ export function ResultsGrid({
   onRowClick,
   selectedIds,
   onSelectionChange,
-  onExportSdf,
+  buildExportRequest,
   toolbarLeft,
   toolbarActions,
 }: ResultsGridProps) {
@@ -584,14 +586,17 @@ export function ResultsGrid({
   // clearSelectionToken mechanism detects the falsy value and calls deselectAll.
   const clearSelectionToken = selectedIds.size;
 
-  // SDF rides as an extra item in the unified Export dropdown alongside
-  // Excel + CSV — chemists get one Export affordance, three formats.
-  const extraExportItems = useMemo(
-    () =>
-      onExportSdf
-        ? [{ label: "SDF", extension: ".sdf", onSelect: onExportSdf }]
-        : undefined,
-    [onExportSdf],
+  // Compose the shared ExportToolbar alongside the caller-supplied action
+  // buttons. Rendered as a single React node so the grid's toolbar row
+  // stays a single flex row. T20 will clean up the old export props on
+  // <DataGrid> once no callers use them.
+  const toolbarActionsWithExport = (
+    <>
+      {toolbarActions}
+      {buildExportRequest ? (
+        <SharedExportToolbar buildRequest={buildExportRequest} />
+      ) : null}
+    </>
   );
 
   return (
@@ -622,9 +627,7 @@ export function ResultsGrid({
         suppressSelectColumn
         searchPlaceholder={false}
         toolbarLeft={toolbarLeft}
-        toolbarActions={toolbarActions}
-        exportFilename="cellar-search"
-        extraExportItems={extraExportItems}
+        toolbarActions={toolbarActionsWithExport}
         onRowClick={onRowClick}
         onSelectionChanged={(event) => {
           const rows = event.api.getSelectedRows();
