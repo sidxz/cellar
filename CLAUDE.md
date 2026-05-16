@@ -276,6 +276,15 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 2. Push `prot-2` and open a PR against `main`.
 3. Optional cleanup commit: remove dead `renderInterceptCell` from `results-grid.tsx` once the smoke confirms `<InterceptCell />` handles all cases.
 
+**Follow-up shipped (commits 17–18):** chemist surfaced a gap on the campaign grid — switching a channel to MEAN updated the EC50 value but the chart still drew the latest run's curve with its (now-mismatched) per-curve intercept line. Fixed end-to-end:
+
+- `5e182dbc feat(campaign): aggregate-mode curve_snapshot carries all contributing curves + marker` — extends the JSONB snapshot in aggregate modes with `additional_curves[]` (each non-rep contributor with run_id + run_date) and `aggregate: {marker_x, marker_label, unit}`. Touches `_build_aggregate_curve_snapshot` (new helper in `channel_resolution.py`) + both resolver paths (`channel_resolution.ChannelResolver.resolve` and `preview_run_import._apply_selection_rule`). LATEST and BEST_R_SQUARED cells unchanged on the wire. Tests: +9 in `test_channel_resolver.py`, +5 in `test_preview_run_import.py`; 232 research_org tests pass.
+- `e16285a1 feat(campaign): aggregate-mode chart overlays contributing curves + marker` — extends `CurveSnapshot` FE type, adds `AdditionalCurve` + `AggregateMarker`. `DoseResponseFigure.buildPlotInputs` draws each non-inactive additional curve as a muted dashed sigmoid (~0.35 opacity), and in aggregate mode replaces the per-curve dashed intercept line with a single solid amber line at `aggregate.marker_x`. Inactive overlays skipped; marker still draws. `DoseResponseSparkline` and the campaign grid call site pass the new fields. Tests: +5 in `dose-response-figure.test.tsx`; 223 FE tests pass.
+
+**Scope of the follow-up:** thumbnail only. The campaign expand-dialog uses `DoseResponseChart` + `snapshotToDoseResponseCurve` adapter (a different path) and still renders the rep curve only on click-expand. Defer unless chemists ask — the inline thumbnail is what was visible in the bug report.
+
+**Browser smoke for the follow-up:** open a closed campaign with a MEAN or GMEAN channel that has 2+ contributing runs. Thumbnail should show: primary fit (solid, full opacity) + N muted dashed sibling fits + a single solid amber vertical line at the cell's aggregate value (NOT at the rep's fitted_value). LATEST-mode and single-run cells unchanged.
+
 ### 2026-05-14 — DR curve identity refactor + dynamic intercept columns on `prot-2`
 
 **Branch:** `prot-2`, `git rev-list --count e807dd03..HEAD` commits ahead of the merged `fe2` HEAD. Nothing pushed yet. Dev DB at head migration `035_cc_intercept_key`. Live snapshot rebuild has been run (`rebuild_campaign_curve_snapshots.py --include-closed`) so existing closed campaigns now carry the full chart shape.
