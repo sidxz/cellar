@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from returns.result import Result, Success
@@ -22,6 +23,7 @@ from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
+    RunRepository,
 )
 from cellar.domain.shared.errors import DomainError
 
@@ -66,6 +68,13 @@ class InterceptValuePayload:
 class CurveDetail:
     curve_id: uuid.UUID
     run_id: uuid.UUID
+    # Date of the owning run — populated by the use case via a Run lookup
+    # (the curve table doesn't carry this column). Drives the drawer's
+    # selection logic when the toolbar picks "latest", and labels each
+    # contributor in aggregate-mode overlays. Nullable for defensive
+    # safety; a curve whose run was deleted out-of-band would surface here
+    # as None rather than crashing the response.
+    run_date: date | None
     batch_id: uuid.UUID
     readout_definition_id: uuid.UUID
     curve_type: str
@@ -89,10 +98,17 @@ class CurveDetail:
     intercept_values: list[InterceptValuePayload]
 
     @classmethod
-    def from_domain(cls, curve: DoseResponseCurve, *, dose_unit: str) -> CurveDetail:
+    def from_domain(
+        cls,
+        curve: DoseResponseCurve,
+        *,
+        dose_unit: str,
+        run_date: date | None,
+    ) -> CurveDetail:
         return cls(
             curve_id=curve.id,
             run_id=curve.run_id,
+            run_date=run_date,
             batch_id=curve.batch_id,
             readout_definition_id=curve.readout_definition_id,
             curve_type=curve.curve_type.value,
@@ -155,10 +171,12 @@ class GetMoleculeActivityDetail:
         uow: UnitOfWork,
         curve_repo: DoseResponseCurveRepository,
         protocol_repo: ProtocolRepository,
+        run_repo: RunRepository,
     ) -> None:
         self._uow = uow
         self._curve_repo = curve_repo
         self._protocol_repo = protocol_repo
+        self._run_repo = run_repo
 
     async def __call__(
         self,
@@ -174,18 +192,28 @@ class GetMoleculeActivityDetail:
             if not curves:
                 return Success(MoleculeActivityDetail(molecule_id=input.molecule_id, protocols=[]))
 
-            # 2. Group curves by protocol_id
+            # 2. Fetch the owning runs in one batch so we can surface
+            #    ``run_date`` per curve. The drawer needs this to honor the
+            #    toolbar's "latest run" selection rule (the curve table
+            #    doesn't carry the date itself).
+            run_ids = list({c.run_id for c in curves})
+            runs_by_id = await self._run_repo.find_by_ids(input.workspace_id, run_ids)
+            run_date_by_id: dict[uuid.UUID, date | None] = {
+                rid: run.run_date for rid, run in runs_by_id.items()
+            }
+
+            # 3. Group curves by protocol_id
             by_protocol: dict[uuid.UUID, list[DoseResponseCurve]] = defaultdict(list)
             for curve in curves:
                 by_protocol[curve.protocol_id].append(curve)
 
-            # 3. Fetch protocol metadata in a single query
+            # 4. Fetch protocol metadata in a single query
             protocols = await self._protocol_repo.find_by_ids(
                 input.workspace_id, list(by_protocol.keys())
             )
             proto_map = {p.id: p for p in protocols}
 
-            # 4. Build response, sorting curves within each group by r_squared DESC
+            # 5. Build response, sorting curves within each group by r_squared DESC
             groups: list[ProtocolCurveGroup] = []
             for protocol_id, protocol_curves in by_protocol.items():
                 proto = proto_map.get(protocol_id)
@@ -198,7 +226,12 @@ class GetMoleculeActivityDetail:
                         protocol_type=proto.protocol_type.value if proto else "unknown",
                         target_id=proto.target_id if proto else None,
                         curves=[
-                            CurveDetail.from_domain(c, dose_unit=dose_unit) for c in sorted_curves
+                            CurveDetail.from_domain(
+                                c,
+                                dose_unit=dose_unit,
+                                run_date=run_date_by_id.get(c.run_id),
+                            )
+                            for c in sorted_curves
                         ],
                     )
                 )

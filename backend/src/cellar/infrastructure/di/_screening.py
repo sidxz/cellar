@@ -778,6 +778,7 @@ def register_screening(container: Container) -> None:
             uow=uow,
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
+            run_repo=SQLAlchemyRunRepository(uow),
         )
 
     container.define(GetMoleculeActivityDetail, _get_molecule_activity_detail)

@@ -7,6 +7,7 @@ powering the compound detail side panel in the search UI.
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter
@@ -45,6 +46,10 @@ class InterceptValueResponse(BaseModel):
 class CurveDetailResponse(BaseModel):
     curve_id: uuid.UUID
     run_id: uuid.UUID
+    # Owning Run's date — surfaced so the drawer's selection logic can
+    # honor the toolbar's "latest run" rule without a second BE call.
+    # Nullable in case the owning Run was deleted out-of-band.
+    run_date: date | None = None
     batch_id: uuid.UUID
     readout_definition_id: uuid.UUID
     curve_type: str
@@ -93,6 +98,7 @@ class MoleculeActivityDetailResponse(BaseModel):
                         CurveDetailResponse(
                             curve_id=c.curve_id,
                             run_id=c.run_id,
+                            run_date=c.run_date,
                             batch_id=c.batch_id,
                             readout_definition_id=c.readout_definition_id,
                             curve_type=c.curve_type,

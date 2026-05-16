@@ -117,11 +117,19 @@ def _make_curve(
 def _make_uc(
     curve_repo: AsyncMock | None = None,
     protocol_repo: AsyncMock | None = None,
+    run_repo: AsyncMock | None = None,
 ) -> GetMoleculeActivityDetail:
+    if run_repo is None:
+        run_repo = AsyncMock()
+        # Default: no runs registered → curves arrive with run_date=None.
+        # Tests that exercise the date-aware selection logic must override
+        # this with a populated `{run_id: Run}` dict.
+        run_repo.find_by_ids = AsyncMock(return_value={})
     return GetMoleculeActivityDetail(
         uow=_FakeUoW(),
         curve_repo=curve_repo or AsyncMock(),
         protocol_repo=protocol_repo or AsyncMock(),
+        run_repo=run_repo,
     )
 
 
@@ -284,3 +292,89 @@ class TestEmptyResults:
         assert detail.protocols[0].protocol_name == "Unknown"
         assert detail.protocols[0].protocol_type == "unknown"
         assert detail.protocols[0].target_id is None
+
+
+class TestRunDateSurfaced:
+    """``run_date`` is fetched from the Run repo and threaded onto each curve.
+
+    The drawer needs ``run_date`` so its selection logic can honor the
+    toolbar's "latest run" rule. The curve table doesn't carry the date;
+    the use case batches a Run-by-ids lookup and joins it back per curve.
+    """
+
+    @pytest.mark.asyncio
+    async def test_run_date_threaded_from_run_repo(self) -> None:
+        from datetime import date
+
+        run_id_a = uuid.uuid4()
+        run_id_b = uuid.uuid4()
+        curves = [
+            _make_curve(run_id=run_id_a, r_squared=0.95),
+            _make_curve(run_id=run_id_b, r_squared=0.99),
+        ]
+
+        curve_repo = AsyncMock()
+        curve_repo.find_by_molecule.return_value = curves
+
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_ids.return_value = [_FakeProtocol(id=PROTO_A, name="P")]
+
+        class _FakeRun:
+            def __init__(self, rid: uuid.UUID, rd: date) -> None:
+                self.id = rid
+                self.run_date = rd
+
+        run_repo = AsyncMock()
+        run_repo.find_by_ids = AsyncMock(
+            return_value={
+                run_id_a: _FakeRun(run_id_a, date(2026, 1, 1)),
+                run_id_b: _FakeRun(run_id_b, date(2026, 5, 1)),
+            }
+        )
+
+        uc = _make_uc(
+            curve_repo=curve_repo, protocol_repo=protocol_repo, run_repo=run_repo
+        )
+        auth = FakeAuth(workspace_id=WS)
+        result = await uc(
+            GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID),
+            auth=auth,
+        )
+
+        detail = result.unwrap()
+        # Curves are sorted by R² desc — the 0.99 R² curve (run_id_b) comes first.
+        cds = detail.protocols[0].curves
+        assert cds[0].run_id == run_id_b
+        assert cds[0].run_date == date(2026, 5, 1)
+        assert cds[1].run_id == run_id_a
+        assert cds[1].run_date == date(2026, 1, 1)
+
+    @pytest.mark.asyncio
+    async def test_run_date_is_none_when_run_missing(self) -> None:
+        """Curve whose owning run was deleted out-of-band surfaces as None.
+
+        Defensive — we don't want a missing run_id to crash the entire
+        molecule detail; the drawer's "latest" rule treats None-dated rows
+        as eldest (matches existing run_date-aware sort semantics).
+        """
+        curve = _make_curve(run_id=uuid.uuid4())
+        curve_repo = AsyncMock()
+        curve_repo.find_by_molecule.return_value = [curve]
+
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_ids.return_value = [_FakeProtocol(id=PROTO_A, name="P")]
+
+        run_repo = AsyncMock()
+        run_repo.find_by_ids = AsyncMock(return_value={})  # Run deleted
+
+        uc = _make_uc(
+            curve_repo=curve_repo, protocol_repo=protocol_repo, run_repo=run_repo
+        )
+        auth = FakeAuth(workspace_id=WS)
+        result = await uc(
+            GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID),
+            auth=auth,
+        )
+
+        detail = result.unwrap()
+        assert detail.protocols[0].curves[0].run_date is None
