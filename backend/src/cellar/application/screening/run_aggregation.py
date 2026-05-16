@@ -66,7 +66,17 @@ class ResolvedRun:
 
 @dataclass(frozen=True)
 class AggregateResult:
-    """Output of ``apply_selection_rule``."""
+    """Output of ``apply_selection_rule``.
+
+    ``representative_run`` is ``None`` only when:
+    - The input run list was empty after qualifier filtering, OR
+    - ``MANUAL_PICK`` was the rule (campaign-only path).
+
+    For every other ND case (e.g. all runs Inactive under
+    LATEST_APPROVED_RUN), ``representative_run`` is the latest-by-date
+    run from the (non-empty) filtered input — so callers always have
+    *something* to render as a curve thumbnail on the ND cell.
+    """
 
     value: float | None
     qualifier: ValueQualifier
@@ -81,6 +91,13 @@ class AggregateResult:
 
 
 def _max_dose_from_raw(raw_data: list[dict] | None) -> float | None:
+    """Largest positive concentration on a candidate's raw_data.
+
+    Used to phrase the upper-bound qualifier on at_bound rows
+    (``> {max_dose}``). Accepts the persisted ``{concentration, response}``
+    shape as well as the chart-normalized ``{x, y}`` shape; ignores
+    non-positive / non-finite x.
+    """
     if not raw_data:
         return None
     best: float | None = None
@@ -154,15 +171,108 @@ def intercept_scalar(
 
 
 def _is_qualified(run: ResolvedRun) -> bool:
+    """True when the run's wire-level qualifier is GT or LT (a detection-limit cell)."""
     return run.qualifier in {ValueQualifier.LT, ValueQualifier.GT}
 
 
 def _filter_by_qualifier_handling(
     runs: list[ResolvedRun], handling: QualifierHandling
 ) -> list[ResolvedRun]:
+    """Drop or carry through GT/LT-qualified runs based on the handling rule."""
     if handling == QualifierHandling.EXCLUDE_QUALIFIED:
         return [r for r in runs if not _is_qualified(r)]
-    return list(runs)
+    if handling == QualifierHandling.INCLUDE_QUALIFIED:
+        return list(runs)
+    if handling == QualifierHandling.TREAT_AS_LIMIT:
+        raise NotImplementedError(
+            "TREAT_AS_LIMIT semantics aren't defined in the shared aggregator yet "
+            "(channel_resolution may handle this differently). "
+            "Pass EXCLUDE_QUALIFIED or INCLUDE_QUALIFIED until search/campaign agree on a unified rule."
+        )
+    raise NotImplementedError(f"Unknown QualifierHandling: {handling!r}")
+
+
+def _eq_runs(
+    runs: list[ResolvedRun], intercept_key: InterceptKey | None
+) -> list[ResolvedRun]:
+    """Subset of runs whose intercept resolves to an EQ scalar."""
+    return [
+        r for r in runs if resolve_intercept(r, intercept_key)[1] == ValueQualifier.EQ
+    ]
+
+
+def _latest_by_date(runs: list[ResolvedRun]) -> ResolvedRun:
+    """Pick the run with the largest run_date; treats missing dates as date.min."""
+    return max(runs, key=lambda r: r.run_date or date.min)
+
+
+def _pick_one_eq(
+    runs: list[ResolvedRun],
+    intercept_key: InterceptKey | None,
+    key_fn,
+) -> AggregateResult:
+    """Pick the single EQ run that maximizes ``key_fn``; ND if no EQ runs.
+
+    Used by LATEST_APPROVED_RUN (key_fn = run_date) and BEST_R_SQUARED
+    (key_fn = curve_r_squared).
+    """
+    eq = _eq_runs(runs, intercept_key)
+    if not eq:
+        return AggregateResult(
+            value=None,
+            qualifier=ValueQualifier.ND,
+            contributing_run_ids=[],
+            representative_run=_latest_by_date(runs),
+        )
+    pick = max(eq, key=key_fn)
+    value, qualifier = resolve_intercept(pick, intercept_key)
+    return AggregateResult(
+        value=value,
+        qualifier=qualifier,
+        contributing_run_ids=[pick.run_id],
+        representative_run=pick,
+    )
+
+
+def _aggregate_eq(
+    runs: list[ResolvedRun],
+    intercept_key: InterceptKey | None,
+    *,
+    require_positive: bool,
+    agg_fn,
+) -> AggregateResult:
+    """Aggregate EQ-resolving scalars via ``agg_fn``; ND if none qualify.
+
+    Used by MEAN_ACROSS_RUNS (require_positive=False, agg_fn=mean) and
+    GEOMETRIC_MEAN (require_positive=True, agg_fn=geomean).
+    """
+    pairs = [(r, intercept_scalar(r, intercept_key)) for r in runs]
+    qualifying = [
+        (r, s) for r, s in pairs if s is not None and (s > 0 or not require_positive)
+    ]
+    if not qualifying:
+        return AggregateResult(
+            value=None,
+            qualifier=ValueQualifier.ND,
+            contributing_run_ids=[],
+            representative_run=_latest_by_date(runs),
+        )
+    eq_runs = [r for r, _ in qualifying]
+    scalars = [s for _, s in qualifying]
+    return AggregateResult(
+        value=agg_fn(scalars),
+        qualifier=ValueQualifier.EQ,
+        contributing_run_ids=[r.run_id for r in eq_runs],
+        representative_run=_latest_by_date(eq_runs),
+    )
+
+
+def _arithmetic_mean(values: list[float]) -> float:
+    return sum(values) / len(values)
+
+
+def _geometric_mean(values: list[float]) -> float:
+    return math.exp(sum(math.log(v) for v in values) / len(values))
 
 
 def apply_selection_rule(
@@ -172,10 +282,9 @@ def apply_selection_rule(
     intercept_key: InterceptKey | None,
 ) -> AggregateResult:
     """Collapse multiple runs into a single (value, qualifier) cell."""
+    filtered = _filter_by_qualifier_handling(runs, qualifier_handling)
 
-    runs = _filter_by_qualifier_handling(runs, qualifier_handling)
-
-    if not runs:
+    if not filtered:
         return AggregateResult(
             value=None,
             qualifier=ValueQualifier.ND,
@@ -184,100 +293,41 @@ def apply_selection_rule(
         )
 
     if rule == SelectionRule.LATEST_APPROVED_RUN:
-        # Drop runs whose intercept is non-EQ before picking latest, so
-        # the cell shows the latest *fittable* run when EXCLUDE_QUALIFIED.
-        eq_runs = [
-            r for r in runs if resolve_intercept(r, intercept_key)[1] == ValueQualifier.EQ
-        ]
-        if not eq_runs:
-            return AggregateResult(
-                value=None,
-                qualifier=ValueQualifier.ND,
-                contributing_run_ids=[],
-                representative_run=max(runs, key=lambda r: r.run_date or date.min),
-            )
-        pick = max(eq_runs, key=lambda r: r.run_date or date.min)
-        value, qualifier = resolve_intercept(pick, intercept_key)
-        return AggregateResult(
-            value=value,
-            qualifier=qualifier,
-            contributing_run_ids=[pick.run_id],
-            representative_run=pick,
+        return _pick_one_eq(
+            filtered, intercept_key, key_fn=lambda r: r.run_date or date.min
         )
 
     if rule == SelectionRule.BEST_R_SQUARED:
-        eq_runs = [
-            r for r in runs if resolve_intercept(r, intercept_key)[1] == ValueQualifier.EQ
-        ]
-        if not eq_runs:
-            return AggregateResult(
-                value=None,
-                qualifier=ValueQualifier.ND,
-                contributing_run_ids=[],
-                representative_run=None,
-            )
-        pick = max(eq_runs, key=lambda r: r.curve_r_squared or -math.inf)
-        value, qualifier = resolve_intercept(pick, intercept_key)
-        return AggregateResult(
-            value=value,
-            qualifier=qualifier,
-            contributing_run_ids=[pick.run_id],
-            representative_run=pick,
+        # `r.curve_r_squared if not None else -inf` (not `or -inf`) so a
+        # legal r²=0.0 (a flat trace) doesn't tie with `None` runs and
+        # lose to whatever order Python's `max` happens to pick.
+        return _pick_one_eq(
+            filtered,
+            intercept_key,
+            key_fn=lambda r: r.curve_r_squared if r.curve_r_squared is not None else -math.inf,
         )
 
     if rule == SelectionRule.MEAN_ACROSS_RUNS:
-        scalars = [
-            v for v in (intercept_scalar(r, intercept_key) for r in runs) if v is not None
-        ]
-        if not scalars:
-            return AggregateResult(
-                value=None,
-                qualifier=ValueQualifier.ND,
-                contributing_run_ids=[],
-                representative_run=max(runs, key=lambda r: r.run_date or date.min),
-            )
-        eq_runs = [
-            r for r in runs if intercept_scalar(r, intercept_key) is not None
-        ]
-        return AggregateResult(
-            value=sum(scalars) / len(scalars),
-            qualifier=ValueQualifier.EQ,
-            contributing_run_ids=[r.run_id for r in eq_runs],
-            representative_run=max(eq_runs, key=lambda r: r.run_date or date.min),
+        return _aggregate_eq(
+            filtered, intercept_key, require_positive=False, agg_fn=_arithmetic_mean
         )
 
     if rule == SelectionRule.GEOMETRIC_MEAN:
-        positives = [
-            v
-            for v in (intercept_scalar(r, intercept_key) for r in runs)
-            if v is not None and v > 0
-        ]
-        if not positives:
-            return AggregateResult(
-                value=None,
-                qualifier=ValueQualifier.ND,
-                contributing_run_ids=[],
-                representative_run=max(runs, key=lambda r: r.run_date or date.min),
-            )
-        eq_runs = [
-            r
-            for r in runs
-            if (s := intercept_scalar(r, intercept_key)) is not None and s > 0
-        ]
-        return AggregateResult(
-            value=math.exp(sum(math.log(v) for v in positives) / len(positives)),
-            qualifier=ValueQualifier.EQ,
-            contributing_run_ids=[r.run_id for r in eq_runs],
-            representative_run=max(eq_runs, key=lambda r: r.run_date or date.min),
+        return _aggregate_eq(
+            filtered, intercept_key, require_positive=True, agg_fn=_geometric_mean
         )
 
-    # MANUAL_PICK in search context — there is no chemist picker, so ND.
-    return AggregateResult(
-        value=None,
-        qualifier=ValueQualifier.ND,
-        contributing_run_ids=[],
-        representative_run=None,
-    )
+    if rule == SelectionRule.MANUAL_PICK:
+        # Search context has no chemist picker; campaigns handle MANUAL_PICK
+        # via a separate code path that doesn't go through this aggregator.
+        return AggregateResult(
+            value=None,
+            qualifier=ValueQualifier.ND,
+            contributing_run_ids=[],
+            representative_run=None,
+        )
+
+    raise NotImplementedError(f"Unknown SelectionRule: {rule!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +342,12 @@ v1 is fixed; later revisits may make this per-protocol if chemists ask."""
 def compute_aggregate_stats(
     runs: list[ResolvedRun], intercept_key: InterceptKey | None
 ) -> AggregateStats:
-    """Geometric mean + fold-range + log-value mean ± SD over EQ runs only.
+    """Geometric mean + fold-range + log-value mean ± sample SD over EQ runs only.
+
+    Uses sample SD (Bessel's correction, ``n-1`` divisor) — the
+    chemistry convention for replicate variance. Single-EQ-run cells
+    return ``log_value_sd=0.0`` by special-case so the public API never
+    surfaces ``NaN``.
 
     ``log_value`` is ``log10(value_in_dose_unit)``. The FE composes the
     pX label (pIC50 = -log10(value_M) = 6 - log10(value_uM)) by reading

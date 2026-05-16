@@ -118,6 +118,10 @@ def test_latest_approved_run_picks_max_run_date_among_eq():
     assert out.value == 0.20
     assert out.qualifier is ValueQualifier.EQ
     assert len(out.contributing_run_ids) == 1
+    assert out.representative_run is not None
+    assert out.representative_run.run_date == date(2026, 4, 1)
+    # contributing_run_ids points to the single picked run
+    assert out.contributing_run_ids[0] == out.representative_run.run_id
 
 
 def test_latest_approved_run_skips_inactive_under_exclude_qualified():
@@ -154,6 +158,11 @@ def test_geometric_mean_log_space_average_of_eq_only():
     )
     assert out.value == pytest.approx(1.0, rel=1e-6)
     assert out.qualifier is ValueQualifier.EQ
+    # The Inactive run is NOT a contributor (only 3 EQ runs are)
+    assert len(out.contributing_run_ids) == 3
+    assert out.representative_run is not None
+    # representative is the latest EQ run, not the inactive one
+    assert out.representative_run.curve_class == "active"
 
 
 def test_mean_across_runs_arithmetic_average_of_eq_only():
@@ -162,6 +171,10 @@ def test_mean_across_runs_arithmetic_average_of_eq_only():
         runs, SelectionRule.MEAN_ACROSS_RUNS, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value == pytest.approx(2.0)
+    assert len(out.contributing_run_ids) == 3
+    assert out.qualifier is ValueQualifier.EQ
+    # representative_run is for snapshot — should be one of the input runs
+    assert out.representative_run is not None
 
 
 def test_best_r_squared_picks_highest_r2_curve():
@@ -174,6 +187,28 @@ def test_best_r_squared_picks_highest_r2_curve():
         runs, SelectionRule.BEST_R_SQUARED, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value == 0.50
+
+
+def test_best_r_squared_handles_zero_r2_distinct_from_none():
+    """r²=0.0 is a legal value (flat trace); must not tie with r²=None."""
+    runs = [
+        _run(value=0.10, r_squared=0.0),     # legal but bad fit
+        _run(value=0.20, r_squared=None),    # not yet fit / unknown
+        _run(value=0.30, r_squared=0.85),    # winner
+    ]
+    out = apply_selection_rule(
+        runs, SelectionRule.BEST_R_SQUARED, QualifierHandling.EXCLUDE_QUALIFIED, None
+    )
+    assert out.value == 0.30
+    # And: zero beats None when those are the only two
+    runs2 = [
+        _run(value=0.10, r_squared=0.0),
+        _run(value=0.20, r_squared=None),
+    ]
+    out2 = apply_selection_rule(
+        runs2, SelectionRule.BEST_R_SQUARED, QualifierHandling.EXCLUDE_QUALIFIED, None
+    )
+    assert out2.value == 0.10  # the r²=0.0 wins; None sorts to -inf
 
 
 def test_manual_pick_returns_nd_in_search_context():
