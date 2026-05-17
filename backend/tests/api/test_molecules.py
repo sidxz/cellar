@@ -5,7 +5,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
+import sqlalchemy as sa
 from httpx import AsyncClient
+
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 @pytest.fixture
@@ -315,3 +318,156 @@ class TestUpdateMolecule:
         )
         assert resp.status_code == 200
         assert resp.json()["lifecycle_stage"] == "active"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/molecules/test-counts
+# ---------------------------------------------------------------------------
+
+_SEED_USER = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")
+
+
+async def _seed_protocol_run_curve(
+    uow: AsyncUnitOfWork,
+    workspace_id: uuid.UUID,
+    molecule_id: uuid.UUID,
+    *,
+    project_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    """Insert a protocol, run, and one DR curve for molecule_id. Returns protocol_id."""
+    protocol_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    rd_id = uuid.uuid4()
+    curve_id = uuid.uuid4()
+
+    async with uow:
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO protocols "
+                "(id, workspace_id, name, protocol_type, status, "
+                "is_locked, dose_unit, pos_control_signal, version, protocol_version, created_by) "
+                "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+                "false, 'uM', 'high', 1, 1, :user) ON CONFLICT DO NOTHING"
+            ),
+            {"id": protocol_id, "ws": workspace_id, "name": f"Proto-{str(protocol_id)[:8]}", "user": _SEED_USER},
+        )
+        if project_id is not None:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO protocol_projects (protocol_id, project_id) "
+                    "VALUES (:proto, :proj) ON CONFLICT DO NOTHING"
+                ),
+                {"proto": protocol_id, "proj": project_id},
+            )
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO readout_definitions "
+                "(id, protocol_id, name, data_type, display_order, is_calculated) "
+                "VALUES (:id, :proto, :name, 'numeric', 0, false)"
+            ),
+            {"id": rd_id, "proto": protocol_id, "name": "EC50"},
+        )
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO runs "
+                "(id, workspace_id, protocol_id, run_date, operator, "
+                "status, is_locked, version, notes) "
+                "VALUES (:id, :ws, :proto, current_date, :user, 'draft', false, 1, null)"
+            ),
+            {"id": run_id, "ws": workspace_id, "proto": protocol_id, "user": _SEED_USER},
+        )
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO dose_response_curves "
+                "(id, workspace_id, molecule_id, protocol_id, run_id, "
+                "readout_definition_id, curve_type, fitted_value, hill_slope, "
+                "top, bottom, r_squared, num_points) "
+                "VALUES (:id, :ws, :mol, :proto, :run, :rd, "
+                "'ic50', 5.0, 1.0, 100.0, 0.0, 0.9, 5)"
+            ),
+            {
+                "id": curve_id,
+                "ws": workspace_id,
+                "mol": molecule_id,
+                "proto": protocol_id,
+                "run": run_id,
+                "rd": rd_id,
+            },
+        )
+        await uow.commit()
+
+    return protocol_id
+
+
+@pytest.mark.asyncio
+class TestMoleculeTestCounts:
+    async def test_empty_body_returns_empty(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/molecules/test-counts",
+            json={"molecule_ids": []},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["counts"] == {}
+
+    async def test_untested_molecule_returns_zero(
+        self, client: AsyncClient, workspace_id: uuid.UUID
+    ) -> None:
+        mol_id = uuid.uuid4()
+        resp = await client.post(
+            "/api/v1/molecules/test-counts",
+            json={"molecule_ids": [str(mol_id)]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["counts"][str(mol_id)] == 0
+
+    async def test_tested_molecule_returns_count(
+        self, client: AsyncClient, workspace_id: uuid.UUID, uow: AsyncUnitOfWork
+    ) -> None:
+        mol_id = uuid.uuid4()
+        # Seed two protocols for the same molecule
+        await _seed_protocol_run_curve(uow, workspace_id, mol_id)
+        await _seed_protocol_run_curve(uow, workspace_id, mol_id)
+
+        resp = await client.post(
+            "/api/v1/molecules/test-counts",
+            json={"molecule_ids": [str(mol_id)]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["counts"][str(mol_id)] == 2
+
+    async def test_project_scoped_count(
+        self, client: AsyncClient, workspace_id: uuid.UUID, uow: AsyncUnitOfWork
+    ) -> None:
+        mol_id = uuid.uuid4()
+        project_id = uuid.uuid4()
+
+        # Insert project row so FK from protocol_projects is satisfied
+        async with uow:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO projects "
+                    "(id, workspace_id, name, version, created_by, visibility) "
+                    "VALUES (:id, :ws, :name, 1, :user, 'workspace') ON CONFLICT DO NOTHING"
+                ),
+                {"id": project_id, "ws": workspace_id, "name": f"Proj-{str(project_id)[:8]}", "user": _SEED_USER},
+            )
+            await uow.commit()
+
+        await _seed_protocol_run_curve(uow, workspace_id, mol_id, project_id=project_id)
+        await _seed_protocol_run_curve(uow, workspace_id, mol_id)  # protocol NOT in project
+
+        # Workspace-scoped count = 2
+        resp_all = await client.post(
+            "/api/v1/molecules/test-counts",
+            json={"molecule_ids": [str(mol_id)]},
+        )
+        assert resp_all.status_code == 200
+        assert resp_all.json()["counts"][str(mol_id)] == 2
+
+        # Project-scoped count = 1 (only the protocol in the project)
+        resp_proj = await client.post(
+            "/api/v1/molecules/test-counts",
+            json={"molecule_ids": [str(mol_id)], "project_id": str(project_id)},
+        )
+        assert resp_proj.status_code == 200
+        assert resp_proj.json()["counts"][str(mol_id)] == 1

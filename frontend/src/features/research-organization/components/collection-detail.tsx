@@ -22,6 +22,7 @@ import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-exp
 import { useCollection, useDeleteCollection } from "../hooks/use-collections";
 import { useRemoveMolecules } from "../hooks/use-collection-molecules";
 import { useCollectionSearch } from "../hooks/use-collection-search";
+import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
 import { useProject } from "../hooks/use-projects";
 import { useViewMode } from "../lib/use-view-mode";
 import { CreateCollectionDialog } from "./create-collection-dialog";
@@ -52,6 +53,13 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const molecules = search.data?.items ?? [];
+
+  // Molecule IDs memoized so the test-count query key is stable.
+  const moleculeIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
+  const { data: testCounts } = useProtocolTestCounts(
+    moleculeIds,
+    query.data?.project_id ?? null,
+  );
 
   const onSelectChange = useCallback((id: string, selected: boolean) => {
     setSelectedIds((prev) => {
@@ -177,6 +185,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               onOpen={onOpen}
               isLoading={search.isLoading}
               showToolbar={false}
+              testCounts={testCounts}
             />
           </div>
         )}

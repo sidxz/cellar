@@ -84,4 +84,35 @@ describe("MoleculeCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /open Test Mol detail/i }));
     expect(onOpen).toHaveBeenCalledWith("mol-1");
   });
+
+  it("renders 'Tested in N protocols' when protocolCount > 0", () => {
+    render(
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+        protocolCount={3}
+      />,
+    );
+    expect(screen.getByText("Tested in 3 protocols")).toBeInTheDocument();
+  });
+
+  it("does not render protocol count line when protocolCount is 0 or undefined", () => {
+    const { rerender } = render(
+      <MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={vi.fn()} />,
+    );
+    expect(screen.queryByText(/tested in/i)).not.toBeInTheDocument();
+
+    rerender(
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+        protocolCount={0}
+      />,
+    );
+    expect(screen.queryByText(/tested in/i)).not.toBeInTheDocument();
+  });
 });

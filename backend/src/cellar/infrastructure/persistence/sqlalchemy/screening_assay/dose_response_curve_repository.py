@@ -21,7 +21,9 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
+    ProtocolModel,
     RunModel,
+    protocol_projects,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -157,6 +159,54 @@ class SQLAlchemyDoseResponseCurveRepository:
         )
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def count_distinct_protocols_per_molecule(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        project_id: uuid.UUID | None = None,
+    ) -> dict[uuid.UUID, int]:
+        """Count distinct protocols each molecule has been tested in.
+
+        A molecule is "tested in" a protocol when ≥1 DoseResponseCurve row
+        exists for that molecule linked (via run) to the protocol.  When
+        ``project_id`` is supplied, only protocols associated with that
+        project via the ``protocol_projects`` join table are counted.
+
+        Molecules not present in ``dose_response_curves`` are returned with
+        count=0 so callers never need to handle missing keys.
+        """
+        if not molecule_ids:
+            return {mol_id: 0 for mol_id in molecule_ids}
+
+        stmt = (
+            select(
+                DoseResponseCurveModel.molecule_id,
+                func.count(func.distinct(ProtocolModel.id)).label("protocol_count"),
+            )
+            .join(RunModel, RunModel.id == DoseResponseCurveModel.run_id)
+            .join(ProtocolModel, ProtocolModel.id == RunModel.protocol_id)
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.molecule_id.in_(molecule_ids),
+            )
+        )
+
+        if project_id is not None:
+            stmt = stmt.join(
+                protocol_projects,
+                protocol_projects.c.protocol_id == ProtocolModel.id,
+            ).where(protocol_projects.c.project_id == project_id)
+
+        stmt = stmt.group_by(DoseResponseCurveModel.molecule_id)
+
+        result = await self._uow.session.execute(stmt)
+        rows = result.all()
+
+        counts: dict[uuid.UUID, int] = {mol_id: 0 for mol_id in molecule_ids}
+        for row in rows:
+            counts[row.molecule_id] = row.protocol_count
+        return counts
 
     async def find_best_curves_for_molecules(
         self,

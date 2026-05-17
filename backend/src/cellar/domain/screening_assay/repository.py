@@ -210,6 +210,21 @@ class DoseResponseCurveRepository(Protocol):
         """
         ...
 
+    async def count_distinct_protocols_per_molecule(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        project_id: uuid.UUID | None = None,
+    ) -> dict[uuid.UUID, int]:
+        """Return distinct protocol count per molecule.
+
+        For each molecule_id in ``molecule_ids``, count how many distinct
+        protocols that molecule has a dose-response curve in.  When
+        ``project_id`` is provided, only protocols linked to that project
+        are counted.  Molecules with no curves are returned with count=0.
+        """
+        ...
+
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> DoseResponseCurve | None: ...

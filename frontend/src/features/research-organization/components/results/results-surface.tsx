@@ -29,6 +29,8 @@ export interface ResultsSurfaceProps {
    * @default true
    */
   showToolbar?: boolean;
+  /** Optional protocol test counts keyed by molecule ID. Rendered on card tiles. */
+  testCounts?: Record<string, number>;
 }
 
 interface TableRow {
@@ -50,6 +52,7 @@ export function ResultsSurface({
   toolbarLeft,
   toolbarRight,
   showToolbar = true,
+  testCounts,
 }: ResultsSurfaceProps) {
   const tableRows: TableRow[] = useMemo(
     () =>
@@ -129,6 +132,7 @@ export function ResultsSurface({
           onSelectChange={onSelectChange}
           onOpen={onOpen}
           isLoading={isLoading}
+          testCounts={testCounts}
         />
       ) : (
         <DataGrid<TableRow>

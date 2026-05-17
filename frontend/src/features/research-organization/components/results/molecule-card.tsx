@@ -11,6 +11,12 @@ export interface MoleculeCardProps {
   selected: boolean;
   onSelectChange: (moleculeId: string, selected: boolean) => void;
   onOpen: (moleculeId: string) => void;
+  /**
+   * Number of distinct protocols this molecule has been tested in.
+   * When > 0, a quiet grey "Tested in N protocols" line is rendered
+   * below the property strip.  Omit or pass 0/undefined to hide it.
+   */
+  protocolCount?: number;
   className?: string;
 }
 
@@ -36,6 +42,7 @@ export function MoleculeCard({
   selected,
   onSelectChange,
   onOpen,
+  protocolCount,
   className,
 }: MoleculeCardProps) {
   const desc = molecule.descriptors;
@@ -93,6 +100,11 @@ export function MoleculeCard({
               </>
             )}
           </div>
+          {typeof protocolCount === "number" && protocolCount > 0 && (
+            <div className="text-xs text-muted-foreground">
+              Tested in {protocolCount} protocol{protocolCount === 1 ? "" : "s"}
+            </div>
+          )}
         </div>
       </button>
     </div>

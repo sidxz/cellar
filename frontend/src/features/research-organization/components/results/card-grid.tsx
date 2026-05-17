@@ -18,6 +18,8 @@ export interface CardGridProps {
   rowHeight?: number;
   /** Scroll container height — defaults to "70vh". */
   height?: string;
+  /** Optional protocol test counts keyed by molecule ID. Passed to each card. */
+  testCounts?: Record<string, number>;
 }
 
 function CardSkeleton() {
@@ -38,6 +40,7 @@ export function CardGrid({
   minTileWidth = 220,
   rowHeight = 290,
   height = "70vh",
+  testCounts,
 }: CardGridProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [columnCount, setColumnCount] = useState(1);
@@ -120,6 +123,7 @@ export function CardGrid({
                   selected={selectedIds.has(m.id)}
                   onSelectChange={onSelectChange}
                   onOpen={onOpen}
+                  protocolCount={testCounts?.[m.id]}
                 />
               ))}
             </div>
@@ -161,7 +165,8 @@ export function CardGrid({
                       selected={selectedIds.has(m.id)}
                       onSelectChange={onSelectChange}
                       onOpen={onOpen}
-                        />
+                      protocolCount={testCounts?.[m.id]}
+                    />
                   ))}
                 </div>
               </div>

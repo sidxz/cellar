@@ -22,6 +22,7 @@ from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
+from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
@@ -138,6 +139,7 @@ __all__ = [
     "ClassifyDoseResponseCurveDep",
     "MoleculeActivityServiceDep",
     "GetMoleculeActivityDetailDep",
+    "GetMoleculeTestCountsDep",
     "ReadoutCalculationEngineDep",
     "FitDoseResponseCurvesDep",
     "GetProtocolStatsDep",
@@ -252,6 +254,9 @@ MoleculeActivityServiceDep = Annotated[
 ]
 GetMoleculeActivityDetailDep = Annotated[
     GetMoleculeActivityDetail, Depends(_get_use_case(GetMoleculeActivityDetail))
+]
+GetMoleculeTestCountsDep = Annotated[
+    GetMoleculeTestCounts, Depends(_get_use_case(GetMoleculeTestCounts))
 ]
 ReadoutCalculationEngineDep = Annotated[
     ReadoutCalculationEngine, Depends(_get_use_case(ReadoutCalculationEngine))

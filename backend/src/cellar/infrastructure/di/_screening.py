@@ -47,6 +47,7 @@ from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatch,
 )
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
+from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
@@ -782,6 +783,15 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(GetMoleculeActivityDetail, _get_molecule_activity_detail)
+
+    def _get_molecule_test_counts(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetMoleculeTestCounts(
+            uow=uow,
+            dr_curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+        )
+
+    container.define(GetMoleculeTestCounts, _get_molecule_test_counts)
 
     # --- Ontology Search & Annotations ---
     container.define(BioPortalClient, lambda c: BioPortalClient(c[SecretProvider]))

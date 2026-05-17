@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from cellar.application.chemical_registration.depict_molecules import (
     DepictMoleculesQuery,
 )
+from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCountsQuery
 from cellar.application.chemical_registration.get_molecule import GetMoleculeQuery
 from cellar.application.chemical_registration.identifiers import (
     AddIdentifierCommand,
@@ -50,6 +51,7 @@ from cellar.interface.dependencies import (
     DepictMoleculesDep,
     GetMoleculeByIdentifierDep,
     GetMoleculeDep,
+    GetMoleculeTestCountsDep,
     GetWorkspaceSettingsDep,
     ListCollectionsForMoleculeDep,
     ListIdentifiersDep,
@@ -620,6 +622,44 @@ async def depict_structures(
         )
     )
     return DepictResponse(images=images)
+
+
+# ---------------------------------------------------------------------------
+# Protocol test-count bulk query
+# ---------------------------------------------------------------------------
+
+
+class MoleculeTestCountsBody(BaseModel):
+    molecule_ids: list[uuid.UUID]
+    project_id: uuid.UUID | None = None
+
+
+class MoleculeTestCountsResponse(BaseModel):
+    counts: dict[str, int]
+
+
+@router.post("/test-counts", response_model=MoleculeTestCountsResponse)
+async def get_molecule_test_counts(
+    body: MoleculeTestCountsBody,
+    auth: AuthDep,
+    use_case: GetMoleculeTestCountsDep,
+) -> MoleculeTestCountsResponse:
+    """Return distinct protocol test counts per molecule.
+
+    For each molecule ID in the request, return how many distinct protocols
+    it has at least one dose-response curve in.  When ``project_id`` is
+    supplied, only protocols linked to that project are counted.
+
+    Molecules with no DR data are returned with count=0 so the FE never
+    has to handle missing keys.
+    """
+    q = GetMoleculeTestCountsQuery(
+        workspace_id=auth.workspace_id,
+        molecule_ids=body.molecule_ids,
+        project_id=body.project_id,
+    )
+    counts = await use_case.execute(q, auth=auth)
+    return MoleculeTestCountsResponse(counts={str(k): v for k, v in counts.items()})
 
 
 @router.get("/{molecule_id}", response_model=MoleculeResponse)
