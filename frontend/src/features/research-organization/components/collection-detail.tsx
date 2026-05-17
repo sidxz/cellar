@@ -2,15 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Download,
-  FolderOpen,
-  Pencil,
-  Plus,
-  Trash2,
-  ExternalLink,
-} from "lucide-react";
-import type { ColDef } from "ag-grid-community";
+import { Download, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,94 +14,63 @@ import {
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
 import { DetailShell } from "@/shared/components/detail-shell";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { MemberName, MoleculeName, OrgName } from "@/shared/components/entity-name";
-import {
-  useCollection,
-  useDeleteCollection,
-} from "../hooks/use-collections";
-import { useCollectionMolecules, useRemoveMolecules } from "../hooks/use-collection-molecules";
-import { useProject } from "../hooks/use-projects";
-import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
-import { CreateCollectionDialog } from "./create-collection-dialog";
-import { AddMoleculesDialog } from "./add-molecules-dialog";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
+import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
+import { useCollection, useDeleteCollection } from "../hooks/use-collections";
+import { useRemoveMolecules } from "../hooks/use-collection-molecules";
+import { useCollectionSearch } from "../hooks/use-collection-search";
+import { useProject } from "../hooks/use-projects";
+import { useViewMode } from "../lib/use-view-mode";
+import { CreateCollectionDialog } from "./create-collection-dialog";
+import { AddMoleculesDialog } from "./add-molecules-dialog";
+import { CollectionHeader } from "./collection/collection-header";
+import { ResultsSurface } from "./results/results-surface";
 
 interface CollectionDetailProps {
   collectionId: string;
-}
-
-interface MoleculeRow {
-  id: string;
 }
 
 export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const router = useRouter();
   const isAdmin = useAuthzHasRole("admin");
   const query = useCollection(collectionId);
-  const { data: moleculeIds, isLoading: moleculesLoading } =
-    useCollectionMolecules(collectionId);
   const { data: project } = useProject(query.data?.project_id ?? undefined);
+  const search = useCollectionSearch(collectionId);
   const deleteMutation = useDeleteCollection();
   const removeMutation = useRemoveMolecules(collectionId);
+  const { mode, setMode } = useViewMode("cards");
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addMolOpen, setAddMolOpen] = useState(false);
-  const [removeIds, setRemoveIds] = useState<string[]>([]);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const moleculeRows: MoleculeRow[] = useMemo(
-    () => (moleculeIds ?? []).map((id) => ({ id })),
-    [moleculeIds]
-  );
+  const molecules = search.data?.items ?? [];
 
-  const columnDefs = useMemo<ColDef<MoleculeRow>[]>(
-    () => [
-      {
-        headerName: "Molecule",
-        field: "id",
-        flex: 1,
-        minWidth: 200,
-        cellRenderer: ({ data }: { data: MoleculeRow | undefined }) =>
-          data ? <MoleculeName id={data.id} /> : null,
-      },
-      {
-        headerName: "",
-        width: 80,
-        sortable: false,
-        filter: false,
-        cellRenderer: ({ data }: { data: MoleculeRow | undefined }) =>
-          data ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => router.push(`/compounds/${data.id}`)}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Button>
-          ) : null,
-      },
-    ],
-    [router]
+  const onSelectChange = useCallback((id: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const onOpen = useCallback(
+    (id: string) => router.push(`/compounds/${id}`),
+    [router],
   );
 
   const { exportSdf } = useSdfExport();
   const handleExportSdf = useCallback(() => {
-    if (!moleculeIds?.length) return;
-    exportSdf(moleculeIds, `${query.data?.name ?? "collection"}.sdf`);
-  }, [moleculeIds, query.data?.name, exportSdf]);
+    const ids = molecules.map((m) => m.id);
+    if (!ids.length) return;
+    exportSdf(ids, `${query.data?.name ?? "collection"}.sdf`);
+  }, [molecules, query.data?.name, exportSdf]);
 
   const handleDelete = () => {
     if (query.data) {
@@ -120,10 +81,26 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   };
 
   const handleRemoveSelected = async () => {
-    await removeMutation.mutateAsync({ molecule_ids: removeIds });
-    setRemoveIds([]);
+    await removeMutation.mutateAsync({ molecule_ids: Array.from(selectedIds) });
+    setSelectedIds(new Set());
     setRemoveOpen(false);
   };
+
+  const selectionToolbar = useMemo(() => {
+    if (selectedIds.size === 0) return null;
+    return (
+      <>
+        <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={() => setRemoveOpen(true)}
+        >
+          Remove
+        </Button>
+      </>
+    );
+  }, [selectedIds.size]);
 
   return (
     <>
@@ -139,24 +116,16 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               variant="outline"
               size="sm"
               onClick={handleExportSdf}
-              disabled={!moleculeIds?.length}
+              disabled={!molecules.length}
             >
               <Download className="mr-2 h-4 w-4" />
               Export SDF
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEditOpen(true)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDeleteOpen(true)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </Button>
@@ -176,122 +145,41 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         )}
       >
         {(collection) => (
-          <>
-            {/* Metadata Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Description</p>
-                    <p className="font-medium">
-                      {collection.description || "\u2014"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Project</p>
-                    <p className="font-medium">
-                      {project ? (
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 text-base font-medium"
-                          onClick={() => router.push(`/projects/${project.id}`)}
-                        >
-                          {project.name}
-                        </Button>
-                      ) : (
-                        "\u2014"
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Organization</p>
-                    <p className="font-medium">
-                      {collection.owned_by_org_id ? (
-                        <OrgName id={collection.owned_by_org_id} />
-                      ) : (
-                        "\u2014"
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Created By</p>
-                    <p className="text-sm font-medium">
-                      <MemberName id={collection.created_by} />
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="flex flex-col gap-4">
+            <CollectionHeader
+              collection={{
+                id: collection.id,
+                name: collection.name,
+                description: collection.description,
+                project_id: collection.project_id,
+                owned_by_org_id: collection.owned_by_org_id,
+                created_by: collection.created_by,
+                visibility: collection.visibility,
+                molecule_count: collection.molecule_count,
+              }}
+              projectName={project?.name}
+            />
 
-            {/* Molecules Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Molecules
-                  <Badge variant="secondary" className="ml-2">
-                    {collection.molecule_count} molecule
-                    {collection.molecule_count !== 1 ? "s" : ""}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <DataGrid<MoleculeRow>
-                  rowData={moleculeRows}
-                  columnDefs={columnDefs}
-                  loading={moleculesLoading}
-                  height="400px"
-                  suppressFilters
-                  selectionToolbar={(selected) => (
-                    <>
-                      <span className="text-sm text-muted-foreground">
-                        {selected.length} selected
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          setRemoveIds(selected.map((r) => r.id));
-                          setRemoveOpen(true);
-                        }}
-                      >
-                        Remove Selected
-                      </Button>
-                    </>
-                  )}
-                  emptyState={
-                    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                      <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        No molecules in this collection yet.
-                      </p>
-                      <Button
-                        className="mt-3"
-                        size="sm"
-                        onClick={() => setAddMolOpen(true)}
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Molecules
-                      </Button>
-                    </div>
-                  }
-                />
-              </CardContent>
-            </Card>
-          </>
+            <ResultsSurface
+              molecules={molecules}
+              mode={mode}
+              onModeChange={setMode}
+              selectedIds={selectedIds}
+              onSelectChange={onSelectChange}
+              onOpen={onOpen}
+              isLoading={search.isLoading}
+              toolbarLeft={selectionToolbar}
+            />
+          </div>
         )}
       </DetailShell>
 
-      {/* Edit dialog */}
       <CreateCollectionDialog
         open={editOpen}
         onOpenChange={setEditOpen}
         collection={query.data}
       />
 
-      {/* Delete confirmation */}
       <ConfirmDeleteDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -301,15 +189,12 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         isPending={deleteMutation.isPending}
       />
 
-      {/* Remove molecules confirmation */}
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove molecules?</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove {removeIds.length} molecule
-              {removeIds.length !== 1 ? "s" : ""} from this collection? The
-              molecules themselves will not be deleted.
+              Remove {selectedIds.size} molecule{selectedIds.size === 1 ? "" : "s"} from this collection? The molecules themselves will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -325,7 +210,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add Molecules dialog */}
       <AddMoleculesDialog
         collectionId={collectionId}
         open={addMolOpen}
