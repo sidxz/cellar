@@ -32,7 +32,6 @@ export function CollectionHeader({
   return (
     <header className={className}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{collection.name}</h1>
         <Badge variant="secondary" className="text-xs">
           {collection.molecule_count} molecule{collection.molecule_count === 1 ? "" : "s"}
         </Badge>

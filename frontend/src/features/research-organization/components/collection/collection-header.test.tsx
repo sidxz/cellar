@@ -27,9 +27,8 @@ const baseCollection = {
 };
 
 describe("CollectionHeader", () => {
-  it("renders the collection name and description", () => {
+  it("renders the description", () => {
     render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    expect(screen.getByRole("heading", { name: /Mtb Q1 Hits/i })).toBeInTheDocument();
     expect(screen.getByText(/Round 1 hits/)).toBeInTheDocument();
   });
 

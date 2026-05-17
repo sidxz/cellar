@@ -73,109 +73,102 @@ export function CardGrid({
     overscan: 2,
   });
 
-  if (isLoading) {
-    return (
-      <div
-        className="grid gap-3 overflow-auto p-1"
-        style={{
-          gridTemplateColumns: `repeat(auto-fill, minmax(${minTileWidth}px, 1fr))`,
-          height,
-        }}
-      >
-        {Array.from({ length: 12 }).map((_, i) => (
-          <CardSkeleton key={i} />
-        ))}
-      </div>
-    );
-  }
-
-  if (!molecules.length) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-        <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
-        <p className="mt-3 text-sm text-muted-foreground">
-          No molecules to display.
-        </p>
-      </div>
-    );
-  }
-
   // In jsdom, getVirtualItems() is empty because there is no scroll-container
   // height to intersect against. Fall back to rendering all rows so tests can
   // assert on tile content without needing a real browser layout engine.
   const virtualItems = virtualizer.getVirtualItems();
   const useFallback = virtualItems.length === 0 && rows.length > 0;
 
-  if (useFallback) {
-    return (
-      <div ref={parentRef} style={{ height, overflow: "auto" }} className="p-1">
-        {rows.map((row, rowIdx) => (
-          <div
-            key={rowIdx}
-            style={{
-              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-            }}
-            className="grid gap-3 mb-3"
-          >
-            {row.map((m) => (
-              <MoleculeCard
-                key={m.id}
-                molecule={m}
-                selected={selectedIds.has(m.id)}
-                onSelectChange={onSelectChange}
-                onOpen={onOpen}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
+  // Always render the scroll container with parentRef attached so the
+  // ResizeObserver effect can measure its width on first render (even when
+  // isLoading=true). Without this the ref is null when the effect runs and
+  // columnCount stays at 1 until a remount.
   return (
     <div ref={parentRef} style={{ height, overflow: "auto" }} className="p-1">
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          position: "relative",
-          width: "100%",
-        }}
-      >
-        {virtualItems.map((vRow) => {
-          const row = rows[vRow.index];
-          return (
+      {isLoading ? (
+        <div
+          className="grid gap-3"
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${minTileWidth}px, 1fr))`,
+          }}
+        >
+          {Array.from({ length: 12 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+      ) : !molecules.length ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+          <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
+          <p className="mt-3 text-sm text-muted-foreground">
+            No molecules to display.
+          </p>
+        </div>
+      ) : useFallback ? (
+        <>
+          {rows.map((row, rowIdx) => (
             <div
-              key={vRow.key}
+              key={rowIdx}
               style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: `${vRow.size}px`,
-                transform: `translateY(${vRow.start}px)`,
+                gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
               }}
-              className="grid gap-3"
+              className="grid gap-3 mb-3"
             >
+              {row.map((m) => (
+                <MoleculeCard
+                  key={m.id}
+                  molecule={m}
+                  selected={selectedIds.has(m.id)}
+                  onSelectChange={onSelectChange}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          ))}
+        </>
+      ) : (
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: "relative",
+            width: "100%",
+          }}
+        >
+          {virtualItems.map((vRow) => {
+            const row = rows[vRow.index];
+            return (
               <div
+                key={vRow.key}
                 style={{
-                  gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${vRow.size}px`,
+                  transform: `translateY(${vRow.start}px)`,
                 }}
                 className="grid gap-3"
               >
-                {row.map((m) => (
-                  <MoleculeCard
-                    key={m.id}
-                    molecule={m}
-                    selected={selectedIds.has(m.id)}
-                    onSelectChange={onSelectChange}
-                    onOpen={onOpen}
-                  />
-                ))}
+                <div
+                  style={{
+                    gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                  }}
+                  className="grid gap-3"
+                >
+                  {row.map((m) => (
+                    <MoleculeCard
+                      key={m.id}
+                      molecule={m}
+                      selected={selectedIds.has(m.id)}
+                      onSelectChange={onSelectChange}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

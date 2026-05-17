@@ -60,11 +60,15 @@ export function ResultsSurface({
     () => [
       {
         headerName: "",
-        width: 90,
+        width: 120,
         sortable: false,
         filter: false,
         cellRenderer: ({ data }: { data?: TableRow }) =>
-          data?.smiles ? <StructureThumbnail smiles={data.smiles} size={56} /> : null,
+          data?.smiles ? (
+            <div className="flex items-center justify-center h-full">
+              <StructureThumbnail smiles={data.smiles} size={56} />
+            </div>
+          ) : null,
       },
       {
         headerName: "ID",
@@ -123,6 +127,7 @@ export function ResultsSurface({
           columnDefs={columnDefs}
           loading={isLoading}
           height="70vh"
+          rowHeight={72}
           suppressFilters
         />
       )}
