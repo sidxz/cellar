@@ -5,20 +5,12 @@ import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Badge } from "@/shared/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 import type { Molecule } from "@/features/chemical-registration/types";
-import {
-  DoseResponseFigure,
-  type CurveSnapshot,
-} from "@/features/screening-assay/components/dose-response-figure";
-import type { ActivityValue } from "../../types";
 
 export interface MoleculeCardProps {
   molecule: Molecule;
   selected: boolean;
   onSelectChange: (moleculeId: string, selected: boolean) => void;
   onOpen: (moleculeId: string) => void;
-  /** Optional first-protocol activity value. When present and it is a valid
-   *  dose-response curve, a compact sparkline is shown below the property strip. */
-  activity?: ActivityValue;
   className?: string;
 }
 
@@ -39,39 +31,11 @@ function ro5Status(violations: number | null | undefined): boolean | null {
   return violations === 0;
 }
 
-/**
- * Build a CurveSnapshot from an ActivityValue, or return null if the value
- * isn't a valid dose-response curve (missing params, no raw data, inactive, etc.).
- */
-function toCurveSnapshot(av: ActivityValue): CurveSnapshot | null {
-  if (
-    av.source !== "dose_response" ||
-    av.curve_params == null ||
-    av.value == null ||
-    !av.raw_data ||
-    av.raw_data.length === 0
-  ) {
-    return null;
-  }
-  return {
-    fitted_value: av.value,
-    top: av.curve_params.top,
-    bottom: av.curve_params.bottom,
-    hill_slope: av.curve_params.hill_slope,
-    r_squared: av.r_squared,
-    curve_class: av.curve_params.curve_class ?? null,
-    raw_data: av.raw_data,
-    additional_curves: av.additional_curves ?? null,
-    aggregate: av.aggregate ?? null,
-  };
-}
-
 export function MoleculeCard({
   molecule,
   selected,
   onSelectChange,
   onOpen,
-  activity,
   className,
 }: MoleculeCardProps) {
   const desc = molecule.descriptors;
@@ -79,7 +43,6 @@ export function MoleculeCard({
   const logp = desc?.logp;
   const ro5 = ro5Status(desc?.ro5_violations);
   const displayName = molecule.name ?? molecule.registration_number ?? molecule.id;
-  const curveSnapshot = activity ? toCurveSnapshot(activity) : null;
 
   return (
     <div
@@ -130,20 +93,6 @@ export function MoleculeCard({
               </>
             )}
           </div>
-          {curveSnapshot && (
-            <div
-              data-testid="molecule-card-sparkline"
-              className="mt-1 flex justify-center"
-            >
-              <DoseResponseFigure
-                curve={curveSnapshot}
-                size="sparkline"
-                width={160}
-                height={60}
-                unit={activity?.unit ?? null}
-              />
-            </div>
-          )}
         </div>
       </button>
     </div>

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MoleculeCard } from "./molecule-card";
 import type { Molecule } from "@/features/chemical-registration/types";
-import type { ActivityValue } from "../../types";
 
 // MoleculeThumbnail renders an <img> via RDKit.js WASM — stub it in tests.
 vi.mock("@/shared/components/molecule-thumbnail", () => ({
@@ -10,19 +9,6 @@ vi.mock("@/shared/components/molecule-thumbnail", () => ({
     <div data-testid="mol-thumb" data-smiles={smiles} />
   ),
 }));
-
-// DoseResponseFigure uses Plotly which is incompatible with jsdom — stub it.
-vi.mock(
-  "@/features/screening-assay/components/dose-response-figure",
-  () => ({
-    DoseResponseFigure: (props: Record<string, unknown>) => (
-      <div
-        data-testid="dose-response-figure"
-        data-curve={JSON.stringify(props.curve)}
-      />
-    ),
-  }),
-);
 
 const baseMol: Molecule = {
   id: "mol-1",
@@ -97,82 +83,5 @@ describe("MoleculeCard", () => {
     render(<MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={onOpen} />);
     fireEvent.click(screen.getByRole("button", { name: /open Test Mol detail/i }));
     expect(onOpen).toHaveBeenCalledWith("mol-1");
-  });
-
-  it("renders a sparkline when activity with valid dose-response data is supplied", () => {
-    const activity: ActivityValue = {
-      value: 0.5,
-      qualifier: "=",
-      unit: "µM",
-      source: "dose_response",
-      curve_type: "ec50",
-      r_squared: 0.98,
-      data_point_count: 8,
-      raw_data: [
-        { x: 0.001, y: 5 },
-        { x: 0.01, y: 15 },
-        { x: 0.1, y: 50 },
-        { x: 1, y: 85 },
-        { x: 10, y: 95 },
-      ],
-      curve_params: {
-        hill_slope: 1.2,
-        top: 100,
-        bottom: 0,
-        num_points: 5,
-        curve_class: "full",
-        confidence_interval_low: 0.3,
-        confidence_interval_high: 0.8,
-        fit_quality_warnings: null,
-      },
-    };
-    render(
-      <MoleculeCard
-        molecule={baseMol}
-        selected={false}
-        onSelectChange={vi.fn()}
-        onOpen={vi.fn()}
-        activity={activity}
-      />,
-    );
-    expect(screen.getByTestId("molecule-card-sparkline")).toBeInTheDocument();
-    expect(screen.getByTestId("dose-response-figure")).toBeInTheDocument();
-  });
-
-  it("does not render a sparkline when activity is undefined", () => {
-    render(
-      <MoleculeCard
-        molecule={baseMol}
-        selected={false}
-        onSelectChange={vi.fn()}
-        onOpen={vi.fn()}
-      />,
-    );
-    expect(screen.queryByTestId("molecule-card-sparkline")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("dose-response-figure")).not.toBeInTheDocument();
-  });
-
-  it("does not render a sparkline when activity has no curve_params", () => {
-    const activity: ActivityValue = {
-      value: 0.5,
-      qualifier: "=",
-      unit: "µM",
-      source: "dose_response",
-      curve_type: "ec50",
-      r_squared: null,
-      data_point_count: 0,
-      raw_data: null,
-      curve_params: null,
-    };
-    render(
-      <MoleculeCard
-        molecule={baseMol}
-        selected={false}
-        onSelectChange={vi.fn()}
-        onOpen={vi.fn()}
-        activity={activity}
-      />,
-    );
-    expect(screen.queryByTestId("molecule-card-sparkline")).not.toBeInTheDocument();
   });
 });

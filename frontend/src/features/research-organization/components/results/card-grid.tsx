@@ -5,7 +5,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderOpen } from "lucide-react";
 import { MoleculeCard } from "./molecule-card";
 import type { Molecule } from "@/features/chemical-registration/types";
-import type { ActivityValue } from "../../types";
 
 export interface CardGridProps {
   molecules: Molecule[];
@@ -19,12 +18,6 @@ export interface CardGridProps {
   rowHeight?: number;
   /** Scroll container height — defaults to "70vh". */
   height?: string;
-  /**
-   * Optional activity data keyed by molecule ID → column ID → ActivityValue.
-   * For each molecule, the FIRST alphabetically-sorted key is used to render
-   * a sparkline on the card (V1.5 "auto first protocol" behaviour).
-   */
-  activityData?: Record<string, Record<string, ActivityValue>>;
 }
 
 function CardSkeleton() {
@@ -45,7 +38,6 @@ export function CardGrid({
   minTileWidth = 220,
   rowHeight = 290,
   height = "70vh",
-  activityData,
 }: CardGridProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [columnCount, setColumnCount] = useState(1);
@@ -121,23 +113,15 @@ export function CardGrid({
               }}
               className="grid gap-3 mb-3"
             >
-              {row.map((m) => {
-                const molActivity = activityData?.[m.id];
-                const firstKey = molActivity
-                  ? Object.keys(molActivity).sort()[0]
-                  : undefined;
-                const activity = firstKey ? molActivity![firstKey] : undefined;
-                return (
-                  <MoleculeCard
-                    key={m.id}
-                    molecule={m}
-                    selected={selectedIds.has(m.id)}
-                    onSelectChange={onSelectChange}
-                    onOpen={onOpen}
-                    activity={activity}
-                  />
-                );
-              })}
+              {row.map((m) => (
+                <MoleculeCard
+                  key={m.id}
+                  molecule={m}
+                  selected={selectedIds.has(m.id)}
+                  onSelectChange={onSelectChange}
+                  onOpen={onOpen}
+                />
+              ))}
             </div>
           ))}
         </>
@@ -170,23 +154,15 @@ export function CardGrid({
                   }}
                   className="grid gap-3"
                 >
-                  {row.map((m) => {
-                    const molActivity = activityData?.[m.id];
-                    const firstKey = molActivity
-                      ? Object.keys(molActivity).sort()[0]
-                      : undefined;
-                    const activity = firstKey ? molActivity![firstKey] : undefined;
-                    return (
-                      <MoleculeCard
-                        key={m.id}
-                        molecule={m}
-                        selected={selectedIds.has(m.id)}
-                        onSelectChange={onSelectChange}
-                        onOpen={onOpen}
-                        activity={activity}
-                      />
-                    );
-                  })}
+                  {row.map((m) => (
+                    <MoleculeCard
+                      key={m.id}
+                      molecule={m}
+                      selected={selectedIds.has(m.id)}
+                      onSelectChange={onSelectChange}
+                      onOpen={onOpen}
+                        />
+                  ))}
                 </div>
               </div>
             );

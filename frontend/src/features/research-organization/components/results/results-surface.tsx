@@ -7,7 +7,6 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import type { Molecule } from "@/features/chemical-registration/types";
-import type { ActivityValue } from "../../types";
 import type { ViewMode } from "../../lib/use-view-mode";
 import { ViewModeToggle } from "./view-mode-toggle";
 import { CardGrid } from "./card-grid";
@@ -30,12 +29,6 @@ export interface ResultsSurfaceProps {
    * @default true
    */
   showToolbar?: boolean;
-  /**
-   * Optional activity data to pass to card-view tiles for sparkline rendering.
-   * Keyed by molecule ID → column ID → ActivityValue.
-   * Ignored in table mode (V1.5: table-view activity columns are a V2 follow-up).
-   */
-  activityData?: Record<string, Record<string, ActivityValue>>;
 }
 
 interface TableRow {
@@ -57,7 +50,6 @@ export function ResultsSurface({
   toolbarLeft,
   toolbarRight,
   showToolbar = true,
-  activityData,
 }: ResultsSurfaceProps) {
   const tableRows: TableRow[] = useMemo(
     () =>
@@ -137,7 +129,6 @@ export function ResultsSurface({
           onSelectChange={onSelectChange}
           onOpen={onOpen}
           isLoading={isLoading}
-          activityData={activityData}
         />
       ) : (
         <DataGrid<TableRow>
