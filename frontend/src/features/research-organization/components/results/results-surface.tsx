@@ -23,6 +23,12 @@ export interface ResultsSurfaceProps {
   toolbarLeft?: ReactNode;
   /** Optional toolbar content rendered to the right of the toggle. */
   toolbarRight?: ReactNode;
+  /**
+   * When false, the internal toolbar row (view-mode toggle + toolbarLeft/toolbarRight slots)
+   * is not rendered. Use this when the parent page owns the toggle externally.
+   * @default true
+   */
+  showToolbar?: boolean;
 }
 
 interface TableRow {
@@ -43,6 +49,7 @@ export function ResultsSurface({
   isLoading = false,
   toolbarLeft,
   toolbarRight,
+  showToolbar = true,
 }: ResultsSurfaceProps) {
   const tableRows: TableRow[] = useMemo(
     () =>
@@ -105,13 +112,15 @@ export function ResultsSurface({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">{toolbarLeft}</div>
-        <div className="flex items-center gap-2">
-          {toolbarRight}
-          <ViewModeToggle mode={mode} onChange={onModeChange} />
+      {showToolbar && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">{toolbarLeft}</div>
+          <div className="flex items-center gap-2">
+            {toolbarRight}
+            <ViewModeToggle mode={mode} onChange={onModeChange} />
+          </div>
         </div>
-      </div>
+      )}
 
       {mode === "cards" ? (
         <CardGrid

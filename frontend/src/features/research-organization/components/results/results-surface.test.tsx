@@ -98,4 +98,20 @@ describe("ResultsSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: /table view/i }));
     expect(onModeChange).toHaveBeenCalledWith("table");
   });
+
+  it("does not render the view-mode toggle when showToolbar is false", () => {
+    render(
+      <ResultsSurface
+        molecules={mols}
+        mode="cards"
+        onModeChange={vi.fn()}
+        selectedIds={new Set()}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+        showToolbar={false}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /card view/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /table view/i })).not.toBeInTheDocument();
+  });
 });

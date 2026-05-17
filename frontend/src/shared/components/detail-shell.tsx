@@ -15,7 +15,7 @@ import { StatusBadge } from "@/shared/components/status-badge";
 
 interface DetailShellProps<T> {
   query: { data: T | undefined; isLoading: boolean };
-  backHref: string;
+  backHref?: string;
   backLabel?: string;
   title: (entity: T) => string;
   /** Explicit breadcrumb trail. When provided, overrides URL-based breadcrumbs.
@@ -73,12 +73,14 @@ export function DetailShell<T>({
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <AlertCircle className="h-12 w-12 text-muted-foreground/40" />
         <p className="mt-4 text-muted-foreground">{notFoundMessage}</p>
-        <Button variant="ghost" size="sm" className="mt-4" asChild>
-          <Link href={backHref}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {backLabel}
-          </Link>
-        </Button>
+        {backHref && (
+          <Button variant="ghost" size="sm" className="mt-4" asChild>
+            <Link href={backHref}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {backLabel}
+            </Link>
+          </Button>
+        )}
       </div>
     );
   }
@@ -88,12 +90,14 @@ export function DetailShell<T>({
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" asChild>
-        <Link href={backHref}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          {backLabel}
-        </Link>
-      </Button>
+      {backHref && (
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={backHref}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {backLabel}
+          </Link>
+        </Button>
+      )}
 
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3 flex-wrap">

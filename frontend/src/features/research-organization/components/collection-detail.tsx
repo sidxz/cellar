@@ -28,6 +28,7 @@ import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 import { CollectionHeader } from "./collection/collection-header";
 import { ResultsSurface } from "./results/results-surface";
+import { ViewModeToggle } from "./results/view-mode-toggle";
 
 interface CollectionDetailProps {
   collectionId: string;
@@ -106,8 +107,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     <>
       <DetailShell
         query={query}
-        backHref="/collections"
-        backLabel="Back to Collections"
         title={(c) => c.name}
         notFoundMessage="Collection not found."
         actions={() => (
@@ -160,6 +159,12 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                 derived_from_campaign_id: collection.derived_from_campaign_id,
               }}
               projectName={project?.name}
+              rightSlot={
+                <>
+                  {selectionToolbar}
+                  <ViewModeToggle mode={mode} onChange={setMode} />
+                </>
+              }
             />
 
             <ResultsSurface
@@ -170,7 +175,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               onSelectChange={onSelectChange}
               onOpen={onOpen}
               isLoading={search.isLoading}
-              toolbarLeft={selectionToolbar}
+              showToolbar={false}
             />
           </div>
         )}

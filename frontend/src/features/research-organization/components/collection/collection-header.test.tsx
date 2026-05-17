@@ -68,4 +68,15 @@ describe("CollectionHeader", () => {
     render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
     expect(screen.getByText(/shared/i)).toBeInTheDocument();
   });
+
+  it("renders rightSlot content at the right end of the strip", () => {
+    render(
+      <CollectionHeader
+        collection={baseCollection}
+        projectName="Mtb-TB"
+        rightSlot={<button>extra</button>}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /extra/i })).toBeInTheDocument();
+  });
 });
