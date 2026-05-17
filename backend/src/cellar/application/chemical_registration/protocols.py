@@ -54,6 +54,7 @@ class ProcessedStructureDTO:
     qc_result: QCResultDTO
     stereochemistry: Stereochemistry
     detected_salt: DetectedSaltDTO | None = None
+    bemis_murcko_smiles: str | None = None
 
 
 class StructureProcessorProtocol(Protocol):

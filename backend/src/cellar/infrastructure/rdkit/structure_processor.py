@@ -16,6 +16,7 @@ from cellar.domain.shared.value_objects import ChemicalStructure
 from cellar.infrastructure.rdkit.descriptor_calculator import DescriptorCalculator
 from cellar.infrastructure.rdkit.errors import QCRejectedError
 from cellar.infrastructure.rdkit.fingerprint_generator import FingerprintGenerator
+from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
 from cellar.infrastructure.rdkit.standardizer import StructureStandardizer
 
 
@@ -72,10 +73,12 @@ class StructureProcessor:
         standardizer: StructureStandardizer | None = None,
         descriptor_calculator: DescriptorCalculator | None = None,
         fingerprint_generator: FingerprintGenerator | None = None,
+        scaffold_calculator: MurckoScaffoldCalculator | None = None,
     ) -> None:
         self._standardizer = standardizer or StructureStandardizer()
         self._descriptor_calc = descriptor_calculator or DescriptorCalculator()
         self._fp_gen = fingerprint_generator or FingerprintGenerator()
+        self._scaffold_calculator = scaffold_calculator
 
     def process(
         self,
@@ -140,6 +143,13 @@ class StructureProcessor:
         # 7. Classify stereochemistry (atom centers + stereogenic double bonds)
         stereochemistry = _classify_stereochemistry(std_mol.mol)
 
+        # 8. Compute Bemis-Murcko scaffold (post-standardization mol)
+        scaffold = (
+            self._scaffold_calculator.compute(std_mol.mol)
+            if self._scaffold_calculator is not None
+            else None
+        )
+
         return Success(
             ProcessedStructureDTO(
                 structure=structure,
@@ -148,6 +158,7 @@ class StructureProcessor:
                 qc_result=qc_result,
                 stereochemistry=stereochemistry,
                 detected_salt=detected_salt_dto,
+                bemis_murcko_smiles=scaffold,
             )
         )
 
