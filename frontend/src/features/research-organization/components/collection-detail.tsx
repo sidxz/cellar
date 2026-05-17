@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Pencil, Plus, Trash2 } from "lucide-react";
+import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +40,27 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const isAdmin = useAuthzHasRole("admin");
   const query = useCollection(collectionId);
   const { data: project } = useProject(query.data?.project_id ?? undefined);
-  const search = useCollectionSearch(collectionId);
+
+  // Fetch all workspace protocols to build drc: column tokens for activity enrichment.
+  // This is intentionally workspace-wide so that any DR readout in any protocol
+  // can produce a sparkline on collection cards (V1.5 "auto first protocol").
+  const { data: protocols } = useProtocols();
+  const protocolColumns = useMemo<string[]>(() => {
+    if (!protocols) return [];
+    const tokens: string[] = [];
+    for (const proto of protocols) {
+      for (const rd of proto.readout_definitions ?? []) {
+        if (rd.data_type === "dose_response") {
+          tokens.push(`drc:${rd.id}`);
+        }
+      }
+    }
+    return tokens;
+  }, [protocols]);
+
+  const search = useCollectionSearch(collectionId, {
+    protocolColumns: protocolColumns.length > 0 ? protocolColumns : undefined,
+  });
   const deleteMutation = useDeleteCollection();
   const removeMutation = useRemoveMolecules(collectionId);
   const { mode, setMode } = useViewMode("cards");
@@ -176,6 +197,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               onOpen={onOpen}
               isLoading={search.isLoading}
               showToolbar={false}
+              activityData={search.data?.activity_data ?? undefined}
             />
           </div>
         )}
