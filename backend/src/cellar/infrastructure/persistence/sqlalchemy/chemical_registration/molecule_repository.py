@@ -195,6 +195,31 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
+    async def fetch_for_scaffold_tree(
+        self, *, molecule_ids: list[uuid.UUID], workspace_id: uuid.UUID
+    ) -> list[tuple[uuid.UUID, str, str | None]]:
+        """Lean projection for the scaffold-tree builder.
+
+        Returns ``(id, smiles, bemis_murcko_smiles)`` triples for every molecule
+        in ``molecule_ids`` that belongs to ``workspace_id``. Molecules without
+        a ``smiles`` are silently dropped — the builder cannot use them.
+
+        Implements ``MoleculeFetcherForScaffoldTree`` (structural Protocol).
+        """
+        if not molecule_ids:
+            return []
+        stmt = select(
+            MoleculeModel.id,
+            MoleculeModel.smiles,
+            MoleculeModel.bemis_murcko_smiles,
+        ).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.id.in_(molecule_ids),
+            MoleculeModel.smiles.isnot(None),
+        )
+        result = await self._session.execute(stmt)
+        return [(row[0], row[1], row[2]) for row in result.all()]
+
     async def find_by_inchi_key(self, workspace_id: uuid.UUID, inchi_key: str) -> Molecule | None:
         stmt = select(MoleculeModel).where(
             MoleculeModel.workspace_id == workspace_id,
