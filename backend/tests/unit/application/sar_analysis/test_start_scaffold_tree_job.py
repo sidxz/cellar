@@ -51,8 +51,8 @@ class _StubOrchestrator:
     def __init__(self):
         self.scheduled = []
 
-    async def schedule(self, *, job_id, molecule_ids):
-        self.scheduled.append((job_id, list(molecule_ids)))
+    async def schedule(self, *, job_id, workspace_id, molecule_ids):
+        self.scheduled.append((job_id, workspace_id, list(molecule_ids)))
 
     async def cancel(self, *, job_id):
         pass
@@ -124,6 +124,7 @@ async def test_large_set_creates_job_and_schedules():
     assert out.job is not None
     assert out.job.status.value == "pending"
     assert orchestrator.scheduled and orchestrator.scheduled[0][0] == out.job.id
+    assert orchestrator.scheduled[0][1] == out.job.workspace_id
 
 
 @pytest.mark.asyncio

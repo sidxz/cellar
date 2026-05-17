@@ -40,7 +40,10 @@ class StartScaffoldTreeJobOutput:
 
 
 class ScaffoldTreeOrchestrator(Protocol):
-    async def schedule(self, *, job_id: UUID, molecule_ids: list[UUID]) -> None: ...
+    async def schedule(
+        self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
+    ) -> None: ...
+
     async def cancel(self, *, job_id: UUID) -> None: ...
 
 
@@ -101,5 +104,9 @@ class StartScaffoldTreeJob:
             now=payload.now,
         )
         await self._repo.save(job)
-        await self._orchestrator.schedule(job_id=job.id, molecule_ids=list(payload.molecule_ids))
+        await self._orchestrator.schedule(
+            job_id=job.id,
+            workspace_id=payload.workspace_id,
+            molecule_ids=list(payload.molecule_ids),
+        )
         return StartScaffoldTreeJobOutput(tree=None, job=job)
