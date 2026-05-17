@@ -10,7 +10,9 @@ from cellar.application.export.renderers.base import RenderOptions
 from cellar.application.export.renderers.excel_renderer import (
     ExcelRenderer,
     SPARKLINE_ROW_CAP,
-    _av_to_sparkline_snapshot,
+)
+from cellar.application.export.renderers.sparkline import (
+    av_to_sparkline_snapshot as _av_to_sparkline_snapshot,
 )
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 
@@ -171,4 +173,4 @@ async def test_excel_notes_sheet_when_sparkline_cap_tripped(tmp_path: Path):
     wb = load_workbook(out)
     assert "Notes" in wb.sheetnames
     notes_text = "\n".join(str(c.value or "") for c in wb["Notes"]["A"])
-    assert "Sparklines omitted" in notes_text
+    assert "Images omitted" in notes_text

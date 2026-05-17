@@ -1,17 +1,167 @@
-/* backend/src/cellar/application/export/renderers/pdf_template/search_report.css */
 @page {
   size: A4 landscape;
-  margin: 1cm;
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #666; }
+  margin: 1.2cm 1cm 1.4cm 1cm;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8px;
+    color: #999;
+  }
+  @bottom-left {
+    content: "Cellar export";
+    font-size: 8px;
+    color: #999;
+  }
 }
-body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 9px; color: #222; }
-.page-header { margin-bottom: 0.5em; }
-.page-header h1 { font-size: 13px; margin: 0 0 0.2em 0; }
-.page-header .meta { color: #777; margin: 0; font-size: 9px; }
-table { width: 100%; border-collapse: collapse; }
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 9px;
+  color: #222;
+  margin: 0;
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+
+.report-header {
+  border-bottom: 1px solid #d4d4d8;
+  padding-bottom: 0.5em;
+  margin-bottom: 0.7em;
+}
+
+.report-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.report-header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 0.2em 0;
+  color: #18181b;
+}
+
+.report-meta {
+  display: flex;
+  gap: 1em;
+  font-size: 9px;
+  color: #71717a;
+}
+
+.query-summary {
+  margin: 0.3em 0 0 0;
+  font-size: 9px;
+  color: #52525b;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.image-notice {
+  margin: 0.3em 0 0 0;
+  font-size: 8.5px;
+  color: #b45309;
+  font-style: italic;
+}
+
+/* ─── Table ─────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;            /* honor column widths instead of auto-sizing */
+  word-wrap: break-word;
+}
+
 thead { display: table-header-group; }
-th, td { border-bottom: 1px solid #e2e2e2; padding: 4px 6px; text-align: left; vertical-align: top; }
-th { background: #f6f6f6; font-weight: 600; }
 tr { page-break-inside: avoid; }
-.cell-number { text-align: right; font-variant-numeric: tabular-nums; }
-.cell-qualifier { color: #777; font-style: italic; }
+
+th, td {
+  border-bottom: 1px solid #e4e4e7;
+  padding: 5px 6px;
+  text-align: left;
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+th {
+  background: #fafafa;
+  font-weight: 600;
+  font-size: 8.5px;
+  color: #3f3f46;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+th .unit {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #71717a;
+}
+
+/* Group-header row: spans across a protocol's intercept+plot columns.
+   Renders with a colored bottom rule so the group reads as one unit even
+   without ag-grid-style background bars (which printers handle poorly). */
+.group-row th.group-header {
+  font-size: 8px;
+  background: #f4f4f5;
+  color: hsl(220, 80%, 35%);
+  border-bottom: 2px solid #d4d4d8;
+  letter-spacing: 0.3px;
+  text-align: center;
+  padding: 4px 4px;
+}
+
+.group-row th.group-spacer {
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+}
+
+td { font-size: 9px; line-height: 1.3; }
+
+.cell-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cell-qualifier .qual {
+  color: #71717a;
+  font-style: italic;
+  font-size: 8.5px;
+}
+
+.cell-smiles .smiles {
+  font-family: "SF Mono", "Menlo", Consolas, monospace;
+  font-size: 7px;
+  color: #52525b;
+  display: block;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.cell-image_structure,
+.cell-image_curve { text-align: center; padding: 4px; }
+
+.cell-image_structure img,
+.cell-image_curve img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+
+.muted { color: #a1a1aa; }
+
+/* ─── Per-kind column widths ─────────────────────────────────── */
+/* table-layout: fixed honors these proportionally to the table width.
+   Tunes the relative widths so structure + chart get the most space. */
+.col-image_structure { width: 12%; }
+.col-image_curve     { width: 14%; }
+.col-smiles          { width: 14%; }
+.col-text            { width: 6%; }
+.col-number          { width: 5%; }
+.col-qualifier       { width: 3%; }

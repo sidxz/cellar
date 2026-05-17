@@ -1,4 +1,3 @@
-{# backend/src/cellar/application/export/renderers/pdf_template/search_report.html.j2 #}
 <!doctype html>
 <html lang="en">
 <head>
@@ -7,25 +6,108 @@
   <link rel="stylesheet" href="search_report.css">
 </head>
 <body>
-  <div class="page-header">
-    <h1>{{ title }}</h1>
-    <p class="meta">{{ rows | length }} rows</p>
-  </div>
+  <header class="report-header">
+    <div class="report-title-row">
+      <h1>{{ title }}</h1>
+      <div class="report-meta">
+        <span class="meta-row">{{ row_count }} {{ "row" if row_count == 1 else "rows" }}</span>
+        {%- if extras.aggregation_label %}
+          <span class="meta-row">{{ extras.aggregation_label }}</span>
+        {%- endif %}
+        {%- if extras.exported_at %}
+          <span class="meta-row">{{ extras.exported_at }}</span>
+        {%- endif %}
+      </div>
+    </div>
+    {%- if extras.query_summary %}
+      <p class="query-summary">{{ extras.query_summary }}</p>
+    {%- endif %}
+    {%- if image_omission_reason %}
+      <p class="image-notice">{{ image_omission_reason }}</p>
+    {%- endif %}
+  </header>
+
   <table>
+    <colgroup>
+      {%- for c in columns -%}
+        <col class="col-{{ c.kind }}">
+      {%- endfor -%}
+    </colgroup>
     <thead>
-      <tr>{% for c in columns %}<th>{{ c.header }}</th>{% endfor %}</tr>
+      {#- Compute group spans: consecutive columns with the same group form a span.
+          Each entry in `header_spans` is {group: str|None, start: int, span: int}.
+          The first row is the group-header row; the second is the per-column header. -#}
+      {%- set has_groups = columns | selectattr('group') | list | length > 0 -%}
+      {%- if has_groups -%}
+        <tr class="group-row">
+          {%- set ns = namespace(prev=None, span=0, anchor=0) -%}
+          {%- for c in columns -%}
+            {%- if c.group != ns.prev -%}
+              {%- if loop.index0 > 0 -%}
+                {#- flush previous span -#}
+                {%- if ns.prev -%}
+                  <th colspan="{{ ns.span }}" class="group-header">{{ ns.prev }}</th>
+                {%- else -%}
+                  {%- for _ in range(ns.span) -%}<th class="group-spacer"></th>{%- endfor -%}
+                {%- endif -%}
+              {%- endif -%}
+              {%- set ns.prev = c.group -%}
+              {%- set ns.span = 1 -%}
+              {%- set ns.anchor = loop.index0 -%}
+            {%- else -%}
+              {%- set ns.span = ns.span + 1 -%}
+            {%- endif -%}
+            {%- if loop.last -%}
+              {%- if ns.prev -%}
+                <th colspan="{{ ns.span }}" class="group-header">{{ ns.prev }}</th>
+              {%- else -%}
+                {%- for _ in range(ns.span) -%}<th class="group-spacer"></th>{%- endfor -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        </tr>
+      {%- endif -%}
+      <tr>
+        {%- for c in columns -%}
+          <th class="th-{{ c.kind }}">{{ c.header }}{%- if c.unit %} <span class="unit">({{ c.unit }})</span>{%- endif -%}</th>
+        {%- endfor -%}
+      </tr>
     </thead>
     <tbody>
-      {% for row in rows %}
+      {%- for rr in rendered_rows -%}
+        {%- set row = rr.row -%}
         <tr>
-          {% for c in columns %}
+          {%- for c in columns -%}
             <td class="cell-{{ c.kind }}">
               {%- set v = row.cells.get(c.key) -%}
-              {%- if v is none -%}—{%- else -%}{{ v }}{%- endif -%}
+              {%- if c.kind == "image_structure" -%}
+                {%- if rr.images.get("structure") -%}
+                  <img src="{{ rr.images['structure'] }}" width="{{ struct_w }}" height="{{ struct_h }}" alt="structure">
+                {%- else -%}
+                  <span class="muted">—</span>
+                {%- endif -%}
+              {%- elif c.kind == "image_curve" -%}
+                {%- if rr.images.get(c.key) -%}
+                  <img src="{{ rr.images[c.key] }}" width="{{ sparkline_w }}" height="{{ sparkline_h }}" alt="dose response">
+                {%- else -%}
+                  <span class="muted">—</span>
+                {%- endif -%}
+              {%- elif c.kind == "qualifier" -%}
+                {%- if v in (None, "", "=") -%}{%- else -%}<span class="qual">{{ v }}</span>{%- endif -%}
+              {%- elif c.kind == "smiles" -%}
+                {%- if v -%}<code class="smiles">{{ v }}</code>{%- else -%}<span class="muted">—</span>{%- endif -%}
+              {%- elif c.kind == "number" -%}
+                {%- if v is none -%}<span class="muted">—</span>
+                {%- elif v is number -%}{{ "%.3g" % v }}
+                {%- else -%}{{ v }}
+                {%- endif -%}
+              {%- else -%}
+                {%- if v in (None, "") -%}<span class="muted">—</span>{%- else -%}{{ v }}{%- endif -%}
+              {%- endif -%}
             </td>
-          {% endfor %}
+          {%- endfor -%}
         </tr>
-      {% endfor %}
+      {%- endfor -%}
     </tbody>
   </table>
 </body>

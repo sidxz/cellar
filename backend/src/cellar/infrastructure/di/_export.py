@@ -91,6 +91,7 @@ def register_export(container: Container) -> None:
                 execute_search=execute_search,
                 protocols_reader=_protocols_reader,
                 requested_by=job.requested_by,
+                format=job.format.value,
             )
 
         return RenderExport(

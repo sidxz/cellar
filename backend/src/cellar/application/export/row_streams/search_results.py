@@ -37,6 +37,10 @@ class SearchResultsRowStream:
     execute_search: ExecuteSearch
     protocols_reader: Any  # async callable: (workspace_id) -> list[Protocol]
     requested_by: uuid.UUID
+    # Export format hint — drives format-specific column shaping (e.g. CSV/SDF
+    # always include SMILES regardless of the chemist's visibleFields). When
+    # None, falls back to the visibleFields whitelist exactly.
+    format: str | None = None
 
     def __post_init__(self) -> None:
         self._cached_total: int | None = None
@@ -93,8 +97,14 @@ class SearchResultsRowStream:
         if self.columns:
             return
         protocol_cols = self.payload.get("protocol_columns") or []
+        report_config = self.payload.get("reportConfig") or self.payload.get("report_config")
         self._protocols_cache = await self.protocols_reader(self.workspace_id)
-        self.columns = _build_columns(protocol_cols, self._protocols_cache)
+        self.columns = _build_columns(
+            protocol_cols,
+            self._protocols_cache,
+            report_config=report_config,
+            format=self.format,
+        )
 
     def _row_for(self, mol, activity_data: dict | None) -> ExportRow:
         raw = {
@@ -132,23 +142,95 @@ class SearchResultsRowStream:
 # ---------------------------------------------------------------------------
 
 
-def _build_columns(protocol_cols: list[str], protocols: list) -> list[ColumnSpec]:
-    base: list[ColumnSpec] = [
-        ColumnSpec(key="registration_number", header="Reg #", kind="text"),
-        ColumnSpec(key="name", header="Name", kind="text"),
-        ColumnSpec(key="smiles", header="SMILES", kind="smiles"),
-        ColumnSpec(key="inchi_key", header="InChIKey", kind="text"),
-        ColumnSpec(key="molecular_formula", header="Formula", kind="text"),
-        ColumnSpec(key="molecular_weight", header="MW", kind="number"),
-        ColumnSpec(key="logp", header="LogP", kind="number"),
-        ColumnSpec(key="hbd", header="HBD", kind="number"),
-        ColumnSpec(key="hba", header="HBA", kind="number"),
-        ColumnSpec(key="tpsa", header="TPSA", kind="number"),
-    ]
-    # Activity columns — one per protocol_column token.
-    # DR tokens (drc:*) expand to one group of value/qualifier/unit/run_count/curve_class
-    # per intercept, plus a trailing image_curve column for the whole readout.
-    # Non-DR tokens (rd:*) emit a single value column.
+# Property column id → (header, kind). The default set matches the FE
+# ReportConfig.visibleFields.properties default (Lipinski + Veber).
+_PROPERTY_COLUMNS: dict[str, tuple[str, str]] = {
+    "molecular_weight": ("MW", "number"),
+    "logp": ("LogP", "number"),
+    "hbd": ("HBD", "number"),
+    "hba": ("HBA", "number"),
+    "tpsa": ("TPSA", "number"),
+    "molecular_formula": ("Formula", "text"),
+    "inchi_key": ("InChIKey", "text"),
+}
+
+# Molecule (non-structural) column id → (header, kind).
+_MOLECULE_COLUMNS: dict[str, tuple[str, str]] = {
+    "name": ("Name", "text"),
+    "lifecycle_stage": ("Stage", "text"),
+}
+
+
+def _build_columns(
+    protocol_cols: list[str],
+    protocols: list,
+    *,
+    report_config: dict | None = None,
+    format: str | None = None,
+) -> list[ColumnSpec]:
+    """Build export columns honoring the FE reportConfig.
+
+    When ``report_config`` is None *or empty* (legacy payload), falls back
+    to the static column set that shipped on 2026-05-16.
+
+    Otherwise, columns reflect ``reportConfig.visibleFields``:
+      - ``structure`` list — ``"structure"`` emits the image column,
+        ``"registration_number"`` emits Reg #, ``"smiles"`` emits SMILES,
+        ``"inchi_key"`` emits InChIKey.
+      - ``properties`` is whitelist-style; only listed ids show up.
+      - ``molecule`` drives Name / Stage / etc.
+
+    ``format`` is the export format ("csv" / "sdf" / "xlsx" / "pdf"). For
+    CSV / SDF — machine-readable formats whose primary purpose is being
+    fed into downstream tools — we force SMILES on even if the chemist
+    didn't tick it in the customize panel. For XLSX / PDF we respect the
+    panel exactly.
+    """
+    fields = None
+    if isinstance(report_config, dict):
+        candidate = report_config.get("visibleFields")
+        if isinstance(candidate, dict):
+            fields = candidate
+    base: list[ColumnSpec] = []
+
+    machine_format = format in ("csv", "sdf")
+
+    if fields is None:
+        # Legacy default — matches the pre-reportConfig column set.
+        base.extend([
+            ColumnSpec(key="registration_number", header="Reg #", kind="text"),
+            ColumnSpec(key="name", header="Name", kind="text"),
+            ColumnSpec(key="smiles", header="SMILES", kind="smiles"),
+            ColumnSpec(key="inchi_key", header="InChIKey", kind="text"),
+            ColumnSpec(key="molecular_formula", header="Formula", kind="text"),
+            ColumnSpec(key="molecular_weight", header="MW", kind="number"),
+            ColumnSpec(key="logp", header="LogP", kind="number"),
+            ColumnSpec(key="hbd", header="HBD", kind="number"),
+            ColumnSpec(key="hba", header="HBA", kind="number"),
+            ColumnSpec(key="tpsa", header="TPSA", kind="number"),
+        ])
+    else:
+        structure_fields = list(fields.get("structure") or [])
+        if "structure" in structure_fields:
+            base.append(ColumnSpec(key="structure", header="Structure", kind="image_structure"))
+        if "registration_number" in structure_fields:
+            base.append(ColumnSpec(key="registration_number", header="Reg #", kind="text"))
+        for mol_field in fields.get("molecule") or []:
+            spec = _MOLECULE_COLUMNS.get(mol_field)
+            if spec:
+                base.append(ColumnSpec(key=mol_field, header=spec[0], kind=spec[1]))  # type: ignore[arg-type]
+        if "smiles" in structure_fields or machine_format:
+            base.append(ColumnSpec(key="smiles", header="SMILES", kind="smiles"))
+        if "inchi_key" in structure_fields:
+            base.append(ColumnSpec(key="inchi_key", header="InChIKey", kind="text"))
+        for prop_id in fields.get("properties") or []:
+            spec = _PROPERTY_COLUMNS.get(prop_id)
+            if spec:
+                base.append(ColumnSpec(key=prop_id, header=spec[0], kind=spec[1]))  # type: ignore[arg-type]
+
+    # Activity columns — one per protocol_column token. DR tokens expand
+    # to one *value* column per intercept (header = label, group = protocol
+    # name) plus one Plot column per readout.
     by_id = {str(p.id): p for p in protocols}
     for col_token in protocol_cols:
         base.extend(_expand_protocol_column(col_token, by_id))
@@ -156,7 +238,14 @@ def _build_columns(protocol_cols: list[str], protocols: list) -> list[ColumnSpec
 
 
 def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
-    """Expand a protocol_column token into one or more ``ColumnSpec`` objects.
+    """Expand a protocol_column token into ColumnSpec objects.
+
+    Mirrors the FE search grid layout: one *value* cell per intercept
+    (header = intercept label, group = protocol name) and one Plot cell
+    per readout (header = "Plot", same group). Qualifier / unit / n /
+    curve_class are NOT separate columns — they're folded into the value
+    cell's display string ("ND", ">100 µM", "67.4 µM ₂") by the cell
+    resolver, matching the chemist's on-screen experience.
 
     Token grammar (matches FE ``protocol-column-id.ts``):
       ``rd:<proto_id>:<rd_id>[:<normalization>]`` — scalar readout
@@ -177,7 +266,7 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         return [
             ColumnSpec(
                 key=f"{token}::value",
-                header=f"{proto_name}::{rd_name}",
+                header=rd_name,
                 kind="number",
                 unit=getattr(rd, "unit", None),
                 group=proto_name,
@@ -204,6 +293,13 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         )
         rd_name = rd.name if rd else "Readout"
         proto_name = proto.name if proto else "Protocol"
+        # When a protocol has a single DR readout the FE drops the readout
+        # name from the header ("EC50" alone is unambiguous). When there
+        # are multiple, we disambiguate with "{readout} {label}".
+        dr_readouts = [
+            r for r in (proto.readout_definitions or []) if getattr(r, "dose_response_config", None)
+        ] if proto else []
+        prefix = "" if len(dr_readouts) <= 1 else f"{rd_name} "
         intercepts = (
             (getattr(rd, "dose_response_config", None).intercepts
              if rd and getattr(rd, "dose_response_config", None) else [])
@@ -213,47 +309,23 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         for spec in intercepts:
             label = spec.label or f"{spec.kind.value.upper()}{int(spec.level)}"
             base_key = f"drc:{rd_id}:{spec.kind.value}:{spec.level}"
-            cols.extend([
+            cols.append(
                 ColumnSpec(
                     key=f"{base_key}::value",
-                    header=f"{proto_name}::{rd_name}::{label}",
+                    header=f"{prefix}{label}",
                     kind="number",
                     unit=getattr(rd, "unit", None),
                     group=proto_name,
-                ),
-                ColumnSpec(
-                    key=f"{base_key}::qualifier",
-                    header=f"{proto_name}::{rd_name}::{label}::qualifier",
-                    kind="qualifier",
-                    group=proto_name,
-                ),
-                ColumnSpec(
-                    key=f"{base_key}::unit",
-                    header=f"{proto_name}::{rd_name}::{label}::unit",
-                    kind="text",
-                    group=proto_name,
-                ),
-                ColumnSpec(
-                    key=f"{base_key}::run_count",
-                    header=f"{proto_name}::{rd_name}::{label}::n",
-                    kind="number",
-                    group=proto_name,
-                ),
-                ColumnSpec(
-                    key=f"{base_key}::curve_class",
-                    header=f"{proto_name}::{rd_name}::{label}::class",
-                    kind="text",
-                    group=proto_name,
-                ),
-            ])
-        # One Plot column per readout-def (NOT per intercept) — matches the
-        # frontend grid. ExcelRenderer + PdfRenderer embed a sparkline PNG/SVG
-        # here; CSV + SDF skip image_curve columns.
+                )
+            )
+        # One Plot column per readout-def — matches the frontend grid.
+        # ExcelRenderer + PdfRenderer embed a sparkline PNG; CSV + SDF
+        # skip image_curve columns.
         if intercepts:
             cols.append(
                 ColumnSpec(
                     key=f"drc:{rd_id}::plot",
-                    header=f"{proto_name}::{rd_name}::Plot",
+                    header=f"{prefix}Plot",
                     kind="image_curve",
                     group=proto_name,
                 )
@@ -315,9 +387,7 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
         return None
     iv = _intercept_for(av, col_token) if col_token.startswith("drc:") else None
     if suffix == "value":
-        if iv is not None:
-            return None if iv.get("value") is None else iv["value"]
-        return av.get("value")
+        return _display_value(av, iv)
     if suffix == "qualifier":
         return _qualifier_of(av, iv)
     if suffix == "unit":
@@ -327,6 +397,34 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     if suffix == "curve_class":
         return (av.get("curve_params") or {}).get("curve_class")
     return None
+
+
+def _display_value(av: dict, iv: dict | None) -> Any:
+    """Return the cell value the chemist sees on the FE grid.
+
+    Mirrors ``formatInterceptDisplay``:
+      - Inactive curve  → string "ND"
+      - At-bound curve  → string ">{value}" (numeric in a text wrapper so
+        chemists doing Excel filters still see "compound > X")
+      - Active scalar   → numeric (preserved as a number so XLSX cells
+        right-align and the column sorts numerically)
+      - No data         → None (Excel empty cell, PDF em-dash)
+
+    Run-count subscripts (₂, ₃…) are NOT folded into this cell — that info
+    lives in the chart thumbnail. Keeping the cell single-value preserves
+    Excel sort + filter behaviour.
+    """
+    if iv is not None:
+        if iv.get("at_bound") and iv.get("value") is not None:
+            return f">{iv['value']}"
+        if iv.get("value") is None:
+            return "ND"
+        return iv["value"]
+    # No intercept entry — single-curve / non-DR fallback.
+    curve_class = (av.get("curve_params") or {}).get("curve_class")
+    if curve_class == "inactive":
+        return "ND"
+    return av.get("value")
 
 
 def _intercept_for(av: dict, col_token: str) -> dict | None:

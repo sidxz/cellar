@@ -256,3 +256,204 @@ def test_cell_value_narrowed_drc_qualifier_column():
     spec = ColumnSpec(key=f"drc:{rd_id}:ic:50.0::qualifier", header="Mtb::IC50::qualifier", kind="qualifier")
     # intercept_values[0].value is None and at_bound is False → ND
     assert _cell_value(spec, raw) == "ND"
+
+
+# ---------------------------------------------------------------------------
+# reportConfig honoring — columns reflect visibleFields
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_report_config_visible_fields_trims_property_columns():
+    """When payload carries reportConfig.visibleFields, the column builder must
+    drop properties the chemist hid on the grid (e.g. MW off → no MW column)."""
+    workspace = uuid.uuid4()
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
+    execute = AsyncMock(return_value=_success(page))
+    protocols_reader = AsyncMock(return_value=[])
+
+    stream = SearchResultsRowStream(
+        workspace_id=workspace,
+        payload={
+            "query": {"criteria": []},
+            "protocol_columns": [],
+            "reportConfig": {
+                "imageSize": "medium",
+                "visibleFields": {
+                    "structure": ["structure", "registration_number"],
+                    # MW intentionally OFF
+                    "properties": ["logp", "tpsa"],
+                    "molecule": ["name"],
+                    "collections": False,
+                    "protocols": {},
+                },
+            },
+        },
+        execute_search=execute,
+        protocols_reader=protocols_reader,
+        requested_by=uuid.uuid4(),
+    )
+    await stream.total_count()
+    keys = [c.key for c in stream.columns]
+    assert "structure" in keys, "structure column must be emitted when visibleFields.structure includes 'structure'"
+    assert "registration_number" in keys
+    assert "name" in keys
+    assert "logp" in keys
+    assert "tpsa" in keys
+    assert "molecular_weight" not in keys, "MW must be dropped when not in visibleFields.properties"
+    # The structure column should be of the new image_structure kind so the
+    # XLSX/PDF renderer knows to embed a PNG.
+    structure_col = next(c for c in stream.columns if c.key == "structure")
+    assert structure_col.kind == "image_structure"
+
+
+@pytest.mark.asyncio
+async def test_report_config_omitted_falls_back_to_legacy_columns():
+    """Without reportConfig, the column set matches the pre-fidelity default
+    (Reg #, Name, SMILES, InChIKey, Formula, MW, LogP, HBD, HBA, TPSA)."""
+    workspace = uuid.uuid4()
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
+    execute = AsyncMock(return_value=_success(page))
+    stream = SearchResultsRowStream(
+        workspace_id=workspace,
+        payload={"query": {"criteria": []}, "protocol_columns": []},
+        execute_search=execute,
+        protocols_reader=AsyncMock(return_value=[]),
+        requested_by=uuid.uuid4(),
+    )
+    await stream.total_count()
+    keys = {c.key for c in stream.columns}
+    assert keys == {
+        "registration_number", "name", "smiles", "inchi_key",
+        "molecular_formula", "molecular_weight", "logp", "hbd", "hba", "tpsa",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Compact intercept columns — one ::value per intercept, no qualifier/unit
+# sub-columns. Plot column carries the protocol-group label.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_intercepts_collapse_to_one_column_per_label():
+    workspace = uuid.uuid4()
+    rd_id = uuid.uuid4()
+
+    ic_ec50 = MagicMock(); ic_ec50.kind.value = "ec"; ic_ec50.level = 50.0; ic_ec50.label = None
+    ic_ec90 = MagicMock(); ic_ec90.kind.value = "ec"; ic_ec90.level = 90.0; ic_ec90.label = None
+    drc_cfg = MagicMock(); drc_cfg.intercepts = [ic_ec50, ic_ec90]
+    rd = MagicMock(); rd.id = rd_id; rd.name = "Resazurin"; rd.unit = "µM"; rd.dose_response_config = drc_cfg
+    proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.readout_definitions = [rd]
+
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
+    stream = SearchResultsRowStream(
+        workspace_id=workspace,
+        payload={"query": {"criteria": []}, "protocol_columns": [f"drc:{rd_id}"]},
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[proto]),
+        requested_by=uuid.uuid4(),
+    )
+    await stream.total_count()
+
+    plot_cols = [c for c in stream.columns if c.key == f"drc:{rd_id}::plot"]
+    assert len(plot_cols) == 1
+    assert plot_cols[0].header == "Plot"
+    assert plot_cols[0].group == "Mtb_WCA"
+
+    intercept_cols = [
+        c for c in stream.columns
+        if c.key.startswith(f"drc:{rd_id}:") and c not in plot_cols
+    ]
+    # Only ::value suffix should be present for the intercepts.
+    suffixes = {c.key.rsplit("::", 1)[1] for c in intercept_cols}
+    assert suffixes == {"value"}, f"Expected only ::value suffix, got {suffixes}"
+    assert {c.header for c in intercept_cols} == {"EC50", "EC90"}
+    assert all(c.group == "Mtb_WCA" for c in intercept_cols)
+    assert all(c.unit == "µM" for c in intercept_cols)
+
+
+# ---------------------------------------------------------------------------
+# _display_value chemist-mirror — inactive → "ND", at_bound → ">value",
+# scalar → number.
+# ---------------------------------------------------------------------------
+
+def test_cell_value_inactive_shows_nd_text():
+    from cellar.application.export.row_streams.search_results import _display_value
+    iv_inactive = {"value": None, "at_bound": False,
+                   "spec": {"kind": "ec", "level": 50.0}}
+    assert _display_value({}, iv_inactive) == "ND"
+
+
+def test_cell_value_at_bound_shows_gt_value():
+    from cellar.application.export.row_streams.search_results import _display_value
+    iv_at_bound = {"value": 100.0, "at_bound": True,
+                   "spec": {"kind": "ec", "level": 50.0}}
+    assert _display_value({}, iv_at_bound) == ">100.0"
+
+
+def test_cell_value_active_returns_scalar():
+    from cellar.application.export.row_streams.search_results import _display_value
+    iv_eq = {"value": 67.4, "at_bound": False,
+             "spec": {"kind": "ec", "level": 50.0}}
+    assert _display_value({}, iv_eq) == 67.4
+
+
+def test_cell_value_legacy_inactive_fallback():
+    from cellar.application.export.row_streams.search_results import _display_value
+    av = {"value": None, "curve_params": {"curve_class": "inactive"}}
+    assert _display_value(av, None) == "ND"
+
+
+# ---------------------------------------------------------------------------
+# Format hint forces SMILES on for CSV/SDF even when chemist hid it.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_csv_format_forces_smiles_on():
+    workspace = uuid.uuid4()
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
+    stream = SearchResultsRowStream(
+        workspace_id=workspace,
+        payload={
+            "query": {"criteria": []},
+            "protocol_columns": [],
+            "reportConfig": {
+                "visibleFields": {
+                    "structure": ["registration_number"],   # SMILES intentionally hidden
+                    "properties": [], "molecule": [],
+                    "collections": False, "protocols": {},
+                },
+            },
+        },
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[]),
+        requested_by=uuid.uuid4(),
+        format="csv",
+    )
+    await stream.total_count()
+    assert "smiles" in {c.key for c in stream.columns}
+
+
+@pytest.mark.asyncio
+async def test_pdf_format_honors_smiles_hidden():
+    workspace = uuid.uuid4()
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
+    stream = SearchResultsRowStream(
+        workspace_id=workspace,
+        payload={
+            "query": {"criteria": []},
+            "protocol_columns": [],
+            "reportConfig": {
+                "visibleFields": {
+                    "structure": ["structure", "registration_number"],
+                    "properties": [], "molecule": [],
+                    "collections": False, "protocols": {},
+                },
+            },
+        },
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[]),
+        requested_by=uuid.uuid4(),
+        format="pdf",
+    )
+    await stream.total_count()
+    assert "smiles" not in {c.key for c in stream.columns}

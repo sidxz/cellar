@@ -5,58 +5,55 @@ from typing import AsyncIterator
 
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from cellar.application.export.renderers.base import RenderOptions
-from cellar.application.export.renderers.sparkline import render_sparkline_png
+from cellar.application.export.renderers.sparkline import (
+    SIZE_PRESETS,
+    av_to_sparkline_snapshot,
+    render_sparkline_png,
+)
+from cellar.application.export.renderers.structure import (
+    STRUCTURE_SIZE_PRESETS,
+    render_structure_pngs,
+)
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 
 SPARKLINE_ROW_CAP = 5000
 
 
-def _av_to_sparkline_snapshot(av: dict) -> dict | None:
-    """Build a sparkline-renderer-compatible snapshot dict from an ActivityValue asdict.
+def _group_spans(columns: list[ColumnSpec]) -> list[tuple[int, int, str | None]]:
+    """Compute consecutive-column spans by ColumnSpec.group.
 
-    ``ActivityValue`` (via ``dataclasses.asdict``) carries raw_data, curve_params,
-    value (the fitted primary intercept), and curve_class via curve_params — but
-    NOT a pre-built ``curve_snapshot`` dict.  The sparkline renderer expects:
-      - ``data_points``: list of {dose, response} (renderer uses "dose"/"response"
-        keys; ActivityValue raw_data uses "x"/"y" — we remap).
-      - ``fit``: {bottom, top, ec50, hill_slope} — ec50 comes from the top-level
-        ``value`` field (the fitted primary intercept); curve_params carries the
-        rest.
-      - ``curve_class``: str | None — from curve_params.
-
-    Returns None when there is not enough shape information to render (e.g. a
-    readout_data source, or a curve with missing fit params).
+    Returns a list of (start_index, end_index_inclusive, group_label).
+    ``group_label`` is None for ungrouped columns.
     """
-    if not av:
-        return None
-    curve_params = av.get("curve_params") or {}
-    top = curve_params.get("top")
-    bottom = curve_params.get("bottom")
-    hill_slope = curve_params.get("hill_slope")
-    if top is None or bottom is None or hill_slope is None:
-        return None  # no fit — not a DR ActivityValue with usable shape
+    spans: list[tuple[int, int, str | None]] = []
+    if not columns:
+        return spans
+    start = 0
+    cur = columns[0].group
+    for i in range(1, len(columns)):
+        if columns[i].group != cur:
+            spans.append((start, i - 1, cur))
+            start = i
+            cur = columns[i].group
+    spans.append((start, len(columns) - 1, cur))
+    return spans
 
-    # Remap raw_data x/y → dose/response for the sparkline renderer.
-    raw_data = av.get("raw_data") or []
-    data_points = [
-        {"dose": pt["x"], "response": pt["y"], **{k: v for k, v in pt.items() if k not in ("x", "y")}}
-        for pt in raw_data
-        if isinstance(pt, dict) and "x" in pt and "y" in pt
-    ]
 
-    ec50 = av.get("value")  # fitted primary intercept value IS the EC50/IC50
-    fit: dict = {"bottom": bottom, "top": top, "hill_slope": hill_slope}
-    if ec50 is not None:
-        fit["ec50"] = ec50
+_GROUP_FILL = PatternFill(start_color="EFF6FF", end_color="EFF6FF", fill_type="solid")
+_GROUP_FONT = Font(bold=True, size=10, color="1E40AF")
+_GROUP_ALIGN = Alignment(horizontal="center", vertical="center")
+_GROUP_BORDER = Border(bottom=Side(style="medium", color="93C5FD"))
 
-    return {
-        "data_points": data_points,
-        "fit": fit,
-        "curve_class": curve_params.get("curve_class"),
-    }
+
+def _style_group_header(cell) -> None:
+    cell.font = _GROUP_FONT
+    cell.fill = _GROUP_FILL
+    cell.alignment = _GROUP_ALIGN
+    cell.border = _GROUP_BORDER
 
 
 class ExcelRenderer:
@@ -69,21 +66,81 @@ class ExcelRenderer:
         options: RenderOptions,
         row_count_hint: int,
     ) -> None:
-        wb = Workbook(write_only=True)
-        ws = wb.create_sheet("Data")
-        headers = [c.header for c in columns]
-        ws.append(headers)
+        # NB: not using Workbook(write_only=True). Write-only sheets silently
+        # ignore row_dimensions after `append` and don't reliably persist
+        # column_dimensions when images are added — leaving structures + plots
+        # squished into default-height rows. Memory budget at the 5K row cap
+        # is comfortable (~150 MB peak) so the simplicity is worth it.
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Data"
 
-        embed_sparklines = (
+        # Two-row header when any column carries a group label. Protocol
+        # group labels (merged across each protocol's columns) on row 1,
+        # per-column labels on row 2. With image_curve cells stacked under
+        # the group, this mirrors the FE search grid 1:1.
+        has_groups = any(c.group for c in columns)
+        if has_groups:
+            ws.append([""] * len(columns))  # placeholder for group row
+            for start, end, label in _group_spans(columns):
+                if not label:
+                    continue
+                if end > start:
+                    ws.merge_cells(
+                        start_row=1, start_column=start + 1,
+                        end_row=1, end_column=end + 1,
+                    )
+                cell = ws.cell(row=1, column=start + 1, value=label)
+                _style_group_header(cell)
+            _HEADER_ROWS = 2
+        else:
+            _HEADER_ROWS = 1
+
+        header_row = [
+            (f"{c.header} ({c.unit})" if c.unit else c.header) for c in columns
+        ]
+        ws.append(header_row)
+
+        embed_images = (
             options.include_sparklines
             and row_count_hint <= SPARKLINE_ROW_CAP
         )
         sparkline_col_indices = [
             i for i, c in enumerate(columns) if c.kind == "image_curve"
         ]
+        structure_col_indices = [
+            i for i, c in enumerate(columns) if c.kind == "image_structure"
+        ]
+        size_preset = options.image_size if options.image_size in SIZE_PRESETS else "medium"
+        sparkline_w, sparkline_h = SIZE_PRESETS[size_preset]
+        struct_w, struct_h = STRUCTURE_SIZE_PRESETS.get(
+            options.image_size, STRUCTURE_SIZE_PRESETS["medium"]
+        )
+
+        # Column widths: Excel uses character widths (~7 px each) plus a
+        # ~5-px padding fudge. Empirically (width = px / 7 + 1) lands the
+        # image inside the cell without horizontal clipping.
+        if embed_images and sparkline_col_indices:
+            for ci in sparkline_col_indices:
+                ws.column_dimensions[get_column_letter(ci + 1)].width = sparkline_w / 7 + 1
+        if embed_images and structure_col_indices:
+            for ci in structure_col_indices:
+                ws.column_dimensions[get_column_letter(ci + 1)].width = struct_w / 7 + 1
+
+        # Per-row height in points (1 pt = 4/3 px). The tallest of the two
+        # image kinds drives the row, plus a small margin so the image
+        # doesn't kiss the gridline above.
+        image_h_px = 0
+        if embed_images and sparkline_col_indices:
+            image_h_px = max(image_h_px, sparkline_h)
+        if embed_images and structure_col_indices:
+            image_h_px = max(image_h_px, struct_h)
+        row_height_pt = (image_h_px * 0.75) + 6 if image_h_px else None
 
         tempfiles: list = []  # keep open until write
         rows_written = 0
+        # Cache SMILES → tempfile path so repeated SMILES embed quickly.
+        structure_cache: dict[str, str] = {}
         try:
             async for batch in batches:
                 for row in batch:
@@ -95,10 +152,17 @@ class ExcelRenderer:
                                 v = float(v)
                             except (TypeError, ValueError):
                                 pass
-                        out_row.append(v if c.kind != "image_curve" else "")
+                        if c.kind in ("image_curve", "image_structure"):
+                            out_row.append("")
+                        else:
+                            out_row.append(v)
                     ws.append(out_row)
                     rows_written += 1
-                    if embed_sparklines and sparkline_col_indices:
+                    excel_row = rows_written + _HEADER_ROWS  # +N for header rows
+                    if row_height_pt is not None:
+                        ws.row_dimensions[excel_row].height = row_height_pt
+
+                    if embed_images and sparkline_col_indices:
                         # Each image_curve column is keyed by "drc:<rd_id>::plot".
                         # The parent activity token is "drc:<rd_id>" — one
                         # ActivityValue (serialised via dataclasses.asdict) per
@@ -109,29 +173,52 @@ class ExcelRenderer:
                         activity = (row.raw.get("activity") or {}) if row.raw else {}
                         for ci in sparkline_col_indices:
                             col = columns[ci]
-                            # col.key is "drc:<rd_id>::plot"
                             if "::" not in col.key:
                                 continue
                             parent_token = col.key.rsplit("::", 1)[0]
                             av = activity.get(parent_token)
                             if not av:
                                 continue
-                            snapshot = _av_to_sparkline_snapshot(av)
-                            png = render_sparkline_png(snapshot) if snapshot else None
+                            snapshot = av_to_sparkline_snapshot(av)
+                            png = render_sparkline_png(snapshot, size=size_preset) if snapshot else None
                             if not png:
                                 continue
                             tf = NamedTemporaryFile(suffix=".png", delete=False)
                             tf.write(png); tf.close()
                             tempfiles.append(tf.name)
                             img = XLImage(tf.name)
-                            cell_ref = f"{get_column_letter(ci+1)}{rows_written+1}"
+                            img.width = sparkline_w
+                            img.height = sparkline_h
+                            cell_ref = f"{get_column_letter(ci+1)}{excel_row}"
+                            ws.add_image(img, cell_ref)
+
+                    if embed_images and structure_col_indices:
+                        smiles = (row.raw or {}).get("smiles")
+                        if not smiles:
+                            continue
+                        tf_path = structure_cache.get(smiles)
+                        if tf_path is None:
+                            pngs = render_structure_pngs([smiles], size=options.image_size)
+                            png = pngs.get(smiles)
+                            if not png:
+                                continue
+                            tf = NamedTemporaryFile(suffix=".png", delete=False)
+                            tf.write(png); tf.close()
+                            tempfiles.append(tf.name)
+                            tf_path = tf.name
+                            structure_cache[smiles] = tf_path
+                        for ci in structure_col_indices:
+                            img = XLImage(tf_path)
+                            img.width = struct_w
+                            img.height = struct_h
+                            cell_ref = f"{get_column_letter(ci+1)}{excel_row}"
                             ws.add_image(img, cell_ref)
 
             notes = wb.create_sheet("Notes")
             notes.append([options.title])
             notes.append([f"Rows: {rows_written}"])
-            if not embed_sparklines and row_count_hint > SPARKLINE_ROW_CAP:
-                notes.append([f"Sparklines omitted: row count {row_count_hint} exceeds {SPARKLINE_ROW_CAP} cap."])
+            if not embed_images and row_count_hint > SPARKLINE_ROW_CAP:
+                notes.append([f"Images omitted: row count {row_count_hint} exceeds {SPARKLINE_ROW_CAP} cap."])
 
             wb.save(out_path)
         finally:

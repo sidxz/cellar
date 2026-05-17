@@ -4,7 +4,15 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Literal, Protocol
 
 
-ColumnKind = Literal["text", "number", "smiles", "image_curve", "qualifier", "structure"]
+ColumnKind = Literal[
+    "text",
+    "number",
+    "smiles",
+    "image_curve",
+    "image_structure",
+    "qualifier",
+    "structure",
+]
 
 
 @dataclass(frozen=True)
