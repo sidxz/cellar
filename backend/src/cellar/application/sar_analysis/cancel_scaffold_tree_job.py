@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
+from cellar.application.sar_analysis.get_scaffold_tree_job import ScaffoldTreeJobNotFound
+from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.sar_analysis.start_scaffold_tree_job import ScaffoldTreeOrchestrator
+from cellar.domain.sar_analysis.scaffold_tree_job import (
+    InvalidScaffoldTreeJobTransition,
+    ScaffoldTreeJob,
+)
+
+
+@dataclass(frozen=True)
+class CancelScaffoldTreeJobInput:
+    job_id: UUID
+    workspace_id: UUID
+    now: datetime
+
+
+class CancelScaffoldTreeJob:
+    def __init__(
+        self,
+        *,
+        repository: ScaffoldTreeJobRepository,
+        orchestrator: ScaffoldTreeOrchestrator,
+    ) -> None:
+        self._repo = repository
+        self._orchestrator = orchestrator
+
+    async def execute(self, payload: CancelScaffoldTreeJobInput) -> ScaffoldTreeJob:
+        job = await self._repo.find_by_id(payload.job_id, workspace_id=payload.workspace_id)
+        if job is None:
+            raise ScaffoldTreeJobNotFound(str(payload.job_id))
+        try:
+            cancelled = job.mark_cancelled(payload.now)
+        except InvalidScaffoldTreeJobTransition:
+            return job  # already terminal — idempotent no-op
+        await self._repo.save(cancelled)
+        await self._orchestrator.cancel(job_id=job.id)
+        return cancelled
