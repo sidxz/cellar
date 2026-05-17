@@ -9,6 +9,7 @@ const TERMINAL_STATUSES = new Set(["ready", "failed", "cancelled", "expired"]);
 interface UseExportReturn {
   start: (req: ExportRequest) => Promise<string>;
   cancel: () => Promise<void>;
+  download: () => Promise<void>;
   reset: () => void;
   job: ExportJob | null;
   isPending: boolean;
@@ -73,6 +74,14 @@ export function useExport(): UseExportReturn {
 
   const cancel = useCallback(async () => {
     if (!job?.id) return;
+    // Once the job has reached a terminal state the BE will 409 a cancel
+    // request — short-circuit so the toast doesn't surface "API error: 409"
+    // when the user clicks a stale Cancel button.
+    if (TERMINAL_STATUSES.has(job.status)) {
+      cancelled.current = true;
+      stop();
+      return;
+    }
     cancelled.current = true;
     stop();
     await customInstance<void>({
@@ -80,6 +89,11 @@ export function useExport(): UseExportReturn {
       method: "POST",
     });
   }, [job, stop]);
+
+  const download = useCallback(async () => {
+    if (!job) return;
+    await triggerDownload(job);
+  }, [job]);
 
   const reset = useCallback(() => {
     cancelled.current = true;
@@ -94,6 +108,7 @@ export function useExport(): UseExportReturn {
   return {
     start,
     cancel,
+    download,
     reset,
     job,
     isPending: !!job && !TERMINAL_STATUSES.has(job.status),

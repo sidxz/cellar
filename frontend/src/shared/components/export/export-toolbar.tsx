@@ -61,6 +61,7 @@ export function ExportToolbar({ buildRequest }: Props) {
         job={exp.job}
         error={exp.error}
         onCancel={exp.cancel}
+        onDownload={exp.download}
         onDismiss={exp.reset}
       />
     </>
