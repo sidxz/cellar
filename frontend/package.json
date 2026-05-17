@@ -21,6 +21,7 @@
     "@sentinel-auth/react": "^0.10.2",
     "@tabler/icons-react": "^3.41.1",
     "@tanstack/react-query": "^5.80.0",
+    "@tanstack/react-virtual": "^3.13.24",
     "ag-grid-community": "^35.2.0",
     "ag-grid-react": "^35.2.0",
     "class-variance-authority": "^0.7.1",
