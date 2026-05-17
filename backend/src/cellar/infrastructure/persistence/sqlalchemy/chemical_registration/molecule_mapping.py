@@ -104,6 +104,7 @@ def model_to_molecule(model: MoleculeModel) -> Molecule:
         predicted_properties=predicted,
         molecular_formula=model.molecular_formula,
         morgan_fp=model.fp_morgan,
+        bemis_murcko_smiles=model.bemis_murcko_smiles,
         structure_image_key=model.structure_image_key,
         sequence=model.sequence,
         stereochemistry=Stereochemistry(model.stereochemistry) if model.stereochemistry else None,

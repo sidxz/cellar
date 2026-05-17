@@ -69,6 +69,9 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     # Fingerprints (binary)
     fp_morgan: Mapped[bytes | None] = mapped_column(LargeBinary)
 
+    # Scaffold (Bemis-Murcko; None = not computed, "" = acyclic)
+    bemis_murcko_smiles: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # State machines
     structure_status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="disclosed"

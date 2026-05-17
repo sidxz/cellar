@@ -120,6 +120,7 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
             model.inchi_key = aggregate.structure.inchi_key
             model.molfile = aggregate.structure.molfile
         model.fp_morgan = aggregate.morgan_fp
+        model.bemis_murcko_smiles = aggregate.bemis_murcko_smiles
         if aggregate.descriptors:
             model.molecular_formula = aggregate.descriptors.molecular_formula
             model.molecular_weight = aggregate.descriptors.molecular_weight
