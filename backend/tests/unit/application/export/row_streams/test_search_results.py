@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from cellar.application.export.row_streams.search_results import SearchResultsRowStream
+from cellar.application.export.row_streams.search_results import (
+    SearchResultsRowStream,
+    _activity_parent_token,
+    _cell_value,
+)
+from cellar.application.export.row_streams.base import ColumnSpec
 
 
 # ---------------------------------------------------------------------------
@@ -137,3 +142,117 @@ def _success(page):
         activity_data=None,
         similarity_scores=None,
     ))
+
+
+# ---------------------------------------------------------------------------
+# Bug #1 regression — narrowed drc col_token must look up the parent
+# ActivityValue in raw["activity"], not the narrowed key.
+# ---------------------------------------------------------------------------
+
+def test_activity_parent_token_strips_intercept_suffix():
+    """_activity_parent_token must strip kind+level from a narrowed drc token."""
+    rd_id = "abc123"
+    assert _activity_parent_token(f"drc:{rd_id}:ec:50.0") == f"drc:{rd_id}"
+    assert _activity_parent_token(f"drc:{rd_id}:ic:90.0") == f"drc:{rd_id}"
+
+
+def test_activity_parent_token_passthrough_for_non_drc():
+    """Non-drc tokens and bare drc:<rd_id> tokens must pass through unchanged."""
+    assert _activity_parent_token("rd:proto:def") == "rd:proto:def"
+    assert _activity_parent_token("drc:someid") == "drc:someid"
+
+
+def test_cell_value_narrowed_drc_resolves_intercept():
+    """A ColumnSpec with key 'drc:<rd_id>:ec:50.0::value' must find the
+    ActivityValue keyed by 'drc:<rd_id>' in raw['activity'] and return the
+    matching intercept_values entry.
+
+    This is the direct regression guard for Bug #1: before the fix, col_token
+    was used as the activity-dict key directly, always yielding None because
+    execute_search keys by the parent token 'drc:<rd_id>'.
+    """
+    rd_id = "abc-def-123"
+    narrowed_key = f"drc:{rd_id}:ec:50.0::value"
+    parent_key = f"drc:{rd_id}"
+
+    # ActivityValue wire shape (result of dataclasses.asdict on ActivityValue)
+    # keyed by the *parent* token — matching what execute_search produces.
+    av = {
+        "value": 9.99,  # primary fitted value (not the intercept-specific value)
+        "qualifier": None,
+        "unit": "uM",
+        "source": "dose_response",
+        "intercept_values": [
+            {
+                "spec": {"kind": "ec", "level": 50.0, "basis": "response", "label": "EC50"},
+                "value": 1.23,
+                "confidence_interval_low": 0.9,
+                "confidence_interval_high": 1.6,
+                "at_bound": False,
+            },
+            {
+                "spec": {"kind": "ec", "level": 90.0, "basis": "response", "label": "EC90"},
+                "value": 4.56,
+                "confidence_interval_low": None,
+                "confidence_interval_high": None,
+                "at_bound": False,
+            },
+        ],
+        "curve_params": {"hill_slope": 1.2, "top": 100.0, "bottom": 0.0,
+                         "num_points": 8, "curve_class": "active",
+                         "confidence_interval_low": None,
+                         "confidence_interval_high": None,
+                         "fit_quality_warnings": None},
+        "run_count": 1,
+        "selection_rule": None,
+        "runs": None,
+        "intercept_aggregates": None,
+        "disagreement_flag": False,
+        "additional_curves": None,
+        "aggregate": None,
+    }
+
+    raw = {"activity": {parent_key: av}}
+
+    spec = ColumnSpec(key=narrowed_key, header="Mtb::EC50", kind="number", unit="uM")
+    assert _cell_value(spec, raw) == 1.23, (
+        "Bug #1: _cell_value should have found the EC50 intercept_values entry "
+        "via the parent token 'drc:<rd_id>', not the narrowed 'drc:<rd_id>:ec:50.0'"
+    )
+
+
+def test_cell_value_narrowed_drc_qualifier_column():
+    """The ::qualifier suffix must also derive from the correct intercept entry."""
+    rd_id = "rd-qualifier"
+    parent_key = f"drc:{rd_id}"
+    av = {
+        "value": None,
+        "qualifier": "nd",
+        "unit": "uM",
+        "source": "dose_response",
+        "intercept_values": [
+            {
+                "spec": {"kind": "ic", "level": 50.0, "basis": "response", "label": "IC50"},
+                "value": None,
+                "confidence_interval_low": None,
+                "confidence_interval_high": None,
+                "at_bound": False,
+            },
+        ],
+        "curve_params": {"hill_slope": 0.0, "top": 0.0, "bottom": 0.0,
+                         "num_points": 6, "curve_class": "inactive",
+                         "confidence_interval_low": None,
+                         "confidence_interval_high": None,
+                         "fit_quality_warnings": None},
+        "run_count": 1,
+        "selection_rule": None,
+        "runs": None,
+        "intercept_aggregates": None,
+        "disagreement_flag": False,
+        "additional_curves": None,
+        "aggregate": None,
+    }
+    raw = {"activity": {parent_key: av}}
+    spec = ColumnSpec(key=f"drc:{rd_id}:ic:50.0::qualifier", header="Mtb::IC50::qualifier", kind="qualifier")
+    # intercept_values[0].value is None and at_bound is False → ND
+    assert _cell_value(spec, raw) == "ND"

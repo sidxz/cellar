@@ -267,19 +267,50 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
 # ---------------------------------------------------------------------------
 
 
+def _activity_parent_token(col_token: str) -> str:
+    """Return the parent activity-dict key for a (possibly narrowed) token.
+
+    DR tokens in the column spec are narrowed to include the intercept kind
+    and level — e.g. ``drc:<rd_id>:ec:50.0``.  But ``ExecuteSearch`` keys
+    ``activity_data`` by the *parent* readout token ``drc:<rd_id>``, because
+    a single ActivityValue covers all intercepts for that readout-def.
+    Non-DR tokens are keyed verbatim (no narrowing) so they pass through
+    unchanged.
+
+    Token grammar (must match ``_expand_protocol_column`` and
+    ``molecule_activity_service._enrich_molecules``):
+      ``drc:<rd_id>``               — already the parent; returned as-is
+      ``drc:<rd_id>:<kind>:<level>``— narrowed; strip to ``drc:<rd_id>``
+      ``rd:<proto_id>:<rd_id>``     — scalar readout; returned as-is
+    """
+    if not col_token.startswith("drc:"):
+        return col_token
+    parts = col_token.split(":")
+    if len(parts) >= 4:  # drc : <rd_id> : <kind> : <level>
+        return ":".join(parts[:2])  # → drc:<rd_id>
+    return col_token  # already the parent
+
+
 def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     """Resolve a cell value from a molecule's raw dict.
 
     Top-level fields (registration_number, smiles, …) are read directly.
-    Activity fields are read from ``raw["activity"][col_token]`` and
+    Activity fields are read from ``raw["activity"][parent_token]`` and
     further resolved via suffix (``::value``, ``::qualifier``, etc.).
+
+    DR column specs use a *narrowed* token that includes the intercept kind
+    and level (e.g. ``drc:<rd_id>:ec:50.0::value``).  The activity dict is
+    keyed by the *parent* token ``drc:<rd_id>`` — one ActivityValue per
+    readout-def carries all intercepts.  ``_activity_parent_token`` handles
+    the translation so the activity lookup always finds its entry.
     """
     if spec.key in raw:
         return raw[spec.key]
     if "::" not in spec.key:
         return None
     col_token, suffix = spec.key.rsplit("::", 1)
-    av = (raw.get("activity") or {}).get(col_token)
+    parent_token = _activity_parent_token(col_token)
+    av = (raw.get("activity") or {}).get(parent_token)
     if not av:
         return None
     iv = _intercept_for(av, col_token) if col_token.startswith("drc:") else None
