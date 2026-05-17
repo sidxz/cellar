@@ -233,6 +233,7 @@ export * from './closeCampaignRequest';
 export * from './closeCampaignRequestPublishesCollection';
 export * from './closeCampaignRequestSignatureMeaning';
 export * from './collectionResponse';
+export * from './collectionResponseDerivedFromCampaignId';
 export * from './collectionResponseDescription';
 export * from './collectionResponseOwnedByOrgId';
 export * from './collectionResponseProjectId';

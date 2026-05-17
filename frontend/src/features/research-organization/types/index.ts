@@ -59,6 +59,8 @@ export interface Collection {
   created_by: string;
   molecule_count: number;
   visibility: "private" | "shared";
+  is_frozen: boolean;
+  derived_from_campaign_id: string | null;
   version: number;
 }
 

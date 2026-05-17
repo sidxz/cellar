@@ -7,6 +7,7 @@
 import type { CollectionResponseDescription } from './collectionResponseDescription';
 import type { CollectionResponseProjectId } from './collectionResponseProjectId';
 import type { CollectionResponseOwnedByOrgId } from './collectionResponseOwnedByOrgId';
+import type { CollectionResponseDerivedFromCampaignId } from './collectionResponseDerivedFromCampaignId';
 
 export interface CollectionResponse {
   id: string;
@@ -18,5 +19,7 @@ export interface CollectionResponse {
   created_by: string;
   molecule_count: number;
   visibility: string;
+  is_frozen?: boolean;
+  derived_from_campaign_id?: CollectionResponseDerivedFromCampaignId;
   version: number;
 }

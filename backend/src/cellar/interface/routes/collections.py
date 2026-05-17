@@ -51,6 +51,8 @@ class CollectionResponse(BaseModel):
     created_by: uuid.UUID
     molecule_count: int
     visibility: str
+    is_frozen: bool = False
+    derived_from_campaign_id: uuid.UUID | None = None
     version: int
 
     @classmethod
@@ -65,6 +67,8 @@ class CollectionResponse(BaseModel):
             created_by=coll.created_by,
             molecule_count=coll.molecule_count,
             visibility=coll.visibility.value,
+            is_frozen=coll.is_frozen,
+            derived_from_campaign_id=coll.derived_from_campaign_id,
             version=coll.version,
         )
 

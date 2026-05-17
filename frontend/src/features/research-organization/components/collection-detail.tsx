@@ -156,6 +156,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                 created_by: collection.created_by,
                 visibility: collection.visibility,
                 molecule_count: collection.molecule_count,
+                is_frozen: collection.is_frozen ?? false,
+                derived_from_campaign_id: collection.derived_from_campaign_id,
               }}
               projectName={project?.name}
             />

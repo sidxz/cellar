@@ -55,6 +55,17 @@ class TestGetCollection:
         assert resp.status_code == 200
         assert resp.json()["molecule_count"] == 0
 
+    async def test_get_includes_frozen_fields(self, client: AsyncClient) -> None:
+        create = await client.post(
+            "/api/v1/collections", json={"name": "FrozenFieldsTest"}
+        )
+        coll_id = create.json()["id"]
+        resp = await client.get(f"/api/v1/collections/{coll_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_frozen"] is False
+        assert data["derived_from_campaign_id"] is None
+
     async def test_get_not_found_404(self, client: AsyncClient) -> None:
         resp = await client.get(f"/api/v1/collections/{uuid.uuid4()}")
         assert resp.status_code == 404
