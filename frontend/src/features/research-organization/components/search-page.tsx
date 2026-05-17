@@ -448,10 +448,29 @@ function SearchPageInner() {
           ...(projectIds.length ? { project_ids: projectIds } : {}),
           sort_by: sortBy,
           sort_dir: sortDir,
+          // Mirror the chemist's on-screen grid: structure visibility,
+          // property column whitelist, image size. The BE column builder
+          // reads this and trims columns / sizes images accordingly.
+          reportConfig: {
+            detailLevel: reportConfig.detailLevel,
+            plotScale: reportConfig.plotScale,
+            showPlotLegend: reportConfig.showPlotLegend,
+            imageSize: reportConfig.imageSize,
+            columnWidth: reportConfig.columnWidth,
+            visibleFields: reportConfig.visibleFields,
+          },
         },
       };
     },
-    [currentQuery, protocolColumns, aggregationMode, projectIds, sortBy, sortDir],
+    [
+      currentQuery,
+      protocolColumns,
+      aggregationMode,
+      projectIds,
+      sortBy,
+      sortDir,
+      reportConfig,
+    ],
   );
 
   // ── Add to collection ──────────────────────────────────────────────────
