@@ -28,7 +28,7 @@ Headline chemist value: "what scaffolds are in this collection, and how does act
 - `ScaffoldTreeJob` aggregate + repo + Temporal workflow + activity.
 - Endpoint `POST /api/v1/scaffold-tree` — sync on cache-hit or ≤500 mols, async otherwise.
 - Endpoint `GET /api/v1/scaffold-tree/jobs/{id}` — poll job status / fetch result.
-- Valkey cache by `sha256(sorted(mol_ids))`, 1 h TTL.
+- Postgres-as-cache via `scaffold_tree_jobs.result_json` + `ids_hash` lookup, 1 h TTL via a `completed_at` WHERE clause. (Valkey isn't wired into the Python codebase yet; pivoting to Postgres keeps V2 from expanding scope. Move to Valkey in a follow-up once another feature needs it.)
 - `ScaffoldTreeView` FE component — split-pane (resizable, persisted), recursive tree, color-by-protocol dropdown, right-pane `CardGrid` reuse.
 - View-mode hook extension: `"table" | "cards" | "scaffold-tree"`; URL form `?view=tree`.
 - View-mode toggle: third segment with fork-down icon.
@@ -200,8 +200,8 @@ class ScaffoldTreeStats:
 
 ### Pipeline
 
-1. Sort and hash `molecule_ids` → `cache_key = f"scaffold-tree:v1:{sha256(...)}"`.
-2. Look up in Valkey. On hit → return immediately with `cache_hit=True`.
+1. Sort and hash `molecule_ids` → `ids_hash = sha256(",".join(sorted(str(id) for id in molecule_ids)))`.
+2. Cache lookup: `SELECT result_json FROM scaffold_tree_jobs WHERE ids_hash = $1 AND status = 'ready' AND completed_at > NOW() - INTERVAL '1 hour' ORDER BY completed_at DESC LIMIT 1`. On hit → deserialize + return with `cache_hit=True`.
 3. Single-query fetch: `SELECT id, smiles, bemis_murcko_smiles FROM molecule WHERE id IN (...)`. Drop rows with `smiles IS NULL` (defensive; shouldn't happen).
 4. Build `rdkit_mols: list[Mol]` from SMILES. Track failures (log; exclude from network).
 5. Bucket acyclic mols (`bemis_murcko_smiles == ""`) separately → single virtual node `__no_scaffold__` with `molecule_ids=[...]`.
@@ -211,7 +211,7 @@ class ScaffoldTreeStats:
    - `molecule_ids` — the mols whose `bemis_murcko_smiles` equals this scaffold. Computed by indexing the input mols by their stored Bemis-Murcko scaffold (NOT by re-traversing the network — the BE-stored scaffold is the ground truth for membership; the network is the hierarchy).
    - `molecule_count = len(molecule_ids)`.
    - `subtree_molecule_count` — DFS down the edge graph, summing `molecule_count` of descendants + self.
-8. Cache result for 1 h. Return.
+8. Return (caller — the workflow activity or the sync route — is responsible for inserting the cache row into `scaffold_tree_jobs` with `status='ready'` + `result_json=<serialized>`).
 
 ### Membership semantics
 
@@ -237,16 +237,16 @@ class ScaffoldTreeJob:
     id: UUID
     requested_by: UUID  # user_id
     workspace_id: UUID
-    ids_hash: str  # cache key fragment — sha256(sorted_ids)
+    ids_hash: str  # cache key — sha256(sorted_ids)
     requested_at: datetime
     status: ScaffoldTreeJobStatus  # pending | running | ready | failed | cancelled
     started_at: datetime | None
     completed_at: datetime | None
     error_message: str | None
-    cache_key: str | None  # populated on ready
+    result: ScaffoldTreeResult | None  # populated on ready; serialized to JSONB
 
     def mark_running(self, now: datetime) -> ScaffoldTreeJob: ...
-    def mark_ready(self, cache_key: str, now: datetime) -> ScaffoldTreeJob: ...
+    def mark_ready(self, result: ScaffoldTreeResult, now: datetime) -> ScaffoldTreeJob: ...
     def mark_failed(self, error: str, now: datetime) -> ScaffoldTreeJob: ...
     def mark_cancelled(self, now: datetime) -> ScaffoldTreeJob: ...
 ```
@@ -262,16 +262,18 @@ CREATE TABLE scaffold_tree_jobs (
     workspace_id UUID NOT NULL,
     ids_hash TEXT NOT NULL,
     requested_at TIMESTAMPTZ NOT NULL,
-    status TEXT NOT NULL,
+    status TEXT NOT NULL,  -- pending | running | ready | failed | cancelled
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     error_message TEXT,
-    cache_key TEXT,
+    result_json JSONB,  -- populated when status = 'ready'; doubles as cache
     version INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX scaffold_tree_jobs_workspace_status ON scaffold_tree_jobs (workspace_id, status);
 CREATE INDEX scaffold_tree_jobs_requested_by_at ON scaffold_tree_jobs (requested_by, requested_at DESC);
+-- The cache-lookup query (ids_hash + ready + completed_at > NOW() - 1h) is served by this partial index:
+CREATE INDEX scaffold_tree_jobs_cache ON scaffold_tree_jobs (ids_hash, completed_at DESC) WHERE status = 'ready';
 ```
 
 ### Workflow
