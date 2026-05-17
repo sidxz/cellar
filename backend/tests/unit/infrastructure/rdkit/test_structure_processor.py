@@ -5,12 +5,13 @@ from returns.result import Failure, Success
 
 from cellar.domain.chemical_registration.enums import Stereochemistry
 from cellar.infrastructure.rdkit.errors import InvalidSmilesError, QCRejectedError
+from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
 from cellar.infrastructure.rdkit.structure_processor import StructureProcessor
 
 
 @pytest.fixture
 def processor() -> StructureProcessor:
-    return StructureProcessor()
+    return StructureProcessor(scaffold_calculator=MurckoScaffoldCalculator())
 
 
 class TestStructureProcessor:

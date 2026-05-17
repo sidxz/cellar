@@ -73,7 +73,8 @@ class StructureProcessor:
         standardizer: StructureStandardizer | None = None,
         descriptor_calculator: DescriptorCalculator | None = None,
         fingerprint_generator: FingerprintGenerator | None = None,
-        scaffold_calculator: MurckoScaffoldCalculator | None = None,
+        *,
+        scaffold_calculator: MurckoScaffoldCalculator,
     ) -> None:
         self._standardizer = standardizer or StructureStandardizer()
         self._descriptor_calc = descriptor_calculator or DescriptorCalculator()
@@ -144,11 +145,7 @@ class StructureProcessor:
         stereochemistry = _classify_stereochemistry(std_mol.mol)
 
         # 8. Compute Bemis-Murcko scaffold (post-standardization mol)
-        scaffold = (
-            self._scaffold_calculator.compute(std_mol.mol)
-            if self._scaffold_calculator is not None
-            else None
-        )
+        scaffold = self._scaffold_calculator.compute(std_mol.mol)
 
         return Success(
             ProcessedStructureDTO(

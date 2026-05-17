@@ -25,11 +25,3 @@ def test_acyclic_smiles_yields_empty_scaffold(processor: StructureProcessor) -> 
     result = processor.process("CCCCC")
     assert isinstance(result, Success)
     assert result.unwrap().bemis_murcko_smiles == ""
-
-
-def test_no_calculator_yields_none_scaffold() -> None:
-    """Back-compat: when no scaffold_calculator is provided, the field is None."""
-    proc = StructureProcessor()
-    result = proc.process("CC(C)Cc1ccc(cc1)C(C)C(=O)O")
-    assert isinstance(result, Success)
-    assert result.unwrap().bemis_murcko_smiles is None

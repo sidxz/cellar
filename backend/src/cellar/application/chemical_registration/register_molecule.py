@@ -332,6 +332,7 @@ class RegisterMolecule:
                     stereochemistry=processed.stereochemistry,
                 )
                 mol.morgan_fp = processed.fingerprints.morgan
+                mol.bemis_murcko_smiles = processed.bemis_murcko_smiles
                 self._add_name_and_ids(mol, input, source="name")
                 await self._repo.save(mol)
                 await self._record_disclosure_provenance(

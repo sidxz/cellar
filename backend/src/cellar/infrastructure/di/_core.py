@@ -21,6 +21,7 @@ from cellar.infrastructure.persistence.database import create_engine, create_ses
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
+from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
 from cellar.infrastructure.rdkit.structure_processor import StructureProcessor
 from cellar.infrastructure.secrets.chain_provider import ChainSecretProvider
 from cellar.infrastructure.secrets.env_provider import EnvSecretProvider
@@ -76,7 +77,11 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
     container.define(FsspecStorageClient, Singleton(lambda: storage_client))
 
     # --- Structure Processor (RDKit) ---
-    container.define(StructureProcessor, Singleton(StructureProcessor))
+    container.define(MurckoScaffoldCalculator, Singleton(MurckoScaffoldCalculator))
+    container.define(
+        StructureProcessor,
+        Singleton(lambda c: StructureProcessor(scaffold_calculator=c[MurckoScaffoldCalculator])),
+    )
     container.define(StructureProcessorProtocol, lambda c: c[StructureProcessor])
 
     # --- Fingerprint Registry ---
