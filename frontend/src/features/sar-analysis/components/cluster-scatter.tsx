@@ -117,6 +117,22 @@ export function ClusterScatter({
   const repIds = new Set(representatives.map((r) => r.moleculeId));
   const repPoints = points.filter((p) => repIds.has(p.moleculeId));
 
+  // Star fill = the representative's chemotype color (cluster palette) so the
+  // chemist can identify both "this is a pick" (star shape) AND "from cluster
+  // X" (fill color). We force `mode: "cluster"` here so the star always carries
+  // chemotype identity even when the base points are colored by Activity /
+  // Scaffold / None.
+  const starFillColors = repPoints.map((p) =>
+    colorForPoint(
+      { mode: "cluster" },
+      {
+        clusterId: clusterById.get(p.moleculeId) ?? 0,
+        activityPic50: null,
+        scaffoldId: null,
+      },
+    ),
+  );
+
   const starTrace: Record<string, unknown> | null =
     representatives.length > 0
       ? {
@@ -126,12 +142,11 @@ export function ClusterScatter({
           y: repPoints.map((p) => p.y),
           marker: {
             symbol: "star",
-            size: 16,
-            // Amber fill + dark amber outline — unambiguously visible on any
-            // cluster color underneath. SVG `scatter` ignores transparent
-            // fills (unlike `scattergl`), so we use a solid amber here.
-            color: "#fbbf24",
-            line: { width: 1.5, color: "#78350f" },
+            size: 18,
+            color: starFillColors,
+            // Dark outline so the star stays visible no matter which cluster
+            // color it's drawn in. Thicker than the base trace's 0.5px.
+            line: { width: 1.5, color: "#1f2937" },
           },
           hoverinfo: "skip",
         }
