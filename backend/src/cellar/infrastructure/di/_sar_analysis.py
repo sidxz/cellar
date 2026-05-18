@@ -1,4 +1,4 @@
-"""SAR analysis bounded context bindings: scaffold-tree jobs + use cases.
+"""SAR analysis bounded context bindings: scaffold-tree + UMAP cluster jobs + use cases.
 
 Wires:
 - ``ScaffoldNetworkBuilder``         — Singleton (pure RDKit wrapper)
@@ -9,6 +9,16 @@ Wires:
   ``TemporalScaffoldTreeOrchestrator`` is bound later by ``app.py``'s lifespan
   once the Temporal client is available — same pattern as ``register_export``.
 - ``StartScaffoldTreeJob`` / ``GetScaffoldTreeJob`` / ``CancelScaffoldTreeJob``
+- ``MorganFingerprintLoader``        — lean session-per-call FP reader
+- ``UmapEmbedder``                   — thin umap-learn wrapper (Singleton)
+- ``ButinaClusterer``                — Singleton (threshold=0.4)
+- ``MaxMinPickerAdapter``            — Singleton (seed=42)
+- ``UmapJobRepository``             — SQLAlchemy impl, per-resolve session
+- ``ComputeUmapCluster``            — per-resolve (holds loader + embedder + clusterer)
+- ``RunUmapCluster``                 — Activity runner used by the Temporal worker
+- ``UmapClusterOrchestrator``       — Null when ``TEMPORAL_DISABLED=1``; live
+  ``TemporalUmapClusterOrchestrator`` bound by ``app.py``'s lifespan.
+- ``StartUmapClusterJob`` / ``GetUmapClusterJob`` / ``CancelUmapClusterJob``
 
 Note: ``MurckoScaffoldCalculator`` is already registered by ``register_core``.
 """
@@ -22,12 +32,20 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.sar_analysis.build_scaffold_network import BuildScaffoldNetwork
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
+from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
+from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
-from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository, UmapJobRepository
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
+from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
 from cellar.application.sar_analysis.start_scaffold_tree_job import (
     ScaffoldTreeOrchestrator,
     StartScaffoldTreeJob,
+)
+from cellar.application.sar_analysis.start_umap_cluster_job import (
+    StartUmapClusterJob,
+    UmapClusterOrchestrator,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
@@ -35,8 +53,15 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (
     SQLAlchemyScaffoldTreeJobRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_repository import (
+    SQLAlchemyUmapJobRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.rdkit.butina_clusterer import ButinaClusterer
+from cellar.infrastructure.rdkit.maxmin_picker import MaxMinPickerAdapter
 from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
+from cellar.infrastructure.rdkit.umap_embedder import UmapEmbedder
+from cellar.infrastructure.sar_analysis.morgan_fingerprint_loader import MorganFingerprintLoader
 
 
 def register_sar_analysis(container: Container) -> None:
@@ -123,3 +148,86 @@ def register_sar_analysis(container: Container) -> None:
     container.define(StartScaffoldTreeJob, _start)
     container.define(GetScaffoldTreeJob, _get)
     container.define(CancelScaffoldTreeJob, _cancel)
+
+    # -------------------------------------------------------------------------
+    # UMAP cluster pipeline
+    # -------------------------------------------------------------------------
+
+    # Singletons — pure computation wrappers, no session state.
+    container.define(UmapEmbedder, Singleton(UmapEmbedder))
+    container.define(ButinaClusterer, Singleton(lambda: ButinaClusterer(threshold=0.4)))
+    container.define(MaxMinPickerAdapter, Singleton(lambda: MaxMinPickerAdapter(seed=42)))
+
+    # MorganFingerprintLoader — per-resolve, creates a fresh session per load_morgan call.
+    def _fp_loader(c: Container) -> MorganFingerprintLoader:
+        return MorganFingerprintLoader(session_factory=c[async_sessionmaker])
+
+    container.define(MorganFingerprintLoader, _fp_loader)
+
+    # UmapJobRepository — per-resolve, fresh session each time.
+    def _umap_job_repo(c: Container) -> UmapJobRepository:
+        session = c[async_sessionmaker]()
+        return SQLAlchemyUmapJobRepository(session)  # type: ignore[return-value]
+
+    container.define(UmapJobRepository, _umap_job_repo)
+
+    # ComputeUmapCluster — per-resolve (depends on loader which is per-resolve).
+    def _compute_umap(c: Container) -> ComputeUmapCluster:
+        return ComputeUmapCluster(
+            fingerprint_loader=c[MorganFingerprintLoader],
+            embedder=c[UmapEmbedder],
+            clusterer=c[ButinaClusterer],
+            maxmin_picker=c[MaxMinPickerAdapter],
+        )
+
+    container.define(ComputeUmapCluster, _compute_umap)
+
+    # RunUmapCluster — in-process runner the Temporal activity wraps.
+    def _run_umap_cluster(c: Container) -> RunUmapCluster:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RunUmapCluster(
+            compute=c[ComputeUmapCluster],
+            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            uow=uow,
+        )
+
+    container.define(RunUmapCluster, _run_umap_cluster)
+
+    # UmapClusterOrchestrator — Null when TEMPORAL_DISABLED=1; live orchestrator
+    # bound by app.py's lifespan once the Temporal client is available.
+    if os.environ.get("TEMPORAL_DISABLED") == "1":
+        from cellar.infrastructure.temporal.orchestrators.umap_cluster import (
+            NullUmapClusterOrchestrator,
+        )
+
+        def _null_umap_orchestrator(c: Container) -> NullUmapClusterOrchestrator:
+            return NullUmapClusterOrchestrator(runner=c[RunUmapCluster].execute)
+
+        container.define(UmapClusterOrchestrator, _null_umap_orchestrator)
+
+    # Use cases.
+    def _start_umap(c: Container) -> StartUmapClusterJob:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return StartUmapClusterJob(
+            compute=c[ComputeUmapCluster],
+            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            orchestrator=c[UmapClusterOrchestrator],
+            uow=uow,
+        )
+
+    def _get_umap(c: Container) -> GetUmapClusterJob:
+        return GetUmapClusterJob(
+            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+        )
+
+    def _cancel_umap(c: Container) -> CancelUmapClusterJob:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CancelUmapClusterJob(
+            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            uow=uow,
+            orchestrator=c[UmapClusterOrchestrator],
+        )
+
+    container.define(StartUmapClusterJob, _start_umap)
+    container.define(GetUmapClusterJob, _get_umap)
+    container.define(CancelUmapClusterJob, _cancel_umap)

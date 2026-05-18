@@ -76,6 +76,9 @@ def create_app() -> FastAPI:
         from cellar.application.sar_analysis.start_scaffold_tree_job import (
             ScaffoldTreeOrchestrator,
         )
+        from cellar.application.sar_analysis.start_umap_cluster_job import (
+            UmapClusterOrchestrator,
+        )
         from cellar.infrastructure.temporal.orchestrators import (
             NullBulkRegistrationOrchestrator,
             NullCddMoleculeImportOrchestrator,
@@ -91,6 +94,10 @@ def create_app() -> FastAPI:
         from cellar.infrastructure.temporal.orchestrators.scaffold_tree import (
             NullScaffoldTreeOrchestrator,
             TemporalScaffoldTreeOrchestrator,
+        )
+        from cellar.infrastructure.temporal.orchestrators.umap_cluster import (
+            NullUmapClusterOrchestrator,
+            TemporalUmapClusterOrchestrator,
         )
 
         if app.state.temporal_client is not None:
@@ -109,15 +116,20 @@ def create_app() -> FastAPI:
             scaffold_orch: ScaffoldTreeOrchestrator = TemporalScaffoldTreeOrchestrator(
                 app.state.temporal_client
             )
+            umap_orch: UmapClusterOrchestrator = TemporalUmapClusterOrchestrator(
+                client=app.state.temporal_client
+            )
         else:
             mol_orch = NullCddMoleculeImportOrchestrator()
             plate_orch = NullCddPlateImportOrchestrator()
             bulk_orch = NullBulkRegistrationOrchestrator()
             from cellar.application.export.render_export import RenderExport
             from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
+            from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
 
             export_orch = NullExportOrchestrator(container[RenderExport])
             scaffold_orch = NullScaffoldTreeOrchestrator(container[RunScaffoldTree])
+            umap_orch = NullUmapClusterOrchestrator(runner=container[RunUmapCluster].execute)
 
         from lagom import Singleton
 
@@ -126,6 +138,7 @@ def create_app() -> FastAPI:
         container.define(BulkRegistrationOrchestrator, Singleton(lambda: bulk_orch))
         container.define(ExportOrchestrator, Singleton(lambda: export_orch))
         container.define(ScaffoldTreeOrchestrator, Singleton(lambda: scaffold_orch))
+        container.define(UmapClusterOrchestrator, Singleton(lambda: umap_orch))
 
         # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
         async with sentinel.lifespan(app):
