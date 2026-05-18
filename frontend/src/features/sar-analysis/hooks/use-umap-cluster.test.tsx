@@ -68,8 +68,11 @@ describe("useUmapCluster", () => {
     let pollCount = 0;
     const pollFn = vi.fn(async () => {
       pollCount++;
-      if (pollCount < 2) return makeJobDto("running");
-      return { ...makeJobDto("ready"), result: makeResultDto() };
+      // Route returns { result, job } — match the real shape.
+      if (pollCount < 2) {
+        return { result: null, job: makeJobDto("running") };
+      }
+      return { result: makeResultDto(), job: makeJobDto("ready") };
     });
 
     const { result } = renderHook(
@@ -101,9 +104,10 @@ describe("useUmapCluster", () => {
       job: makeJobDto("pending"),
     }));
 
-    const pollFn = vi.fn(async () =>
-      makeJobDto("failed", { error_message: "compute boom" }),
-    );
+    const pollFn = vi.fn(async () => ({
+      result: null,
+      job: makeJobDto("failed", { error_message: "compute boom" }),
+    }));
 
     const { result } = renderHook(
       () =>
@@ -172,7 +176,10 @@ describe("useUmapCluster", () => {
       job: makeJobDto("pending"),
     }));
     // poll always stays pending so we can call cancel before completion
-    const pollFn = vi.fn(async () => makeJobDto("pending"));
+    const pollFn = vi.fn(async () => ({
+      result: null,
+      job: makeJobDto("pending"),
+    }));
     const cancelFn = vi.fn(async () => {});
 
     const { result } = renderHook(

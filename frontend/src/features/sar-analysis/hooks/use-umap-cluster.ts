@@ -31,8 +31,11 @@ export interface UseUmapClusterInput {
     n?: number | null;
     threshold?: number | null;
   }) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
-  /** Override for tests — defaults to the orval-generated GET. */
-  pollFn?: (jobId: string) => Promise<UmapJobDto & { result?: UmapResultDto | null }>;
+  /** Override for tests — defaults to the orval-generated GET. The route
+   *  returns `StartUmapClusterResponse` ({result, job}), not a flat UmapJobDto. */
+  pollFn?: (
+    jobId: string,
+  ) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
   /** Override for tests — defaults to the orval-generated cancel POST. */
   cancelFn?: (jobId: string) => Promise<void>;
   pollIntervalMs?: number;
@@ -65,7 +68,7 @@ async function defaultStartFn(input: {
 
 async function defaultPollFn(
   jobId: string,
-): Promise<UmapJobDto & { result?: UmapResultDto | null }> {
+): Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }> {
   const { getUmapClusterJobApiV1SarUmapClusterJobsJobIdGet } = await import(
     "@/shared/lib/api/sar-analysis/sar-analysis"
   );
@@ -163,21 +166,30 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
 
     const tick = async () => {
       try {
-        const status = await pollFn(asyncJob.id);
+        const resp = await pollFn(asyncJob.id);
         if (cancelled) return;
 
-        const mappedJob = dtoToUmapJob(status);
+        // Route returns { result, job } — job carries status, result is the
+        // payload once status === "ready".
+        const jobDto = resp.job;
+        if (!jobDto) {
+          // Defensive: shouldn't happen (route always returns job), but stop
+          // polling if we lose the job entry rather than spin forever.
+          setPollError("Job not found");
+          return;
+        }
+        const mappedJob = dtoToUmapJob(jobDto);
         setPolledJob(mappedJob);
 
-        if (status.status === "ready") {
-          if (status.result) setPolledResult(dtoToUmapResult(status.result));
+        if (jobDto.status === "ready") {
+          if (resp.result) setPolledResult(dtoToUmapResult(resp.result));
           return;
         }
-        if (status.status === "failed") {
-          setPollError(status.error_message ?? "UMAP cluster compute failed");
+        if (jobDto.status === "failed") {
+          setPollError(jobDto.error_message ?? "UMAP cluster compute failed");
           return;
         }
-        if (status.status === "cancelled") {
+        if (jobDto.status === "cancelled") {
           setPollError("UMAP cluster compute cancelled");
           return;
         }
