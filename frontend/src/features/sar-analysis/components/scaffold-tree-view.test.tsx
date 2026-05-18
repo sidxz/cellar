@@ -1,0 +1,153 @@
+import { describe, it, expect, vi, beforeAll } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+
+import { ScaffoldTreeView } from "./scaffold-tree-view";
+
+// next/navigation requires the App Router context — stub out for tests.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+// react-resizable-panels uses ResizeObserver + layout APIs not in jsdom.
+// Mock it so tests focus on selection logic, not panel internals.
+vi.mock("@/shared/components/ui/resizable", () => ({
+  ResizablePanelGroup: ({ children }: any) => (
+    <div data-testid="resizable-group">{children}</div>
+  ),
+  ResizablePanel: ({ children }: any) => (
+    <div data-testid="resizable-panel">{children}</div>
+  ),
+  ResizableHandle: () => <div data-testid="resizable-handle" />,
+}));
+
+// Mock the hook so we don't hit network.
+// The tree object is defined INSIDE the factory so it is stable across renders
+// (same reference returned by every useScaffoldTree() call). If a new literal
+// were returned each call the useEffect([tree]) in the component would fire on
+// every render → infinite setState → OOM.
+vi.mock("../hooks/use-scaffold-tree", () => {
+  const stableTree = {
+    nodes: [
+      {
+        scaffold_smiles: "c1ccccc1",
+        molecule_ids: ["m1", "m2"],
+        molecule_count: 2,
+        subtree_molecule_count: 3,
+      },
+      {
+        scaffold_smiles: "c1ccc2ccccc2c1",
+        molecule_ids: ["m3"],
+        molecule_count: 1,
+        subtree_molecule_count: 1,
+      },
+    ],
+    edges: [{ parent_smiles: "c1ccccc1", child_smiles: "c1ccc2ccccc2c1" }],
+    stats: { node_count: 2, elapsed_ms: 5, cache_hit: false },
+  };
+  return {
+    useScaffoldTree: () => ({
+      tree: stableTree,
+      jobId: null,
+      isStarting: false,
+      isPolling: false,
+      error: null,
+    }),
+  };
+});
+
+// Mock CardGrid — tracks the molecule count passed in
+vi.mock(
+  "@/features/research-organization/components/results/card-grid",
+  () => ({
+    CardGrid: ({ molecules }: any) => (
+      <div data-testid="card-grid">{molecules.length} cards</div>
+    ),
+  }),
+);
+
+// Mock StructureThumbnail (RDKit-free shim)
+vi.mock("@/shared/components/chemistry", () => ({
+  StructureThumbnail: ({ smiles }: any) => (
+    <div data-testid={`thumb-${smiles}`} />
+  ),
+}));
+
+// ScaffoldColorPicker uses Radix Select which triggers a ref-update loop in
+// jsdom. Mock it so the scaffold-tree-view tests focus on tree + panel logic.
+vi.mock("./scaffold-color-picker", () => ({
+  ScaffoldColorPicker: ({ value, onChange }: any) => (
+    <div data-testid="color-picker" data-value={value ?? "none"} />
+  ),
+}));
+
+const wrapper = ({ children }: any) => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+};
+
+const molecules = [
+  {
+    id: "m1",
+    bemis_murcko_smiles: "c1ccccc1",
+    structure: { smiles: "..." },
+  } as any,
+  {
+    id: "m2",
+    bemis_murcko_smiles: "c1ccccc1",
+    structure: { smiles: "..." },
+  } as any,
+  {
+    id: "m3",
+    bemis_murcko_smiles: "c1ccc2ccccc2c1",
+    structure: { smiles: "..." },
+  } as any,
+];
+
+describe("ScaffoldTreeView", () => {
+  it("renders the tree with first-level nodes", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("scaffold-node-c1ccccc1"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("right pane shows all molecules when no node selected", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
+    );
+  });
+
+  it("right pane filters to selected node's subtree on click", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    fireEvent.click(await screen.findByTestId("scaffold-node-c1ccccc1"));
+    // benzene subtree = {c1ccccc1: m1, m2} + {c1ccc2ccccc2c1: m3} = 3 cards
+    await waitFor(() =>
+      expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
+    );
+  });
+
+  it("clicking selected node again deselects (back to all)", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    const node = await screen.findByTestId("scaffold-node-c1ccccc1");
+    fireEvent.click(node);
+    fireEvent.click(node);
+    await waitFor(() =>
+      expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
+    );
+  });
+});
