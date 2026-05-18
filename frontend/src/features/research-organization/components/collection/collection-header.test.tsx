@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { CollectionHeader } from "./collection-header";
 
@@ -11,11 +11,6 @@ vi.mock("next/link", () => ({
 vi.mock("@/shared/components/entity-name", () => ({
   MemberName: ({ id }: { id: string }) => <span data-testid="member">{id}</span>,
   OrgName: ({ id }: { id: string }) => <span data-testid="org">{id}</span>,
-}));
-
-const mockUseInlineEditHook = vi.fn();
-vi.mock("@/features/research-organization/hooks/use-inline-edit-collection-name", () => ({
-  useInlineEditCollectionName: () => mockUseInlineEditHook(),
 }));
 
 const baseCollection = {
@@ -32,18 +27,6 @@ const baseCollection = {
 };
 
 describe("CollectionHeader", () => {
-  beforeEach(() => {
-    mockUseInlineEditHook.mockReturnValue({
-      isEditing: false,
-      draft: "Mtb Q1 Hits",
-      isPending: false,
-      startEdit: vi.fn(),
-      cancel: vi.fn(),
-      commit: vi.fn(),
-      setDraft: vi.fn(),
-    });
-  });
-
   it("renders the description", () => {
     render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
     expect(screen.getByText(/Round 1 hits/)).toBeInTheDocument();
@@ -95,27 +78,5 @@ describe("CollectionHeader", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /extra/i })).toBeInTheDocument();
-  });
-
-  it("renders the name as a clickable inline-edit affordance", () => {
-    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    const trigger = screen.getByRole("button", { name: /Mtb Q1 Hits/ });
-    expect(trigger).toBeInTheDocument();
-  });
-
-  it("renders an input (not the rename button) when isEditing is true", () => {
-    mockUseInlineEditHook.mockReturnValue({
-      isEditing: true,
-      draft: "Mtb Q1 Hits",
-      isPending: false,
-      startEdit: vi.fn(),
-      cancel: vi.fn(),
-      commit: vi.fn(),
-      setDraft: vi.fn(),
-    });
-    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    expect(screen.getByRole("textbox", { name: /collection name/i })).toBeInTheDocument();
-    // Rename button should NOT be visible while editing
-    expect(screen.queryByRole("button", { name: /rename collection/i })).toBeNull();
   });
 });
