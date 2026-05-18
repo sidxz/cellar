@@ -24,6 +24,14 @@ from rdkit import Chem
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Eagerly import sibling model modules so SQLAlchemy can resolve cross-context
+# foreign keys at query-compile time (e.g. molecules.originating_org_id -> organizations.id).
+# Without this, select(MoleculeModel) raises NoReferencedTableError.
+import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.models  # noqa: F401
+
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
