@@ -183,6 +183,36 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-18 — Roadmap: V1 ✓ · V2 ✓ (push pending) · V3 next · V4 deferred
+
+| | Phase | Status |
+|---|---|---|
+| **V1** | Collections UX redesign (cards default, virtualized grid, header strip) | shipped, awaiting push |
+| **V2** | Bemis-Murcko scaffold tree on `/collections/{id}?view=tree` + scaffold filter on `/search` + ergonomic loop closer | shipped, awaiting push |
+| **V3** | UMAP cluster map + activity heatmap; lasso → save-as-collection | **next — unstarted** |
+| **V4** | Scale-at-10K: per-scaffold fetch + server-side scaffold-membership filter | deferred; triggers when first collection > 10K mols. Spec: `docs/superpowers/specs/2026-05-17-scaffold-tree-v4-at-scale.md` |
+
+**Branch:** `prot-2`, ~57 commits ahead of origin. Eight unpushed sessions: V1 + V1.5, V2 base, V2 post-smoke, multi-run aggregation, unified export, DR display honesty, scaffold-tree polish, **this session = V2 closing polish**. All tests green; `pnpm exec tsc --noEmit` clean.
+
+**This session (V2 closing polish):** Waves 0/1/4 of `docs/superpowers/specs/2026-05-17-followup-batch-design.md` + one real bug fix. Commits `2e3be354..HEAD` — see `git log` rather than rehashing here. The bug fix worth highlighting: commit `4d0161f4` split saved-search + scaffold handoffs into prepare-then-fire effects, killing the recurring "page sticks in skeleton on soft nav" bug (root cause was a single mount-time effect capturing a stale TanStack Query observer; mutate returned silently without firing the network request). This is a class-of-bug fix — should resolve similar reports across earlier prior handoffs too.
+
+**Top-priority smoke before push (verifies the class-of-bug fix):**
+1. Soft-nav scaffold loop closer: click scaffold icon from a tree node → land on `/search` with results, NOT skeleton-stuck.
+2. Soft-nav saved-search: click a saved search from the list → auto-executes, NOT skeleton-stuck.
+
+Lower-priority smokes (Ketcher drawer + preview, Groups-mode loop closer parity, Sonner toast on > 500-mol collection, frozen-collection state) are listed in the spec's acceptance criteria.
+
+**V3 next session:** UMAP-on-Morgan-FP via Temporal workflow + `POST /api/v1/embeddings/umap` (BE). `ClusterMapView` (Plotly scatter, lasso → save-as-new-collection) + `HeatmapView` (AG Grid cellStyle) (FE). Brainstorm first — V3 has chemistry decisions (fingerprint choice, embedding dimensions, cluster algorithm) and UX decisions (lasso interaction, heatmap pivot axes) that need chemist alignment before code.
+
+**Carry-overs that stay deferred** (don't accumulate more V2 polish — push V2 + move to V3):
+- `SearchQueryBuilder` is dead code (zero production callers). Cleanup PR welcome.
+- Wave 5 (lift `/search` ResultsGrid into ResultsSurface) — biggest piece in the deferred plan; defer past V3.
+- color-by-protocol on `/collections` scaffold tree (activityData threading); scaffold chip on MoleculeCard; Valkey cache layer swap; precompute scaffold trees on collection-membership change.
+
+**Resume:** smoke top-2 → push `prot-2` → open PR with all 8 sessions' work → start V3 brainstorm in a fresh conversation.
+
+---
+
 ### 2026-05-17 — V2 scaffold tree: post-smoke polish + chemistry correctness + scale fixes
 
 **Branch:** `prot-2`. 11 commits on top of the V2 base ship (`9436e1ed`). Nothing pushed — branch is now **41 commits ahead of `origin/prot-2`**. **Browser smoke pending** on the most-recent fixes (smoke checklist below).
