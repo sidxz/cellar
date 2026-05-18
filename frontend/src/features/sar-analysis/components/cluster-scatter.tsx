@@ -23,6 +23,8 @@ interface ClusterScatterProps {
   colorMode: ColorOption;
   activityPic50: Record<string, number | null>;
   scaffoldByMol: Record<string, string | null>;
+  /** Chemist-readable hover label per molecule id, e.g. "CV-00984 · SACC-0460144". */
+  labelByMolId?: Record<string, string>;
   onSelected: (polygon: { x: number; y: number }[] | null) => void;
   onPointClick: (moleculeId: string) => void;
   lassoActive?: boolean;
@@ -57,6 +59,7 @@ export function ClusterScatter({
   colorMode,
   activityPic50,
   scaffoldByMol,
+  labelByMolId,
   onSelected,
   onPointClick,
 }: ClusterScatterProps) {
@@ -91,8 +94,13 @@ export function ClusterScatter({
       size: 8,
       line: { width: 0.5, color: "#fff" },
     },
-    customdata: points.map((p) => p.moleculeId),
-    hovertemplate: "%{customdata}<extra></extra>",
+    // customdata carries [moleculeId, hoverLabel] so click handlers get the id
+    // while hovertemplate displays the chemist-readable label.
+    customdata: points.map((p) => [
+      p.moleculeId,
+      labelByMolId?.[p.moleculeId] ?? p.moleculeId,
+    ]),
+    hovertemplate: "%{customdata[1]}<extra></extra>",
   };
 
   const repIds = new Set(representatives.map((r) => r.moleculeId));
@@ -141,7 +149,10 @@ export function ClusterScatter({
     },
     onClick: (ev: any) => {
       const pt = ev?.points?.[0];
-      if (pt?.customdata) onPointClick(pt.customdata as string);
+      const cd = pt?.customdata;
+      // customdata is [moleculeId, hoverLabel]; click handler wants the id.
+      const moleculeId = Array.isArray(cd) ? (cd[0] as string) : (cd as string | undefined);
+      if (moleculeId) onPointClick(moleculeId);
     },
   };
 

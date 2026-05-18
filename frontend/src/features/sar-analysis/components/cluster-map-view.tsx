@@ -192,6 +192,21 @@ export function ClusterMapView({
     [molecules],
   );
 
+  // Chemist-readable hover label: prefer "reg_number · name" → reg_number → name
+  // → short id. UUIDs are never shown.
+  const labelByMolId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of molecules) {
+      const reg = (m as { reg_number?: string | null }).reg_number ?? null;
+      const name = (m as { name?: string | null }).name ?? null;
+      if (reg && name) map[m.id] = `${reg} · ${name}`;
+      else if (reg) map[m.id] = reg;
+      else if (name) map[m.id] = name;
+      else map[m.id] = m.id.slice(0, 8);
+    }
+    return map;
+  }, [molecules]);
+
   const colorOption: ColorOption = useMemo(() => {
     if (colorMode === "activity" && colorProtocolId) {
       return { mode: "activity", protocolId: colorProtocolId };
@@ -303,6 +318,7 @@ export function ClusterMapView({
                 colorMode={colorOption}
                 activityPic50={activityPic50}
                 scaffoldByMol={scaffoldByMol}
+                labelByMolId={labelByMolId}
                 onSelected={handleLassoSelected}
                 onPointClick={handlePointClick}
                 lassoActive={lassoedIds.size > 0}
