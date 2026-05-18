@@ -36,7 +36,7 @@ class _FakeEmbedder:
 
 
 class _FakeButina:
-    def cluster(self, fps):
+    def cluster(self, fps, *, threshold=None):  # noqa: ARG002 (signature parity)
         # All in one cluster, medoid = 0.
         return [0] * len(fps), [0]
 

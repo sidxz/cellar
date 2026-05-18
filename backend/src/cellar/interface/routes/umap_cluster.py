@@ -55,7 +55,12 @@ class StartUmapClusterBody(BaseModel):
 
     ``picker`` controls the representative-selection algorithm:
     - ``maxmin``: MaxMin diversity picker; ``n`` (required) sets the output count.
-    - ``butina``: Butina cluster medoids; ``threshold`` (required) controls cluster size.
+    - ``butina``: Butina cluster medoids; ``threshold`` drives the picks AND the coloring.
+
+    ``threshold`` is the Butina cluster threshold (Tanimoto distance) that always
+    drives the per-compound cluster coloring on the scatter, regardless of picker.
+    Defaults to 0.4 when omitted. When ``picker=butina``, this same threshold
+    also drives the medoid picks (single source of truth).
     """
 
     collection_id: UUID | None = None
@@ -76,8 +81,6 @@ class StartUmapClusterBody(BaseModel):
     def _check_picker_params(self) -> "StartUmapClusterBody":
         if self.picker == "maxmin" and self.n is None:
             raise ValueError("n is required when picker=maxmin.")
-        if self.picker == "butina" and self.threshold is None:
-            raise ValueError("threshold is required when picker=butina.")
         return self
 
 
@@ -208,8 +211,15 @@ async def start_umap_cluster(
             detail=f"Cluster map capped at {MAX_SET_SIZE} molecules; refine the filter.",
         )
 
+    # `threshold` is always part of picker_params — it drives the Butina coloring
+    # for both picker modes. When picker=butina it ALSO drives the medoid picks.
+    # When omitted by the caller, server default is 0.4 (chemistry convention
+    # for ECFP4-like fingerprints).
+    cluster_threshold = body.threshold if body.threshold is not None else 0.4
     picker_params: dict = (
-        {"n": body.n} if body.picker == "maxmin" else {"threshold": body.threshold}
+        {"n": body.n, "threshold": cluster_threshold}
+        if body.picker == "maxmin"
+        else {"threshold": cluster_threshold}
     )
 
     out = await uc.execute(

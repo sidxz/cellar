@@ -16,9 +16,14 @@ class ButinaClusterer:
     """
 
     def __init__(self, *, threshold: float = 0.4) -> None:
-        self._threshold = threshold
+        self._default_threshold = threshold
 
-    def cluster(self, fingerprints: list) -> tuple[list[int], list[int]]:
+    def cluster(
+        self, fingerprints: list, *, threshold: float | None = None
+    ) -> tuple[list[int], list[int]]:
+        effective_threshold = (
+            threshold if threshold is not None else self._default_threshold
+        )
         n = len(fingerprints)
         dists: list[float] = []
         for i in range(1, n):
@@ -26,7 +31,7 @@ class ButinaClusterer:
             dists.extend(1.0 - s for s in sims)
 
         cluster_tuples = Butina.ClusterData(
-            dists, n, self._threshold, isDistData=True
+            dists, n, effective_threshold, isDistData=True
         )
         cluster_ids = [0] * n
         medoid_indices: list[int] = []

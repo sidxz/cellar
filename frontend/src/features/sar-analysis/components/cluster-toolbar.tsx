@@ -50,7 +50,7 @@ export function ClusterToolbar(props: ClusterToolbarProps) {
         </Select>
       </div>
 
-      {props.picker === "maxmin" ? (
+      {props.picker === "maxmin" && (
         <div className="flex items-center gap-2 text-xs">
           <Label htmlFor="cluster-n">N</Label>
           <Input
@@ -63,22 +63,26 @@ export function ClusterToolbar(props: ClusterToolbarProps) {
             className="h-8 w-20"
           />
         </div>
-      ) : (
-        <div className="flex items-center gap-2 text-xs">
-          <Label>Threshold</Label>
-          <div className="w-40">
-            <Slider
-              aria-label="Threshold"
-              min={0.05}
-              max={0.95}
-              step={0.05}
-              value={[props.threshold]}
-              onValueChange={(v) => props.onThresholdChange(v[0])}
-            />
-          </div>
-          <span className="font-mono text-xs">{props.threshold.toFixed(2)}</span>
-        </div>
       )}
+
+      <div className="flex items-center gap-2 text-xs">
+        <Label>
+          {props.picker === "butina" ? "Threshold" : "Cluster threshold"}
+        </Label>
+        <div className="w-40">
+          <Slider
+            aria-label={
+              props.picker === "butina" ? "Threshold" : "Cluster threshold"
+            }
+            min={0.05}
+            max={0.95}
+            step={0.05}
+            value={[props.threshold]}
+            onValueChange={(v) => props.onThresholdChange(v[0])}
+          />
+        </div>
+        <span className="font-mono text-xs">{props.threshold.toFixed(2)}</span>
+      </div>
 
       <Button
         size="sm"

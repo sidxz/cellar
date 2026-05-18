@@ -37,7 +37,9 @@ class Embedder(Protocol):
 
 
 class Clusterer(Protocol):
-    def cluster(self, fingerprints) -> tuple[list[int], list[int]]: ...
+    def cluster(
+        self, fingerprints, *, threshold: float | None = None
+    ) -> tuple[list[int], list[int]]: ...
 
 
 class MaxMinPickerProto(Protocol):
@@ -91,8 +93,13 @@ class ComputeUmapCluster:
         embed_input = np.array([list(getattr(f, "bits", f)) for f in fps])
         coords = np.asarray(self._embedder.embed(embed_input))
 
-        # Always cluster (used for coloring even when picker=maxmin).
-        cluster_ids, medoid_indices = self._clusterer.cluster(fps)
+        # Always cluster (used for coloring even when picker=maxmin). The
+        # cluster threshold is also a chemist knob — for MaxMin it controls
+        # the color partition; for Butina it controls the picks too.
+        cluster_threshold = float(payload.picker_params.get("threshold", 0.4))
+        cluster_ids, medoid_indices = self._clusterer.cluster(
+            fps, threshold=cluster_threshold
+        )
 
         # Pick.
         if payload.picker == "maxmin":

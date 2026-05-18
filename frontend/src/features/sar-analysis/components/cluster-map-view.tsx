@@ -140,7 +140,7 @@ export function ClusterMapView({
   const isDirty =
     committedPicker !== picker ||
     (picker === "maxmin" && committedN !== n) ||
-    (picker === "butina" && committedThreshold !== threshold);
+    committedThreshold !== threshold;
 
   // --- All mol IDs (for the hook) ---
   const allIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
