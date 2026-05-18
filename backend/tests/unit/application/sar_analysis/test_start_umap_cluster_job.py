@@ -24,6 +24,7 @@ class _FakeRepo:
     def __init__(self) -> None:
         self.saved: list[UmapJob] = []
         self.cached: UmapJob | None = None
+        self.partial: UmapJob | None = None
 
     async def save(self, job: UmapJob) -> None:
         self.saved.append(job)
@@ -33,6 +34,9 @@ class _FakeRepo:
 
     async def find_cached(self, **_kwargs) -> UmapJob | None:
         return self.cached
+
+    async def find_compatible_for_pick(self, **_kwargs) -> UmapJob | None:
+        return self.partial
 
 
 class _FakeUow:
@@ -47,6 +51,7 @@ class _FakeUow:
 class _FakeCompute:
     def __init__(self) -> None:
         self.calls: list[ComputeUmapClusterInput] = []
+        self.pick_only_calls: list[dict[str, Any]] = []
 
     async def execute(self, payload: ComputeUmapClusterInput) -> UmapResult:
         self.calls.append(payload)
@@ -57,6 +62,25 @@ class _FakeCompute:
             cluster_count=0,
             picker=payload.picker,
             picker_params=payload.picker_params,
+        )
+
+    async def pick_only(
+        self,
+        *,
+        existing: UmapResult,
+        picker: str,
+        picker_params: dict[str, Any],
+    ) -> UmapResult:
+        self.pick_only_calls.append(
+            {"existing": existing, "picker": picker, "picker_params": picker_params}
+        )
+        return UmapResult(
+            points=existing.points,
+            clusters=existing.clusters,
+            representatives=[],
+            cluster_count=existing.cluster_count,
+            picker=picker,
+            picker_params=picker_params,
         )
 
 
@@ -163,3 +187,61 @@ async def test_async_path_schedules_when_above_limit() -> None:
     assert out.job.status == UmapJobStatus.PENDING
     assert len(orch.scheduled) == 1
     assert orch.scheduled[0]["picker"] == "butina"
+
+
+@pytest.mark.asyncio
+async def test_partial_cache_hit_runs_pick_only_skipping_full_compute() -> None:
+    """Chemist scrubs N at the same threshold → reuse UMAP + clusters, only
+    re-run the picker."""
+    repo = _FakeRepo()
+    repo.partial = (
+        UmapJob.create(
+            workspace_id=uuid4(),
+            requested_by=uuid4(),
+            ids_hash="h",
+            picker="maxmin",
+            picker_params={"n": 5, "threshold": 0.4},
+            picker_param_hash="ph_prev",
+            now=datetime.now(timezone.utc),
+        )
+        .mark_running(datetime.now(timezone.utc))
+        .mark_ready(
+            UmapResult(
+                points=[],
+                clusters=[],
+                representatives=[],
+                cluster_count=3,
+                picker="maxmin",
+                picker_params={"n": 5, "threshold": 0.4},
+            ),
+            datetime.now(timezone.utc),
+        )
+    )
+    compute = _FakeCompute()
+    use_case = StartUmapClusterJob(
+        compute=compute,
+        repository=repo,
+        orchestrator=_FakeOrchestrator(),
+        uow=_FakeUow(),
+        sync_limit=500,
+    )
+    out = await use_case.execute(
+        StartUmapClusterJobInput(
+            molecule_ids=[uuid4() for _ in range(30)],
+            picker="maxmin",
+            picker_params={"n": 10, "threshold": 0.4},
+            workspace_id=uuid4(),
+            requested_by=uuid4(),
+            now=datetime.now(timezone.utc),
+        )
+    )
+    assert out.result is not None
+    assert out.job is None
+    # Full compute path SHOULD NOT have been taken.
+    assert compute.calls == []
+    # pick_only IS what ran.
+    assert len(compute.pick_only_calls) == 1
+    assert compute.pick_only_calls[0]["picker_params"] == {"n": 10, "threshold": 0.4}
+    # And the new READY job is persisted for next-time full-cache-hit.
+    assert len(repo.saved) == 1
+    assert repo.saved[0].status == UmapJobStatus.READY

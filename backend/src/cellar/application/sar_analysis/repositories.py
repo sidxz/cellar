@@ -35,3 +35,11 @@ class UmapJobRepository(Protocol):
         picker_param_hash: str,
         ttl_seconds: int,
     ) -> UmapJob | None: ...
+
+    async def find_compatible_for_pick(
+        self,
+        *,
+        ids_hash: str,
+        threshold: float,
+        ttl_seconds: int,
+    ) -> UmapJob | None: ...

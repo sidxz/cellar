@@ -135,3 +135,67 @@ class ComputeUmapCluster:
             picker_params=payload.picker_params,
             skipped_molecule_ids=skipped,
         )
+
+    async def pick_only(
+        self,
+        *,
+        existing: UmapResult,
+        picker: str,
+        picker_params: dict[str, Any],
+    ) -> UmapResult:
+        """Re-run the picker against a cached UMAP+cluster result.
+
+        Skips the expensive UMAP step + Butina clustering by reusing the existing
+        result's `points` and `clusters`. For MaxMin we still need fingerprints
+        to compute Tanimoto distances; for Butina we just pick medoids out of
+        the cached cluster assignments (no FP load required).
+
+        Caller guarantees: existing.points / existing.clusters were computed at
+        the same `threshold` the new picker_params specify (the partial-cache
+        lookup keys on that).
+        """
+        # Cluster_id lookup per molecule, in the same order as existing.points.
+        cluster_by_mol = {c.molecule_id: c.cluster_id for c in existing.clusters}
+        ordered_ids = [p.molecule_id for p in existing.points]
+        cluster_ids = [cluster_by_mol.get(mid, 0) for mid in ordered_ids]
+
+        if picker == "maxmin":
+            # Need real FPs for Tanimoto distance — load by ID.
+            loaded = await self._loader.load_morgan(ordered_ids)
+            fps = [loaded[i] for i in ordered_ids if i in loaded]
+            if len(fps) != len(ordered_ids):
+                # FP availability shifted since the cache was built — fall back
+                # to the full path by raising. The caller can catch + redo.
+                raise RuntimeError(
+                    "Fingerprint availability changed since cache built; "
+                    "cannot do pick-only path."
+                )
+            n = int(picker_params.get("n", 50))
+            pick_indices = self._maxmin.pick(fps, n=n)
+            rep_assignments = [(idx, cluster_ids[idx]) for idx in pick_indices]
+        elif picker == "butina":
+            # Medoid = first member of each cluster in the existing assignment.
+            seen: dict[int, int] = {}
+            for idx, cid in enumerate(cluster_ids):
+                if cid not in seen:
+                    seen[cid] = idx
+            rep_assignments = sorted(
+                ((idx, cid) for cid, idx in seen.items()), key=lambda x: x[1]
+            )
+        else:  # pragma: no cover - guarded at API layer
+            raise ValueError(f"Unknown picker: {picker}")
+
+        representatives = [
+            RepresentativePick(molecule_id=ordered_ids[idx], cluster_id=cid)
+            for idx, cid in rep_assignments
+        ]
+
+        return UmapResult(
+            points=existing.points,
+            clusters=existing.clusters,
+            representatives=representatives,
+            cluster_count=existing.cluster_count,
+            picker=picker,
+            picker_params=picker_params,
+            skipped_molecule_ids=existing.skipped_molecule_ids,
+        )

@@ -81,6 +81,52 @@ class StartUmapClusterJob:
         if cached is not None and cached.result is not None:
             return StartUmapClusterJobOutput(result=cached.result, job=None)
 
+        # Partial-cache path: if a prior READY job exists for the same compound
+        # set + same Butina threshold, reuse its UMAP coords + cluster
+        # assignments and only re-run the picker. Skips the expensive UMAP step
+        # when chemists scrub N or switch picker mode at the same threshold.
+        threshold = float(payload.picker_params.get("threshold", 0.4))
+        async with self._uow:
+            partial = await self._repo.find_compatible_for_pick(
+                ids_hash=ids_hash,
+                threshold=threshold,
+                ttl_seconds=3600,
+            )
+
+        if (
+            partial is not None
+            and partial.result is not None
+            and len(payload.molecule_ids) <= self._sync_limit
+        ):
+            try:
+                result = await self._compute.pick_only(
+                    existing=partial.result,
+                    picker=payload.picker,
+                    picker_params=payload.picker_params,
+                )
+            except RuntimeError:
+                # FP availability shifted since the cache was built — fall
+                # through to full compute.
+                result = None
+            if result is not None:
+                job = (
+                    UmapJob.create(
+                        workspace_id=payload.workspace_id,
+                        requested_by=payload.requested_by,
+                        ids_hash=ids_hash,
+                        picker=payload.picker,
+                        picker_params=payload.picker_params,
+                        picker_param_hash=pp_hash,
+                        now=payload.now,
+                    )
+                    .mark_running(payload.now)
+                    .mark_ready(result, payload.now)
+                )
+                async with self._uow:
+                    await self._repo.save(job)
+                    await self._uow.commit()
+                return StartUmapClusterJobOutput(result=result, job=None)
+
         if len(payload.molecule_ids) <= self._sync_limit:
             result = await self._compute.execute(
                 ComputeUmapClusterInput(

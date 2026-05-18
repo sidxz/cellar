@@ -153,3 +153,35 @@ class SQLAlchemyUmapJobRepository:
         )
         model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
         return _model_to_domain(model) if model else None
+
+    async def find_compatible_for_pick(
+        self,
+        *,
+        ids_hash: str,
+        threshold: float,
+        ttl_seconds: int,
+    ) -> UmapJob | None:
+        """Find any READY job with matching ids_hash + threshold.
+
+        Used by the partial-cache path: if we have UMAP coords + Butina clusters
+        for the same compound set at the same threshold, we can reuse them and
+        only re-run the picker (MaxMin in particular skips the expensive UMAP
+        step). The matched job may have any picker / N.
+        """
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=ttl_seconds)
+        # picker_params is JSONB. Match the threshold key inside it. The path
+        # extraction uses the JSONB ->> operator (text), then cast to float.
+        threshold_expr = UmapJobModel.picker_params["threshold"].as_float()
+        stmt = (
+            select(UmapJobModel)
+            .where(
+                UmapJobModel.ids_hash == ids_hash,
+                threshold_expr == threshold,
+                UmapJobModel.status == UmapJobStatus.READY.value,
+                UmapJobModel.completed_at >= cutoff,
+            )
+            .order_by(UmapJobModel.completed_at.desc())
+            .limit(1)
+        )
+        model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
+        return _model_to_domain(model) if model else None
