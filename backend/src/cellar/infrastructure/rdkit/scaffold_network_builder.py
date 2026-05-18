@@ -4,11 +4,15 @@ The use case layer maps node SMILES back to owning molecule IDs using the
 stored bemis_murcko_smiles column.  This module returns the raw network
 shape only — no membership information.
 
-Edge direction: (parent_smiles, child_smiles) following RDKit's convention
-where beginIdx → endIdx runs from a more-complex scaffold down toward a
-simpler parent (i.e. the scaffold at beginIdx *contains* endIdx as a parent).
-Callers that want to render a hierarchy tree should treat the tuple's second
-element as the parent node.
+Edge direction (chemist-facing semantics): (parent_smiles, child_smiles)
+means *parent is the simpler / more general scaffold (ancestor) and child
+is the more elaborated descendant*. This is the convention chemists expect
+when reading a scaffold tree top-down (benzene at the root, decorated /
+fused / bridged ring systems beneath it).
+
+RDKit's internal edge representation is the other way around — `beginIdx`
+is the more complex scaffold and `endIdx` is the simpler parent. We flip
+the tuple at construction so the wire shape is unambiguous downstream.
 
 Note on fused ring systems: RDKit's Schuffenhauer algorithm does not fragment
 fused bicyclics (e.g. naphthalene) into their component rings — such molecules
@@ -42,9 +46,22 @@ class ScaffoldNetworkBuilder:
     """
 
     def __init__(self) -> None:
-        # Default ScaffoldNetworkParams() — Schuffenhauer-style hierarchy.
-        # Pinned explicitly so RDKit upgrades can't silently shift behavior.
+        # Default ScaffoldNetworkParams() emits FOUR variants per scaffold:
+        # the bare ring skeleton, a `*`-marked "with attachments" form, and
+        # generic / generic-bond variants where atoms or bonds are replaced
+        # by `*`. For chemist-facing tree rendering we only want the bare
+        # ring skeleton (matches stored bemis_murcko_smiles). Disable the
+        # other three explicitly so RDKit upgrades can't silently re-add them.
         self._params = rdScaffoldNetwork.ScaffoldNetworkParams()
+        self._params.includeScaffoldsWithAttachments = False
+        self._params.includeScaffoldsWithoutAttachments = True
+        self._params.includeGenericScaffolds = False
+        self._params.includeGenericBondScaffolds = False
+        self._params.keepOnlyFirstFragment = True
+        self._params.pruneBeforeFragmenting = True
+        self._params.flattenChirality = True
+        self._params.flattenIsotopes = True
+        self._params.flattenKeepLargest = True
 
     def build(self, mols: list[Chem.Mol | None]) -> RawScaffoldNetwork:
         """Return the scaffold network for *mols*.
@@ -72,13 +89,16 @@ class ScaffoldNetworkBuilder:
 
         node_smiles: list[str] = [str(n) for n in net.nodes]
 
+        # Flip RDKit's convention so (parent, child) means (ancestor, descendant)
+        # in chemist terms. RDKit emits beginIdx=complex, endIdx=simpler ancestor;
+        # we re-tuple as (parent=simpler, child=more-complex). See module docstring.
         edges: list[tuple[str, str]] = []
         for edge in net.edges:
             try:
-                parent = node_smiles[edge.beginIdx]
-                child = node_smiles[edge.endIdx]
+                more_complex = node_smiles[edge.beginIdx]
+                simpler_ancestor = node_smiles[edge.endIdx]
             except IndexError:  # pragma: no cover
                 continue
-            edges.append((parent, child))
+            edges.append((simpler_ancestor, more_complex))
 
         return RawScaffoldNetwork(node_smiles=node_smiles, edges=edges)

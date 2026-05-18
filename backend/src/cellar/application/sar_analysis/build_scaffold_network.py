@@ -95,25 +95,32 @@ class BuildScaffoldNetwork:
         if not rows:
             return _empty_result(started)
 
-        ringed_mols: list[Chem.Mol] = []
         acyclic_ids: list[UUID] = []
         scaffold_to_mol_ids: dict[str, list[UUID]] = defaultdict(list)
-
-        for mid, smi, scaffold in rows:
+        # Build the network from the STORED Bemis-Murcko scaffolds, not from
+        # the full molecules. The original full-mol input caused rdScaffoldNetwork
+        # to emit nodes that still carried OH / OMe / stereo decorations
+        # (the "with attachments" variant and the molecule itself as a root).
+        # Feeding the pure ring skeletons in means every emitted node is a
+        # ring-fragment of a Murcko scaffold — visually identifiable as a real
+        # scaffold by any chemist. Deduplicate by scaffold SMILES so we don't
+        # build the network on N copies of `c1ccccc1`.
+        scaffold_input_mols: dict[str, Chem.Mol] = {}
+        for mid, _smi, scaffold in rows:
             if scaffold == "":
-                # Stored empty string means acyclic — confirmed by backfill
                 acyclic_ids.append(mid)
                 continue
             if scaffold is None:
                 # Not yet backfilled — silently exclude from both buckets
                 continue
-            mol = Chem.MolFromSmiles(smi)
-            if mol is None:
-                continue
-            ringed_mols.append(mol)
+            if scaffold not in scaffold_input_mols:
+                mol = Chem.MolFromSmiles(scaffold)
+                if mol is None:
+                    continue
+                scaffold_input_mols[scaffold] = mol
             scaffold_to_mol_ids[scaffold].append(mid)
 
-        network = self._builder.build(ringed_mols)
+        network = self._builder.build(list(scaffold_input_mols.values()))
 
         # Build parent→children map from (parent, child) edge tuples
         children: dict[str, list[str]] = defaultdict(list)
