@@ -173,6 +173,7 @@ export type CriterionType =
   | "text"
   | "property"
   | "structure"
+  | "scaffold"
   | "activity"
   | "collection"
   | "keyword_list"
@@ -227,6 +228,15 @@ export interface StructureCriterion {
    *    "any bond" semantics — used when Ketcher SMILES export fails)
    *  Omitted ⇒ legacy defensive path (BE aromatizes the SMARTS). */
   query_kind?: "smiles" | "smarts";
+}
+
+export type ScaffoldMode = "exact_match" | "acyclic_only";
+
+export interface ScaffoldCriterion {
+  type: "scaffold";
+  mode: ScaffoldMode;
+  /** Required when mode is "exact_match"; ignored in acyclic_only. */
+  scaffold_smiles?: string;
 }
 
 /** Per-protocol run scoping for ActivityCriterion. */
@@ -373,6 +383,7 @@ export type SearchCriterionBase =
   | TextCriterion
   | PropertyCriterion
   | StructureCriterion
+  | ScaffoldCriterion
   | ActivityCriterion
   | CollectionCriterion
   | KeywordListCriterion

@@ -12,6 +12,7 @@ import type {
   PropertyOperator,
   RefType,
   RunDateCriterion,
+  ScaffoldCriterion,
   SelectivityCriterion,
   StructureCriterion,
   StructureSearchType,
@@ -120,6 +121,10 @@ export function defaultStructureCriterion(): StructureCriterion {
     threshold: 0.7,
     inchi_key: undefined,
   };
+}
+
+export function defaultScaffoldCriterion(): ScaffoldCriterion {
+  return { type: "scaffold", mode: "exact_match", scaffold_smiles: "" };
 }
 
 export function defaultActivityCriterion(): ActivityCriterion {

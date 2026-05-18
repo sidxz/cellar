@@ -21,6 +21,7 @@ import {
   defaultProjectCriterion,
   defaultPropertyCriterion,
   defaultRunDateCriterion,
+  defaultScaffoldCriterion,
   defaultSelectivityCriterion,
   defaultStructureCriterion,
   defaultTextCriterion,
@@ -36,6 +37,7 @@ import {
   ProjectCriterionRow,
   PropertyCriterionRow,
   RunDateCriterionRow,
+  ScaffoldCriterionRow,
   SelectivityCriterionRow,
   StructureCriterionRow,
   TextCriterionRow,
@@ -112,6 +114,7 @@ export function SearchQueryBuilder({ initialQuery, onSearch, isLoading }: Search
               text: defaultTextCriterion,
               property: defaultPropertyCriterion,
               structure: defaultStructureCriterion,
+              scaffold: defaultScaffoldCriterion,
               activity: defaultActivityCriterion,
               collection: defaultCollectionCriterion,
               keyword_list: defaultKeywordListCriterion,
@@ -138,6 +141,7 @@ export function SearchQueryBuilder({ initialQuery, onSearch, isLoading }: Search
             <SelectItem value="batch">Batch</SelectItem>
             <SelectItem value="collection">Collection</SelectItem>
             <SelectItem value="project">Project</SelectItem>
+            <SelectItem value="scaffold">Scaffold</SelectItem>
             <SelectItem value="keyword_list">Keyword List</SelectItem>
             <SelectItem value="run_date">Run Date</SelectItem>
             <SelectItem value="selectivity">Selectivity</SelectItem>
@@ -239,6 +243,14 @@ export function SearchQueryBuilder({ initialQuery, onSearch, isLoading }: Search
             case "project":
               return wrapWithNegate(
                 <ProjectCriterionRow
+                  criterion={criterion}
+                  onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
+                  onRemove={() => removeCriterion(index)}
+                />,
+              );
+            case "scaffold":
+              return wrapWithNegate(
+                <ScaffoldCriterionRow
                   criterion={criterion}
                   onChange={(c) => updateCriterion(index, { ...c, negate: criterion.negate })}
                   onRemove={() => removeCriterion(index)}
