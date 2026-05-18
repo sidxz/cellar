@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost } from "@/shared/lib/api/scaffold-tree/scaffold-tree";
 
 import {
   ResizableHandle,
@@ -42,6 +44,10 @@ type Props = {
   /** Called when a molecule tile is opened. Defaults to routing to /compounds/{id}. */
   onOpen?: (moleculeId: string) => void;
 };
+
+// Shared toast id — exported so tests can reference the same constant and
+// avoid silent rot if the id is ever renamed.
+export const SCAFFOLD_TREE_TOAST_ID = "scaffold-tree-job";
 
 // react-resizable-panels v4 interprets NUMBER props as pixels and STRING
 // props as percentages. We want percent-based layout that scales with the
@@ -141,7 +147,7 @@ export function ScaffoldTreeView({
   // expand to the full member list and we won't undercount on > 200-mol sets.
   // Otherwise (ad-hoc search results, sub-paged views) fall back to the
   // visible molecule IDs.
-  const { tree, isStarting, isPolling, error } = useScaffoldTree(
+  const { tree, jobId, isStarting, isPolling, error } = useScaffoldTree(
     collectionId ? { collectionId } : { moleculeIds },
   );
 
@@ -286,6 +292,51 @@ export function ScaffoldTreeView({
     // state survives min-members filter tweaks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree]);
+
+  // Sonner toast for long-running async compute. After 3 seconds in a
+  // pending state, show a loading toast with a Cancel action. Dismiss on
+  // terminal status (tree arrives or error fires). The inline caption
+  // below stays as a backstop for screens where toasts may be off.
+  //
+  // toastScheduledRef: only dismiss when a toast was actually shown — avoids
+  // calling toast.dismiss on every idle render (e.g. the initial mount).
+  const toastScheduledRef = useRef(false);
+  useEffect(() => {
+    const isWorking = isStarting || (isPolling && !tree);
+    if (!isWorking) {
+      if (toastScheduledRef.current) {
+        toast.dismiss(SCAFFOLD_TREE_TOAST_ID);
+        toastScheduledRef.current = false;
+      }
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      // Same-tick race guard: if the component transitioned to idle in the
+      // same tick that the timer fired, skip the toast entirely.
+      if (!isWorking) return;
+      toastScheduledRef.current = true;
+      toast.loading("Computing scaffold tree…", {
+        id: SCAFFOLD_TREE_TOAST_ID,
+        duration: Infinity,
+        action: {
+          label: "Cancel",
+          onClick: () => {
+            if (jobId) {
+              void cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost(jobId);
+            }
+            toast.dismiss(SCAFFOLD_TREE_TOAST_ID);
+            // id makes the success toast idempotent — rapid double-clicks
+            // replace rather than stack a second notification.
+            toast.success("Scaffold tree cancelled", { id: SCAFFOLD_TREE_TOAST_ID });
+            toastScheduledRef.current = false;
+          },
+        },
+      });
+    }, 3000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isStarting, isPolling, tree, jobId]);
 
   const protocolOptions = useMemo(() => {
     const seen = new Map<string, string>();

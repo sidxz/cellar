@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
+import { toast } from "sonner";
+import type { UseScaffoldTreeReturn } from "../hooks/use-scaffold-tree";
 
-import { ScaffoldTreeView } from "./scaffold-tree-view";
+import { ScaffoldTreeView, SCAFFOLD_TREE_TOAST_ID } from "./scaffold-tree-view";
 
 // next/navigation requires the App Router context — stub out for tests.
 vi.mock("next/navigation", () => ({
@@ -24,40 +26,75 @@ vi.mock("@/shared/components/ui/resizable", () => ({
   ResizableHandle: () => <div data-testid="resizable-handle" />,
 }));
 
-// Mock the hook so we don't hit network.
-// The tree object is defined INSIDE the factory so it is stable across renders
-// (same reference returned by every useScaffoldTree() call). If a new literal
-// were returned each call the useEffect([tree]) in the component would fire on
-// every render → infinite setState → OOM.
-vi.mock("../hooks/use-scaffold-tree", () => {
-  const stableTree = {
-    nodes: [
-      {
-        scaffold_smiles: "c1ccccc1",
-        molecule_ids: ["m1", "m2"],
-        molecule_count: 2,
-        subtree_molecule_count: 3,
-      },
-      {
-        scaffold_smiles: "c1ccc2ccccc2c1",
-        molecule_ids: ["m3"],
-        molecule_count: 1,
-        subtree_molecule_count: 1,
-      },
-    ],
-    edges: [{ parent_smiles: "c1ccccc1", child_smiles: "c1ccc2ccccc2c1" }],
-    stats: { node_count: 2, elapsed_ms: 5, cache_hit: false },
-  };
-  return {
-    useScaffoldTree: () => ({
-      tree: stableTree,
-      jobId: null,
-      isStarting: false,
-      isPolling: false,
-      error: null,
-    }),
-  };
-});
+// Stable fixture tree — shared by both the existing tests and the new
+// toast tests. Defined outside the mock factory so we can reference it
+// in rerender calls too.
+const fixtureTree = {
+  nodes: [
+    {
+      scaffold_smiles: "c1ccccc1",
+      molecule_ids: ["m1", "m2"],
+      molecule_count: 2,
+      subtree_molecule_count: 3,
+    },
+    {
+      scaffold_smiles: "c1ccc2ccccc2c1",
+      molecule_ids: ["m3"],
+      molecule_count: 1,
+      subtree_molecule_count: 1,
+    },
+  ],
+  edges: [{ parent_smiles: "c1ccccc1", child_smiles: "c1ccc2ccccc2c1" }],
+  stats: { node_count: 2, elapsed_ms: 5, cache_hit: false },
+};
+
+// The mock is a vi.fn() so the toast-wiring tests can override the return
+// value per-test via mockReturnValue(). The default implementation returns
+// the stable tree so all existing tests continue to pass unchanged.
+//
+// Typed explicitly so that mockReturnValue() calls accept nullable tree
+// values without TS complaining about the inferred non-nullable type from
+// the default literal.
+const mockUseScaffoldTree = vi.fn((): UseScaffoldTreeReturn => ({
+  tree: fixtureTree,
+  jobId: null,
+  isStarting: false,
+  isPolling: false,
+  error: null,
+}));
+
+vi.mock("../hooks/use-scaffold-tree", () => ({
+  // Ignore the params — the mock controls return value via mockReturnValue().
+  // Using a single ignored param avoids the TS2556 "spread must have tuple
+  // type" error from (...args: any[]) in vi.mock factory closures.
+  useScaffoldTree: (_p: unknown) => mockUseScaffoldTree(),
+}));
+
+// Sonner — mock the three methods the component calls.
+vi.mock("sonner", () => ({
+  toast: {
+    loading: vi.fn(),
+    success: vi.fn(),
+    dismiss: vi.fn(),
+  },
+}));
+
+// Cancel endpoint — track calls without hitting the network.
+const mockCancel = vi.fn();
+vi.mock(
+  "@/shared/lib/api/scaffold-tree/scaffold-tree",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("@/shared/lib/api/scaffold-tree/scaffold-tree")
+    >();
+    return {
+      ...actual,
+      cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost: (
+        jobId: string,
+      ) => mockCancel(jobId),
+    };
+  },
+);
 
 // Mock CardGrid — tracks the molecule count passed in
 vi.mock(
@@ -68,6 +105,7 @@ vi.mock(
     ),
   }),
 );
+
 
 // Mock StructureThumbnail (RDKit-free shim)
 vi.mock("@/shared/components/chemistry", () => ({
@@ -224,5 +262,138 @@ describe("ScaffoldTreeView — Hierarchy mode", () => {
       expect(screen.queryByTestId("scaffold-node-c1ccccc1")).toBeNull(),
     );
     expect(screen.getByText(/no scaffolds match/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Toast wiring tests (Wave 4 / C1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render <ScaffoldTreeView> with the hook returning the given values.
+ * Returns a rerender helper that accepts the next hook-return override.
+ */
+function renderWithHookState(initial: UseScaffoldTreeReturn) {
+  mockUseScaffoldTree.mockReturnValue(initial);
+  const result = render(
+    <ScaffoldTreeView molecules={molecules} activityData={{}} />,
+    { wrapper },
+  );
+  return {
+    rerender: (next: UseScaffoldTreeReturn) => {
+      mockUseScaffoldTree.mockReturnValue(next);
+      result.rerender(
+        <ScaffoldTreeView molecules={molecules} activityData={{}} />,
+      );
+    },
+  };
+}
+
+describe("ScaffoldTreeView — async-compute Sonner toast (Wave 4 / C1)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    (toast.loading as ReturnType<typeof vi.fn>).mockClear();
+    (toast.success as ReturnType<typeof vi.fn>).mockClear();
+    (toast.dismiss as ReturnType<typeof vi.fn>).mockClear();
+    mockCancel.mockClear();
+    // Reset hook back to the default stable-tree state between tests.
+    mockUseScaffoldTree.mockReturnValue({
+      tree: fixtureTree,
+      jobId: null,
+      isStarting: false,
+      isPolling: false,
+      error: null,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows a loading toast after 3 s of pending state", () => {
+    renderWithHookState({
+      isStarting: true,
+      isPolling: false,
+      tree: null,
+      jobId: null,
+      error: null,
+    });
+    // Before 3 s — toast must NOT have fired yet.
+    expect(toast.loading).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(3000);
+    expect(toast.loading).toHaveBeenCalledWith(
+      "Computing scaffold tree…",
+      expect.objectContaining({
+        id: SCAFFOLD_TREE_TOAST_ID,
+        duration: Infinity,
+        action: expect.objectContaining({ label: "Cancel" }),
+      }),
+    );
+  });
+
+  it("does NOT show a toast when compute completes within 3 s", () => {
+    const { rerender } = renderWithHookState({
+      isStarting: true,
+      isPolling: false,
+      tree: null,
+      jobId: null,
+      error: null,
+    });
+    vi.advanceTimersByTime(2000);
+    // Tree arrives before the 3-second threshold fires.
+    rerender({
+      isStarting: false,
+      isPolling: false,
+      tree: fixtureTree,
+      jobId: null,
+      error: null,
+    });
+    vi.advanceTimersByTime(2000); // would have fired the toast if not cleared
+    expect(toast.loading).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the toast when the tree arrives after the 3-s mark", () => {
+    const { rerender } = renderWithHookState({
+      isStarting: true,
+      isPolling: false,
+      tree: null,
+      jobId: null,
+      error: null,
+    });
+    vi.advanceTimersByTime(3000);
+    expect(toast.loading).toHaveBeenCalledTimes(1);
+
+    // Tree arrives — component re-renders with isWorking = false.
+    rerender({
+      isStarting: false,
+      isPolling: false,
+      tree: fixtureTree,
+      jobId: null,
+      error: null,
+    });
+    expect(toast.dismiss).toHaveBeenCalledWith(SCAFFOLD_TREE_TOAST_ID);
+  });
+
+  it("Cancel action fires the cancel API call then dismisses and toasts success", () => {
+    renderWithHookState({
+      isStarting: false,
+      isPolling: true,
+      tree: null,
+      jobId: "job-123",
+      error: null,
+    });
+    vi.advanceTimersByTime(3000);
+    expect(toast.loading).toHaveBeenCalledTimes(1);
+
+    // Grab the action handler from the toast.loading call.
+    const opts = (toast.loading as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    opts.action.onClick();
+
+    expect(mockCancel).toHaveBeenCalledWith("job-123");
+    expect(toast.dismiss).toHaveBeenCalledWith(SCAFFOLD_TREE_TOAST_ID);
+    expect(toast.success).toHaveBeenCalledWith(
+      "Scaffold tree cancelled",
+      expect.objectContaining({ id: SCAFFOLD_TREE_TOAST_ID }),
+    );
   });
 });
