@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Lock, FlaskConical, FolderOpen } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { MemberName, OrgName } from "@/shared/components/entity-name";
+import { useInlineEditCollectionName } from "@/features/research-organization/hooks/use-inline-edit-collection-name";
 
 export interface CollectionHeaderData {
   id: string;
@@ -33,10 +34,51 @@ export function CollectionHeader({
   rightSlot,
   className,
 }: CollectionHeaderProps) {
+  const edit = useInlineEditCollectionName(collection.id, collection.name);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (edit.isEditing) inputRef.current?.focus();
+  }, [edit.isEditing]);
+
   return (
     <header className={className}>
       {/* Single-row meta strip */}
       <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+        {/* Inline-editable name — leads the strip; reads as a heading at base size */}
+        {edit.isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            autoComplete="off"
+            aria-label="Collection name"
+            className="text-sm font-medium bg-background border rounded px-2 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={edit.draft}
+            onChange={(e) => edit.setDraft(e.target.value)}
+            onBlur={edit.commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                inputRef.current?.blur(); // single commit path via onBlur
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                edit.cancel(); // cancel resets draft; subsequent blur is a no-op (unchanged guard)
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="text-sm font-medium text-foreground hover:bg-muted rounded px-1 -mx-1 disabled:opacity-60 disabled:hover:bg-transparent"
+            onClick={edit.startEdit}
+            disabled={edit.isPending}
+            title="Click to rename"
+            aria-label={`Rename collection: ${collection.name}`}
+          >
+            {collection.name}
+          </button>
+        )}
+
         {/* Left: badges + meta links + created-by */}
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-muted-foreground">
           <Badge variant="secondary" className="text-xs">
