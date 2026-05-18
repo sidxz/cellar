@@ -142,12 +142,13 @@ function ScaffoldTreeNodeInner(props: Props) {
           </span>
         </span>
 
-        {/* Action button — visible only on hover/focus; opens /search filtered
-            to compounds matching this node's scaffold. */}
+        {/* Action button — faintly visible at rest; brightens on row hover or
+            keyboard focus. Opens /search filtered to compounds matching this
+            node's scaffold. */}
         <button
           type="button"
           onClick={handleOpenInSearch}
-          className="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+          className="ml-auto opacity-30 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
           aria-label="Find compounds with this scaffold"
           title="Find compounds with this scaffold"
         >
