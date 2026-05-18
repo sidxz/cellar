@@ -129,6 +129,20 @@ export function ClusterMapView({
   const [pendingSubset, setPendingSubset] = useState<string[] | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
+  // --- Committed picker config ---
+  // Toolbar (`picker`, `n`, `threshold` from URL state) holds the PENDING
+  // config the chemist is composing. The map only re-fetches when the chemist
+  // hits Diversify, which commits pending → committed below. Auto-fetch on
+  // every keystroke would burn server compute + cache slots; the explicit
+  // Diversify trigger matches the brainstormed interaction model.
+  const [committedPicker, setCommittedPicker] = useState(picker);
+  const [committedN, setCommittedN] = useState(n);
+  const [committedThreshold, setCommittedThreshold] = useState(threshold);
+  const isDirty =
+    committedPicker !== picker ||
+    (picker === "maxmin" && committedN !== n) ||
+    (picker === "butina" && committedThreshold !== threshold);
+
   // --- All mol IDs (for the hook) ---
   const allIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
 
@@ -140,9 +154,9 @@ export function ClusterMapView({
   const { result, loading, error, cancel } = useUmapCluster({
     collectionId: useCollectionSource ? collectionId : undefined,
     moleculeIds: useCollectionSource ? undefined : (pendingSubset ?? allIds),
-    picker,
-    n,
-    threshold,
+    picker: committedPicker,
+    n: committedN,
+    threshold: committedThreshold,
     enabled: molecules.length >= MIN_MOLS_FOR_UMAP,
   });
 
@@ -230,11 +244,15 @@ export function ClusterMapView({
   }, []);
 
   const handleDiversify = useCallback(() => {
+    // Commit pending picker config → committed (triggers refetch).
+    setCommittedPicker(picker);
+    setCommittedN(n);
+    setCommittedThreshold(threshold);
     // Snapshot lasso into pendingSubset to re-scope computation; clear the
     // polygon so the next interaction starts fresh.
     setPendingSubset(lassoedIds.size > 0 ? [...lassoedIds] : null);
     setLassoPolygon(null);
-  }, [lassoedIds]);
+  }, [lassoedIds, picker, n, threshold]);
 
   const handleSave = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -274,6 +292,7 @@ export function ClusterMapView({
         onNChange={setN}
         onThresholdChange={setThreshold}
         onDiversify={handleDiversify}
+        diversifyDirty={isDirty}
         onSave={handleSave}
         colorPicker={
           <ColorModePicker
