@@ -150,4 +150,22 @@ describe("ScaffoldTreeView", () => {
       expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
     );
   });
+
+  it("min-mols pill hides root nodes below the threshold", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    // Initial state: benzene root has subtree_count=3 — visible at min=1
+    await screen.findByTestId("scaffold-node-c1ccccc1");
+
+    // Click the pill three times: 1 → 2 → 3 → 5. At 5, benzene (subtree=3) is hidden.
+    const pill = screen.getByTitle(/cycle minimum members/i);
+    fireEvent.click(pill); // 2
+    fireEvent.click(pill); // 3
+    fireEvent.click(pill); // 5
+    await waitFor(() =>
+      expect(screen.queryByTestId("scaffold-node-c1ccccc1")).toBeNull(),
+    );
+    expect(screen.getByText(/no scaffolds match/i)).toBeInTheDocument();
+  });
 });

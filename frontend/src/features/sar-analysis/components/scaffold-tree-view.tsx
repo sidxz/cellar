@@ -40,6 +40,36 @@ const TREE_MIN_PCT = "20";
 const TREE_MAX_PCT = "50";
 const CARDS_DEFAULT_PCT = "70";
 
+const MIN_MEMBERS_CYCLE = [1, 2, 3, 5, 10] as const;
+
+function MinMembersPill({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  const cycle = () => {
+    const idx = MIN_MEMBERS_CYCLE.indexOf(
+      value as (typeof MIN_MEMBERS_CYCLE)[number],
+    );
+    const next =
+      MIN_MEMBERS_CYCLE[(idx + 1) % MIN_MEMBERS_CYCLE.length] ?? 1;
+    onChange(next);
+  };
+  return (
+    <button
+      type="button"
+      onClick={cycle}
+      title="Cycle minimum members threshold"
+      className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border bg-background hover:bg-muted shrink-0 tabular-nums"
+    >
+      <span className="text-muted-foreground">Min</span>
+      <span className="font-semibold">{value}</span>
+    </button>
+  );
+}
+
 export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
   const router = useRouter();
   const moleculeIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
@@ -51,14 +81,11 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
   const [selectedScaffold, setSelectedScaffold] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [colorBy, setColorBy] = useState<string | null>(null);
+  const [minMembers, setMinMembers] = useState<number>(1);
 
-  // Default-expand root nodes once the tree arrives.
-  useEffect(() => {
-    if (tree?.nodes.length) {
-      const roots = rootNodes(tree).map((n) => n.scaffold_smiles);
-      setExpanded(new Set(roots));
-    }
-  }, [tree]);
+  // Number of top roots to auto-expand on first arrival. Beyond this, chemists
+  // expand explicitly. Keeps the initial visual scan to the cluster heads only.
+  const DEFAULT_EXPAND_TOP_N = 3;
 
   const handleToggle = useCallback((scaffoldSmiles: string) => {
     setExpanded((prev) => {
@@ -124,6 +151,61 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
     return molecules.filter((m) => ids.has(m.id));
   }, [molecules, tree, selectedScaffold]);
 
+  // Path A: visible nodes after the min-members filter. A node is visible
+  // when its subtree_molecule_count >= minMembers. Applies recursively in
+  // the tree — both as a root-level filter and as an inner-node guard.
+  const visibleNodes = useMemo(() => {
+    const s = new Set<string>();
+    if (!tree) return s;
+    for (const n of tree.nodes) {
+      if (n.subtree_molecule_count >= minMembers) s.add(n.scaffold_smiles);
+    }
+    return s;
+  }, [tree, minMembers]);
+
+  // Path A: root-level node sort. Cluster heads (largest subtree_count) first;
+  // ties by direct molecule_count, then alphabetical for determinism. Also drops
+  // phantom-parent roots — nodes RDKit emitted as intermediates that nobody's
+  // molecule actually belongs to (molecule_count=0) AND that don't aggregate
+  // anything meaningful (subtree_count <= 1). Those are visual noise.
+  const sortedRoots = useMemo(() => {
+    if (!tree) return [];
+    const roots = rootNodes(tree)
+      .filter(
+        (r) =>
+          visibleNodes.has(r.scaffold_smiles) &&
+          // hide phantom-parent roots: no direct members + trivial subtree
+          !(r.molecule_count === 0 && r.subtree_molecule_count <= 1),
+      )
+      .sort((a, b) => {
+        if (b.subtree_molecule_count !== a.subtree_molecule_count) {
+          return b.subtree_molecule_count - a.subtree_molecule_count;
+        }
+        if (b.molecule_count !== a.molecule_count) {
+          return b.molecule_count - a.molecule_count;
+        }
+        return a.scaffold_smiles.localeCompare(b.scaffold_smiles);
+      });
+    return roots;
+  }, [tree, visibleNodes]);
+
+  // Path A: default-expand only the top-N roots once the tree arrives.
+  // Previously we expanded ALL roots — visually overwhelming for diverse sets.
+  useEffect(() => {
+    if (sortedRoots.length > 0) {
+      setExpanded(
+        new Set(
+          sortedRoots
+            .slice(0, DEFAULT_EXPAND_TOP_N)
+            .map((n) => n.scaffold_smiles),
+        ),
+      );
+    }
+    // Intentionally only re-runs when the tree identity changes; user expansion
+    // state survives min-members filter tweaks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree]);
+
   const protocolOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const perMol of Object.values(activityData ?? {})) {
@@ -162,8 +244,6 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
     );
   }
 
-  const roots = rootNodes(tree);
-
   // The group needs an explicit height because `h-full` cascades to 0 inside
   // the parent's `flex flex-col gap-3/4` (no defined height). 70vh leaves room
   // for the page header + collection chrome above without scrollbar conflict.
@@ -178,28 +258,52 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
         maxSize={TREE_MAX_PCT}
       >
         <div className="flex flex-col h-full">
-          <div className="p-2 border-b">
-            <ScaffoldColorPicker
-              protocols={protocolOptions}
-              value={colorBy}
-              onChange={setColorBy}
-            />
+          <div className="p-2 border-b flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <MinMembersPill value={minMembers} onChange={setMinMembers} />
+              <ScaffoldColorPicker
+                protocols={protocolOptions}
+                value={colorBy}
+                onChange={setColorBy}
+              />
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-1">
-            {roots.map((root) => (
-              <ScaffoldTreeNode
-                key={root.scaffold_smiles}
-                scaffoldSmiles={root.scaffold_smiles}
-                tree={tree}
-                childIndex={childIndex}
-                colorBins={colorBins}
-                depth={0}
-                expanded={expanded}
-                selected={selectedScaffold}
-                onToggle={handleToggle}
-                onSelect={handleSelect}
-              />
-            ))}
+            {sortedRoots.length === 0 ? (
+              <div className="p-4 text-xs text-muted-foreground">
+                No scaffolds match the current filter.
+                {minMembers > 1 && (
+                  <>
+                    {" "}
+                    Try{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => setMinMembers(1)}
+                    >
+                      Min mols = 1
+                    </button>
+                    .
+                  </>
+                )}
+              </div>
+            ) : (
+              sortedRoots.map((root) => (
+                <ScaffoldTreeNode
+                  key={root.scaffold_smiles}
+                  scaffoldSmiles={root.scaffold_smiles}
+                  tree={tree}
+                  childIndex={childIndex}
+                  colorBins={colorBins}
+                  visibleNodes={visibleNodes}
+                  depth={0}
+                  expanded={expanded}
+                  selected={selectedScaffold}
+                  onToggle={handleToggle}
+                  onSelect={handleSelect}
+                />
+              ))
+            )}
           </div>
         </div>
       </ResizablePanel>

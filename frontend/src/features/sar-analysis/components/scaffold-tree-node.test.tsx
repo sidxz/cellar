@@ -35,8 +35,9 @@ describe("ScaffoldTreeNode", () => {
         colorBins={new Map()}
       />,
     );
-    // Format: "1 · 2" (own · subtree)
-    expect(screen.getByText(/1\s*·\s*2/)).toBeInTheDocument();
+    // Format: "1 mol · 2 sub" — own count then descendant count
+    expect(screen.getByText(/1/)).toBeInTheDocument();
+    expect(screen.getByText(/2 sub/)).toBeInTheDocument();
   });
 
   it("renders only own count when subtree equals own count", () => {
@@ -60,8 +61,10 @@ describe("ScaffoldTreeNode", () => {
         colorBins={new Map()}
       />,
     );
-    // Just "1"
+    // Just "1" + "mol" (singular), no "sub"
     expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText(/^mol$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sub/i)).not.toBeInTheDocument();
   });
 
   it("emits onSelect with scaffold smiles on row click", () => {

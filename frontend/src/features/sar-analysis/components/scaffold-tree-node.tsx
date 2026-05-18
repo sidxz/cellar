@@ -17,6 +17,12 @@ type Props = {
   childIndex: Map<string, string[]>;
   /** Scaffold -> activity rollup color bin, computed once at the tree root */
   colorBins: Map<string, ActivityRollupBin>;
+  /**
+   * Set of scaffold SMILES that pass the min-members filter. Children are
+   * pruned to this set so a deep subtree below the threshold collapses cleanly.
+   * If undefined, no filtering is applied.
+   */
+  visibleNodes?: Set<string>;
   depth: number;
   expanded: Set<string>;
   selected: string | null;
@@ -37,6 +43,7 @@ function ScaffoldTreeNodeInner(props: Props) {
     tree,
     childIndex,
     colorBins,
+    visibleNodes,
     depth,
     expanded,
     selected,
@@ -54,8 +61,15 @@ function ScaffoldTreeNodeInner(props: Props) {
 
   const node = nodesBySmiles.get(scaffoldSmiles);
   if (!node) return null;
+  // Defensive: a parent might pass us a smiles that doesn't pass the filter.
+  if (visibleNodes && !visibleNodes.has(scaffoldSmiles)) return null;
 
-  const children = childIndex.get(scaffoldSmiles) ?? [];
+  // Filter children to visible ones so a subtree below the threshold collapses
+  // without rendering any of its rows.
+  const allChildren = childIndex.get(scaffoldSmiles) ?? [];
+  const children = visibleNodes
+    ? allChildren.filter((c) => visibleNodes.has(c))
+    : allChildren;
   const isExpanded = expanded.has(scaffoldSmiles);
   const isSelected = selected === scaffoldSmiles;
   const isBucket = scaffoldSmiles === NO_SCAFFOLD_SENTINEL;
@@ -106,11 +120,17 @@ function ScaffoldTreeNodeInner(props: Props) {
         {/* Spacer pushes the count to the right edge */}
         <span className="flex-1" aria-hidden />
 
-        {/* Molecule counts */}
-        <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-          {node.molecule_count === node.subtree_molecule_count
-            ? node.molecule_count
-            : `${node.molecule_count} · ${node.subtree_molecule_count}`}
+        {/* Molecule counts — bold and labeled so chemists can scan cluster
+            heads at a glance. "9 mols" reads faster than "9". When a node
+            aggregates descendants too, append the subtree count subtly. */}
+        <span className="text-sm tabular-nums shrink-0 flex items-baseline gap-1">
+          <span className="font-semibold">{node.molecule_count}</span>
+          <span className="text-xs text-muted-foreground">
+            {node.molecule_count === 1 ? "mol" : "mols"}
+            {node.molecule_count !== node.subtree_molecule_count && (
+              <> · {node.subtree_molecule_count} sub</>
+            )}
+          </span>
         </span>
 
         {/* Activity color band */}
@@ -132,6 +152,7 @@ function ScaffoldTreeNodeInner(props: Props) {
               tree={tree}
               childIndex={childIndex}
               colorBins={colorBins}
+              visibleNodes={visibleNodes}
               depth={depth + 1}
               expanded={expanded}
               selected={selected}
