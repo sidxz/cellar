@@ -40,7 +40,7 @@ export function ScaffoldSection({ criteria, onChange }: ScaffoldSectionProps) {
       </div>
 
       {criteria.length === 0 && (
-        <p className="text-sm italic text-muted-foreground py-1">
+        <p className="text-sm italic text-muted-foreground/50">
           No scaffold filters.
         </p>
       )}
