@@ -10,10 +10,13 @@ import {
 } from "@/shared/components/ui/resizable";
 import { CardGrid } from "@/features/research-organization/components/results/card-grid";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { cn } from "@/shared/lib/utils";
 
 import { useScaffoldTree } from "../hooks/use-scaffold-tree";
 import { ScaffoldTreeNode } from "./scaffold-tree-node";
+import { ScaffoldGroupsList } from "./scaffold-groups-list";
 import { ScaffoldColorPicker } from "./scaffold-color-picker";
+import { useTreeSubMode } from "../lib/use-tree-sub-mode";
 import {
   buildChildIndex,
   collectSubtreeMolIds,
@@ -41,6 +44,54 @@ const TREE_MAX_PCT = "50";
 const CARDS_DEFAULT_PCT = "70";
 
 const MIN_MEMBERS_CYCLE = [1, 2, 3, 5, 10] as const;
+
+function SubModeToggle({
+  value,
+  onChange,
+}: {
+  value: "groups" | "hierarchy";
+  onChange: (next: "groups" | "hierarchy") => void;
+}) {
+  // Tiny segmented control. Groups (default) = flat list of distinct
+  // chemotypes by frequency; Hierarchy = Schuffenhauer DAG with Path A's
+  // sort + filters. Chemists scan in Groups, drill in Hierarchy.
+  const base =
+    "px-2 py-1 text-xs first:rounded-l-md last:rounded-r-md border-y border-r first:border-l shrink-0 transition-colors";
+  return (
+    <div
+      role="group"
+      aria-label="Scaffold view mode"
+      className="inline-flex items-stretch text-xs"
+    >
+      <button
+        type="button"
+        onClick={() => onChange("groups")}
+        aria-pressed={value === "groups"}
+        className={cn(
+          base,
+          value === "groups"
+            ? "bg-primary text-primary-foreground border-primary"
+            : "bg-background hover:bg-muted border-border",
+        )}
+      >
+        Groups
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("hierarchy")}
+        aria-pressed={value === "hierarchy"}
+        className={cn(
+          base,
+          value === "hierarchy"
+            ? "bg-primary text-primary-foreground border-primary"
+            : "bg-background hover:bg-muted border-border",
+        )}
+      >
+        Hierarchy
+      </button>
+    </div>
+  );
+}
 
 function MinMembersPill({
   value,
@@ -77,6 +128,7 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
     moleculeIds,
   });
 
+  const { subMode, setSubMode } = useTreeSubMode();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedScaffold, setSelectedScaffold] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -147,9 +199,21 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
 
   const filteredMolecules = useMemo(() => {
     if (!tree || selectedScaffold == null) return molecules;
+    // In Hierarchy mode, selecting an inner node should show the whole subtree
+    // (all descendant mols) — that's the SAR-pivot story. In Groups mode each
+    // row IS a leaf chemotype, so we filter to its direct molecule_ids only —
+    // chemists who pick "piperidine variant A" want THOSE compounds, not also
+    // every other scaffold that happens to be a substructure.
+    if (subMode === "groups") {
+      const node = tree.nodes.find(
+        (n) => n.scaffold_smiles === selectedScaffold,
+      );
+      const directIds = new Set(node?.molecule_ids ?? []);
+      return molecules.filter((m) => directIds.has(m.id));
+    }
     const ids = new Set(collectSubtreeMolIds(selectedScaffold, tree));
     return molecules.filter((m) => ids.has(m.id));
-  }, [molecules, tree, selectedScaffold]);
+  }, [molecules, tree, selectedScaffold, subMode]);
 
   // Path A: visible nodes after the min-members filter. A node is visible
   // when its subtree_molecule_count >= minMembers. Applies recursively in
@@ -258,18 +322,25 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
         maxSize={TREE_MAX_PCT}
       >
         <div className="flex flex-col h-full">
-          <div className="p-2 border-b flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <MinMembersPill value={minMembers} onChange={setMinMembers} />
-              <ScaffoldColorPicker
-                protocols={protocolOptions}
-                value={colorBy}
-                onChange={setColorBy}
-              />
-            </div>
+          <div className="p-2 border-b flex flex-wrap items-center gap-2">
+            <SubModeToggle value={subMode} onChange={setSubMode} />
+            <MinMembersPill value={minMembers} onChange={setMinMembers} />
+            <ScaffoldColorPicker
+              protocols={protocolOptions}
+              value={colorBy}
+              onChange={setColorBy}
+            />
           </div>
           <div className="flex-1 overflow-y-auto p-1">
-            {sortedRoots.length === 0 ? (
+            {subMode === "groups" ? (
+              <ScaffoldGroupsList
+                tree={tree}
+                colorBins={colorBins}
+                minMembers={minMembers}
+                selected={selectedScaffold}
+                onSelect={handleSelect}
+              />
+            ) : sortedRoots.length === 0 ? (
               <div className="p-4 text-xs text-muted-foreground">
                 No scaffolds match the current filter.
                 {minMembers > 1 && (

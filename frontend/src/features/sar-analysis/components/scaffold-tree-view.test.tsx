@@ -107,19 +107,27 @@ const molecules = [
   } as any,
 ];
 
-describe("ScaffoldTreeView", () => {
-  it("renders the tree with first-level nodes", async () => {
+function switchToHierarchy() {
+  fireEvent.click(screen.getByRole("button", { name: /hierarchy/i }));
+}
+
+describe("ScaffoldTreeView — Groups mode (default)", () => {
+  it("renders distinct chemotypes sorted by molecule_count desc", async () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
     await waitFor(() =>
       expect(
-        screen.getByTestId("scaffold-node-c1ccccc1"),
+        screen.getByTestId("scaffold-group-c1ccccc1"),
       ).toBeInTheDocument(),
     );
+    // Both nodes shown as groups (both have molecule_count > 0)
+    expect(
+      screen.getByTestId("scaffold-group-c1ccc2ccccc2c1"),
+    ).toBeInTheDocument();
   });
 
-  it("right pane shows all molecules when no node selected", async () => {
+  it("right pane shows all molecules when no group selected", async () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
@@ -128,12 +136,60 @@ describe("ScaffoldTreeView", () => {
     );
   });
 
-  it("right pane filters to selected node's subtree on click", async () => {
+  it("clicking a group filters cards to that group's DIRECT members only", async () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
+    // benzene group has molecule_ids = [m1, m2] (direct only — NOT m3 from
+    // the naphthalene descendant; that's the hierarchy-mode subtree story)
+    fireEvent.click(
+      await screen.findByTestId("scaffold-group-c1ccccc1"),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("card-grid")).toHaveTextContent("2 cards"),
+    );
+  });
+
+  it("min-mols pill hides single-member chemotypes", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    await screen.findByTestId("scaffold-group-c1ccccc1");
+
+    const pill = screen.getByTitle(/cycle minimum members/i);
+    fireEvent.click(pill); // 1 → 2
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("scaffold-group-c1ccc2ccccc2c1"),
+      ).toBeNull(),
+    );
+    // benzene still visible (count=2 >= min=2)
+    expect(
+      screen.getByTestId("scaffold-group-c1ccccc1"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("ScaffoldTreeView — Hierarchy mode", () => {
+  it("renders the tree with first-level nodes after switching", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    switchToHierarchy();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("scaffold-node-c1ccccc1"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("clicking a node filters cards to its full subtree", async () => {
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
+      wrapper,
+    });
+    switchToHierarchy();
     fireEvent.click(await screen.findByTestId("scaffold-node-c1ccccc1"));
-    // benzene subtree = {c1ccccc1: m1, m2} + {c1ccc2ccccc2c1: m3} = 3 cards
+    // benzene subtree = m1, m2 (benzene direct) + m3 (naphthalene descendant) = 3
     await waitFor(() =>
       expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
     );
@@ -143,6 +199,7 @@ describe("ScaffoldTreeView", () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
+    switchToHierarchy();
     const node = await screen.findByTestId("scaffold-node-c1ccccc1");
     fireEvent.click(node);
     fireEvent.click(node);
@@ -155,7 +212,7 @@ describe("ScaffoldTreeView", () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
-    // Initial state: benzene root has subtree_count=3 — visible at min=1
+    switchToHierarchy();
     await screen.findByTestId("scaffold-node-c1ccccc1");
 
     // Click the pill three times: 1 → 2 → 3 → 5. At 5, benzene (subtree=3) is hidden.
