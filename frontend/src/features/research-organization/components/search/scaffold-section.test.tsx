@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ScaffoldSection } from "./scaffold-section";
 
+// Stub chemistry components — see scaffold-rows.test.tsx for rationale.
+vi.mock("@/shared/components/chemistry", () => ({
+  StructureRenderer: () => null,
+  StructureEditorDialog: () => null,
+}));
+
 describe("ScaffoldSection", () => {
   it("shows an empty-state message when no criteria are present", () => {
     render(<ScaffoldSection criteria={[]} onChange={vi.fn()} />);
@@ -45,5 +51,34 @@ describe("ScaffoldSection", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /remove criterion/i }));
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it("shows the Bemis-Murcko caption when any criterion is exact_match", () => {
+    render(
+      <ScaffoldSection
+        criteria={[
+          { type: "scaffold", mode: "exact_match", scaffold_smiles: "c1ccncc1" },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(/canonical Bemis-Murcko scaffold/i),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the caption when all rows are acyclic_only (or when empty)", () => {
+    const { rerender } = render(
+      <ScaffoldSection criteria={[]} onChange={vi.fn()} />,
+    );
+    expect(screen.queryByText(/canonical Bemis-Murcko/i)).toBeNull();
+
+    rerender(
+      <ScaffoldSection
+        criteria={[{ type: "scaffold", mode: "acyclic_only" }]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/canonical Bemis-Murcko/i)).toBeNull();
   });
 });

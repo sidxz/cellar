@@ -55,6 +55,13 @@ export function ScaffoldSection({ criteria, onChange }: ScaffoldSectionProps) {
           />
         ))}
       </div>
+
+      {criteria.some((c) => c.mode === "exact_match") && (
+        <p className="text-xs text-muted-foreground/70">
+          Compared to the canonical Bemis-Murcko scaffold. Decorated molecules
+          are stripped to their scaffold before comparing.
+        </p>
+      )}
     </div>
   );
 }
