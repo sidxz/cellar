@@ -40,6 +40,13 @@ import { customInstance } from '.././custom-instance';
 
 /**
  * Execute a compound search -- inline query or saved search reference.
+
+Pagination cap: ``MAX_PAGE_SIZE`` (200) for general queries. When the body
+is JUST a single ``{type:"collection"}`` criterion the chemist is asking
+for every member of that collection — pagination is wrong UX — so the cap
+rises to ``COLLECTION_FETCH_MAX_PAGE_SIZE`` (10K). The whole collection
+loads atomically into one response, scaffold-tree right-pane filters work
+on the full set, and CardGrid virtualization handles the row count.
  * @summary Execute Search
  */
 export const executeSearchApiV1SearchExecutePost = (
