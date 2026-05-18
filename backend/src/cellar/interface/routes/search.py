@@ -15,7 +15,12 @@ from cellar.domain.sar_analysis.search_modes import SearchMode
 from cellar.domain.shared.aggregation_types import SelectionRule
 from cellar.interface.dependencies import AuthDep, CountSearchDep, ExecuteSearchDep
 from cellar.interface.error_handlers import result_to_response
-from cellar.interface.pagination import clamp_limit, parse_cursor
+from cellar.interface.pagination import (
+    COLLECTION_FETCH_MAX_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    clamp_limit,
+    parse_cursor,
+)
 from cellar.interface.routes.molecules import MoleculeResponse
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
@@ -163,6 +168,24 @@ def _attach_score(m: Molecule, scores: dict[uuid.UUID, float] | None) -> Molecul
     return resp
 
 
+def _is_single_collection_query(body: ExecuteSearchBody) -> bool:
+    """True when the body is a single ``{type:"collection"}`` criterion query.
+
+    Used to relax the search-endpoint pagination cap for collection fetches —
+    the chemist who opens /collections/{id} expects to see every member at
+    once (cards virtualize, scaffold-tree right-pane filter needs the full
+    set). For anything else (multi-criterion search, saved searches, structure
+    similarity, etc.) the default 200-row cap stands.
+    """
+    if body.saved_search_id is not None or body.query is None:
+        return False
+    criteria = body.query.get("criteria")
+    if not isinstance(criteria, list) or len(criteria) != 1:
+        return False
+    first = criteria[0]
+    return isinstance(first, dict) and first.get("type") == "collection"
+
+
 @router.post("/execute", response_model=ExecuteSearchResponse)
 async def execute_search(
     body: ExecuteSearchBody,
@@ -173,7 +196,17 @@ async def execute_search(
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> ExecuteSearchResponse:
-    """Execute a compound search -- inline query or saved search reference."""
+    """Execute a compound search -- inline query or saved search reference.
+
+    Pagination cap: ``MAX_PAGE_SIZE`` (200) for general queries. When the body
+    is JUST a single ``{type:"collection"}`` criterion the chemist is asking
+    for every member of that collection — pagination is wrong UX — so the cap
+    rises to ``COLLECTION_FETCH_MAX_PAGE_SIZE`` (10K). The whole collection
+    loads atomically into one response, scaffold-tree right-pane filters work
+    on the full set, and CardGrid virtualization handles the row count.
+    """
+    is_collection_fetch = _is_single_collection_query(body)
+    cap = COLLECTION_FETCH_MAX_PAGE_SIZE if is_collection_fetch else MAX_PAGE_SIZE
     q = ExecuteSearchQuery(
         workspace_id=auth.workspace_id,
         saved_search_id=body.saved_search_id,
@@ -181,7 +214,7 @@ async def execute_search(
         protocol_columns=body.protocol_columns,
         aggregation=body.aggregation,
         cursor_id=parse_cursor(cursor),
-        limit=clamp_limit(limit),
+        limit=clamp_limit(limit, max_size=cap),
         sort_by=sort_by,
         sort_dir=sort_dir if sort_dir in ("asc", "desc") else None,
     )

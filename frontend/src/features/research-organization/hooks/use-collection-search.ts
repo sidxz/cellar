@@ -6,7 +6,12 @@ import type { EnrichedSearchResponse } from "./use-search";
 import type { ExecuteSearchInput } from "../types";
 
 export interface UseCollectionSearchOptions {
-  /** Page size — collections rarely exceed a few thousand mols so default 1000 is plenty for V1. */
+  /**
+   * Page size. The BE auto-relaxes the generic search cap (200) to
+   * COLLECTION_FETCH_MAX_PAGE_SIZE (10K) when the query is a single
+   * `{type: "collection"}` criterion, so we can ask atomically. Default
+   * 10000 covers every realistic curated chemistry collection.
+   */
   limit?: number;
 }
 
@@ -20,7 +25,7 @@ export function useCollectionSearch(
   collectionId: string,
   opts: UseCollectionSearchOptions = {},
 ) {
-  const { limit = 1000 } = opts;
+  const { limit = 10000 } = opts;
 
   return useQuery({
     queryKey: ["collection-search", collectionId, limit],
