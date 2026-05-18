@@ -31,6 +31,8 @@ import { CollectionHeader } from "./collection/collection-header";
 import { ResultsSurface } from "./results/results-surface";
 import { ViewModeToggle } from "./results/view-mode-toggle";
 
+const FROZEN_TOOLTIP = "Frozen collection — unfreeze to modify.";
+
 interface CollectionDetailProps {
   collectionId: string;
 }
@@ -96,6 +98,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     setRemoveOpen(false);
   };
 
+  const isFrozen = query.data?.is_frozen ?? false;
+
   const selectionToolbar = useMemo(() => {
     if (selectedIds.size === 0) return null;
     return (
@@ -105,12 +109,14 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
           size="sm"
           variant="destructive"
           onClick={() => setRemoveOpen(true)}
+          disabled={isFrozen}
+          title={isFrozen ? FROZEN_TOOLTIP : undefined}
         >
           Remove
         </Button>
       </>
     );
-  }, [selectedIds.size]);
+  }, [selectedIds.size, isFrozen]);
 
   return (
     <>
@@ -137,7 +143,12 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </Button>
-            <Button size="sm" onClick={() => setAddMolOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => setAddMolOpen(true)}
+              disabled={isFrozen}
+              title={isFrozen ? FROZEN_TOOLTIP : undefined}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Molecules
             </Button>
