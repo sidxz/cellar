@@ -127,8 +127,11 @@ export function ClusterScatter({
           marker: {
             symbol: "star",
             size: 16,
-            color: "rgba(0,0,0,0)",
-            line: { width: 1.5, color: "#ffffff" },
+            // Amber fill + dark amber outline — unambiguously visible on any
+            // cluster color underneath. SVG `scatter` ignores transparent
+            // fills (unlike `scattergl`), so we use a solid amber here.
+            color: "#fbbf24",
+            line: { width: 1.5, color: "#78350f" },
           },
           hoverinfo: "skip",
         }
