@@ -294,6 +294,38 @@ export function ClusterMapView({
         }
       />
 
+      {/* Status row — disambiguates picks vs chemotype clusters so the chemist
+          isn't surprised when N=2 shows 8 colors on the map. */}
+      {result && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+          <span>
+            <span className="font-medium text-foreground">
+              {result.clusterCount}
+            </span>{" "}
+            chemotype{result.clusterCount === 1 ? "" : "s"} (Butina @{" "}
+            {committedThreshold.toFixed(2)})
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            <span className="font-medium text-foreground">
+              {result.representatives.length}
+            </span>{" "}
+            representative
+            {result.representatives.length === 1 ? "" : "s"} (
+            {committedPicker === "maxmin"
+              ? `MaxMin N=${committedN}`
+              : "Butina medoids"}
+            )
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            {lassoedIds.size > 0
+              ? `Lasso: ${lassoedIds.size} selected`
+              : "Drag on the map to lasso a region"}
+          </span>
+        </div>
+      )}
+
       {/* Split pane — scatter left, selection pane right */}
       <ResizablePanelGroup
         orientation="horizontal"
