@@ -53,6 +53,7 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._structu
     _default_registry,
     _parse_metric,
     _resolve_algorithm_and_metric,
+    _scaffold_clause,
     _similarity_clause,
     _structure_clause,
     _substructure_clause,
@@ -73,6 +74,7 @@ __all__ = [
     "_parse_metric",
     "_default_registry",
     "_project_clause",
+    "_scaffold_clause",
     "_text_clause",
     "_property_clause",
     "_structure_clause",
@@ -115,6 +117,8 @@ def compose_criteria(query: dict[str, Any], *, workspace_id: uuid.UUID) -> Colum
             clause = _property_clause(criterion)
         elif ctype == "structure":
             clause = _structure_clause(criterion)
+        elif ctype == "scaffold":
+            clause = _scaffold_clause(criterion)
         elif ctype == "activity":
             clause = _activity_clause(criterion, workspace_id)
         elif ctype == "collection":
@@ -192,6 +196,8 @@ def _group_clause(
             clause = _property_clause(sub)
         elif ctype == "structure":
             clause = _structure_clause(sub)
+        elif ctype == "scaffold":
+            clause = _scaffold_clause(sub)
         elif ctype == "activity":
             clause = _activity_clause(sub, workspace_id)
         elif ctype == "collection":

@@ -167,6 +167,53 @@ def _compute_query_bytes(algorithm_name: str, smiles: str) -> bytes | None:
     return MorganAlgorithm().compute_bytes(mol)
 
 
+def _scaffold_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """WHERE clause for {type: 'scaffold'} criteria.
+
+    Supports two modes:
+      - 'exact_match': molecules.bemis_murcko_smiles == canonical(input)
+        Input is canonicalized via Bemis-Murcko computation so a paste of
+        the full molecule normalizes to its scaffold (forgiving behavior).
+      - 'acyclic_only': molecules.bemis_murcko_smiles == ''
+        Matches the V2 'no scaffold' bucket (acyclic compounds; RDKit
+        convention writes the empty string for these).
+
+    Raises ValueError on unknown mode or unparseable scaffold_smiles.
+    """
+    from rdkit import Chem  # local import to keep module fast to import
+
+    from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
+
+    mode = criterion.get("mode", "exact_match")
+
+    if mode == "acyclic_only":
+        return MoleculeModel.bemis_murcko_smiles == ""
+
+    if mode == "exact_match":
+        raw = criterion.get("scaffold_smiles")
+        if not raw:
+            msg = "scaffold criterion: 'exact_match' mode requires 'scaffold_smiles'"
+            raise ValueError(msg)
+        mol = Chem.MolFromSmiles(raw)
+        if mol is None:
+            msg = f"scaffold criterion: invalid SMILES {raw!r}"
+            raise ValueError(msg)
+        canonical = MurckoScaffoldCalculator().compute(mol)
+        if canonical is None:
+            msg = f"scaffold criterion: failed to compute scaffold for {raw!r}"
+            raise ValueError(msg)
+        if canonical == "":
+            msg = (
+                f"scaffold criterion: {raw!r} has no ring system — "
+                "use mode='acyclic_only' to find acyclic compounds"
+            )
+            raise ValueError(msg)
+        return MoleculeModel.bemis_murcko_smiles == canonical
+
+    msg = f"scaffold criterion: unknown mode {mode!r} (allowed: exact_match, acyclic_only)"
+    raise ValueError(msg)
+
+
 def _similarity_clause(criterion: dict[str, Any]) -> ColumnElement:
     smiles = criterion["smiles"]
     algorithm_name, metric, threshold = _resolve_algorithm_and_metric(criterion)
