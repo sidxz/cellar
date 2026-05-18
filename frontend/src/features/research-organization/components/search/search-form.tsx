@@ -32,8 +32,8 @@ import { KeywordSection } from "./keyword-section";
 import { ProjectFilter } from "./project-filter";
 import { PropertySection } from "./property-section";
 import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
+import { ScaffoldSection } from "./scaffold-section";
 import { StructureSection } from "./structure-section";
-import { ScaffoldCriterionRow } from "../criterion-rows/scaffold-rows";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -575,36 +575,17 @@ export function SearchForm({
           <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
         </div>
 
-        {/* Scaffold filters — shown only when one or more scaffold criteria are
-            active. The scaffold-tree "Find in search" action stashes a criterion
-            in sessionStorage; the page reads it on mount, fires the search, and
-            sets initialQuery so this section surfaces the active filter to the
-            chemist. They can edit, remove, or add additional criteria from here. */}
-        {scaffoldCriteria.length > 0 && (
-          <>
-            <Separator className="my-3" />
-            <div>
-              <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Scaffold
-              </span>
-              <div className="mt-2 space-y-2">
-                {scaffoldCriteria.map((c, i) => (
-                  <ScaffoldCriterionRow
-                    // biome-ignore lint/suspicious/noArrayIndexKey: scaffold rows are not reordered
-                    key={i}
-                    criterion={c}
-                    onChange={(updated) =>
-                      setScaffoldCriteria((prev) => prev.map((sc, idx) => (idx === i ? updated : sc)))
-                    }
-                    onRemove={() =>
-                      setScaffoldCriteria((prev) => prev.filter((_, idx) => idx !== i))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+        <Separator className="my-3" />
+
+        {/* Scaffold filter section — always rendered so chemists can compose
+            a query against Bemis-Murcko scaffolds directly. The scaffold-tree
+            "find in search" action stashes a criterion in sessionStorage; the
+            page reads it on mount, fires the search, and populates this
+            section so the active filter is visible + editable. */}
+        <ScaffoldSection
+          criteria={scaffoldCriteria}
+          onChange={setScaffoldCriteria}
+        />
 
         {/* More Filters */}
         <div className="mt-3 pt-3 border-t border-border">
