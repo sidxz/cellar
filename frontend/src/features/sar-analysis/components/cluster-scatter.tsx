@@ -86,8 +86,16 @@ export function ClusterScatter({
 
   // --- Traces ---
 
+  // Trace type: prefer SVG `scatter` for ≤5K points. Plotly's `scattergl`
+  // (WebGL) historically does not thread `customdata` reliably into
+  // `plotly_selected` event payloads — the lasso fires but the chemist's
+  // selection is lost. Below the SVG cutoff, SVG is plenty fast and
+  // selection event data is well-defined.
+  const useWebGL = points.length > 5000;
+  const traceType = useWebGL ? "scattergl" : "scatter";
+
   const baseTrace: Record<string, unknown> = {
-    type: "scattergl",
+    type: traceType,
     mode: "markers",
     x: points.map((p) => p.x),
     y: points.map((p) => p.y),
@@ -96,8 +104,9 @@ export function ClusterScatter({
       size: 8,
       line: { width: 0.5, color: "#fff" },
     },
-    // customdata carries [moleculeId, hoverLabel] so click handlers get the id
-    // while hovertemplate displays the chemist-readable label.
+    // customdata carries [moleculeId, hoverLabel] for hovertemplate + click
+    // handlers; selection uses pointNumber index lookup against `points` so
+    // it works regardless of whether scattergl threads customdata through.
     customdata: points.map((p) => [
       p.moleculeId,
       labelByMolId?.[p.moleculeId] ?? p.moleculeId,
@@ -111,7 +120,7 @@ export function ClusterScatter({
   const starTrace: Record<string, unknown> | null =
     representatives.length > 0
       ? {
-          type: "scattergl",
+          type: traceType,
           mode: "markers",
           x: repPoints.map((p) => p.x),
           y: repPoints.map((p) => p.y),
@@ -131,19 +140,25 @@ export function ClusterScatter({
   // interface (which is intentionally loose). We pass them via a cast so the
   // shared dynamic-import wrapper handles the event wiring correctly.
   const extraHandlers = {
-    // Plotly fires plotly_selected with ev.points = the selected markers, regardless
-    // of whether the user used lasso or box select. customdata is [moleculeId, label]
-    // (set on the base trace above) so we extract the IDs directly — no need to
-    // reconstruct the polygon + run point-in-polygon ourselves.
+    // Plotly fires plotly_selected with ev.points after lasso/box selection.
+    // We resolve molecule IDs via `pointNumber` (the trace's array index) and
+    // look up our `points` array directly — this is more reliable than
+    // `customdata` (which scattergl traces sometimes don't thread through to
+    // selection events) and works on both `scatter` and `scattergl` traces.
+    // We only honor selections on the BASE trace (curveNumber === 0); stars
+    // on curveNumber === 1 don't carry molecule identity in any structured
+    // way and would double-count selections.
     onSelected: (ev: any) => {
       if (!ev || !Array.isArray(ev.points) || ev.points.length === 0) {
         onSelected(null);
         return;
       }
       const ids = ev.points
+        .filter((p: any) => p?.curveNumber === 0)
         .map((p: any) => {
-          const cd = p?.customdata;
-          return Array.isArray(cd) ? (cd[0] as string) : (cd as string | undefined);
+          const idx = p?.pointNumber ?? p?.pointIndex;
+          if (typeof idx !== "number") return undefined;
+          return points[idx]?.moleculeId;
         })
         .filter((id: string | undefined): id is string => Boolean(id));
       onSelected(ids.length > 0 ? ids : null);
