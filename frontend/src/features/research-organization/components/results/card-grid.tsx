@@ -16,7 +16,10 @@ export interface CardGridProps {
   minTileWidth?: number;
   /** Approximate tile height in px (used for windowing math). */
   rowHeight?: number;
-  /** Scroll container height — defaults to "70vh". */
+  /** Scroll container height — defaults to "100%" (fills parent). Callers
+   *  embedding CardGrid directly under a block-flow parent (no defined height)
+   *  MUST supply a height (e.g. "calc(100vh - 14rem)") or wrap it in a sized
+   *  container, otherwise the grid collapses to 0. */
   height?: string;
   /** Optional protocol test counts keyed by molecule ID. Passed to each card. */
   testCounts?: Record<string, number>;
@@ -39,7 +42,7 @@ export function CardGrid({
   isLoading = false,
   minTileWidth = 220,
   rowHeight = 290,
-  height = "70vh",
+  height = "100%",
   testCounts,
 }: CardGridProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);

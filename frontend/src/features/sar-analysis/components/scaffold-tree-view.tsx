@@ -46,10 +46,10 @@ type Props = {
 // react-resizable-panels v4 interprets NUMBER props as pixels and STRING
 // props as percentages. We want percent-based layout that scales with the
 // container, so all size props below are strings.
-const TREE_DEFAULT_PCT = "30";
-const TREE_MIN_PCT = "20";
+const TREE_DEFAULT_PCT = "15";
+const TREE_MIN_PCT = "12";
 const TREE_MAX_PCT = "50";
-const CARDS_DEFAULT_PCT = "70";
+const CARDS_DEFAULT_PCT = "85";
 
 const MIN_MEMBERS_CYCLE = [1, 2, 3, 5, 10] as const;
 
@@ -326,12 +326,13 @@ export function ScaffoldTreeView({
   }
 
   // The group needs an explicit height because `h-full` cascades to 0 inside
-  // the parent's `flex flex-col gap-3/4` (no defined height). 70vh leaves room
-  // for the page header + collection chrome above without scrollbar conflict.
+  // the parent's `flex flex-col gap-3/4` (no defined height). Claim the full
+  // viewport below the page chrome (title row + collection header strip +
+  // gaps ≈ 14rem); min-h floor keeps short screens usable.
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      className="h-[70vh] min-h-[480px] rounded-md border"
+      className="h-[calc(100vh-14rem)] min-h-[480px] rounded-md border"
     >
       <ResizablePanel
         defaultSize={TREE_DEFAULT_PCT}

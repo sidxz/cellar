@@ -117,12 +117,10 @@ function ScaffoldTreeNodeInner(props: Props) {
           />
         )}
 
-        {/* Spacer pushes the count to the right edge */}
-        <span className="flex-1" aria-hidden />
-
-        {/* Molecule counts — bold and labeled so chemists can scan cluster
-            heads at a glance. "9 mols" reads faster than "9". When a node
-            aggregates descendants too, append the subtree count subtly. */}
+        {/* Molecule counts sit adjacent to the thumbnail — chemist's natural
+            pair (structure → "how many?"). Bold + labeled so cluster heads
+            scan at a glance. When a node aggregates descendants too, append
+            the subtree count subtly. */}
         <span className="text-sm tabular-nums shrink-0 flex items-baseline gap-1">
           <span className="font-semibold">{node.molecule_count}</span>
           <span className="text-xs text-muted-foreground">
@@ -133,11 +131,11 @@ function ScaffoldTreeNodeInner(props: Props) {
           </span>
         </span>
 
-        {/* Activity color band */}
+        {/* Activity color band — pinned to the right edge as a status glyph */}
         {colorBin && (
           <span
             aria-label={`activity ${colorBin}`}
-            className={cn("h-1.5 w-6 rounded shrink-0", BIN_COLORS[colorBin])}
+            className={cn("ml-auto h-1.5 w-6 rounded shrink-0", BIN_COLORS[colorBin])}
           />
         )}
       </div>

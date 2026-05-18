@@ -149,14 +149,16 @@ export function ResultsSurface({
           onOpen={onOpen}
         />
       ) : mode === "cards" ? (
-        <CardGrid
-          molecules={molecules}
-          selectedIds={selectedIds}
-          onSelectChange={onSelectChange}
-          onOpen={onOpen}
-          isLoading={isLoading}
-          testCounts={testCounts}
-        />
+        <div className="h-[calc(100vh-14rem)] min-h-[480px]">
+          <CardGrid
+            molecules={molecules}
+            selectedIds={selectedIds}
+            onSelectChange={onSelectChange}
+            onOpen={onOpen}
+            isLoading={isLoading}
+            testCounts={testCounts}
+          />
+        </div>
       ) : (
         <DataGrid<TableRow>
           rowData={tableRows}

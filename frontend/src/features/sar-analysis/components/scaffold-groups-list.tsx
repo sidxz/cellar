@@ -98,8 +98,6 @@ function ScaffoldGroupsListInner({
               />
             )}
 
-            <span className="flex-1" aria-hidden />
-
             <span className="text-sm tabular-nums shrink-0 flex items-baseline gap-1">
               <span className="font-semibold">{g.molecule_count}</span>
               <span className="text-xs text-muted-foreground">
@@ -111,7 +109,7 @@ function ScaffoldGroupsListInner({
               <span
                 aria-label={`activity ${colorBin}`}
                 className={cn(
-                  "h-1.5 w-6 rounded shrink-0",
+                  "ml-auto h-1.5 w-6 rounded shrink-0",
                   BIN_COLORS[colorBin],
                 )}
               />
