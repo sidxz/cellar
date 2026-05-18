@@ -169,6 +169,31 @@ describe("ClusterMapView", () => {
     expect(screen.queryByTestId("save-dialog")).not.toBeInTheDocument();
   });
 
+  it("passes collectionId only when on a collection page (XOR with moleculeIds)", async () => {
+    const { useUmapCluster } = await import(
+      "@/features/sar-analysis/hooks/use-umap-cluster"
+    );
+    (useUmapCluster as any).mockClear();
+    render(
+      <ClusterMapView {...defaultProps} collectionId="col-1" />,
+      { wrapper },
+    );
+    const call = (useUmapCluster as any).mock.calls[0][0];
+    expect(call.collectionId).toBe("col-1");
+    expect(call.moleculeIds).toBeUndefined();
+  });
+
+  it("passes moleculeIds only when no collectionId (search-page case)", async () => {
+    const { useUmapCluster } = await import(
+      "@/features/sar-analysis/hooks/use-umap-cluster"
+    );
+    (useUmapCluster as any).mockClear();
+    render(<ClusterMapView {...defaultProps} />, { wrapper });
+    const call = (useUmapCluster as any).mock.calls[0][0];
+    expect(call.collectionId).toBeUndefined();
+    expect(call.moleculeIds).toEqual(molecules.map((m) => m.id));
+  });
+
   it("shows a 'not enough molecules' message when fewer than 10 mols given", () => {
     render(
       <ClusterMapView

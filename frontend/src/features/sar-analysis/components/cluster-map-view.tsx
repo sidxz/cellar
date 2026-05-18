@@ -133,9 +133,13 @@ export function ClusterMapView({
   const allIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
 
   // --- UMAP hook ---
+  // API contract: exactly one of collection_id / molecule_ids. Send collection_id
+  // for full-collection compute (server expands membership); send molecule_ids
+  // for /search or for a lasso-scoped subset.
+  const useCollectionSource = !pendingSubset && Boolean(collectionId);
   const { result, loading, error, cancel } = useUmapCluster({
-    collectionId: pendingSubset ? undefined : collectionId,
-    moleculeIds: pendingSubset ?? allIds,
+    collectionId: useCollectionSource ? collectionId : undefined,
+    moleculeIds: useCollectionSource ? undefined : (pendingSubset ?? allIds),
     picker,
     n,
     threshold,
