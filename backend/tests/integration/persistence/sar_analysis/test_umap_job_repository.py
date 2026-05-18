@@ -120,12 +120,18 @@ async def test_find_cached_misses_on_different_picker(uow) -> None:
 
 @pytest.mark.asyncio
 async def test_find_cached_misses_past_ttl(uow) -> None:
+    # Use a distinct ids_hash so this job cannot collide with the READY row
+    # inserted by test_find_cached_hits_ready_within_ttl (which also uses
+    # ids_hash="X", picker="maxmin", picker_param_hash="ph").  Both tests
+    # commit to the same shared DB (the UoW does NOT roll back on success),
+    # so hash collisions between tests cause spurious cache hits.
+    unique_hash = f"ttl-test-{uuid4().hex}"
     now = _now()
     job = (
         UmapJob.create(
             workspace_id=uuid4(),
             requested_by=uuid4(),
-            ids_hash="X",
+            ids_hash=unique_hash,
             picker="maxmin",
             picker_params={"n": 50},
             picker_param_hash="ph",
@@ -142,7 +148,7 @@ async def test_find_cached_misses_past_ttl(uow) -> None:
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         miss = await repo.find_cached(
-            ids_hash="X", picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
+            ids_hash=unique_hash, picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
         )
 
     assert miss is None
