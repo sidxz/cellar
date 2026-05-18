@@ -20,7 +20,7 @@ beforeAll(() => {
 });
 
 describe("ScaffoldColorPicker", () => {
-  it("renders 'none' label by default", () => {
+  it("renders the 'Color by:' prefix label", () => {
     render(
       <ScaffoldColorPicker
         protocols={[{ id: "p1", name: "Mtb WCA" }]}
@@ -28,7 +28,18 @@ describe("ScaffoldColorPicker", () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByText(/— none —/i)).toBeInTheDocument();
+    expect(screen.getByText(/color by:/i)).toBeInTheDocument();
+  });
+
+  it("hides entirely when there are no protocols to color by", () => {
+    const { container } = render(
+      <ScaffoldColorPicker
+        protocols={[]}
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("emits onChange when a protocol is picked", () => {
@@ -55,7 +66,10 @@ describe("ScaffoldColorPicker", () => {
       />,
     );
     fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(screen.getByText(/— none —/i));
+    // Radix Select renders the dropdown items into a portal; "none" appears
+    // inside it once the combobox is opened.
+    const noneItems = screen.getAllByText(/^none$/i);
+    fireEvent.click(noneItems[noneItems.length - 1]);
     expect(handle).toHaveBeenCalledWith(null);
   });
 });

@@ -66,7 +66,7 @@ describe("ResultsSurface", () => {
         onOpen={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: /card view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getAllByTestId("mol-thumb")).toHaveLength(2);
   });
 
@@ -84,7 +84,7 @@ describe("ResultsSurface", () => {
     // Assert that the ViewModeToggle reflects table mode correctly.
     // AG Grid may not render cells in jsdom (it relies on layout that jsdom lacks),
     // so we only assert on the toggle's aria-pressed state here.
-    expect(screen.getByRole("button", { name: /table view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("calls onModeChange when the inactive toggle is clicked", () => {
@@ -99,7 +99,7 @@ describe("ResultsSurface", () => {
         onOpen={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /table view/i }));
+    fireEvent.click(screen.getByRole("button", { name: /list view/i }));
     expect(onModeChange).toHaveBeenCalledWith("table");
   });
 
@@ -115,8 +115,8 @@ describe("ResultsSurface", () => {
         showToolbar={false}
       />,
     );
-    expect(screen.queryByRole("button", { name: /card view/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /table view/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /grid view/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /list view/i })).not.toBeInTheDocument();
   });
 
   it("renders ScaffoldTreeView when mode=scaffold-tree", () => {
@@ -132,6 +132,6 @@ describe("ResultsSurface", () => {
     );
     expect(screen.getByTestId("scaffold-tree-view")).toBeInTheDocument();
     // Toggle should reflect scaffold-tree as active
-    expect(screen.getByRole("button", { name: /tree view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute("aria-pressed", "true");
   });
 });
