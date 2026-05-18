@@ -23,7 +23,13 @@ type Props = {
   onOpen?: (moleculeId: string) => void;
 };
 
-const DEFAULT_TREE_PCT = 30;
+// react-resizable-panels v4 interprets NUMBER props as pixels and STRING
+// props as percentages. We want percent-based layout that scales with the
+// container, so all size props below are strings.
+const TREE_DEFAULT_PCT = "30";
+const TREE_MIN_PCT = "20";
+const TREE_MAX_PCT = "50";
+const CARDS_DEFAULT_PCT = "70";
 
 export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
   const router = useRouter();
@@ -127,12 +133,18 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
 
   const roots = rootNodes(tree);
 
+  // The group needs an explicit height because `h-full` cascades to 0 inside
+  // the parent's `flex flex-col gap-3/4` (no defined height). 70vh leaves room
+  // for the page header + collection chrome above without scrollbar conflict.
   return (
-    <ResizablePanelGroup orientation="horizontal" className="h-full">
+    <ResizablePanelGroup
+      orientation="horizontal"
+      className="h-[70vh] min-h-[480px] rounded-md border"
+    >
       <ResizablePanel
-        defaultSize={DEFAULT_TREE_PCT}
-        minSize={20}
-        maxSize={50}
+        defaultSize={TREE_DEFAULT_PCT}
+        minSize={TREE_MIN_PCT}
+        maxSize={TREE_MAX_PCT}
       >
         <div className="flex flex-col h-full">
           <div className="p-2 border-b">
@@ -160,8 +172,8 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
           </div>
         </div>
       </ResizablePanel>
-      <ResizableHandle />
-      <ResizablePanel defaultSize={100 - DEFAULT_TREE_PCT}>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={CARDS_DEFAULT_PCT}>
         <div className="h-full overflow-auto">
           <CardGrid
             molecules={filteredMolecules}
