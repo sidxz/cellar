@@ -1,6 +1,7 @@
 """Unit tests for GetUmapClusterJob."""
 
 import pytest
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
@@ -14,9 +15,19 @@ class _Repo:
         return self.job
 
 
+class _UoW:
+    """Minimal async context manager stub — does not touch a DB."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
 @pytest.mark.asyncio
 async def test_returns_none_when_missing():
-    out = await GetUmapClusterJob(_Repo()).execute(uuid4())
+    out = await GetUmapClusterJob(repository=_Repo(), uow=_UoW()).execute(uuid4())
     assert out is None
 
 
@@ -34,5 +45,5 @@ async def test_returns_job_when_found():
         picker_param_hash="ph",
         now=datetime.now(timezone.utc),
     )
-    out = await GetUmapClusterJob(_Repo(job)).execute(job.id)
+    out = await GetUmapClusterJob(repository=_Repo(job), uow=_UoW()).execute(job.id)
     assert out is job

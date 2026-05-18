@@ -33,8 +33,7 @@ def _empty_result(picker: str = "maxmin") -> UmapResult:
 
 
 @pytest.mark.asyncio
-async def test_round_trip(db_session) -> None:
-    repo = SQLAlchemyUmapJobRepository(db_session)
+async def test_round_trip(uow) -> None:
     job = UmapJob.create(
         workspace_id=uuid4(),
         requested_by=uuid4(),
@@ -44,17 +43,22 @@ async def test_round_trip(db_session) -> None:
         picker_param_hash="ph",
         now=_now(),
     )
-    await repo.save(job)
-    await db_session.flush()
-    found = await repo.find_by_id(job.id)
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        found = await repo.find_by_id(job.id)
+
     assert found is not None
     assert found.id == job.id
     assert found.status == UmapJobStatus.PENDING
 
 
 @pytest.mark.asyncio
-async def test_find_cached_hits_ready_within_ttl(db_session) -> None:
-    repo = SQLAlchemyUmapJobRepository(db_session)
+async def test_find_cached_hits_ready_within_ttl(uow) -> None:
     now = _now()
     job = (
         UmapJob.create(
@@ -69,18 +73,23 @@ async def test_find_cached_hits_ready_within_ttl(db_session) -> None:
         .mark_running(now - timedelta(minutes=4))
         .mark_ready(_empty_result(), now - timedelta(minutes=3))
     )
-    await repo.save(job)
-    await db_session.flush()
-    found = await repo.find_cached(
-        ids_hash="X", picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
-    )
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        found = await repo.find_cached(
+            ids_hash="X", picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
+        )
+
     assert found is not None
     assert found.status == UmapJobStatus.READY
 
 
 @pytest.mark.asyncio
-async def test_find_cached_misses_on_different_picker(db_session) -> None:
-    repo = SQLAlchemyUmapJobRepository(db_session)
+async def test_find_cached_misses_on_different_picker(uow) -> None:
     now = _now()
     job = (
         UmapJob.create(
@@ -95,17 +104,22 @@ async def test_find_cached_misses_on_different_picker(db_session) -> None:
         .mark_running(now - timedelta(minutes=2))
         .mark_ready(_empty_result(), now - timedelta(minutes=1))
     )
-    await repo.save(job)
-    await db_session.flush()
-    miss = await repo.find_cached(
-        ids_hash="X", picker="butina", picker_param_hash="phA", ttl_seconds=3600
-    )
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        miss = await repo.find_cached(
+            ids_hash="X", picker="butina", picker_param_hash="phA", ttl_seconds=3600
+        )
+
     assert miss is None
 
 
 @pytest.mark.asyncio
-async def test_find_cached_misses_past_ttl(db_session) -> None:
-    repo = SQLAlchemyUmapJobRepository(db_session)
+async def test_find_cached_misses_past_ttl(uow) -> None:
     now = _now()
     job = (
         UmapJob.create(
@@ -120,9 +134,15 @@ async def test_find_cached_misses_past_ttl(db_session) -> None:
         .mark_running(now - timedelta(hours=2, minutes=59))
         .mark_ready(_empty_result(), now - timedelta(hours=2))
     )
-    await repo.save(job)
-    await db_session.flush()
-    miss = await repo.find_cached(
-        ids_hash="X", picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
-    )
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        miss = await repo.find_cached(
+            ids_hash="X", picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
+        )
+
     assert miss is None

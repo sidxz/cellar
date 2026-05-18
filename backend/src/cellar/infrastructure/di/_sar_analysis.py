@@ -164,10 +164,11 @@ def register_sar_analysis(container: Container) -> None:
 
     container.define(MorganFingerprintLoader, _fp_loader)
 
-    # UmapJobRepository — per-resolve, fresh session each time.
+    # UmapJobRepository — per-resolve fresh UoW so request-scoped sessions
+    # don't bleed across callers — same pattern as ScaffoldTreeJobRepository.
     def _umap_job_repo(c: Container) -> UmapJobRepository:
-        session = c[async_sessionmaker]()
-        return SQLAlchemyUmapJobRepository(session)  # type: ignore[return-value]
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SQLAlchemyUmapJobRepository(uow)  # type: ignore[return-value]
 
     container.define(UmapJobRepository, _umap_job_repo)
 
@@ -183,11 +184,13 @@ def register_sar_analysis(container: Container) -> None:
     container.define(ComputeUmapCluster, _compute_umap)
 
     # RunUmapCluster — in-process runner the Temporal activity wraps.
+    # A single UoW is shared by the runner and its repo so both operate within
+    # the same transaction boundary — mirrors RunScaffoldTree exactly.
     def _run_umap_cluster(c: Container) -> RunUmapCluster:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RunUmapCluster(
             compute=c[ComputeUmapCluster],
-            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            repository=SQLAlchemyUmapJobRepository(uow),
             uow=uow,
         )
 
@@ -205,25 +208,28 @@ def register_sar_analysis(container: Container) -> None:
 
         container.define(UmapClusterOrchestrator, _null_umap_orchestrator)
 
-    # Use cases.
+    # Use cases — each builds its own UoW and shares it with its repo so the
+    # use case and repo always operate within the same transaction boundary.
     def _start_umap(c: Container) -> StartUmapClusterJob:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return StartUmapClusterJob(
             compute=c[ComputeUmapCluster],
-            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            repository=SQLAlchemyUmapJobRepository(uow),
             orchestrator=c[UmapClusterOrchestrator],
             uow=uow,
         )
 
     def _get_umap(c: Container) -> GetUmapClusterJob:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetUmapClusterJob(
-            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            repository=SQLAlchemyUmapJobRepository(uow),
+            uow=uow,
         )
 
     def _cancel_umap(c: Container) -> CancelUmapClusterJob:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return CancelUmapClusterJob(
-            repository=SQLAlchemyUmapJobRepository(c[async_sessionmaker]()),
+            repository=SQLAlchemyUmapJobRepository(uow),
             uow=uow,
             orchestrator=c[UmapClusterOrchestrator],
         )

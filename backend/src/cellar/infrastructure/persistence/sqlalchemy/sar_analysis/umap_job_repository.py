@@ -7,7 +7,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from cellar.domain.sar_analysis.umap_job import UmapJob, UmapJobStatus
 from cellar.domain.sar_analysis.umap_types import (
@@ -19,6 +18,7 @@ from cellar.domain.sar_analysis.umap_types import (
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_model import (
     UmapJobModel,
 )
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 def _encode_result(result: UmapResult) -> dict[str, Any]:
@@ -86,6 +86,15 @@ def _domain_to_model(job: UmapJob) -> UmapJobModel:
     )
 
 
+def _apply_to_model(model: UmapJobModel, job: UmapJob) -> None:
+    model.status = job.status.value
+    model.started_at = job.started_at
+    model.completed_at = job.completed_at
+    model.error_message = job.error_message
+    model.result_json = _encode_result(job.result) if job.result else None
+    model.version = job.version
+
+
 def _model_to_domain(model: UmapJobModel) -> UmapJob:
     return UmapJob(
         id=model.id,
@@ -106,14 +115,19 @@ def _model_to_domain(model: UmapJobModel) -> UmapJob:
 
 
 class SQLAlchemyUmapJobRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    def __init__(self, uow: AsyncUnitOfWork) -> None:
+        self._uow = uow
 
     async def save(self, job: UmapJob) -> None:
-        await self._session.merge(_domain_to_model(job))
+        session = self._uow.session
+        existing = await session.get(UmapJobModel, job.id)
+        if existing is None:
+            session.add(_domain_to_model(job))
+        else:
+            _apply_to_model(existing, job)
 
     async def find_by_id(self, job_id: UUID) -> UmapJob | None:
-        model = await self._session.get(UmapJobModel, job_id)
+        model = await self._uow.session.get(UmapJobModel, job_id)
         return _model_to_domain(model) if model else None
 
     async def find_cached(
@@ -137,5 +151,5 @@ class SQLAlchemyUmapJobRepository:
             .order_by(UmapJobModel.completed_at.desc())
             .limit(1)
         )
-        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
         return _model_to_domain(model) if model else None

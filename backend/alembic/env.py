@@ -37,6 +37,8 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_
 import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_model  # noqa: F401
 
 target_metadata = Base.metadata
 
