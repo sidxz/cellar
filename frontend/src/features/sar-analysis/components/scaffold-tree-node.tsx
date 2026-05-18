@@ -84,22 +84,25 @@ export function ScaffoldTreeNode(props: Props) {
           <span className="inline-block w-3 shrink-0" aria-hidden />
         )}
 
-        {/* Structure thumbnail (32px) or sentinel label */}
-        {isBucket ? null : (
-          <StructureThumbnail smiles={scaffoldSmiles} size={32} className="shrink-0 rounded" />
+        {/* Structure thumbnail (large — chemists read structures, not SMILES) or
+            sentinel placeholder. Matches the card-grid recognition pattern. */}
+        {isBucket ? (
+          <div className="shrink-0 w-20 h-20 flex items-center justify-center rounded border border-dashed border-muted-foreground/40">
+            <span className="text-xs italic text-muted-foreground">no scaffold</span>
+          </div>
+        ) : (
+          <StructureThumbnail
+            smiles={scaffoldSmiles}
+            size={80}
+            className="shrink-0 rounded border bg-background"
+          />
         )}
 
-        {/* Label */}
-        {isBucket ? (
-          <span className="text-xs italic text-muted-foreground">no scaffold</span>
-        ) : (
-          <span className="text-xs font-mono truncate flex-1 text-muted-foreground">
-            {scaffoldSmiles}
-          </span>
-        )}
+        {/* Spacer pushes the count to the right edge */}
+        <span className="flex-1" aria-hidden />
 
         {/* Molecule counts */}
-        <span className="text-xs tabular-nums text-muted-foreground ml-auto shrink-0">
+        <span className="text-xs tabular-nums text-muted-foreground shrink-0">
           {node.molecule_count === node.subtree_molecule_count
             ? node.molecule_count
             : `${node.molecule_count} · ${node.subtree_molecule_count}`}
