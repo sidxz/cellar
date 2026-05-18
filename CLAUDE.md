@@ -183,6 +183,92 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-17 — V2 scaffold tree: post-smoke polish + chemistry correctness + scale fixes
+
+**Branch:** `prot-2`. 9 follow-up commits on top of the V2 base ship (`9436e1ed`). Nothing pushed — branch is now ~88 commits ahead of `origin/prot-2`. **Browser smoke pending** on the most-recent fixes.
+
+**Spec for V4 deferrals:** `docs/superpowers/specs/2026-05-17-scaffold-tree-v4-at-scale.md` (per-scaffold-fetch + server-side scaffold-membership filtering, triggered on first collection > 10K mols).
+
+**What this batch is:** chemist-driven correctness + UX iteration after the V2 ship. Started with the chemist saying "the layout is broken" → ended with the tree rendering correct Bemis-Murcko scaffolds, proper Schuffenhauer parent/child semantics, two sub-modes (Groups default + Hierarchy opt-in), and full-collection compute that bypasses the search-pagination clamp.
+
+**Commits (oldest → newest):**
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `be812e20` | fix: backfill script must eagerly import sibling model modules (FK resolution) |
+| 2 | `b01aed5a` | fix: split-pane layout — string sizes (percent) + explicit height (v4 API change) |
+| 3 | `30307a21` | fix: drop SMILES text + bump thumbnail to 80px (chemists read structures) |
+| 4 | `884cffd1` | perf: hoist + memoize O(N²) tree work into the parent (dev-server memory) |
+| 5 | `a1b59a08` | fix: emit clean ring-only scaffolds, parent=simpler |
+| 6 | `f799c2ec` | feat: Path A — frequency sort + hide phantom roots + min-mols filter |
+| 7 | `4ed64398` | feat: Path B — Groups sub-mode (default) + Hierarchy toggle |
+| 8 | `c099c641` | fix: see the FULL collection, not just the visible page (BE collection_id input) |
+| 9 | `300f4fc5` | fix: relax pagination cap for {type:'collection'} queries |
+
+**Locked design decisions from this session:**
+
+- **`react-resizable-panels` v4 uses STRING sizes for percentages, NUMBER for pixels.** Saved as `feedback_react_resizable_panels_v4_pixels.md`. Bit us once; flagged for permanence.
+- **Tree node = 80px structure thumbnail only, no SMILES text.** Chemists read structures not strings; the long font-mono SMILES label was visual noise.
+- **`rdScaffoldNetwork.ScaffoldNetworkParams()` defaults emit 4 variants per scaffold** including a `*`-marked "with attachments" form and the full-decoration molecule itself. We disable everything except `includeScaffoldsWithoutAttachments`, AND feed the stored Bemis-Murcko scaffolds (not full mols) as input. Result: every emitted node is a ring-only skeleton.
+- **Edge tuple convention: `(parent_simpler, child_more_complex)`** — chemist-intuitive. RDKit's native `(beginIdx, endIdx)` is `(complex, simpler-ancestor)`; we flip on the way out.
+- **`MAX_PAGE_SIZE = 200` is a SEARCH-endpoint cap, wrong for collection fetches.** New `COLLECTION_FETCH_MAX_PAGE_SIZE = 10_000` applies when the search body is a single `{type:"collection"}` criterion. The chemist who opens `/collections/{id}` expects every member; pagination is wrong UX.
+- **Two-mode toggle inside the tree view: Groups (default) | Hierarchy.** Groups = flat freq-sorted distinct Murckos (the chemist's typical first scan). Hierarchy = Schuffenhauer DAG (SAR drill). Path A's improvements apply to Hierarchy; Groups is inherently flat + sorted.
+- **Min-mols pill cycles 1 → 2 → 3 → 5 → 10.** In Groups: hides chemotypes below threshold. In Hierarchy: prunes any subtree below threshold (recursive via `visibleNodes` Set).
+
+**Surfaces touched (FE):**
+- `frontend/src/features/sar-analysis/components/scaffold-tree-view.tsx` — split-pane, sub-mode dispatch, toolbar (sub-mode + min-mols + color), uses `collectionId` when on a collection page
+- `frontend/src/features/sar-analysis/components/scaffold-tree-node.tsx` — single recursive node row; receives precomputed `childIndex` + `colorBins` + `visibleNodes` (O(N) not O(N²))
+- `frontend/src/features/sar-analysis/components/scaffold-groups-list.tsx` — NEW: flat frequency-sorted list (Groups mode)
+- `frontend/src/features/sar-analysis/components/scaffold-color-picker.tsx` — protocol picker for tree-node coloring
+- `frontend/src/features/sar-analysis/lib/use-tree-sub-mode.ts` — NEW: URL state hook (`?sub=hierarchy` is opt-in; default is implicit groups)
+- `frontend/src/features/sar-analysis/hooks/use-scaffold-tree.ts` — accepts EITHER `collectionId` (preferred when available, server-side expansion) OR `moleculeIds` (ad-hoc)
+- `frontend/src/features/research-organization/components/collection-detail.tsx` — passes `collection.id` through ResultsSurface so the tree gets full membership
+- `frontend/src/features/research-organization/components/results/results-surface.tsx` — adds optional `collectionId` prop, threads it to ScaffoldTreeView
+- `frontend/src/features/research-organization/hooks/use-collection-search.ts` — default `limit` 1000 → 10000 (matches the new BE cap for collection queries)
+
+**Surfaces touched (BE):**
+- `backend/src/cellar/infrastructure/rdkit/scaffold_network_builder.py` — explicit ScaffoldNetworkParams (only `includeScaffoldsWithoutAttachments=True`), edge tuple flipped
+- `backend/src/cellar/application/sar_analysis/build_scaffold_network.py` — feeds stored Bemis-Murcko scaffolds (not full mols), deduplicated
+- `backend/src/cellar/interface/routes/scaffold_tree.py` — accepts `collection_id` XOR `molecule_ids`; expands collection server-side via `ListCollectionMolecules` (limit 100K)
+- `backend/src/cellar/interface/routes/search.py` — `_is_single_collection_query` detector + per-call `cap` parameter to `clamp_limit`
+- `backend/src/cellar/application/shared/pagination.py` — `clamp_limit(limit, *, max_size=MAX_PAGE_SIZE)` accepts override; adds `COLLECTION_FETCH_MAX_PAGE_SIZE = 10_000`
+- `backend/scripts/backfill_bemis_murcko.py` — eager imports of cross-context model modules (FK resolution fix)
+
+**V4 deferred items (see `docs/superpowers/specs/2026-05-17-scaffold-tree-v4-at-scale.md`):**
+- Path A: server-side scaffold-membership filtering (B-tree index on `bemis_murcko_smiles` + `find_by_scaffold` endpoint). Triggers: collection > 10K mols, or chemist reports count mismatch.
+- Path B: per-scaffold lazy fetch by IDs on click. Pairs naturally with virtualized "show all" pane on huge collections.
+- Don't build either preemptively — current usage lives well under 10K.
+
+**Smoke checklist (please run before push):**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Restart `pnpm dev` (clear bloated HMR cache from earlier sessions) | Server boots, no "memory threshold" warning |
+| 2 | Open `Lead Series A - Quinazolines` (5 mols) → `?view=tree` | Groups mode default; ~3-5 chemotypes shown sorted by count desc; chevrons gone; bold count badges |
+| 3 | Click a chemotype | Cards filter to its direct members only |
+| 4 | Toggle to Hierarchy | Schuffenhauer DAG; top-3 roots auto-expanded; phantom-parent rows hidden; subtree counts ascend |
+| 5 | Pop the Min pill to 2 | Singleton chemotypes hide; empty-state shows "back to Min=1" link if all filtered |
+| 6 | Open the 900-mol `large` collection in tree view | "Computing scaffold tree…" caption ~10-30s on first load; ready state shows ALL chemotypes; "no scaffold" bucket shows 33 mols |
+| 7 | Click "no scaffold" | RIGHT pane shows 33 cards (Ca²⁺, Fe³⁺, peptides, fatty acids), not 9 |
+| 8 | Refresh the same collection | <500 ms response (cache hit on `ids_hash`) |
+| 9 | Switch to a protocol in the color-by dropdown | Tree nodes shade (color bands appear where data exists); refresh doesn't reset |
+| 10 | Visit `?view=tree&sub=hierarchy` (deep link) | Lands in Hierarchy mode on first paint |
+
+**Diagnostic anchors (post-iteration):**
+- Scaffold cleanliness comes from `ScaffoldNetworkParams` with `includeScaffoldsWithAttachments=False` AND from feeding stored Bemis-Murcko scaffolds as input (not full mols).
+- Edge `parent_smiles` is the SIMPLER ancestor (chemist-intuitive). Codebase-internal RDKit emit is the opposite; flip happens in `ScaffoldNetworkBuilder.build()`.
+- Full-collection compute uses the BE `collection_id` expansion path (`POST /scaffold-tree` with `collection_id`); the FE detects via the `collectionId` prop on `ScaffoldTreeView`.
+- `useCollectionSearch` now defaults to `limit=10000`; the BE search route detects `{type:"collection"}` single-criterion bodies and applies `COLLECTION_FETCH_MAX_PAGE_SIZE` to honor it.
+
+**Test totals:** 197 FE tests in scope (research-org + sar-analysis); 20 BE scaffold-tree unit + 5 API tests; 2611+ BE total. All green.
+
+**How to resume:**
+1. Walk the 10-step smoke checklist above on the live dev stack.
+2. If all pass: push `prot-2` and open a PR against `main`. This batch rides along with the prior V2 base ship + Collections V1 + V1.5.
+3. Stale-cache cleanup: `DELETE FROM scaffold_tree_jobs WHERE status='ready';` runs cleanly between deployments to invalidate any pre-fix cached jobs.
+
+---
+
 ### 2026-05-17 — V2 scaffold tree shipped on prot-2 (28 commits, all tests green)
 
 **Branch:** `prot-2`. 28 new implementation commits + 3 spec/plan commits since the prior session's HEAD (`7837b3a4`). Total now ~78 commits ahead of `origin/prot-2`. **Browser smoke pending.**
