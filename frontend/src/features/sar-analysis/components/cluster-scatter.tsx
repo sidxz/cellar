@@ -142,11 +142,13 @@ export function ClusterScatter({
           y: repPoints.map((p) => p.y),
           marker: {
             symbol: "star",
-            size: 18,
+            // 12px matches the base 8px dot's visual footprint (stars need a
+            // few extra px because of their pointed silhouette / negative space).
+            size: 12,
             color: starFillColors,
             // Dark outline so the star stays visible no matter which cluster
             // color it's drawn in. Thicker than the base trace's 0.5px.
-            line: { width: 1.5, color: "#1f2937" },
+            line: { width: 1, color: "#1f2937" },
           },
           hoverinfo: "skip",
         }
