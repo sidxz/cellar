@@ -3,21 +3,23 @@
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-export type ViewMode = "table" | "cards" | "scaffold-tree";
+export type ViewMode = "table" | "cards" | "scaffold-tree" | "clusters";
 
-const ALL_MODES: ViewMode[] = ["table", "cards", "scaffold-tree"];
+const ALL_MODES: ViewMode[] = ["table", "cards", "scaffold-tree", "clusters"];
 
 /** Maps URL param values to ViewMode values (and vice versa for short forms). */
 const URL_TO_MODE: Record<string, ViewMode> = {
   table: "table",
   cards: "cards",
   tree: "scaffold-tree",
+  clusters: "clusters",
 };
 
 const MODE_TO_URL: Record<ViewMode, string> = {
   table: "table",
   cards: "cards",
   "scaffold-tree": "tree",
+  clusters: "clusters",
 };
 
 function parseViewMode(raw: string | null, fallback: ViewMode): ViewMode {

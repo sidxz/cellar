@@ -23,8 +23,9 @@ import { useCollection, useDeleteCollection } from "../hooks/use-collections";
 import { useRemoveMolecules } from "../hooks/use-collection-molecules";
 import { useCollectionSearch } from "../hooks/use-collection-search";
 import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
-import { useProject } from "../hooks/use-projects";
+import { useProject, useProjects } from "../hooks/use-projects";
 import { useViewMode } from "../lib/use-view-mode";
+import type { ViewMode } from "../lib/use-view-mode";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 import { CollectionHeader } from "./collection/collection-header";
@@ -42,6 +43,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const isAdmin = useAuthzHasRole("admin");
   const query = useCollection(collectionId);
   const { data: project } = useProject(query.data?.project_id ?? undefined);
+  const { data: allProjects } = useProjects();
 
   const search = useCollectionSearch(collectionId);
   const deleteMutation = useDeleteCollection();
@@ -61,6 +63,19 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const { data: testCounts } = useProtocolTestCounts(
     moleculeIds,
     query.data?.project_id ?? null,
+  );
+
+  // Cluster view: disabled when molecule count is below the UMAP threshold.
+  const clusterDisabledModes = useMemo<Set<ViewMode>>(() => {
+    const s = new Set<ViewMode>();
+    if (molecules.length < 10) s.add("clusters");
+    return s;
+  }, [molecules.length]);
+
+  // Projects list shape for the cluster view's Save-as-collection dialog.
+  const clusterProjects = useMemo(
+    () => (allProjects ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [allProjects],
   );
 
   const onSelectChange = useCallback((id: string, selected: boolean) => {
@@ -182,7 +197,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               rightSlot={
                 <>
                   {selectionToolbar}
-                  <ViewModeToggle mode={mode} onChange={setMode} />
+                  <ViewModeToggle mode={mode} onChange={setMode} disabledModes={clusterDisabledModes} />
                 </>
               }
             />
@@ -198,6 +213,9 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               showToolbar={false}
               testCounts={testCounts}
               collectionId={collection.id}
+              clusterProjects={clusterProjects}
+              clusterDefaultProjectId={collection.project_id ?? null}
+              clusterSourceLabel={collection.name}
             />
           </div>
         )}

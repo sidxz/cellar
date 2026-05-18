@@ -29,6 +29,7 @@ vi.mock("../hooks/use-collection-molecules", () => ({
 }));
 vi.mock("../hooks/use-projects", () => ({
   useProject: () => ({ data: null }),
+  useProjects: () => ({ data: [] }),
 }));
 vi.mock("../hooks/use-protocol-test-counts", () => ({
   useProtocolTestCounts: () => ({ data: {} }),

@@ -19,6 +19,24 @@ vi.mock("@/features/sar-analysis/components/scaffold-tree-view", () => ({
   ScaffoldTreeView: () => <div data-testid="scaffold-tree-view" />,
 }));
 
+vi.mock("@/features/sar-analysis/components/cluster-map-view", () => ({
+  ClusterMapView: () => <div data-testid="cluster-map-view" />,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock("../../hooks/use-collections", () => ({
+  useCreateCollection: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/shared/lib/api/custom-instance", () => ({
+  customInstance: vi.fn(),
+}));
+
 // jsdom doesn't implement ResizeObserver. Stub it so react-virtual's measure
 // path can run without throwing.
 beforeAll(() => {
@@ -133,5 +151,35 @@ describe("ResultsSurface", () => {
     expect(screen.getByTestId("scaffold-tree-view")).toBeInTheDocument();
     // Toggle should reflect scaffold-tree as active
     expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("renders ClusterMapView when mode=clusters", () => {
+    render(
+      <ResultsSurface
+        molecules={mols}
+        mode="clusters"
+        onModeChange={vi.fn()}
+        selectedIds={new Set()}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("cluster-map-view")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cluster view/i })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("disables cluster toggle when molecule count < 10", () => {
+    render(
+      <ResultsSurface
+        molecules={mols}
+        mode="cards"
+        onModeChange={vi.fn()}
+        selectedIds={new Set()}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
+    // mols has 2 entries, so cluster should be disabled
+    expect(screen.getByRole("button", { name: /cluster view/i })).toBeDisabled();
   });
 });

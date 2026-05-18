@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import type { ColDef } from "ag-grid-community";
 import { ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { ScaffoldTreeView } from "@/features/sar-analysis/components/scaffold-tree-view";
+import { ClusterMapView } from "@/features/sar-analysis/components/cluster-map-view";
+import type { ProtocolOption } from "@/features/sar-analysis/components/color-mode-picker";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import type { MembershipResult } from "../../types";
+import { useCreateCollection } from "../../hooks/use-collections";
 import type { ViewMode } from "../../lib/use-view-mode";
 import { ViewModeToggle } from "./view-mode-toggle";
 import { CardGrid } from "./card-grid";
+
+// Minimum molecule count for the cluster view to be enabled.
+const MIN_MOLS_FOR_CLUSTER = 10;
 
 export interface ResultsSurfaceProps {
   molecules: Molecule[];
@@ -45,6 +54,28 @@ export interface ResultsSurfaceProps {
    * pane still render the paginated visible set.
    */
   collectionId?: string;
+
+  // ── Cluster view props ────────────────────────────────────────────────────
+
+  /**
+   * Protocol list for the cluster-view color-by-activity picker.
+   * When empty the picker defaults to "Cluster" coloring.
+   */
+  clusterProtocols?: ProtocolOption[];
+  /** Default protocol to use for activity coloring in the cluster view. */
+  clusterDefaultProtocolId?: string | null;
+  /**
+   * Projects list for the Save-as-collection dialog inside the cluster view.
+   * When omitted the dialog still works but the project picker is empty.
+   */
+  clusterProjects?: { id: string; name: string }[];
+  /** Project to pre-select in the Save-as-collection dialog. */
+  clusterDefaultProjectId?: string | null;
+  /**
+   * Human-readable label for the current data source (collection name or
+   * "Search results"). Used in the default name for saved selections.
+   */
+  clusterSourceLabel?: string;
 }
 
 interface TableRow {
@@ -69,7 +100,15 @@ export function ResultsSurface({
   testCounts,
   activityData,
   collectionId,
+  clusterProtocols = [],
+  clusterDefaultProtocolId = null,
+  clusterProjects = [],
+  clusterDefaultProjectId = null,
+  clusterSourceLabel = "Search results",
 }: ResultsSurfaceProps) {
+  const router = useRouter();
+  const createCollection = useCreateCollection();
+
   const tableRows: TableRow[] = useMemo(
     () =>
       molecules.map((m) => ({
@@ -129,6 +168,48 @@ export function ResultsSurface({
     [onOpen],
   );
 
+  // Disabled modes: cluster requires MIN_MOLS_FOR_CLUSTER molecules.
+  const disabledModes = useMemo<Set<ViewMode>>(() => {
+    const disabled = new Set<ViewMode>();
+    if (molecules.length < MIN_MOLS_FOR_CLUSTER) disabled.add("clusters");
+    return disabled;
+  }, [molecules.length]);
+
+  // Save-as-collection handler for the cluster view: creates a new collection,
+  // bulk-adds the selected molecules, then navigates to it in cluster mode.
+  const handleSaveClusterCollection = useCallback(
+    async (args: { name: string; projectId: string | null; moleculeIds: string[] }) => {
+      // Step 1: create the collection.
+      const newCollection = await new Promise<{ id: string }>((resolve, reject) => {
+        createCollection.mutate(
+          { name: args.name, project_id: args.projectId },
+          {
+            onSuccess: (c) => resolve(c as { id: string }),
+            onError: (err) => reject(err),
+          },
+        );
+      });
+
+      // Step 2: add the selected molecules to the new collection.
+      if (args.moleculeIds.length > 0) {
+        await customInstance<MembershipResult>({
+          url: `/api/v1/collections/${newCollection.id}/molecules`,
+          method: "POST",
+          data: {
+            references: args.moleculeIds.map((id) => ({
+              value: id,
+              ref_type: "uuid",
+            })),
+          },
+        });
+      }
+
+      // Step 3: navigate to the new collection in cluster view.
+      router.push(`/collections/${newCollection.id}?view=clusters`);
+    },
+    [createCollection, router],
+  );
+
   return (
     <div className="flex flex-col gap-3">
       {showToolbar && (
@@ -136,7 +217,7 @@ export function ResultsSurface({
           <div className="flex items-center gap-2">{toolbarLeft}</div>
           <div className="flex items-center gap-2">
             {toolbarRight}
-            <ViewModeToggle mode={mode} onChange={onModeChange} />
+            <ViewModeToggle mode={mode} onChange={onModeChange} disabledModes={disabledModes} />
           </div>
         </div>
       )}
@@ -147,6 +228,17 @@ export function ResultsSurface({
           activityData={activityData ?? {}}
           collectionId={collectionId}
           onOpen={onOpen}
+        />
+      ) : mode === "clusters" ? (
+        <ClusterMapView
+          molecules={molecules}
+          collectionId={collectionId}
+          protocols={clusterProtocols}
+          defaultColorProtocolId={clusterDefaultProtocolId}
+          onSaveCollection={handleSaveClusterCollection}
+          projects={clusterProjects}
+          defaultProjectId={clusterDefaultProjectId}
+          sourceLabel={clusterSourceLabel}
         />
       ) : mode === "cards" ? (
         <div className="h-[calc(100vh-14rem)] min-h-[480px]">
