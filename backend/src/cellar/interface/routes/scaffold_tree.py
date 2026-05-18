@@ -16,6 +16,9 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel
 
+from cellar.application.research_organization.collection_membership import (
+    ListCollectionMoleculesQuery,
+)
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import (
     CancelScaffoldTreeJob,
     CancelScaffoldTreeJobInput,
@@ -30,13 +33,23 @@ from cellar.application.sar_analysis.start_scaffold_tree_job import (
     StartScaffoldTreeJobInput,
 )
 from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
+from cellar.interface.error_handlers import result_to_response
 from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 from cellar.interface.dependencies import AuthDep
+from cellar.interface.dependencies._research_organization import (
+    ListCollectionMoleculesDep,
+)
 from cellar.interface.dependencies._sar_analysis import (
     CancelScaffoldTreeJobDep,
     GetScaffoldTreeJobDep,
     StartScaffoldTreeJobDep,
 )
+
+# A cap that's well above any realistic curated collection size. Bypasses the
+# generic search-endpoint pagination clamp (MAX_PAGE_SIZE=200) which exists for
+# /search but is wrong for a collection-scoped scaffold-tree compute — the tree
+# must see EVERY member, or it under-counts every cluster head.
+COLLECTION_EXPANSION_LIMIT = 100_000
 
 router = APIRouter(prefix="/api/v1/scaffold-tree", tags=["scaffold-tree"])
 
@@ -47,7 +60,16 @@ router = APIRouter(prefix="/api/v1/scaffold-tree", tags=["scaffold-tree"])
 
 
 class StartScaffoldTreeRequest(BaseModel):
-    molecule_ids: list[UUID]
+    """Exactly one of ``molecule_ids`` or ``collection_id`` must be set.
+
+    Use ``collection_id`` when computing a tree for an entire saved collection
+    — the route expands it server-side so the compute always sees every member,
+    bypassing the generic search-endpoint pagination clamp. Use ``molecule_ids``
+    for ad-hoc sets (e.g. a search result the chemist wants to tree-ify).
+    """
+
+    molecule_ids: list[UUID] | None = None
+    collection_id: UUID | None = None
 
 
 class JobView(BaseModel):
@@ -123,15 +145,42 @@ async def start_scaffold_tree(
     response: Response,
     auth: AuthDep,
     uc: StartScaffoldTreeJobDep,
+    list_collection_members: ListCollectionMoleculesDep,
 ) -> StartScaffoldTreeResponse:
-    """Compute or schedule a scaffold tree for the given molecule IDs.
+    """Compute or schedule a scaffold tree.
 
-    Returns 200 with ``tree`` populated on cache hit or small (≤500) sets.
-    Returns 202 with ``job`` populated when async computation is scheduled.
+    Accepts either ``molecule_ids`` (explicit list) or ``collection_id``
+    (server-side expansion to full member set). Returns 200 with ``tree``
+    populated on cache hit or small (≤500) sets. Returns 202 with ``job``
+    populated when async computation is scheduled.
     """
+    if (payload.molecule_ids is None) == (payload.collection_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="exactly one of molecule_ids or collection_id must be set",
+        )
+
+    if payload.collection_id is not None:
+        # Expand server-side so the compute sees every collection member.
+        # ListCollectionMolecules already does the workspace-scoping check;
+        # result_to_response unwraps Success / raises HTTPException on Failure.
+        molecule_ids = result_to_response(
+            await list_collection_members(
+                ListCollectionMoleculesQuery(
+                    workspace_id=auth.workspace_id,
+                    collection_id=payload.collection_id,
+                    offset=0,
+                    limit=COLLECTION_EXPANSION_LIMIT,
+                ),
+                auth=auth,
+            )
+        )
+    else:
+        molecule_ids = list(payload.molecule_ids or [])
+
     out = await uc.execute(
         StartScaffoldTreeJobInput(
-            molecule_ids=list(payload.molecule_ids),
+            molecule_ids=molecule_ids,
             workspace_id=auth.workspace_id,
             requested_by=auth.user_id,
             now=datetime.now(timezone.utc),

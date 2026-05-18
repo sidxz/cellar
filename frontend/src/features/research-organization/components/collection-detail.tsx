@@ -186,6 +186,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               isLoading={search.isLoading}
               showToolbar={false}
               testCounts={testCounts}
+              collectionId={collection.id}
             />
           </div>
         )}

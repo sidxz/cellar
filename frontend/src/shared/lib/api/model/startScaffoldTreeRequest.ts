@@ -4,7 +4,18 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { StartScaffoldTreeRequestMoleculeIds } from './startScaffoldTreeRequestMoleculeIds';
+import type { StartScaffoldTreeRequestCollectionId } from './startScaffoldTreeRequestCollectionId';
 
+/**
+ * Exactly one of ``molecule_ids`` or ``collection_id`` must be set.
+
+Use ``collection_id`` when computing a tree for an entire saved collection
+— the route expands it server-side so the compute always sees every member,
+bypassing the generic search-endpoint pagination clamp. Use ``molecule_ids``
+for ad-hoc sets (e.g. a search result the chemist wants to tree-ify).
+ */
 export interface StartScaffoldTreeRequest {
-  molecule_ids: string[];
+  molecule_ids?: StartScaffoldTreeRequestMoleculeIds;
+  collection_id?: StartScaffoldTreeRequestCollectionId;
 }

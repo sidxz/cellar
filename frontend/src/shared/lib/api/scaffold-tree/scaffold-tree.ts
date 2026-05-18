@@ -36,10 +36,12 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
- * Compute or schedule a scaffold tree for the given molecule IDs.
+ * Compute or schedule a scaffold tree.
 
-Returns 200 with ``tree`` populated on cache hit or small (≤500) sets.
-Returns 202 with ``job`` populated when async computation is scheduled.
+Accepts either ``molecule_ids`` (explicit list) or ``collection_id``
+(server-side expansion to full member set). Returns 200 with ``tree``
+populated on cache hit or small (≤500) sets. Returns 202 with ``job``
+populated when async computation is scheduled.
  * @summary Start Scaffold Tree
  */
 export const startScaffoldTreeApiV1ScaffoldTreePost = (

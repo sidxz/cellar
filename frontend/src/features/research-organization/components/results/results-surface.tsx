@@ -38,6 +38,13 @@ export interface ResultsSurfaceProps {
    * When absent, the tree renders without activity coloring.
    */
   activityData?: Record<string, Record<string, any>>;
+  /**
+   * Optional collection identifier. When set, the scaffold-tree view computes
+   * against the full collection on the BE (bypassing the search-pagination
+   * cap) instead of the visible page of `molecules`. The cards on the right
+   * pane still render the paginated visible set.
+   */
+  collectionId?: string;
 }
 
 interface TableRow {
@@ -61,6 +68,7 @@ export function ResultsSurface({
   showToolbar = true,
   testCounts,
   activityData,
+  collectionId,
 }: ResultsSurfaceProps) {
   const tableRows: TableRow[] = useMemo(
     () =>
@@ -137,6 +145,7 @@ export function ResultsSurface({
         <ScaffoldTreeView
           molecules={molecules}
           activityData={activityData ?? {}}
+          collectionId={collectionId}
           onOpen={onOpen}
         />
       ) : mode === "cards" ? (

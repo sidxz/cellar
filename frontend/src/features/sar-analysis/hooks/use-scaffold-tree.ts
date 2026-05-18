@@ -7,10 +7,20 @@ import type {
   StartScaffoldTreeResponse,
 } from "../types/scaffold-tree";
 
+/**
+ * Either ``moleculeIds`` (an explicit list — for ad-hoc sets) or
+ * ``collectionId`` (server-side expansion to all members of a saved
+ * collection — bypasses the search endpoint's 200-row pagination cap so
+ * the scaffold tree always sees every member). Exactly one must be set.
+ */
 export type UseScaffoldTreeParams = {
-  moleculeIds: string[];
+  moleculeIds?: string[];
+  collectionId?: string;
   /** Override for tests — defaults to the orval-generated POST. */
-  startFn?: (mol_ids: string[]) => Promise<StartScaffoldTreeResponse>;
+  startFn?: (input: {
+    molecule_ids?: string[];
+    collection_id?: string;
+  }) => Promise<StartScaffoldTreeResponse>;
   /** Override for tests — defaults to the orval-generated GET. */
   pollFn?: (job_id: string) => Promise<ScaffoldTreeJob>;
   pollIntervalMs?: number;
@@ -34,18 +44,37 @@ function sortedKey(ids: string[]): string {
 export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeReturn {
   const {
     moleculeIds,
+    collectionId,
     startFn = defaultStartFn,
     pollFn = defaultPollFn,
     pollIntervalMs = DEFAULT_POLL_MS,
     enabled = true,
   } = params;
 
-  const key = useMemo(() => sortedKey(moleculeIds), [moleculeIds]);
+  // Query key prefers the (stable) collectionId when available — otherwise
+  // a sorted hash of explicit mol ids.
+  const key = useMemo(
+    () =>
+      collectionId
+        ? `coll:${collectionId}`
+        : `ids:${sortedKey(moleculeIds ?? [])}`,
+    [collectionId, moleculeIds],
+  );
+
+  // Either path must be enabled, but not both (the BE rejects {neither, both}).
+  const queryEnabled =
+    enabled &&
+    (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
   const start = useQuery({
     queryKey: ["scaffold-tree", "start", key],
-    queryFn: () => startFn(moleculeIds),
-    enabled: enabled && moleculeIds.length > 0,
+    queryFn: () =>
+      startFn(
+        collectionId
+          ? { collection_id: collectionId }
+          : { molecule_ids: moleculeIds ?? [] },
+      ),
+    enabled: queryEnabled,
     staleTime: 5 * 60_000,
   });
 
@@ -100,11 +129,14 @@ export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeR
   };
 }
 
-async function defaultStartFn(mol_ids: string[]): Promise<StartScaffoldTreeResponse> {
+async function defaultStartFn(input: {
+  molecule_ids?: string[];
+  collection_id?: string;
+}): Promise<StartScaffoldTreeResponse> {
   const { startScaffoldTreeApiV1ScaffoldTreePost } = await import(
     "@/shared/lib/api/scaffold-tree/scaffold-tree"
   );
-  const res = await startScaffoldTreeApiV1ScaffoldTreePost({ molecule_ids: mol_ids });
+  const res = await startScaffoldTreeApiV1ScaffoldTreePost(input);
   return res as unknown as StartScaffoldTreeResponse;
 }
 

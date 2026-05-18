@@ -1006,6 +1006,8 @@ export * from './startExportResponse';
 export * from './startRequest';
 export * from './startRequestProposedRouteId';
 export * from './startScaffoldTreeRequest';
+export * from './startScaffoldTreeRequestCollectionId';
+export * from './startScaffoldTreeRequestMoleculeIds';
 export * from './startScaffoldTreeResponse';
 export * from './startScaffoldTreeResponseJob';
 export * from './startScaffoldTreeResponseTree';

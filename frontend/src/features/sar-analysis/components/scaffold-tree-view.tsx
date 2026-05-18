@@ -31,6 +31,14 @@ import {
 type Props = {
   molecules: Molecule[];
   activityData: Record<string, Record<string, any>>;
+  /**
+   * When set, the scaffold tree is computed against the FULL membership of
+   * this collection on the BE (bypassing the search endpoint's 200-row
+   * pagination cap). The right-pane CardGrid still uses the paginated
+   * `molecules` for visual rendering. When unset, the tree falls back to
+   * the visible molecule IDs (suitable for ad-hoc result sets).
+   */
+  collectionId?: string;
   /** Called when a molecule tile is opened. Defaults to routing to /compounds/{id}. */
   onOpen?: (moleculeId: string) => void;
 };
@@ -121,12 +129,21 @@ function MinMembersPill({
   );
 }
 
-export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
+export function ScaffoldTreeView({
+  molecules,
+  activityData,
+  collectionId,
+  onOpen,
+}: Props) {
   const router = useRouter();
   const moleculeIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
-  const { tree, isStarting, isPolling, error } = useScaffoldTree({
-    moleculeIds,
-  });
+  // When the parent surface gave us a collection_id, prefer that — the BE will
+  // expand to the full member list and we won't undercount on > 200-mol sets.
+  // Otherwise (ad-hoc search results, sub-paged views) fall back to the
+  // visible molecule IDs.
+  const { tree, isStarting, isPolling, error } = useScaffoldTree(
+    collectionId ? { collectionId } : { moleculeIds },
+  );
 
   const { subMode, setSubMode } = useTreeSubMode();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
