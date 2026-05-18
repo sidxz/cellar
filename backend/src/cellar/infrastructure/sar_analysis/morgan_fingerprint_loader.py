@@ -1,11 +1,9 @@
 """MorganFingerprintLoader — loads persisted Morgan FP bytes and converts to ExplicitBitVect.
 
 The domain stores ``mol.morgan_fp`` as packed MSB-first bytes (256 bytes for 2048 bits),
-written by ``MorganAlgorithm.compute_bytes``. The persisted column is
-``MoleculeModel.fp_morgan``.
-
-Conversion uses ``DataStructs.CreateFromBinaryText`` which reads the same packed
-MSB-first format.  The bit-vector size must match the generator: 2048 (radius=2 ECFP4).
+written by ``MorganAlgorithm.compute_bytes``.  Conversion back uses RDKit's
+``CreateFromBitString`` (the inverse of the generator's ``ToBitString() → packed bytes``).
+The bit-vector size must match the generator: 2048 (radius=2 ECFP4).
 
 Molecules with ``fp_morgan IS NULL`` are silently skipped; the caller
 (``ComputeUmapCluster``) collects them in ``skipped_molecule_ids``.
@@ -26,6 +24,17 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 )
 
 _MORGAN_FP_NBITS = 2048
+
+
+def _bytes_to_bitvect(fp_bytes: bytes) -> ExplicitBitVect:
+    """Decode MSB-packed bytes (the storage shape) back into an ExplicitBitVect.
+
+    Inverse of ``MorganAlgorithm.compute_bytes``, which packs ``fp.ToBitString()``
+    into bytes by chunking 8 bits MSB-first. Round-tripping uses RDKit's own
+    ``CreateFromBitString``.
+    """
+    bit_string = "".join(f"{b:08b}" for b in fp_bytes)
+    return DataStructs.CreateFromBitString(bit_string)
 
 
 class MorganFingerprintLoader:
@@ -64,7 +73,7 @@ class MorganFingerprintLoader:
 
         result: dict[UUID, ExplicitBitVect] = {}
         for mol_id, fp_bytes in rows:
-            bv = ExplicitBitVect(_MORGAN_FP_NBITS)
-            DataStructs.CreateFromBinaryText(bv, fp_bytes)
-            result[mol_id] = bv
+            if len(fp_bytes) * 8 != _MORGAN_FP_NBITS:
+                continue
+            result[mol_id] = _bytes_to_bitvect(fp_bytes)
         return result
