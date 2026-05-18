@@ -12,7 +12,6 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { useUmapCluster } from "../hooks/use-umap-cluster";
 import { usePickerConfig } from "../lib/use-picker-config";
 import { useColorMode } from "../lib/use-color-mode";
-import { idsInsidePolygon } from "../lib/lasso-math";
 import type { ColorOption } from "../lib/cluster-palette";
 import { ClusterScatter } from "./cluster-scatter";
 import { ClusterToolbar } from "./cluster-toolbar";
@@ -121,9 +120,9 @@ export function ClusterMapView({
     });
 
   // --- Lasso + subset state ---
-  const [lassoPolygon, setLassoPolygon] = useState<
-    { x: number; y: number }[] | null
-  >(null);
+  // Plotly's onSelected gives us the selected molecule IDs directly (more
+  // reliable than reconstructing the polygon + running point-in-polygon).
+  const [lassoedIds, setLassoedIds] = useState<Set<string>>(new Set());
   // When user hits Diversify with a lasso active, snapshot those IDs into
   // pendingSubset to scope re-computation to the selection.
   const [pendingSubset, setPendingSubset] = useState<string[] | null>(null);
@@ -162,27 +161,18 @@ export function ClusterMapView({
 
   // --- Derived selection state ---
 
-  // All points that fall inside the current lasso polygon.
-  const lassoedIds: Set<string> = useMemo(() => {
-    if (!result || !lassoPolygon || lassoPolygon.length < 3) return new Set();
-    return new Set(idsInsidePolygon(result.points, lassoPolygon));
-  }, [result, lassoPolygon]);
-
   // Representatives from the cluster result.
   const repIds: Set<string> = useMemo(
     () => new Set((result?.representatives ?? []).map((r) => r.moleculeId)),
     [result],
   );
 
-  // Combined selection: if both lasso and reps are populated, show intersection;
-  // otherwise show whichever is non-empty (rep-only = "show cluster picks").
+  // Selection precedence: an active lasso wins over the auto-Diversify picks.
+  // No lasso → show the picks. Lasso around empty space → still show the picks
+  // (chemist can retry; they didn't lose context).
   const selectedIds: Set<string> = useMemo(() => {
-    if (lassoedIds.size > 0 && repIds.size > 0) {
-      return new Set([...lassoedIds].filter((id) => repIds.has(id)));
-    }
     if (lassoedIds.size > 0) return lassoedIds;
-    if (repIds.size > 0) return repIds;
-    return new Set();
+    return repIds;
   }, [lassoedIds, repIds]);
 
   const selectedMolecules = useMemo(
@@ -233,8 +223,8 @@ export function ClusterMapView({
   // --- Handlers ---
 
   const handleLassoSelected = useCallback(
-    (polygon: { x: number; y: number }[] | null) => {
-      setLassoPolygon(polygon);
+    (ids: string[] | null) => {
+      setLassoedIds(new Set(ids ?? []));
     },
     [],
   );
@@ -249,9 +239,9 @@ export function ClusterMapView({
     setCommittedN(n);
     setCommittedThreshold(threshold);
     // Snapshot lasso into pendingSubset to re-scope computation; clear the
-    // polygon so the next interaction starts fresh.
+    // lasso so the next interaction starts fresh.
     setPendingSubset(lassoedIds.size > 0 ? [...lassoedIds] : null);
-    setLassoPolygon(null);
+    setLassoedIds(new Set());
   }, [lassoedIds, picker, n, threshold]);
 
   const handleSave = useCallback(() => {

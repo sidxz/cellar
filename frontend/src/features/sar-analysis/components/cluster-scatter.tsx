@@ -25,7 +25,9 @@ interface ClusterScatterProps {
   scaffoldByMol: Record<string, string | null>;
   /** Chemist-readable hover label per molecule id, e.g. "CV-00984 · SACC-0460144". */
   labelByMolId?: Record<string, string>;
-  onSelected: (polygon: { x: number; y: number }[] | null) => void;
+  /** Fires with the array of selected molecule IDs after a lasso / box selection,
+   *  or null when the selection is cleared. */
+  onSelected: (moleculeIds: string[] | null) => void;
   onPointClick: (moleculeId: string) => void;
   lassoActive?: boolean;
 }
@@ -129,24 +131,25 @@ export function ClusterScatter({
   // interface (which is intentionally loose). We pass them via a cast so the
   // shared dynamic-import wrapper handles the event wiring correctly.
   const extraHandlers = {
+    // Plotly fires plotly_selected with ev.points = the selected markers, regardless
+    // of whether the user used lasso or box select. customdata is [moleculeId, label]
+    // (set on the base trace above) so we extract the IDs directly — no need to
+    // reconstruct the polygon + run point-in-polygon ourselves.
     onSelected: (ev: any) => {
-      if (!ev) {
+      if (!ev || !Array.isArray(ev.points) || ev.points.length === 0) {
         onSelected(null);
         return;
       }
-      // Lasso: ev.lassoPoints = {x: number[], y: number[]}
-      // Box: ev.range = {x: [min,max], y: [min,max]} (no polygon)
-      const lasso = ev.lassoPoints as { x: number[]; y: number[] } | undefined;
-      if (lasso?.x) {
-        const polygon = lasso.x.map((x: number, i: number) => ({
-          x,
-          y: lasso.y[i],
-        }));
-        onSelected(polygon);
-      } else {
-        onSelected(null);
-      }
+      const ids = ev.points
+        .map((p: any) => {
+          const cd = p?.customdata;
+          return Array.isArray(cd) ? (cd[0] as string) : (cd as string | undefined);
+        })
+        .filter((id: string | undefined): id is string => Boolean(id));
+      onSelected(ids.length > 0 ? ids : null);
     },
+    // Plotly fires plotly_deselect when user double-clicks outside a selection.
+    onDeselect: () => onSelected(null),
     onClick: (ev: any) => {
       const pt = ev?.points?.[0];
       const cd = pt?.customdata;
