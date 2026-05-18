@@ -1,14 +1,23 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 import { ScaffoldTreeNode } from "./scaffold-tree-node";
 import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
+import {
+  consumeScaffoldSearch,
+  STORAGE_KEY,
+} from "@/features/research-organization/lib/scaffold-search-handoff";
 
 // StructureThumbnail renders via RDKit.js WASM — stub it in tests.
 vi.mock("@/shared/components/chemistry", () => ({
   StructureThumbnail: ({ smiles }: { smiles: string }) => (
     <div data-testid="structure-thumb" data-smiles={smiles} />
   ),
+}));
+
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
 }));
 
 const tree = {
@@ -153,5 +162,89 @@ describe("ScaffoldTreeNode", () => {
     );
     // Child node should be rendered
     expect(screen.getByTestId("scaffold-node-c1ccc2ccccc2c1")).toBeInTheDocument();
+  });
+});
+
+describe("scaffold → search loop closer", () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  });
+
+  it("clicking the 'open in search' action stashes the scaffold and navigates", () => {
+    render(
+      <ScaffoldTreeNode
+        scaffoldSmiles="c1ccncc1"
+        tree={{
+          nodes: [{ scaffold_smiles: "c1ccncc1", molecule_count: 1, subtree_molecule_count: 1, molecule_ids: ["m1"] }],
+          edges: [],
+          stats: { node_count: 1, elapsed_ms: 0, cache_hit: false },
+        }}
+        childIndex={new Map()}
+        colorBins={new Map()}
+        depth={0}
+        expanded={new Set()}
+        selected={null}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    const action = screen.getByRole("button", { name: /find compounds with this scaffold/i });
+    fireEvent.click(action);
+    expect(mockPush).toHaveBeenCalledWith("/search");
+    expect(consumeScaffoldSearch()).toEqual({
+      type: "scaffold",
+      mode: "exact_match",
+      scaffold_smiles: "c1ccncc1",
+    });
+  });
+
+  it("clicking the action on the NO_SCAFFOLD bucket stashes as acyclic_only", () => {
+    render(
+      <ScaffoldTreeNode
+        scaffoldSmiles={NO_SCAFFOLD_SENTINEL}
+        tree={{
+          nodes: [{ scaffold_smiles: NO_SCAFFOLD_SENTINEL, molecule_count: 5, subtree_molecule_count: 5, molecule_ids: [] }],
+          edges: [],
+          stats: { node_count: 1, elapsed_ms: 0, cache_hit: false },
+        }}
+        childIndex={new Map()}
+        colorBins={new Map()}
+        depth={0}
+        expanded={new Set()}
+        selected={null}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /find compounds with this scaffold/i }));
+    expect(mockPush).toHaveBeenCalledWith("/search");
+    expect(consumeScaffoldSearch()).toEqual({
+      type: "scaffold",
+      mode: "acyclic_only",
+    });
+  });
+
+  it("action button click does NOT fire the row select handler", () => {
+    const onSelect = vi.fn();
+    render(
+      <ScaffoldTreeNode
+        scaffoldSmiles="c1ccncc1"
+        tree={{
+          nodes: [{ scaffold_smiles: "c1ccncc1", molecule_count: 1, subtree_molecule_count: 1, molecule_ids: ["m1"] }],
+          edges: [],
+          stats: { node_count: 1, elapsed_ms: 0, cache_hit: false },
+        }}
+        childIndex={new Map()}
+        colorBins={new Map()}
+        depth={0}
+        expanded={new Set()}
+        selected={null}
+        onToggle={vi.fn()}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /find compounds with this scaffold/i }));
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

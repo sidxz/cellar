@@ -1,8 +1,10 @@
 import { memo, useMemo } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { cn } from "@/shared/lib/utils";
+import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 
 import {
   NO_SCAFFOLD_SENTINEL,
@@ -51,6 +53,15 @@ function ScaffoldTreeNodeInner(props: Props) {
     onSelect,
   } = props;
 
+  const router = useRouter();
+
+  const handleOpenInSearch = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const stashed = scaffoldSmiles === NO_SCAFFOLD_SENTINEL ? "" : scaffoldSmiles;
+    stashScaffoldSearch(stashed);
+    router.push("/search");
+  };
+
   // Map lookup over tree.nodes is O(N) per node — for 30+ nodes recursing,
   // that's redundant. Build a smiles->node lookup once at the root, walk down.
   const nodesBySmiles = useMemo(() => {
@@ -81,7 +92,7 @@ function ScaffoldTreeNodeInner(props: Props) {
         data-testid={`scaffold-node-${scaffoldSmiles}`}
         onClick={() => onSelect(scaffoldSmiles)}
         className={cn(
-          "flex items-center gap-2 rounded px-2 py-1 cursor-pointer hover:bg-muted",
+          "group flex items-center gap-2 rounded px-2 py-1 cursor-pointer hover:bg-muted",
           isSelected && "bg-muted",
         )}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
@@ -131,11 +142,23 @@ function ScaffoldTreeNodeInner(props: Props) {
           </span>
         </span>
 
+        {/* Action button — visible only on hover/focus; opens /search filtered
+            to compounds matching this node's scaffold. */}
+        <button
+          type="button"
+          onClick={handleOpenInSearch}
+          className="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+          aria-label="Find compounds with this scaffold"
+          title="Find compounds with this scaffold"
+        >
+          <Search size={14} />
+        </button>
+
         {/* Activity color band — pinned to the right edge as a status glyph */}
         {colorBin && (
           <span
             aria-label={`activity ${colorBin}`}
-            className={cn("ml-auto h-1.5 w-6 rounded shrink-0", BIN_COLORS[colorBin])}
+            className={cn("h-1.5 w-6 rounded shrink-0", BIN_COLORS[colorBin])}
           />
         )}
       </div>

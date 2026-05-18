@@ -31,6 +31,7 @@ import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
 import { SaveSearchDialog } from "./search/save-search-dialog";
 import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
+import { consumeScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -428,6 +429,60 @@ function SearchPageInner() {
     enrichItems,
     setAggregationMode,
   ]);
+
+  // ── Scaffold-tree → /search handoff ────────────────────────────────────
+  // scaffold-tree-node.tsx stashes a pending scaffold criterion before
+  // navigating here. Consume + auto-execute. One-shot — the helper clears
+  // storage on read so we don't re-trigger on subsequent renders.
+  //
+  // Saved-search takes priority: if a ?saved= param is present we discard the
+  // stash and let the saved-search effect run instead. Without this guard both
+  // effects fire and whichever completes last wins — non-deterministic.
+  const scaffoldHandoffConsumedRef = useRef(false);
+  useEffect(() => {
+    if (scaffoldHandoffConsumedRef.current) return;
+    scaffoldHandoffConsumedRef.current = true;
+    // Saved-search takes priority — discard the stash so it doesn't persist
+    // into a subsequent /search visit without the ?saved= param.
+    if (savedSearchId) {
+      consumeScaffoldSearch();
+      return;
+    }
+    const criterion = consumeScaffoldSearch();
+    if (!criterion) return;
+
+    const query: SearchQuery = { logic: "and", criteria: [criterion] };
+    dispatch({ type: "searchStart", query, protocolColumns: [] });
+
+    const input = {
+      query,
+      aggregation: aggregationModeToWire(aggregationMode),
+    };
+    runSearch(
+      { input, limit: SEARCH_PAGE_SIZE },
+      {
+        onSuccess: (data) => {
+          dispatch({
+            type: "searchComplete",
+            results: enrichItems(data),
+            nextCursor: data.next_cursor,
+            totalCount: data.total_count,
+          });
+        },
+        onError: (err) => {
+          console.error("[Search] scaffold-handoff mutation failed:", err);
+          dispatch({
+            type: "searchComplete",
+            results: [],
+            nextCursor: null,
+            totalCount: null,
+          });
+        },
+      },
+    );
+    // Deliberately runs only once on mount — the handoff key is one-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Export request builder ─────────────────────────────────────────────
   // Produces a fully-parameterised ExportRequest closure for the shared

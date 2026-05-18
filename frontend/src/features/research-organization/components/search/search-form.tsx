@@ -11,6 +11,7 @@ import type {
   ActivityCriterion,
   GroupCriterion,
   PropertyCriterion,
+  ScaffoldCriterion,
   SearchCriterion,
   SearchQuery,
   StructureCriterion,
@@ -32,6 +33,7 @@ import { ProjectFilter } from "./project-filter";
 import { PropertySection } from "./property-section";
 import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
 import { StructureSection } from "./structure-section";
+import { ScaffoldCriterionRow } from "../criterion-rows/scaffold-rows";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
   const propertyCriteria: PropertyCriterion[] = [];
   let structureCriterion: StructureCriterion | null = null;
   const collectionCriteria: SearchCriterion[] = [];
+  const scaffoldCriteria: ScaffoldCriterion[] = [];
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
   // Hoisted out so saved searches that include a project criterion can
   // re-populate the project chips at the top of the panel.
@@ -68,6 +71,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
       propertyCriteria,
       structureCriterion,
       collectionCriteria,
+      scaffoldCriteria,
       advanced,
       projectIds,
     };
@@ -107,6 +111,9 @@ function decomposeQuery(query: SearchQuery | undefined) {
       case "collection":
         collectionCriteria.push(c);
         break;
+      case "scaffold":
+        scaffoldCriteria.push(c);
+        break;
       case "selectivity":
         advanced.selectivity.push(c);
         break;
@@ -134,6 +141,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
     propertyCriteria,
     structureCriterion,
     collectionCriteria,
+    scaffoldCriteria,
     advanced,
     projectIds,
   };
@@ -284,6 +292,9 @@ export function SearchForm({
   const [collectionTerms, setCollectionTerms] = useState<CollectionTermValue[]>(
     collectionCriteriaToTerms(initial.collectionCriteria),
   );
+  const [scaffoldCriteria, setScaffoldCriteria] = useState<ScaffoldCriterion[]>(
+    initial.scaffoldCriteria,
+  );
   const [textCriteria, setTextCriteria] = useState<TextCriterion[]>(initial.textCriteria);
   const [advanced, setAdvanced] = useState<AdvancedFiltersState>(initial.advanced);
 
@@ -302,6 +313,7 @@ export function SearchForm({
     setStructureCriterion(parsed.structureCriterion);
     setPropertyCriteria(parsed.propertyCriteria);
     setCollectionTerms(collectionCriteriaToTerms(parsed.collectionCriteria));
+    setScaffoldCriteria(parsed.scaffoldCriteria);
     setTextCriteria(parsed.textCriteria);
     setAdvanced(parsed.advanced);
     // Round-trip saved searches: a stored project criterion repopulates the
@@ -411,6 +423,14 @@ export function SearchForm({
       criteria.push(c);
     }
 
+    // Scaffold — emitted as-is; exact_match rows without a smiles are skipped
+    // so a half-filled row doesn't reach the BE as a 422.
+    for (const c of scaffoldCriteria) {
+      if (c.mode === "acyclic_only" || (c.mode === "exact_match" && c.scaffold_smiles)) {
+        criteria.push(c);
+      }
+    }
+
     // Text / Keywords
     for (const c of textCriteria) {
       if (c.value) criteria.push(c);
@@ -449,6 +469,7 @@ export function SearchForm({
     structureCriterion,
     propertyCriteria,
     collectionTerms,
+    scaffoldCriteria,
     textCriteria,
     advanced,
   ]);
@@ -466,6 +487,7 @@ export function SearchForm({
     setStructureCriterion(null);
     setPropertyCriteria([]);
     setCollectionTerms([]);
+    setScaffoldCriteria([]);
     setTextCriteria([]);
     setAdvanced(emptyAdvancedFilters());
     onProjectsChange([]);
@@ -552,6 +574,37 @@ export function SearchForm({
           />
           <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
         </div>
+
+        {/* Scaffold filters — shown only when one or more scaffold criteria are
+            active. The scaffold-tree "Find in search" action stashes a criterion
+            in sessionStorage; the page reads it on mount, fires the search, and
+            sets initialQuery so this section surfaces the active filter to the
+            chemist. They can edit, remove, or add additional criteria from here. */}
+        {scaffoldCriteria.length > 0 && (
+          <>
+            <Separator className="my-3" />
+            <div>
+              <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Scaffold
+              </span>
+              <div className="mt-2 space-y-2">
+                {scaffoldCriteria.map((c, i) => (
+                  <ScaffoldCriterionRow
+                    // biome-ignore lint/suspicious/noArrayIndexKey: scaffold rows are not reordered
+                    key={i}
+                    criterion={c}
+                    onChange={(updated) =>
+                      setScaffoldCriteria((prev) => prev.map((sc, idx) => (idx === i ? updated : sc)))
+                    }
+                    onRemove={() =>
+                      setScaffoldCriteria((prev) => prev.filter((_, idx) => idx !== i))
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* More Filters */}
         <div className="mt-3 pt-3 border-t border-border">
