@@ -22,6 +22,7 @@ from cellar.application.sar_analysis.build_scaffold_network import (
     BuildScaffoldNetworkInput,
 )
 from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.shared.unit_of_work import UnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -35,12 +36,13 @@ class RunScaffoldTree:
 
     Usage::
 
-        runner = RunScaffoldTree(builder=..., repository=...)
+        runner = RunScaffoldTree(builder=..., repository=..., uow=...)
         await runner.run(job_id=job.id, workspace_id=job.workspace_id, molecule_ids=[...])
     """
 
     builder: BuildScaffoldNetwork
     repository: ScaffoldTreeJobRepository
+    uow: UnitOfWork
 
     async def run(
         self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
@@ -55,13 +57,14 @@ class RunScaffoldTree:
         """
         log = logger.bind(job_id=str(job_id), workspace_id=str(workspace_id))
         try:
-            job = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
-            if job is None:
-                log.error("scaffold_tree_job_not_found")
-                return
-
-            running = job.mark_running(datetime.now(timezone.utc))
-            await self.repository.save(running)
+            async with self.uow:
+                job = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
+                if job is None:
+                    log.error("scaffold_tree_job_not_found")
+                    return
+                running = job.mark_running(datetime.now(timezone.utc))
+                await self.repository.save(running)
+                await self.uow.commit()
 
             tree = await self.builder.execute(
                 BuildScaffoldNetworkInput(
@@ -70,19 +73,23 @@ class RunScaffoldTree:
                 )
             )
 
-            ready = running.mark_ready(tree, datetime.now(timezone.utc))
-            await self.repository.save(ready)
+            async with self.uow:
+                ready = running.mark_ready(tree, datetime.now(timezone.utc))
+                await self.repository.save(ready)
+                await self.uow.commit()
             log.info("scaffold_tree_job_ready", node_count=tree.stats.node_count)
 
         except Exception as exc:
             log.exception("scaffold_tree_job_failed")
             try:
-                current = await self.repository.find_by_id(
-                    job_id, workspace_id=workspace_id
-                )
-                if current is not None:
-                    failed = current.mark_failed(str(exc), datetime.now(timezone.utc))
-                    await self.repository.save(failed)
+                async with self.uow:
+                    current = await self.repository.find_by_id(
+                        job_id, workspace_id=workspace_id
+                    )
+                    if current is not None:
+                        failed = current.mark_failed(str(exc), datetime.now(timezone.utc))
+                        await self.repository.save(failed)
+                        await self.uow.commit()
             except Exception:
                 log.exception("scaffold_tree_fail_mark_failed")
             raise

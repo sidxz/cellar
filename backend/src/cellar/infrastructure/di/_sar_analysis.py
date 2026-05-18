@@ -60,6 +60,7 @@ def register_sar_analysis(container: Container) -> None:
         return BuildScaffoldNetwork(
             molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
             job_repository=SQLAlchemyScaffoldTreeJobRepository(uow),
+            uow=uow,
             network_builder=c[ScaffoldNetworkBuilder],
         )
 
@@ -73,6 +74,7 @@ def register_sar_analysis(container: Container) -> None:
         return RunScaffoldTree(
             builder=c[BuildScaffoldNetwork],
             repository=SQLAlchemyScaffoldTreeJobRepository(uow),
+            uow=uow,
         )
 
     container.define(RunScaffoldTree, _run_scaffold_tree)
@@ -100,12 +102,14 @@ def register_sar_analysis(container: Container) -> None:
             builder=c[BuildScaffoldNetwork],
             repository=SQLAlchemyScaffoldTreeJobRepository(uow),
             orchestrator=c[ScaffoldTreeOrchestrator],
+            uow=uow,
         )
 
     def _get(c: Container) -> GetScaffoldTreeJob:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetScaffoldTreeJob(
             repository=SQLAlchemyScaffoldTreeJobRepository(uow),
+            uow=uow,
         )
 
     def _cancel(c: Container) -> CancelScaffoldTreeJob:
@@ -113,6 +117,7 @@ def register_sar_analysis(container: Container) -> None:
         return CancelScaffoldTreeJob(
             repository=SQLAlchemyScaffoldTreeJobRepository(uow),
             orchestrator=c[ScaffoldTreeOrchestrator],
+            uow=uow,
         )
 
     container.define(StartScaffoldTreeJob, _start)

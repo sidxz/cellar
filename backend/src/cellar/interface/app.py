@@ -73,6 +73,9 @@ def create_app() -> FastAPI:
             CddPlateImportOrchestrator,
         )
         from cellar.application.export.orchestration import ExportOrchestrator
+        from cellar.application.sar_analysis.start_scaffold_tree_job import (
+            ScaffoldTreeOrchestrator,
+        )
         from cellar.infrastructure.temporal.orchestrators import (
             NullBulkRegistrationOrchestrator,
             NullCddMoleculeImportOrchestrator,
@@ -84,6 +87,10 @@ def create_app() -> FastAPI:
         from cellar.infrastructure.temporal.orchestrators.export import (
             NullExportOrchestrator,
             TemporalExportOrchestrator,
+        )
+        from cellar.infrastructure.temporal.orchestrators.scaffold_tree import (
+            NullScaffoldTreeOrchestrator,
+            TemporalScaffoldTreeOrchestrator,
         )
 
         if app.state.temporal_client is not None:
@@ -99,13 +106,18 @@ def create_app() -> FastAPI:
             export_orch: ExportOrchestrator = TemporalExportOrchestrator(
                 app.state.temporal_client
             )
+            scaffold_orch: ScaffoldTreeOrchestrator = TemporalScaffoldTreeOrchestrator(
+                app.state.temporal_client
+            )
         else:
             mol_orch = NullCddMoleculeImportOrchestrator()
             plate_orch = NullCddPlateImportOrchestrator()
             bulk_orch = NullBulkRegistrationOrchestrator()
             from cellar.application.export.render_export import RenderExport
+            from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
 
             export_orch = NullExportOrchestrator(container[RenderExport])
+            scaffold_orch = NullScaffoldTreeOrchestrator(container[RunScaffoldTree])
 
         from lagom import Singleton
 
@@ -113,6 +125,7 @@ def create_app() -> FastAPI:
         container.define(CddPlateImportOrchestrator, Singleton(lambda: plate_orch))
         container.define(BulkRegistrationOrchestrator, Singleton(lambda: bulk_orch))
         container.define(ExportOrchestrator, Singleton(lambda: export_orch))
+        container.define(ScaffoldTreeOrchestrator, Singleton(lambda: scaffold_orch))
 
         # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
         async with sentinel.lifespan(app):
@@ -248,6 +261,10 @@ def create_app() -> FastAPI:
 
     app.include_router(search_router)
     app.include_router(search_algorithms_router)
+
+    from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
+
+    app.include_router(scaffold_tree_router)
 
     from cellar.interface.routes.molecule_activity import router as molecule_activity_router
 

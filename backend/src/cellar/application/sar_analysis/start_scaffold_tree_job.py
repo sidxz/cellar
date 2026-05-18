@@ -21,6 +21,7 @@ from cellar.application.sar_analysis.build_scaffold_network import (
     compute_ids_hash,
 )
 from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
 from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 
@@ -54,18 +55,22 @@ class StartScaffoldTreeJob:
         builder: BuildScaffoldNetwork,
         repository: ScaffoldTreeJobRepository,
         orchestrator: ScaffoldTreeOrchestrator,
+        uow: UnitOfWork,
         sync_limit: int = 500,
     ) -> None:
         self._builder = builder
         self._repo = repository
         self._orchestrator = orchestrator
+        self._uow = uow
         self._sync_limit = sync_limit
 
     async def execute(self, payload: StartScaffoldTreeJobInput) -> StartScaffoldTreeJobOutput:
         ids_hash = compute_ids_hash(payload.molecule_ids)
 
         # Always check cache first regardless of size.
-        cached = await self._repo.find_cached(ids_hash=ids_hash, ttl_seconds=3600)
+        async with self._uow:
+            cached = await self._repo.find_cached(ids_hash=ids_hash, ttl_seconds=3600)
+
         if cached is not None:
             return StartScaffoldTreeJobOutput(
                 tree=replace(
@@ -93,7 +98,9 @@ class StartScaffoldTreeJob:
                 .mark_running(payload.now)
                 .mark_ready(tree, payload.now)
             )
-            await self._repo.save(job)
+            async with self._uow:
+                await self._repo.save(job)
+                await self._uow.commit()
             return StartScaffoldTreeJobOutput(tree=tree, job=None)
 
         # Async path — create pending job + schedule workflow.
@@ -103,7 +110,9 @@ class StartScaffoldTreeJob:
             ids_hash=ids_hash,
             now=payload.now,
         )
-        await self._repo.save(job)
+        async with self._uow:
+            await self._repo.save(job)
+            await self._uow.commit()
         await self._orchestrator.schedule(
             job_id=job.id,
             workspace_id=payload.workspace_id,

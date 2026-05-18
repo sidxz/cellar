@@ -19,6 +19,26 @@ from cellar.domain.sar_analysis.scaffold_tree_job import (
 )
 
 
+class _NullUoW:
+    """No-op UoW for unit tests — fakes don't need real DB sessions."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        pass
+
+    async def commit(self):
+        return []
+
+    async def rollback(self):
+        pass
+
+    @property
+    def is_active(self):
+        return True
+
+
 class _InMemoryRepo:
     def __init__(self):
         self.saved = {}
@@ -56,7 +76,7 @@ async def test_get_returns_job_when_present():
     )
     repo = _InMemoryRepo()
     await repo.save(job)
-    fetched = await GetScaffoldTreeJob(repository=repo).execute(
+    fetched = await GetScaffoldTreeJob(repository=repo, uow=_NullUoW()).execute(
         GetScaffoldTreeJobInput(job_id=job.id, workspace_id=workspace_id)
     )
     assert fetched.id == job.id
@@ -65,7 +85,7 @@ async def test_get_returns_job_when_present():
 @pytest.mark.asyncio
 async def test_get_raises_not_found_when_missing():
     with pytest.raises(ScaffoldTreeJobNotFound):
-        await GetScaffoldTreeJob(repository=_InMemoryRepo()).execute(
+        await GetScaffoldTreeJob(repository=_InMemoryRepo(), uow=_NullUoW()).execute(
             GetScaffoldTreeJobInput(
                 job_id=uuid.uuid4(), workspace_id=uuid.uuid4()
             )
@@ -83,7 +103,7 @@ async def test_get_raises_not_found_when_workspace_mismatch():
     repo = _InMemoryRepo()
     await repo.save(job)
     with pytest.raises(ScaffoldTreeJobNotFound):
-        await GetScaffoldTreeJob(repository=repo).execute(
+        await GetScaffoldTreeJob(repository=repo, uow=_NullUoW()).execute(
             GetScaffoldTreeJobInput(job_id=job.id, workspace_id=other_workspace)
         )
 
@@ -99,7 +119,7 @@ async def test_cancel_transitions_to_cancelled_and_calls_orchestrator():
     await repo.save(job)
     orchestrator = _StubOrchestrator()
     cancelled = await CancelScaffoldTreeJob(
-        repository=repo, orchestrator=orchestrator
+        repository=repo, orchestrator=orchestrator, uow=_NullUoW()
     ).execute(
         CancelScaffoldTreeJobInput(
             job_id=job.id, workspace_id=workspace_id,
@@ -125,7 +145,7 @@ async def test_cancel_idempotent_on_terminal_returns_unchanged():
     repo = _InMemoryRepo()
     await repo.save(job)
     out = await CancelScaffoldTreeJob(
-        repository=repo, orchestrator=_StubOrchestrator()
+        repository=repo, orchestrator=_StubOrchestrator(), uow=_NullUoW()
     ).execute(
         CancelScaffoldTreeJobInput(
             job_id=job.id, workspace_id=workspace_id, now=now,

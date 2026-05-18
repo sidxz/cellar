@@ -24,6 +24,7 @@ from uuid import UUID
 from rdkit import Chem
 
 from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.sar_analysis.scaffold_tree_types import (
     NO_SCAFFOLD_SENTINEL,
     ScaffoldTreeEdge,
@@ -58,18 +59,22 @@ class BuildScaffoldNetwork:
         *,
         molecule_fetcher: MoleculeFetcherForScaffoldTree,
         job_repository: ScaffoldTreeJobRepository,
+        uow: UnitOfWork,
         cache_ttl_seconds: int = 3600,
         network_builder: ScaffoldNetworkBuilder | None = None,
     ) -> None:
         self._fetcher = molecule_fetcher
         self._repo = job_repository
+        self._uow = uow
         self._ttl = cache_ttl_seconds
         self._builder = network_builder or ScaffoldNetworkBuilder()
 
     async def execute(self, payload: BuildScaffoldNetworkInput) -> ScaffoldTreeResult:
         ids_hash = compute_ids_hash(payload.molecule_ids)
 
-        cached = await self._repo.find_cached(ids_hash=ids_hash, ttl_seconds=self._ttl)
+        async with self._uow:
+            cached = await self._repo.find_cached(ids_hash=ids_hash, ttl_seconds=self._ttl)
+
         if cached is not None:
             return ScaffoldTreeResult(
                 nodes=cached.nodes,
@@ -83,9 +88,10 @@ class BuildScaffoldNetwork:
             )
 
         started = time.perf_counter()
-        rows = await self._fetcher.fetch_for_scaffold_tree(
-            molecule_ids=payload.molecule_ids, workspace_id=payload.workspace_id
-        )
+        async with self._uow:
+            rows = await self._fetcher.fetch_for_scaffold_tree(
+                molecule_ids=payload.molecule_ids, workspace_id=payload.workspace_id
+            )
         if not rows:
             return _empty_result(started)
 

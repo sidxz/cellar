@@ -27,6 +27,7 @@ from ._export import *  # noqa: F401, F403
 from ._inventory import *  # noqa: F401, F403
 from ._research_organization import *  # noqa: F401, F403
 from ._run_import import *  # noqa: F401, F403
+from ._sar_analysis import *  # noqa: F401, F403
 from ._screening import *  # noqa: F401, F403
 from ._workspace_config import *  # noqa: F401, F403
 
@@ -42,6 +43,7 @@ from . import (
     _inventory,
     _research_organization,
     _run_import,
+    _sar_analysis,
     _screening,
     _workspace_config,
 )
@@ -54,6 +56,7 @@ __all__ = (
     + _chemical_registration.__all__
     + _export.__all__
     + _inventory.__all__
+    + _sar_analysis.__all__
     + _screening.__all__
     + _research_organization.__all__
     + _attachment.__all__

@@ -14,6 +14,26 @@ from cellar.domain.sar_analysis.scaffold_tree_types import (
 )
 
 
+class _NullUoW:
+    """No-op UoW for unit tests — fakes don't need real DB sessions."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        pass
+
+    async def commit(self):
+        return []
+
+    async def rollback(self):
+        pass
+
+    @property
+    def is_active(self):
+        return True
+
+
 class _CacheHitBuilder:
     async def execute(self, payload):
         return ScaffoldTreeResult(
@@ -64,6 +84,7 @@ async def test_cache_hit_returns_inline_no_job():
         builder=_CacheHitBuilder(),
         repository=_InMemoryRepo(),
         orchestrator=_StubOrchestrator(),
+        uow=_NullUoW(),
         sync_limit=500,
     ).execute(
         StartScaffoldTreeJobInput(
@@ -86,6 +107,7 @@ async def test_small_set_runs_sync_no_job():
         builder=_CacheMissBuilder(),
         repository=repo,
         orchestrator=orchestrator,
+        uow=_NullUoW(),
         sync_limit=500,
     ).execute(
         StartScaffoldTreeJobInput(
@@ -111,6 +133,7 @@ async def test_large_set_creates_job_and_schedules():
         builder=_CacheMissBuilder(),
         repository=repo,
         orchestrator=orchestrator,
+        uow=_NullUoW(),
         sync_limit=500,
     ).execute(
         StartScaffoldTreeJobInput(
@@ -149,6 +172,7 @@ async def test_large_set_cache_hit_returns_inline_no_job():
         builder=_CacheMissBuilder(),
         repository=_CacheRepo(),
         orchestrator=orchestrator,
+        uow=_NullUoW(),
         sync_limit=500,
     ).execute(
         StartScaffoldTreeJobInput(

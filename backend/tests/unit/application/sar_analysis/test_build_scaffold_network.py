@@ -15,6 +15,26 @@ from cellar.domain.sar_analysis.scaffold_tree_types import (
 )
 
 
+class _NullUoW:
+    """No-op UoW for unit tests — fakes don't need real DB sessions."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        pass
+
+    async def commit(self):
+        return []
+
+    async def rollback(self):
+        pass
+
+    @property
+    def is_active(self):
+        return True
+
+
 class _FakeMoleculeFetcher:
     def __init__(self, mols):
         # mols: list of tuples (id, smiles, bemis_murcko_smiles)
@@ -37,6 +57,7 @@ async def test_empty_input_returns_empty_result():
     uc = BuildScaffoldNetwork(
         molecule_fetcher=_FakeMoleculeFetcher([]),
         job_repository=_NeverCachingRepo(),
+        uow=_NullUoW(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
@@ -57,6 +78,7 @@ async def test_acyclic_mols_grouped_under_no_scaffold_bucket():
     uc = BuildScaffoldNetwork(
         molecule_fetcher=_FakeMoleculeFetcher([(m1, "CCCC", ""), (m2, "CCCCO", "")]),
         job_repository=_NeverCachingRepo(),
+        uow=_NullUoW(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
@@ -78,6 +100,7 @@ async def test_ringed_mols_yield_network_with_member_counts():
             (m2, "CC(C)Cc1ccc(cc1)C(C)C(=O)O", "c1ccccc1"),  # ibuprofen → benzene
         ]),
         job_repository=_NeverCachingRepo(),
+        uow=_NullUoW(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
@@ -106,6 +129,7 @@ async def test_cache_hit_short_circuits():
     uc = BuildScaffoldNetwork(
         molecule_fetcher=_SpyFetcher(),
         job_repository=_AlwaysCacheHitRepo(),
+        uow=_NullUoW(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
