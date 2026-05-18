@@ -1,9 +1,12 @@
 "use client";
 
 import { memo, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { cn } from "@/shared/lib/utils";
+import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 
 import {
   NO_SCAFFOLD_SENTINEL,
@@ -48,6 +51,15 @@ function ScaffoldGroupsListInner({
   selected,
   onSelect,
 }: Props) {
+  const router = useRouter();
+
+  const handleOpenInSearch = (e: React.MouseEvent, scaffoldSmiles: string) => {
+    e.stopPropagation();
+    const stashed = scaffoldSmiles === NO_SCAFFOLD_SENTINEL ? "" : scaffoldSmiles;
+    stashScaffoldSearch(stashed);
+    router.push("/search");
+  };
+
   const groups = useMemo(() => {
     return tree.nodes
       .filter((n) => n.molecule_count >= minMembers)
@@ -80,7 +92,7 @@ function ScaffoldGroupsListInner({
             data-testid={`scaffold-group-${g.scaffold_smiles}`}
             onClick={() => onSelect(g.scaffold_smiles)}
             className={cn(
-              "flex items-center gap-2 rounded px-2 py-1 cursor-pointer hover:bg-muted",
+              "group flex items-center gap-2 rounded px-2 py-1 cursor-pointer hover:bg-muted",
               isSelected && "bg-muted",
             )}
           >
@@ -105,11 +117,25 @@ function ScaffoldGroupsListInner({
               </span>
             </span>
 
+            {/* Loop-closer action — faintly visible at rest, brightens on
+                row hover or keyboard focus. Opens /search filtered to this
+                chemotype's compounds. Mirrors the same affordance on
+                Hierarchy-mode rows in <ScaffoldTreeNode />. */}
+            <button
+              type="button"
+              onClick={(e) => handleOpenInSearch(e, g.scaffold_smiles)}
+              className="ml-auto opacity-30 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+              aria-label="Find compounds with this scaffold"
+              title="Find compounds with this scaffold"
+            >
+              <Search size={14} />
+            </button>
+
             {colorBin && (
               <span
                 aria-label={`activity ${colorBin}`}
                 className={cn(
-                  "ml-auto h-1.5 w-6 rounded shrink-0",
+                  "h-1.5 w-6 rounded shrink-0",
                   BIN_COLORS[colorBin],
                 )}
               />
