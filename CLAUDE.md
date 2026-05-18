@@ -185,7 +185,7 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 
 ### 2026-05-17 — V2 scaffold tree: post-smoke polish + chemistry correctness + scale fixes
 
-**Branch:** `prot-2`. 9 follow-up commits on top of the V2 base ship (`9436e1ed`). Nothing pushed — branch is now ~88 commits ahead of `origin/prot-2`. **Browser smoke pending** on the most-recent fixes.
+**Branch:** `prot-2`. 11 commits on top of the V2 base ship (`9436e1ed`). Nothing pushed — branch is now **41 commits ahead of `origin/prot-2`**. **Browser smoke pending** on the most-recent fixes (smoke checklist below).
 
 **Spec for V4 deferrals:** `docs/superpowers/specs/2026-05-17-scaffold-tree-v4-at-scale.md` (per-scaffold-fetch + server-side scaffold-membership filtering, triggered on first collection > 10K mols).
 
@@ -204,6 +204,8 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 | 7 | `4ed64398` | feat: Path B — Groups sub-mode (default) + Hierarchy toggle |
 | 8 | `c099c641` | fix: see the FULL collection, not just the visible page (BE collection_id input) |
 | 9 | `300f4fc5` | fix: relax pagination cap for {type:'collection'} queries |
+| 10 | `550e56ee` | docs: CLAUDE.md handoff + V4 deferral spec (this entry) |
+| 11 | `f4640aa6` | feat: name the view-mode toggle (List|Grid|Scaffold) + clearer color picker |
 
 **Locked design decisions from this session:**
 
@@ -253,6 +255,9 @@ _Per-conversation handoff. Add a brief status block when ending a session that n
 | 8 | Refresh the same collection | <500 ms response (cache hit on `ids_hash`) |
 | 9 | Switch to a protocol in the color-by dropdown | Tree nodes shade (color bands appear where data exists); refresh doesn't reset |
 | 10 | Visit `?view=tree&sub=hierarchy` (deep link) | Lands in Hierarchy mode on first paint |
+| 11 | View-mode toggle top-right | Shows three labeled segments: `List`, `Grid`, `Scaffold` (icon + text, labels hide on narrow screens) |
+| 12 | Open the 900-mol `large` collection in tree view (no protocol activity) | `Color by:` picker is HIDDEN entirely (no dead control) |
+| 13 | Open a collection with protocol activity (Mtb_WCA mols) in tree view | `Color by:` prefix label visible; dropdown shows "none" + actual protocol names |
 
 **Diagnostic anchors (post-iteration):**
 - Scaffold cleanliness comes from `ScaffoldNetworkParams` with `includeScaffoldsWithAttachments=False` AND from feeding stored Bemis-Murcko scaffolds as input (not full mols).
