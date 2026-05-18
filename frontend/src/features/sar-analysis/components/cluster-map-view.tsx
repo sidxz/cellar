@@ -362,9 +362,9 @@ export function ClusterMapView({
                 activityPic50={activityPic50}
                 scaffoldByMol={scaffoldByMol}
                 labelByMolId={labelByMolId}
+                lassoedIds={lassoedIds}
                 onSelected={handleLassoSelected}
                 onPointClick={handlePointClick}
-                lassoActive={lassoedIds.size > 0}
               />
             )}
             {!loading && !result && (

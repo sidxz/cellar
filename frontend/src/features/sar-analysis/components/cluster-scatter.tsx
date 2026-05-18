@@ -25,11 +25,13 @@ interface ClusterScatterProps {
   scaffoldByMol: Record<string, string | null>;
   /** Chemist-readable hover label per molecule id, e.g. "CV-00984 · SACC-0460144". */
   labelByMolId?: Record<string, string>;
+  /** IDs currently lassoed — when non-empty, non-lassoed points dim to 0.35
+   *  opacity so the chemist can see what they selected on the map. */
+  lassoedIds?: Set<string>;
   /** Fires with the array of selected molecule IDs after a lasso / box selection,
    *  or null when the selection is cleared. */
   onSelected: (moleculeIds: string[] | null) => void;
   onPointClick: (moleculeId: string) => void;
-  lassoActive?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,7 @@ export function ClusterScatter({
   activityPic50,
   scaffoldByMol,
   labelByMolId,
+  lassoedIds,
   onSelected,
   onPointClick,
 }: ClusterScatterProps) {
@@ -94,6 +97,14 @@ export function ClusterScatter({
   const useWebGL = points.length > 5000;
   const traceType = useWebGL ? "scattergl" : "scatter";
 
+  // Per-point opacity for lasso visual feedback: lassoed points stay fully
+  // opaque, non-lassoed points dim to 0.25 so the chemist can SEE what they
+  // selected. When no lasso is active, all points are fully opaque.
+  const hasLasso = (lassoedIds?.size ?? 0) > 0;
+  const opacities = hasLasso
+    ? points.map((p) => (lassoedIds!.has(p.moleculeId) ? 1.0 : 0.25))
+    : points.map(() => 1.0);
+
   const baseTrace: Record<string, unknown> = {
     type: traceType,
     mode: "markers",
@@ -102,6 +113,9 @@ export function ClusterScatter({
     marker: {
       color: fillColors,
       size: 8,
+      // Per-marker opacity for lasso dim; broken on scattergl in some versions
+      // but works cleanly on SVG `scatter` which is our default for <5K points.
+      opacity: opacities,
       line: { width: 0.5, color: "#fff" },
     },
     // customdata carries [moleculeId, hoverLabel] for hovertemplate + click
