@@ -36,6 +36,8 @@ import type {
   MergeEventResponse,
   MergeImpactResponse,
   MoleculeResponse,
+  MoleculeTestCountsBody,
+  MoleculeTestCountsResponse,
   PaginatedResponseMoleculeResponse,
   RegisterMoleculeBody,
   RegistrationResponse,
@@ -467,6 +469,78 @@ export const useDepictStructuresApiV1MoleculesDepictPost = <TError = HTTPValidat
       > => {
 
       const mutationOptions = getDepictStructuresApiV1MoleculesDepictPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Return distinct protocol test counts per molecule.
+
+For each molecule ID in the request, return how many distinct protocols
+it has at least one dose-response curve in.  When ``project_id`` is
+supplied, only protocols linked to that project are counted.
+
+Molecules with no DR data are returned with count=0 so the FE never
+has to handle missing keys.
+ * @summary Get Molecule Test Counts
+ */
+export const getMoleculeTestCountsApiV1MoleculesTestCountsPost = (
+    moleculeTestCountsBody: MoleculeTestCountsBody,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<MoleculeTestCountsResponse>(
+      {url: `/api/v1/molecules/test-counts`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: moleculeTestCountsBody, signal
+    },
+      );
+    }
+  
+
+
+export const getGetMoleculeTestCountsApiV1MoleculesTestCountsPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMoleculeTestCountsApiV1MoleculesTestCountsPost>>, TError,{data: MoleculeTestCountsBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof getMoleculeTestCountsApiV1MoleculesTestCountsPost>>, TError,{data: MoleculeTestCountsBody}, TContext> => {
+
+const mutationKey = ['getMoleculeTestCountsApiV1MoleculesTestCountsPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getMoleculeTestCountsApiV1MoleculesTestCountsPost>>, {data: MoleculeTestCountsBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  getMoleculeTestCountsApiV1MoleculesTestCountsPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetMoleculeTestCountsApiV1MoleculesTestCountsPostMutationResult = NonNullable<Awaited<ReturnType<typeof getMoleculeTestCountsApiV1MoleculesTestCountsPost>>>
+    export type GetMoleculeTestCountsApiV1MoleculesTestCountsPostMutationBody = MoleculeTestCountsBody
+    export type GetMoleculeTestCountsApiV1MoleculesTestCountsPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Get Molecule Test Counts
+ */
+export const useGetMoleculeTestCountsApiV1MoleculesTestCountsPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMoleculeTestCountsApiV1MoleculesTestCountsPost>>, TError,{data: MoleculeTestCountsBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getMoleculeTestCountsApiV1MoleculesTestCountsPost>>,
+        TError,
+        {data: MoleculeTestCountsBody},
+        TContext
+      > => {
+
+      const mutationOptions = getGetMoleculeTestCountsApiV1MoleculesTestCountsPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
