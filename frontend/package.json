@@ -42,6 +42,7 @@
     "react-dropzone": "^15.0.0",
     "react-hook-form": "^7.56.0",
     "react-plotly.js": "^2.6.0",
+    "react-resizable-panels": "^4.11.1",
     "sonner": "^2.0.0",
     "tailwind-merge": "^3.3.0",
     "zod": "^3.25.0",
