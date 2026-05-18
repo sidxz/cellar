@@ -43,6 +43,7 @@ dependencies = [
     # Logging
     "structlog>=24.4.0",
     "asteval>=1.0.8",
+    "umap-learn>=0.5.12",
 ]
 
 [dependency-groups]
