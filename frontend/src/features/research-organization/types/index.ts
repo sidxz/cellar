@@ -230,13 +230,20 @@ export interface StructureCriterion {
   query_kind?: "smiles" | "smarts";
 }
 
-export type ScaffoldMode = "exact_match" | "acyclic_only";
+export type ScaffoldMode = "exact_match" | "acyclic_only" | "exact_match_in";
 
 export interface ScaffoldCriterion {
   type: "scaffold";
   mode: ScaffoldMode;
-  /** Required when mode is "exact_match"; ignored in acyclic_only. */
+  /** Required when mode is "exact_match"; ignored otherwise. */
   scaffold_smiles?: string;
+  /**
+   * Required when mode is "exact_match_in"; a list of scaffold SMILES
+   * that get OR'd together server-side via IN. V4 Path A — used by the
+   * scaffold-tree right pane when a Hierarchy node selects its whole
+   * subtree. Cap: 500 entries (enforced server-side).
+   */
+  scaffold_smiles_list?: string[];
 }
 
 /** Per-protocol run scoping for ActivityCriterion. */
