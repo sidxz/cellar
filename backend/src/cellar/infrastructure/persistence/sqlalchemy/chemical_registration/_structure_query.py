@@ -167,18 +167,27 @@ def _compute_query_bytes(algorithm_name: str, smiles: str) -> bytes | None:
     return MorganAlgorithm().compute_bytes(mol)
 
 
+_SCAFFOLD_IN_MAX = 500
+
+
 def _scaffold_clause(criterion: dict[str, Any]) -> ColumnElement:
     """WHERE clause for {type: 'scaffold'} criteria.
 
-    Supports two modes:
+    Supports three modes:
       - 'exact_match': molecules.bemis_murcko_smiles == canonical(input)
         Input is canonicalized via Bemis-Murcko computation so a paste of
         the full molecule normalizes to its scaffold (forgiving behavior).
       - 'acyclic_only': molecules.bemis_murcko_smiles == ''
         Matches the V2 'no scaffold' bucket (acyclic compounds; RDKit
         convention writes the empty string for these).
+      - 'exact_match_in': molecules.bemis_murcko_smiles IN (canonical(input)...)
+        V4 Path A — server-side filter to a list of scaffolds. Each input
+        is canonicalized; entries that resolve to '' are dropped silently;
+        duplicates are de-duped. Empty post-canonical list emits false_().
+        Cap: 500 inputs per query.
 
-    Raises ValueError on unknown mode or unparseable scaffold_smiles.
+    Raises ValueError on unknown mode, unparseable scaffold_smiles, or
+    oversized exact_match_in list.
     """
     from rdkit import Chem  # local import to keep module fast to import
 
@@ -210,7 +219,45 @@ def _scaffold_clause(criterion: dict[str, Any]) -> ColumnElement:
             raise ValueError(msg)
         return MoleculeModel.bemis_murcko_smiles == canonical
 
-    msg = f"scaffold criterion: unknown mode {mode!r} (allowed: exact_match, acyclic_only)"
+    if mode == "exact_match_in":
+        raw_list = criterion.get("scaffold_smiles_list")
+        if raw_list is None:
+            msg = "scaffold criterion: 'exact_match_in' mode requires 'scaffold_smiles_list'"
+            raise ValueError(msg)
+        if not isinstance(raw_list, list):
+            msg = "scaffold criterion: 'scaffold_smiles_list' must be a list"
+            raise ValueError(msg)
+        if len(raw_list) > _SCAFFOLD_IN_MAX:
+            msg = (
+                f"scaffold criterion: too many scaffolds in 'exact_match_in' "
+                f"(got {len(raw_list)}, max {_SCAFFOLD_IN_MAX})"
+            )
+            raise ValueError(msg)
+        calc = MurckoScaffoldCalculator()
+        seen: set[str] = set()
+        canonical_list: list[str] = []
+        for raw in raw_list:
+            mol = Chem.MolFromSmiles(raw)
+            if mol is None:
+                # Skip unparseable entries rather than failing the whole query —
+                # caller may be passing scaffold SMILES from a node-walk where
+                # one bad entry shouldn't poison the lookup.
+                continue
+            canonical = calc.compute(mol)
+            if not canonical:  # None or "" → acyclic; drop silently
+                continue
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            canonical_list.append(canonical)
+        if not canonical_list:
+            return sa.false()
+        return MoleculeModel.bemis_murcko_smiles.in_(canonical_list)
+
+    msg = (
+        f"scaffold criterion: unknown mode {mode!r} "
+        "(allowed: exact_match, acyclic_only, exact_match_in)"
+    )
     raise ValueError(msg)
 
 

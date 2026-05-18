@@ -132,3 +132,118 @@ class TestScaffoldClause:
                 ],
                 "logic": "and",
             })
+
+    def test_exact_match_in_emits_in_clause(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "scaffold",
+                    "mode": "exact_match_in",
+                    "scaffold_smiles_list": ["c1ccncc1", "c1ccccc1"],
+                }
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "bemis_murcko_smiles" in sql
+        # SQLAlchemy emits "IN (...)" (uppercase) by default.
+        assert " IN " in sql.upper()
+
+    def test_exact_match_in_canonicalizes_each_input(self) -> None:
+        """Full-molecule SMILES inputs canonicalize to their scaffolds."""
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "scaffold",
+                    "mode": "exact_match_in",
+                    # 2-aminopyridine + 4-aminopyridine: both should canonicalize
+                    # to pyridine scaffold; result list should be DE-DUPED.
+                    "scaffold_smiles_list": ["Nc1ccccn1", "Nc1ccncc1"],
+                }
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # The input N atoms should be gone (canonicalized away).
+        assert "Nc1" not in sql
+        # Both inputs canonicalize to pyridine; only ONE literal should appear
+        # in the IN clause (dedup). Count distinct pyridine-ish substrings.
+        pyridine_literals = sum(
+            sql.count(s) for s in ("'c1ccncc1'", "'c1ccccn1'", "'n1ccccc1'")
+        )
+        assert pyridine_literals == 1
+
+    def test_exact_match_in_drops_acyclic_entries_silently(self) -> None:
+        """Inputs that canonicalize to '' are dropped (caller uses acyclic_only mode for those)."""
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "scaffold",
+                    "mode": "exact_match_in",
+                    "scaffold_smiles_list": ["CCCC", "c1ccccc1"],
+                }
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # Acyclic dropped — only benzene survives. IN clause should have
+        # exactly ONE literal.
+        assert sql.count("'") == 2  # one literal = two single-quote chars
+
+    def test_exact_match_in_empty_list_emits_false(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "scaffold",
+                    "mode": "exact_match_in",
+                    "scaffold_smiles_list": [],
+                }
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        # SQLAlchemy false_() renders as "false" (or "0") depending on dialect.
+        assert "false" in sql.lower() or " 0" in sql
+
+    def test_exact_match_in_all_acyclic_emits_false(self) -> None:
+        """When every input canonicalizes to '', the post-canonical list is empty."""
+        clause = _compose({
+            "criteria": [
+                {
+                    "type": "scaffold",
+                    "mode": "exact_match_in",
+                    "scaffold_smiles_list": ["CCCC", "CCO"],
+                }
+            ],
+            "logic": "and",
+        })
+        assert clause is not None
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "false" in sql.lower() or " 0" in sql
+
+    def test_exact_match_in_oversized_list_raises(self) -> None:
+        """501 scaffolds → ValueError. Cap is 500."""
+        with pytest.raises(ValueError, match=r"too many scaffolds"):
+            _compose({
+                "criteria": [
+                    {
+                        "type": "scaffold",
+                        "mode": "exact_match_in",
+                        "scaffold_smiles_list": ["c1ccccc1"] * 501,
+                    }
+                ],
+                "logic": "and",
+            })
+
+    def test_exact_match_in_without_list_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"scaffold_smiles_list"):
+            _compose({
+                "criteria": [
+                    {"type": "scaffold", "mode": "exact_match_in"}
+                ],
+                "logic": "and",
+            })
