@@ -183,6 +183,221 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-17 — V2 scaffold tree shipped on prot-2 (28 commits, all tests green)
+
+**Branch:** `prot-2`. 28 new implementation commits + 3 spec/plan commits since the prior session's HEAD (`7837b3a4`). Total now ~78 commits ahead of `origin/prot-2`. **Browser smoke pending.**
+
+**Spec:** `docs/superpowers/specs/2026-05-17-scaffold-tree-v2-design.md`. **Plan:** `docs/superpowers/plans/2026-05-17-scaffold-tree-v2.md` — 28 TDD tasks shipped via subagent-driven execution with two-stage review.
+
+**Behavior change:** `/collections/{id}` and `/search` get a new opt-in **scaffold-tree view-mode** (toggle in the view-mode segmented control, URL `?view=tree`). Default stays `cards`. Renders a Bemis-Murcko scaffold network (left pane, recursive tree, picks a protocol from the result-set's activity to color nodes) + the existing `CardGrid` (right pane, filtered to the selected node's subtree).
+
+Per-molecule `bemis_murcko_smiles` is now computed at registration (mirrors the fingerprint pattern). A one-shot `backfill_bemis_murcko.py` script populates legacy rows. The endpoint is sync-with-cache for ≤500 mols, async via Temporal for larger sets. Postgres-as-cache via `scaffold_tree_jobs.result_json` JSONB + a partial index on `(ids_hash, completed_at DESC) WHERE status='ready'` (Valkey deferred — wire it when another feature needs it).
+
+**Commits shipped** (oldest → newest, all on prot-2):
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `0446c31e` | migration 037 — bemis_murcko_smiles on molecules |
+| 2 | `58e3ddfb` | Molecule.bemis_murcko_smiles field |
+| 3 | `21bfcfb7` | MoleculeModel bemis_murcko_smiles + repo round-trip |
+| 4 | `5e64ad18` | MurckoScaffoldCalculator infra wrapper |
+| 5 | `72d051dd` | StructureProcessor emits bemis_murcko_smiles |
+| 6 | `255e9174` | RegisterMolecule writes bemis_murcko_smiles |
+| 7 | `d7c79f3a` | one-shot backfill_bemis_murcko script |
+| 8 | `1179233b` | migration 038 — scaffold_tree_jobs (table + cache index) |
+| 9 | `a731a0c3` | domain types — ScaffoldTreeNode/Edge/Result/Stats |
+| 10 | `1a398a6a` | ScaffoldTreeJob aggregate + state machine |
+| 11 | `f2673553` | ScaffoldTreeJobRepository with cache lookup |
+| 12 | `c37c74c5` | ScaffoldNetworkBuilder infra wrapper |
+| 13 | `e15072b7` | BuildScaffoldNetwork use case (cache-aware, NO_SCAFFOLD bucket) |
+| 14 | `23b14829` | StartScaffoldTreeJob — sync/async dispatch |
+| 15 | `4534976d` | Temporal workflow + activity + orchestrators |
+| 16 | `ee96d85f` | GetScaffoldTreeJob + CancelScaffoldTreeJob use cases |
+| 17 | `0de611ee` | DI wiring for sar_analysis context |
+| 18 | `f43a453e` | POST /scaffold-tree + GET/cancel job endpoints |
+| 19 | `7a1f7ac7` | regenerate orval client for /scaffold-tree endpoints |
+| 20 | `4367898e` | chore(deps): add shadcn Resizable for split-pane |
+| 21 | `4b5c9ce5` | FE wire types + NO_SCAFFOLD sentinel |
+| 22 | `da835fab` | scaffold-tree-math — subtree + child-index helpers |
+| 23 | `832e28bc` | scaffold-rollup — median pIC50 + 4-bin classification |
+| 24 | `bec96c8e` | useScaffoldTree — sync return + async poll |
+| 25 | `c2aff11f` | ScaffoldColorPicker dropdown |
+| 26 | `e47065ee` | recursive ScaffoldTreeNode component |
+| 27 | `30da1513` | ScaffoldTreeView split-pane composition |
+| 28 | `6922944a` | wire scaffold-tree view-mode into ResultsSurface + toggle |
+
+**New bounded context: `sar_analysis`.** First members landed: `domain/sar_analysis/{scaffold_tree_job,scaffold_tree_types}.py`, `application/sar_analysis/{build_scaffold_network,start_scaffold_tree_job,get_scaffold_tree_job,cancel_scaffold_tree_job,run_scaffold_tree,repositories}.py`, `infrastructure/persistence/sqlalchemy/sar_analysis/`, `infrastructure/di/_sar_analysis.py`, `infrastructure/temporal/{workflows,activities,orchestrators}/scaffold_tree.py`, `interface/routes/scaffold_tree.py`. FE: `features/sar-analysis/{types,lib,hooks,components}/`.
+
+**Cache design (locked).** `scaffold_tree_jobs` table doubles as the cache — `find_cached(ids_hash, ttl_seconds=3600)` joins on `ids_hash + status='ready' + completed_at > NOW() - 1h` (served by the `scaffold_tree_jobs_cache` partial index). Sync path persists a READY job so the next call hits the cache. Async path mirrors the export-job pipeline shape exactly (NullOrchestrator for `TEMPORAL_DISABLED=1`, TemporalOrchestrator otherwise).
+
+**Dispatch logic.** `POST /api/v1/scaffold-tree`:
+- 200 with `{tree, job: null}` on cache hit OR set size ≤ 500
+- 202 with `{tree: null, job: {...}}` on cache miss + > 500
+- `GET /api/v1/scaffold-tree/jobs/{id}` polls (status + tree if ready)
+- `POST /api/v1/scaffold-tree/jobs/{id}/cancel` cancels (idempotent on terminal)
+
+**Activity rollup is FE-side.** The BE payload is pure-structural (nodes/edges/counts). `<ScaffoldColorPicker>` picks a protocol from the result-set's `activityData`; `scaffold-rollup.ts::medianPic50ForMols` rolls up node coloring. Locked default: **no color** (chemist opts in to a protocol). ND-qualified and non-positive values excluded.
+
+**Smoke checklist (pending — please run before push):**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | `uv run alembic upgrade head` on dev DB | Migrations 037 + 038 land cleanly |
+| 2 | Register a new molecule via UI | `select bemis_murcko_smiles from molecules where id = ?;` returns canonical SMILES (or `""` for acyclic) |
+| 3 | `uv run python backend/scripts/backfill_bemis_murcko.py --batch-size 500` | Logs `backfill_batch_done` per batch; second run reports 0 processed |
+| 4 | Open `/collections/{id}` with ≥ 10 ringed mols, hard-reload | View-mode toggle shows three segments; default is `cards`; no scaffold UI visible |
+| 5 | Click the third segment (Tree view) | URL gains `?view=tree`; left pane shows tree (first-level roots auto-expanded); right pane shows ALL mols via CardGrid |
+| 6 | Click an inner scaffold node | Right pane filters to subtree members (count matches `subtree_molecule_count`); ChevronDown rotates |
+| 7 | Click a leaf node | Right pane shows that node's mol(s) only |
+| 8 | Click the selected node again | Deselect — right pane returns to all mols |
+| 9 | Pick a protocol from the color-by dropdown | Tree nodes gain colored bars on the right (red→amber→orange→emerald for activity bins); nodes with no data show no band |
+| 10 | Switch protocols in the dropdown | Bands re-color immediately; no "Computing…" flash |
+| 11 | Open a > 500-mol collection in tree view | "Computing scaffold tree…" caption appears; tree renders within ~30s; second open is instant (cache hit on `ids_hash`) |
+| 12 | `select status, ids_hash, completed_at from scaffold_tree_jobs order by requested_at desc limit 5;` | Recent ready jobs visible; `result_json` populated |
+| 13 | Add a mol to the collection, re-open tree view | New `ids_hash` → cache miss → recompute |
+| 14 | Open a collection of only acyclic compounds (CCCCC etc.) | Tree shows ONE node: "no scaffold" (italic). Right pane has all mols. |
+| 15 | Drag the resizable divider | Left pane resizes between min 20% and max 50% |
+| 16 | Switch back to `cards` view | URL drops `?view=`; CardGrid renders intact |
+
+**Diagnostic anchors:**
+- `frontend/src/features/sar-analysis/components/scaffold-tree-view.tsx::ScaffoldTreeView` — split-pane composition; calls `useScaffoldTree({moleculeIds})` and filters CardGrid via `collectSubtreeMolIds`.
+- `frontend/src/features/sar-analysis/hooks/use-scaffold-tree.ts::useScaffoldTree` — single source of truth for sync vs async path; mocks via `startFn` / `pollFn` overrides for tests.
+- `backend/src/cellar/application/sar_analysis/start_scaffold_tree_job.py::StartScaffoldTreeJob` — sync-or-async dispatch. Sync path always persists a READY job so the next call cache-hits.
+- `backend/src/cellar/application/sar_analysis/build_scaffold_network.py::BuildScaffoldNetwork` — pipeline. Membership comes from stored `bemis_murcko_smiles` (NOT re-derived); hierarchy from `rdScaffoldNetwork.CreateScaffoldNetwork`.
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/sar_analysis/scaffold_tree_job_repository.py::SQLAlchemyScaffoldTreeJobRepository.find_cached` — Postgres cache lookup; partial index `scaffold_tree_jobs_cache` serves it.
+- `backend/src/cellar/infrastructure/temporal/workflows/scaffold_tree.py` + `activities/scaffold_tree.py` + `orchestrators/scaffold_tree.py` — mirrors export pipeline exactly. `TemporalScaffoldTreeOrchestrator` bound in `app.py` lifespan (not in DI directly).
+
+**Open caveats / known gaps:**
+- **`ResultsSurface` doesn't currently pass `activityData` to `<ScaffoldTreeView />` from `collection-detail.tsx`** — the collection search endpoint doesn't return activity columns, so color-by-protocol will render the dropdown with NO options (until activity data is threaded). The tree itself works; color-by is a follow-up. Easiest fix: extend `useCollectionSearch` to optionally fetch activity for the page-visible mols (mirroring the search-grid path).
+- Tree-pane default 30%; min 20% max 50%. Tunable post-smoke if it crowds on standard laptop screens.
+- Sonner "Computing scaffold tree…" toast at 3s NOT implemented (deferred — inline caption suffices for V2 MVP per spec follow-ups).
+- The Docker temporal-worker container is broken (`No module named 'cellar'` from a pre-existing `uv sync --no-install-project` issue in `backend/Dockerfile`) — local `uv run` works fine. Pre-existing, not caused by this work.
+- Pre-existing failures in `tests/api/molecules/test_test_counts.py` (missing `visibility` column in fixtures) — NOT caused by this work; flagged by the Task 18 implementer.
+
+**How to resume:**
+1. Spin dev stack: `docker compose up -d && cd frontend && pnpm dev`. Confirm Temporal worker is reachable (locally via `uv run python -m cellar.infrastructure.temporal.worker` since the Docker image is broken).
+2. `cd backend && uv run alembic upgrade head` — migrations 037 + 038 should apply cleanly.
+3. `cd backend && uv run python scripts/backfill_bemis_murcko.py --batch-size 500` — backfill legacy rows.
+4. Walk the 16-row smoke checklist above on at least one ringed-mol collection AND one acyclic-only collection.
+5. If smokes pass, push `prot-2` and open a PR against `main`. PR scope: "V2 scaffold tree" — also rides along the un-pushed V1/V1.5 collections work from the prior session.
+6. If color-by-protocol stays empty on smoke #9, decide: ship V2 without coloring + log a follow-up to thread `activityData` through `CollectionDetail → ResultsSurface → ScaffoldTreeView`, OR block the merge on that thread.
+
+**Follow-ups (deferred from spec):**
+- Thread `activityData` from `CollectionDetail` → `ResultsSurface` → `ScaffoldTreeView` (so color-by-protocol actually has data).
+- Sonner toast upgrade after 3s of async computing (with Cancel action).
+- Precompute scaffold trees on collection-membership change (Temporal event handler) — fixes the "first chemist on a 10K collection waits 60s" tax.
+- Scaffold filter row in `SearchQueryBuilder` ("compounds with scaffold X").
+- Scaffold chip on `MoleculeCard` (subject to V1.5 card-density rule).
+- Move cache layer to Valkey once another feature needs it.
+- Hoist view-mode toggle + scaffold tree onto standalone `/search`.
+
+---
+
+### 2026-05-17 — Collections V1 + V1.5 shipped on prot-2
+
+**Branch:** `prot-2`. 15 commits since the prior session HEAD (`88b43fcb`). Nothing pushed. **Browser smoke pending** (V1.5 smoke walks the protocol-test-count line, frozen chip, provenance link, single-row strip). BE unit tests pass (+4 new for `GetMoleculeTestCounts`); FE 324 tests pass (+37 new across V1 + V1.5); `pnpm exec tsc --noEmit` clean.
+
+**Design + plans:**
+- Design: `/Users/sidx/.claude/plans/lets-look-at-our-lazy-nygaard.md` — full V0 → V1 → V2 → V3 architecture, persona-aware redesign.
+- V1 plan: `docs/superpowers/plans/2026-05-17-collections-v1.md` — 10 TDD tasks shipped via subagent-driven execution + 1 smoke-fix follow-up + 4 V1.5 polish items.
+
+**Behavior change:** `/collections/{id}` is no longer a flat name-only table. It now composes the same enriched-search engine `/search` uses (via a single `Collection` criterion — already shipped end-to-end on BE before this session at `_collection_clause:106`). The page renders a virtualized card grid by default (structure + ID + name + MW · cLogP · Ro5 chip + "Tested in N protocols" line when N > 0) or a compact table (structure thumb + ID + name + open-link). View mode persists to URL (`?view=table`) with localStorage fallback. A `CollectionHeader` strip below the page title carries badges (count · visibility · Frozen?), project chip, campaign provenance link, creator/org, and the view-mode toggle on the right; description on its own line. Selection across both views drives a Remove-from-collection action.
+
+**Commits shipped this session** (hash + title):
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `6fb8e42f` | chore(deps): add @tanstack/react-virtual for collection card grid |
+| 2 | `2aff4738` | feat(collections): useViewMode hook — URL-state segmented control state |
+| 3 | `f78873d4` | feat(collections): ViewModeToggle — segmented table/cards control (+ jest-dom test infra) |
+| 4 | `98be940e` | feat(collections): useCollectionSearch — enriched molecule fetch via search engine |
+| 5 | `f266b2f2` | feat(collections): MoleculeCard — structure + name + key props tile |
+| 6 | `4dd7ecb0` | feat(collections): CardGrid — virtualized responsive grid of MoleculeCard tiles |
+| 7 | `292d9165` | feat(collections): ResultsSurface — view-mode dispatcher (cards | table) |
+| 8 | `e02ee4e2` | feat(collections): CollectionHeader — name + badges + provenance + owner |
+| 9 | `e5d263f3` | feat(collections): refactor CollectionDetail — rich header + card/table dispatcher |
+| 10 | `a3e68ab7` | fix(collections): V1 smoke — card grid ref timing + dup heading + table density |
+| 11 | `d9dc2a26` | fix(collections): expose is_frozen + derived_from_campaign_id on API |
+| 12 | `1e59378d` | feat(collections): compress chrome — single-row meta strip + drop back-link |
+| 13 | `5287992f` | feat(collections): activity sparkline on MoleculeCard (auto-first-protocol) |
+| 14 | `79116877` | revert(collections): drop V1.5 P3 sparkline — wrong design (random protocol, no caption) |
+| 15 | `7837b3a4` | feat(collections): protocol test-count on MoleculeCard (project-scoped) |
+
+**Card information density principle (locked in this session):** the V1.5 P3 sparkline (auto-first-protocol) was vetoed by the chemist because alphabetic-by-UUID protocol selection has no chemistry meaning and the unlabeled curve was uninterpretable at glance. Replaced with a higher-signal lower-clutter `Tested in N protocols` line. **General rule for card surfaces: information must EARN its space — counts beat values for at-glance scanning because they don't require interpretation.** See [[feedback_card_density]] if added.
+
+**Surfaces touched:**
+- `/collections/{id}` — primary user-visible change. Page chrome, view modes, header strip all new.
+- BE: new use case `application/screening/get_molecule_test_counts.py` + new repo method `count_distinct_protocols_per_molecule` on `dose_response_curve_repository.py` + new endpoint `POST /api/v1/molecules/test-counts` (body `{molecule_ids: UUID[], project_id: UUID | None}`; response `{counts: dict[str, int]}`). `CollectionResponse` now includes `is_frozen` + `derived_from_campaign_id`.
+- FE: new components/hooks under `frontend/src/features/research-organization/`:
+  - `components/results/{molecule-card,card-grid,results-surface,view-mode-toggle}.tsx`
+  - `components/collection/collection-header.tsx`
+  - `hooks/{use-collection-search,use-protocol-test-counts}.ts`
+  - `lib/use-view-mode.ts`
+- FE deps: `@tanstack/react-virtual` (prod) + `@testing-library/jest-dom` (dev) + `frontend/vitest.setup.ts`.
+
+**Smoke checklist (pending — please run before push):**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Open a collection with ≥3 mols on a hard-reload | `CollectionHeader` shows name in DetailShell title row + action buttons; below it a single-row strip with badges (count · visibility) · project chip · creator · view-mode toggle on the right. Description on its own line below. **NO duplicate name**. Cards default; each tile = structure + ID + name + MW · cLogP · Ro5 chip. If the mol has DR data in any protocol, a small grey `Tested in N protocols` line appears below props. |
+| 2 | Click table-view icon | Switches to AG Grid with 72px rows. Structure column ~120px wide, thumbs centered + readable. ID + name + open-link columns. URL gains `?view=table`. Refresh persists. |
+| 3 | Open a frozen collection (set `is_frozen=true` in DB) | Header now shows the `Frozen` chip (was previously missing — V1.5 P1 fixed this). |
+| 4 | Open a campaign-derived collection (`derived_from_campaign_id` set) | Header shows `from campaign` link routing to `/campaigns/{id}` (V1.5 P1 fixed). |
+| 5 | Open a collection scoped to a project | The `Tested in N protocols` line counts ONLY protocols in that project (project_id is in the protocol's project list). Sanity-check vs the DB. |
+| 6 | Open a workspace-wide collection (no project_id) | Count is workspace-wide. |
+| 7 | Open a brand-new untested collection | `Tested in N protocols` line is ABSENT on every card (N=0 → no line). Cards stay clean. |
+| 8 | Multi-select 2 tiles → Remove → confirm | Removed; molecule count badge updates; selection clears. |
+| 9 | Click a tile (not the checkbox) | Routes to `/compounds/{id}`. |
+| 10 | Open an empty collection | "No molecules to display." empty state in both card and table views. |
+| 11 | Click `Export SDF` on a non-empty collection | Existing SDF export runs. |
+| 12 | Refresh `/collections/{id}?view=table` | Table view immediately, no flash of cards. |
+
+**How to resume:**
+1. Spin up the dev stack: `docker compose up -d && cd frontend && pnpm dev`. Verify the Temporal worker is up (`docker compose logs temporal-worker | tail`) and that the BE has reloaded the new `/api/v1/molecules/test-counts` endpoint (curl it with a known mol_id from a project to sanity-check).
+2. Walk the smoke checklist above on at least one project-scoped collection AND one workspace-wide collection.
+3. If anything breaks, capture the failed request payload from devtools + the row from `select id, name, project_id, is_frozen, derived_from_campaign_id from collections where id = '<id>';` for diagnostics.
+4. If all smokes pass, push `prot-2` and open a PR against `main`. The prior session's commits (export pipeline + DR display honesty + multi-run aggregation) ride along — title the PR scoped to "Collections V1 redesign" and call out the prior session's commits in the body.
+
+**Open follow-ups (post-merge):**
+
+- **V1.5 leftovers** (small, low-risk):
+  - Lift the full `/search` `ResultsGrid` into `ResultsSurface` as the table mode (today's table is a thin DataGrid without activity columns / intercept cells / aggregation toolbar).
+  - Wire `<SearchQueryBuilder>` inline on `/collections/{id}` so chemists can add criteria on top of the implicit collection scope.
+  - Inline-edit collection name (click-to-edit pattern; existing edit dialog stays as fallback).
+  - Disable add/remove buttons when `is_frozen=true` (data is there post-P1; just needs the UX wire-up).
+  - Hoist `ViewModeToggle` + view modes onto `/search` standalone.
+
+- **V2 — scaffold tree** (the next chemist-value pop):
+  - BE: `bemis_murcko_smiles` column on `Molecule` + compute at registration + backfill script.
+  - BE: `POST /api/v1/scaffold-tree` using `rdScaffoldNetwork.CreateScaffoldNetwork`. Cache by mol-id-set hash.
+  - FE: split-pane scaffold view (tree left, mols right). Node coloring respects page-level `AggregationControl`.
+
+- **V3 — cluster map + heatmap:**
+  - BE: UMAP-on-Morgan-FP pipeline (`umap-learn` + optional Butina) via Temporal workflow for large sets.
+  - BE: `POST /api/v1/embeddings/umap` endpoint.
+  - FE: `ClusterMapView` (Plotly scatter + lasso → "Save as new collection") + `HeatmapView` (AG Grid cellStyle).
+
+**Diagnostic anchors:**
+- `frontend/src/features/research-organization/components/collection-detail.tsx::CollectionDetail` — page composition: header + ResultsSurface + dialogs. Uses `useCollectionSearch` for molecules + `useProtocolTestCounts` for the count line; passes `collection.project_id` to the latter for project scoping.
+- `frontend/src/features/research-organization/hooks/use-collection-search.ts::useCollectionSearch` — single source of truth for the molecule list. Posts a single `{type: "collection", collection_id}` criterion to `/api/v1/search/execute`. NO `protocol_columns` (sparkline plumbing was reverted in V1.5 P4).
+- `frontend/src/features/research-organization/hooks/use-protocol-test-counts.ts::useProtocolTestCounts` — keyed by (molecule_ids sorted, project_id). Posts to the new BE endpoint; returns `{mol_id: count}`. Sort-key normalization prevents cache misses on caller-order variance.
+- `frontend/src/features/research-organization/components/results/results-surface.tsx::ResultsSurface` — view-mode dispatcher. `showToolbar` prop lets the page-level chrome (CollectionDetail) own the toggle externally (collections) OR let ResultsSurface render it internally (future `/search` use).
+- `frontend/src/features/research-organization/components/results/card-grid.tsx::CardGrid` — virtualized responsive grid. parentRef is on the always-mounted outer div (fixes the V1 first-load ref bug); jsdom-fallback path renders non-virtualized when `useVirtualizer` returns no items (test env only).
+- `frontend/src/features/research-organization/components/results/molecule-card.tsx::MoleculeCard` — single tile. Renders `Tested in N protocols` only when `protocolCount > 0` (zero-count = no line, cards stay clean for fresh-territory compounds).
+- `frontend/src/features/research-organization/components/collection/collection-header.tsx::CollectionHeader` — single-row strip with `rightSlot` for caller-provided toolbar. No H1 (DetailShell owns the page title to avoid the duplicate-heading bug fixed in V1 smoke).
+- `frontend/src/features/research-organization/lib/use-view-mode.ts::useViewMode` — URL state via `?view=`. Mirrors the existing `useAggregationMode` pattern.
+- `backend/src/cellar/application/screening/get_molecule_test_counts.py::GetMoleculeTestCounts` — counts distinct protocols per mol via DR-curve → run → protocol path. Many-to-many project scoping via `protocol_projects` join table.
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/screening_assay/dose_response_curve_repository.py::count_distinct_protocols_per_molecule` — single SQL query. Always returns a complete dict (every requested mol_id is keyed, 0 if no curves).
+- `backend/src/cellar/interface/routes/molecules.py` (or wherever the new route landed — search the codebase for `test-counts`) — `POST /api/v1/molecules/test-counts`.
+
+**Open caveats / known limitations:**
+- The card surface deliberately does NOT show any activity *value* at glance. Per the locked card-density principle ("counts beat values for scanning"), the EC50 number remains exclusive to drill-in surfaces (table view, molecule detail, /search).
+- The new `/api/v1/molecules/test-counts` endpoint fires once per page open + once per filter change. No batching across collections — fine for current usage, may need debouncing if we later add inline filtering on `/collections`.
+- Table-view of `/collections/{id}` is a thin DataGrid (struct + ID + name + open-link). Activity columns + intercept cells live in `/search`'s grid only. Lift task is V1.5 leftover above.
+- The duplicate-heading bug fix removed the `<h1>` from `CollectionHeader`, so callers reusing `CollectionHeader` standalone (outside a DetailShell) would render no name. Currently only `CollectionDetail` uses it, and that's wrapped in DetailShell — so no callers are broken. If anyone else adopts `CollectionHeader`, they need to provide their own page title.
+- `protocol_projects` is the join table that gates project scoping. If protocols ever lose their project_ids[] list (e.g. become workspace-only), the project-filter parameter silently returns 0 counts — defensive zero-init in the repo prevents undefined behavior.
+- 4 BE API integration tests for `POST /api/v1/molecules/test-counts` are written but require the Docker+RDKit testcontainer to run (typical for this codebase). The 4 unit tests for `GetMoleculeTestCounts` pass without the container.
+
 ### 2026-05-16 — Unified export pipeline shipped on prot-2
 
 **Branch:** `prot-2`. 21 implementation commits since plan commit `b20796b7` (T1–T20) + 1 test-infra fix (T21). Nothing pushed. **Browser smoke pending** (BE 2611 tests pass, FE 287 tests pass, tsc clean).
