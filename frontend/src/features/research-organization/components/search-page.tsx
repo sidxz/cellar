@@ -21,6 +21,7 @@ import {
   useAggregationMode,
   wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
+import type { AggregationMode } from "../lib/use-aggregation-mode";
 import { SearchForm } from "./search/search-form";
 import {
   ResultsToolbarActions,
@@ -350,22 +351,43 @@ function SearchPageInner() {
     );
   }, [aggregationMode, currentQuery, hasSearched, protocolColumns, searchMutation, sortBy, sortDir, enrichItems]);
 
-  // ── Load saved search from URL ─────────────────────────────────────────
-  const savedSearchLoadedRef = useRef<string | null>(null);
+  // ── Auto-fire handoffs (saved search + scaffold) ──────────────────────
+  //
+  // Both handoffs follow a TWO-EFFECT pattern: "prepare" sets pending state,
+  // then "fire" reacts to that state and runs the mutation. This is more
+  // robust than the previous mount-time single-effect approach, which had
+  // a recurring soft-navigation bug — the mutation call would fire (no
+  // visible error) but the request never reached the network. Splitting
+  // into prepare + fire lets React commit the prep state, then fire the
+  // mutation from a clean re-render cycle. The mutation goes through
+  // `handleSearch` (the same path the chemist's Search button uses) so
+  // the deps are always fresh.
+  type PendingSavedSearchLoad = {
+    query: SearchQuery;
+    aggregationMode: AggregationMode;
+    protocolColumns: string[];
+    columnsBlob: Record<string, unknown> | null;
+  };
+
+  const [pendingSavedSearchLoad, setPendingSavedSearchLoad] =
+    useState<PendingSavedSearchLoad | null>(null);
+  const [loadedSavedSearchId, setLoadedSavedSearchId] = useState<string | null>(null);
+  const [pendingScaffoldQuery, setPendingScaffoldQuery] = useState<SearchQuery | null>(null);
   const { mutate: runSearch } = searchMutation;
 
+  // PREPARE: saved-search load — when the URL has ?saved=<id> and the
+  // savedSearches list has resolved, decode the saved query + columns and
+  // stage them for the fire effect to execute. Skip if we already loaded
+  // this id in the current mount (idempotent across re-renders driven by
+  // other state churn).
   useEffect(() => {
     if (!savedSearchId || !savedSearches) return;
-    if (savedSearchLoadedRef.current === savedSearchId) return;
-    savedSearchLoadedRef.current = savedSearchId;
+    if (loadedSavedSearchId === savedSearchId) return;
+    if (pendingSavedSearchLoad) return; // already staged, wait for fire
 
     const saved = savedSearches.find((s: SavedSearch) => s.id === savedSearchId);
     if (!saved) return;
 
-    loadFromSavedSearch(saved.columns);
-
-    const cols = saved.columns as { protocolColumns?: string[] } | null;
-    const restoredColumns = cols?.protocolColumns ?? [];
     const rawQuery = saved.query as Record<string, unknown>;
     // The aggregation rule is co-located inside the saved `query` blob
     // (Task 14). Old saved searches (pre-Task 14) won't have this key
@@ -382,28 +404,49 @@ function SearchPageInner() {
     const query = queryWithoutAggregation as unknown as SearchQuery;
     if (!query?.criteria) return;
 
-    // Mirror the persisted mode into the URL so the toolbar chip + the
-    // page's `aggregationMode` reader observe the rule the saved search
-    // ran under. Pin the ref BEFORE updating URL state so the
-    // `aggregationMode`-watching re-trigger effect doesn't double-fire
-    // on the next render.
-    previousAggregationModeRef.current = nextAggregationMode;
-    setAggregationMode(nextAggregationMode);
+    const cols = saved.columns as { protocolColumns?: string[] } | null;
+    const restoredColumns = cols?.protocolColumns ?? [];
 
-    // Inline the search instead of going through handleSearch so the
-    // saved-search load flow stays self-contained and doesn't depend on a
-    // closure that loadFromSavedSearch is about to invalidate. Uses
-    // `nextAggregationMode` directly — the closure's `aggregationMode`
-    // still reflects the pre-load URL value on this tick.
+    setPendingSavedSearchLoad({
+      query,
+      aggregationMode: nextAggregationMode,
+      protocolColumns: restoredColumns,
+      columnsBlob: saved.columns as Record<string, unknown> | null,
+    });
+  }, [savedSearchId, savedSearches, loadedSavedSearchId, pendingSavedSearchLoad]);
+
+  // FIRE: saved-search load — execute the staged search. Uses runSearch
+  // directly (not handleSearch) because saved searches carry their OWN
+  // aggregationMode + columns that differ from the page's current state.
+  useEffect(() => {
+    if (!pendingSavedSearchLoad) return;
+    const {
+      query,
+      aggregationMode: aggMode,
+      protocolColumns: restoredColumns,
+      columnsBlob,
+    } = pendingSavedSearchLoad;
+
+    // Clear pending + mark loaded BEFORE async work so a re-render from
+    // setAggregationMode below doesn't bounce the prep effect into firing
+    // a second time.
+    setPendingSavedSearchLoad(null);
+    setLoadedSavedSearchId(savedSearchId);
+
+    loadFromSavedSearch(columnsBlob);
+    // Pin the ref before flipping the URL so the aggregation auto-refire
+    // effect doesn't double-fire on the next render.
+    previousAggregationModeRef.current = aggMode;
+    setAggregationMode(aggMode);
+
     dispatch({ type: "searchStart", query, protocolColumns: restoredColumns });
 
     const backendCols = toBackendProtocolColumns(restoredColumns);
     const input = {
       query,
       ...(backendCols.length > 0 ? { protocol_columns: backendCols } : {}),
-      aggregation: aggregationModeToWire(nextAggregationMode),
+      aggregation: aggregationModeToWire(aggMode),
     };
-
     runSearch(
       { input, limit: SEARCH_PAGE_SIZE },
       {
@@ -417,60 +460,6 @@ function SearchPageInner() {
         },
         onError: (err) => {
           console.error("[Search] saved-search mutation failed:", err);
-          dispatch({ type: "searchComplete", results: [], nextCursor: null, totalCount: null });
-        },
-      },
-    );
-  }, [
-    savedSearchId,
-    savedSearches,
-    loadFromSavedSearch,
-    runSearch,
-    enrichItems,
-    setAggregationMode,
-  ]);
-
-  // ── Scaffold-tree → /search handoff ────────────────────────────────────
-  // scaffold-tree-node.tsx stashes a pending scaffold criterion before
-  // navigating here. Consume + auto-execute. One-shot — the helper clears
-  // storage on read so we don't re-trigger on subsequent renders.
-  //
-  // Saved-search takes priority: if a ?saved= param is present we discard the
-  // stash and let the saved-search effect run instead. Without this guard both
-  // effects fire and whichever completes last wins — non-deterministic.
-  const scaffoldHandoffConsumedRef = useRef(false);
-  useEffect(() => {
-    if (scaffoldHandoffConsumedRef.current) return;
-    scaffoldHandoffConsumedRef.current = true;
-    // Saved-search takes priority — discard the stash so it doesn't persist
-    // into a subsequent /search visit without the ?saved= param.
-    if (savedSearchId) {
-      consumeScaffoldSearch();
-      return;
-    }
-    const criterion = consumeScaffoldSearch();
-    if (!criterion) return;
-
-    const query: SearchQuery = { logic: "and", criteria: [criterion] };
-    dispatch({ type: "searchStart", query, protocolColumns: [] });
-
-    const input = {
-      query,
-      aggregation: aggregationModeToWire(aggregationMode),
-    };
-    runSearch(
-      { input, limit: SEARCH_PAGE_SIZE },
-      {
-        onSuccess: (data) => {
-          dispatch({
-            type: "searchComplete",
-            results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
-          });
-        },
-        onError: (err) => {
-          console.error("[Search] scaffold-handoff mutation failed:", err);
           dispatch({
             type: "searchComplete",
             results: [],
@@ -480,9 +469,40 @@ function SearchPageInner() {
         },
       },
     );
-    // Deliberately runs only once on mount — the handoff key is one-shot.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    pendingSavedSearchLoad,
+    savedSearchId,
+    runSearch,
+    enrichItems,
+    loadFromSavedSearch,
+    setAggregationMode,
+  ]);
+
+  // PREPARE: scaffold handoff — consume the sessionStorage stash (one-shot
+  // via the helper's removeItem on read). Saved-search takes priority; if
+  // ?saved= is set, discard the stash so it doesn't bleed into a later
+  // visit without ?saved=.
+  useEffect(() => {
+    if (savedSearchId) {
+      consumeScaffoldSearch();
+      return;
+    }
+    const criterion = consumeScaffoldSearch();
+    if (!criterion) return;
+    setPendingScaffoldQuery({ logic: "and", criteria: [criterion] });
+  }, [savedSearchId]);
+
+  // FIRE: scaffold handoff — route through handleSearch (the canonical
+  // path the Search button uses). handleSearch's deps are tracked by its
+  // useCallback so we always get an up-to-date reference, avoiding the
+  // stale-closure bug where the inline mutation call would fire but the
+  // request never reached the network.
+  useEffect(() => {
+    if (!pendingScaffoldQuery) return;
+    const query = pendingScaffoldQuery;
+    setPendingScaffoldQuery(null);
+    handleSearch(query, []);
+  }, [pendingScaffoldQuery, handleSearch]);
 
   // ── Export request builder ─────────────────────────────────────────────
   // Produces a fully-parameterised ExportRequest closure for the shared
