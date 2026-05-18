@@ -53,6 +53,7 @@ async def run_worker() -> None:
     )
     from cellar.application.export.render_export import RenderExport
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
+    from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
     from cellar.domain.shared.secret_provider import SecretProvider
     from cellar.infrastructure.cdd.client import CddVaultClient
     from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -65,6 +66,7 @@ async def run_worker() -> None:
     )
     from cellar.infrastructure.temporal.activities.registration import RegistrationActivities
     from cellar.infrastructure.temporal.activities.scaffold_tree import ScaffoldTreeActivities
+    from cellar.infrastructure.temporal.activities.umap_cluster import UmapClusterActivities
     from cellar.infrastructure.temporal.workflows.bulk_registration import (
         BulkRegistrationWorkflow,
     )
@@ -72,6 +74,7 @@ async def run_worker() -> None:
     from cellar.infrastructure.temporal.workflows.cdd_vault_import import CddVaultImportWorkflow
     from cellar.infrastructure.temporal.workflows.export import ExportWorkflow
     from cellar.infrastructure.temporal.workflows.scaffold_tree import ScaffoldTreeWorkflow
+    from cellar.infrastructure.temporal.workflows.umap_cluster import UmapClusterWorkflow
 
     session_factory = container[async_sessionmaker]
     dispatcher = container[EventDispatcher]
@@ -92,6 +95,11 @@ async def run_worker() -> None:
     run_scaffold_tree = container[RunScaffoldTree]
     scaffold_tree_activities = ScaffoldTreeActivities(run_scaffold_tree)
 
+    # --- UMAP cluster activity ---
+    # RunUmapCluster is wired by the DI container via register_sar_analysis.
+    run_umap_cluster = container[RunUmapCluster]
+    umap_cluster_activities = UmapClusterActivities(run_umap_cluster)
+
     tracking = BulkTrackingActivities(session_factory, dispatcher)
     cdd_fetch = CddFetchActivities(session_factory, secret_provider, cdd_client)
     file_parsing = FileParsingActivities()
@@ -109,10 +117,13 @@ async def run_worker() -> None:
             CddPlateImportWorkflow,
             ExportWorkflow,
             ScaffoldTreeWorkflow,
+            UmapClusterWorkflow,
         ],
         activities=[
             # Scaffold tree
             scaffold_tree_activities.run_scaffold_tree,
+            # UMAP cluster
+            umap_cluster_activities.run_umap_cluster,
             # Export
             export_activities.run_export,
             # BulkRegistration tracking
