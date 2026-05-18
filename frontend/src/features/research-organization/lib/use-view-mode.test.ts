@@ -47,4 +47,16 @@ describe("useViewMode", () => {
     act(() => result.current.setMode("cards"));
     expect(replace).toHaveBeenCalledWith("/collections/abc-123", { scroll: false });
   });
+
+  it("accepts 'scaffold-tree' as a valid mode (URL form 'tree')", () => {
+    params = new URLSearchParams("view=tree");
+    const { result } = renderHook(() => useViewMode("cards"));
+    expect(result.current.mode).toBe("scaffold-tree");
+  });
+
+  it("setMode writes ?view=tree for scaffold-tree and strips it at default", () => {
+    const { result } = renderHook(() => useViewMode("cards"));
+    act(() => result.current.setMode("scaffold-tree"));
+    expect(replace).toHaveBeenCalledWith("/collections/abc-123?view=tree", { scroll: false });
+  });
 });

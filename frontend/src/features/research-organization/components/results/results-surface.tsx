@@ -7,6 +7,7 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { ScaffoldTreeView } from "@/features/sar-analysis/components/scaffold-tree-view";
 import type { ViewMode } from "../../lib/use-view-mode";
 import { ViewModeToggle } from "./view-mode-toggle";
 import { CardGrid } from "./card-grid";
@@ -31,6 +32,12 @@ export interface ResultsSurfaceProps {
   showToolbar?: boolean;
   /** Optional protocol test counts keyed by molecule ID. Rendered on card tiles. */
   testCounts?: Record<string, number>;
+  /**
+   * Activity data keyed by molecule ID → protocol ID → ActivityValue.
+   * Required for the scaffold-tree view's color-by-protocol feature.
+   * When absent, the tree renders without activity coloring.
+   */
+  activityData?: Record<string, Record<string, any>>;
 }
 
 interface TableRow {
@@ -53,6 +60,7 @@ export function ResultsSurface({
   toolbarRight,
   showToolbar = true,
   testCounts,
+  activityData,
 }: ResultsSurfaceProps) {
   const tableRows: TableRow[] = useMemo(
     () =>
@@ -125,7 +133,13 @@ export function ResultsSurface({
         </div>
       )}
 
-      {mode === "cards" ? (
+      {mode === "scaffold-tree" ? (
+        <ScaffoldTreeView
+          molecules={molecules}
+          activityData={activityData ?? {}}
+          onOpen={onOpen}
+        />
+      ) : mode === "cards" ? (
         <CardGrid
           molecules={molecules}
           selectedIds={selectedIds}

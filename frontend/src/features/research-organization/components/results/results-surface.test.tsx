@@ -15,6 +15,10 @@ vi.mock("@/shared/components/chemistry", () => ({
   ),
 }));
 
+vi.mock("@/features/sar-analysis/components/scaffold-tree-view", () => ({
+  ScaffoldTreeView: () => <div data-testid="scaffold-tree-view" />,
+}));
+
 // jsdom doesn't implement ResizeObserver. Stub it so react-virtual's measure
 // path can run without throwing.
 beforeAll(() => {
@@ -113,5 +117,21 @@ describe("ResultsSurface", () => {
     );
     expect(screen.queryByRole("button", { name: /card view/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /table view/i })).not.toBeInTheDocument();
+  });
+
+  it("renders ScaffoldTreeView when mode=scaffold-tree", () => {
+    render(
+      <ResultsSurface
+        molecules={mols}
+        mode="scaffold-tree"
+        onModeChange={vi.fn()}
+        selectedIds={new Set()}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("scaffold-tree-view")).toBeInTheDocument();
+    // Toggle should reflect scaffold-tree as active
+    expect(screen.getByRole("button", { name: /tree view/i })).toHaveAttribute("aria-pressed", "true");
   });
 });
