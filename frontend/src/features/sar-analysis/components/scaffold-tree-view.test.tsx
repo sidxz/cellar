@@ -7,6 +7,14 @@ import type { UseScaffoldTreeReturn } from "../hooks/use-scaffold-tree";
 
 import { ScaffoldTreeView, SCAFFOLD_TREE_TOAST_ID } from "./scaffold-tree-view";
 
+// ---------------------------------------------------------------------------
+// customInstance mock — used by useCollectionScaffoldSearch (V4 Path A tests)
+// ---------------------------------------------------------------------------
+const mockCustomInstance = vi.fn();
+vi.mock("@/shared/lib/api/custom-instance", () => ({
+  customInstance: (...args: any[]) => mockCustomInstance(...args),
+}));
+
 // next/navigation requires the App Router context — stub out for tests.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -395,5 +403,126 @@ describe("ScaffoldTreeView — async-compute Sonner toast (Wave 4 / C1)", () => 
       "Scaffold tree cancelled",
       expect.objectContaining({ id: SCAFFOLD_TREE_TOAST_ID }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// V4 Path A — server-side scaffold filter tests
+// ---------------------------------------------------------------------------
+// These tests verify that `useCollectionScaffoldSearch` is invoked (via
+// `customInstance`) when `collectionId` is set + a scaffold is selected, and
+// is NOT invoked when `collectionId` is absent (ad-hoc result sets).
+
+describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
+  beforeEach(() => {
+    // Default: server returns an empty items list (we care about the call,
+    // not the rendered cards, in these tests).
+    mockCustomInstance.mockReset();
+    mockCustomInstance.mockResolvedValue({ items: [] });
+    // Reset hook to stable tree state.
+    mockUseScaffoldTree.mockReturnValue({
+      tree: fixtureTree,
+      jobId: null,
+      isStarting: false,
+      isPolling: false,
+      error: null,
+    });
+  });
+
+  it("invokes customInstance with scaffold exact_match_in body when scaffold selected on a collection page (Groups mode)", async () => {
+    render(
+      <ScaffoldTreeView
+        molecules={molecules}
+        activityData={{}}
+        collectionId="col-abc"
+      />,
+      { wrapper },
+    );
+
+    // Groups mode is the default. Find the benzene row by its data-testid
+    // (set in scaffold-groups-list.tsx: data-testid=`scaffold-group-${smiles}`).
+    const benzeneRow = await screen.findByTestId("scaffold-group-c1ccccc1");
+    fireEvent.click(benzeneRow);
+
+    await waitFor(() => {
+      expect(mockCustomInstance).toHaveBeenCalled();
+    });
+
+    const call = mockCustomInstance.mock.calls[0][0];
+    expect(call.url).toBe("/api/v1/search/execute");
+
+    // The group criterion wraps collection + scaffold in an AND.
+    const groupCrit = call.data.query.criteria[0];
+    expect(groupCrit.type).toBe("group");
+    expect(groupCrit.logic).toBe("and");
+
+    // One sub-criterion must be the collection criterion.
+    expect(groupCrit.criteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "collection",
+          collection_id: "col-abc",
+        }),
+      ]),
+    );
+
+    // One sub-criterion must be the scaffold exact_match_in criterion.
+    expect(groupCrit.criteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "scaffold",
+          mode: "exact_match_in",
+          scaffold_smiles_list: ["c1ccccc1"],
+        }),
+      ]),
+    );
+  });
+
+  it("does NOT invoke customInstance when collectionId is absent (ad-hoc result set)", async () => {
+    render(
+      <ScaffoldTreeView molecules={molecules} activityData={{}} />,
+      { wrapper },
+    );
+
+    // Select the same benzene row.
+    const benzeneRow = await screen.findByTestId("scaffold-group-c1ccccc1");
+    fireEvent.click(benzeneRow);
+
+    // Wait a tick to ensure no async call was scheduled.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockCustomInstance).not.toHaveBeenCalled();
+  });
+
+  it("includes all subtree scaffold SMILES in the criterion body for Hierarchy mode", async () => {
+    render(
+      <ScaffoldTreeView
+        molecules={molecules}
+        activityData={{}}
+        collectionId="col-xyz"
+      />,
+      { wrapper },
+    );
+
+    // Switch to Hierarchy mode.
+    fireEvent.click(screen.getByRole("button", { name: /hierarchy/i }));
+
+    // Click the benzene root node — its subtree includes itself + naphthalene.
+    const benzeneNode = await screen.findByTestId("scaffold-node-c1ccccc1");
+    fireEvent.click(benzeneNode);
+
+    await waitFor(() => {
+      expect(mockCustomInstance).toHaveBeenCalled();
+    });
+
+    const call = mockCustomInstance.mock.calls[0][0];
+    const groupCrit = call.data.query.criteria[0];
+    const scaffoldCrit = groupCrit.criteria.find(
+      (c: any) => c.type === "scaffold",
+    );
+    // Benzene subtree contains both scaffold SMILES (benzene + naphthalene).
+    expect(scaffoldCrit.scaffold_smiles_list).toEqual(
+      expect.arrayContaining(["c1ccccc1", "c1ccc2ccccc2c1"]),
+    );
+    expect(scaffoldCrit.mode).toBe("exact_match_in");
   });
 });

@@ -15,6 +15,7 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { cn } from "@/shared/lib/utils";
 
 import { useScaffoldTree } from "../hooks/use-scaffold-tree";
+import { useCollectionScaffoldSearch } from "../hooks/use-collection-scaffold-search";
 import { ScaffoldTreeNode } from "./scaffold-tree-node";
 import { ScaffoldGroupsList } from "./scaffold-groups-list";
 import { ScaffoldColorPicker } from "./scaffold-color-picker";
@@ -24,6 +25,7 @@ import {
   collectSubtreeMolIds,
   rootNodes,
 } from "../lib/scaffold-tree-math";
+import { collectSubtreeScaffolds } from "../lib/collect-subtree-scaffolds";
 import {
   classifyActivity,
   medianPic50ForMols,
@@ -220,8 +222,39 @@ export function ScaffoldTreeView({
     return map;
   }, [tree, colorBy, activityData]);
 
+  // V4 Path A: when a scaffold is selected on a collection page, fetch the
+  // filtered set server-side via the new exact_match_in criterion. Avoids the
+  // in-memory filter over the full collection load (which is capped at 10K).
+  // When no scaffold is selected, OR when we're operating on an ad-hoc result
+  // set (no collectionId), fall through to the existing in-memory path.
+  const selectedScaffolds = useMemo<string[]>(() => {
+    if (!tree || selectedScaffold == null) return [];
+    if (subMode === "groups") return [selectedScaffold];
+    return collectSubtreeScaffolds(selectedScaffold, tree);
+  }, [tree, selectedScaffold, subMode]);
+
+  const serverFiltered = useCollectionScaffoldSearch({
+    collectionId: collectionId ?? "",
+    scaffoldSmiles: selectedScaffolds,
+    enabled: Boolean(collectionId) && selectedScaffolds.length > 0,
+  });
+
   const filteredMolecules = useMemo(() => {
     if (!tree || selectedScaffold == null) return molecules;
+
+    // V4 Path A: server-side filtered result wins when we're on a collection
+    // page AND a scaffold is selected. Use the server response directly —
+    // it's the authoritative list (not clipped by the 10K parent-load cap).
+    if (
+      collectionId &&
+      selectedScaffolds.length > 0 &&
+      serverFiltered.data?.items
+    ) {
+      return serverFiltered.data.items as typeof molecules;
+    }
+
+    // Fallback (ad-hoc result sets without collectionId, or while the server
+    // call is in flight): in-memory filter of the already-loaded molecules.
     // In Hierarchy mode, selecting an inner node should show the whole subtree
     // (all descendant mols) — that's the SAR-pivot story. In Groups mode each
     // row IS a leaf chemotype, so we filter to its direct molecule_ids only —
@@ -236,7 +269,15 @@ export function ScaffoldTreeView({
     }
     const ids = new Set(collectSubtreeMolIds(selectedScaffold, tree));
     return molecules.filter((m) => ids.has(m.id));
-  }, [molecules, tree, selectedScaffold, subMode]);
+  }, [
+    molecules,
+    tree,
+    selectedScaffold,
+    subMode,
+    collectionId,
+    selectedScaffolds,
+    serverFiltered.data,
+  ]);
 
   // Path A: visible nodes after the min-members filter. A node is visible
   // when its subtree_molecule_count >= minMembers. Applies recursively in
