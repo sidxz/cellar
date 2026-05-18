@@ -31,8 +31,8 @@ describe("ScaffoldTreeNode", () => {
         selected={null}
         onToggle={() => {}}
         onSelect={() => {}}
-        colorByProtocolId={null}
-        activity={undefined}
+        childIndex={new Map()}
+        colorBins={new Map()}
       />,
     );
     // Format: "1 · 2" (own · subtree)
@@ -56,8 +56,8 @@ describe("ScaffoldTreeNode", () => {
         selected={null}
         onToggle={() => {}}
         onSelect={() => {}}
-        colorByProtocolId={null}
-        activity={undefined}
+        childIndex={new Map()}
+        colorBins={new Map()}
       />,
     );
     // Just "1"
@@ -75,8 +75,8 @@ describe("ScaffoldTreeNode", () => {
         selected={null}
         onToggle={() => {}}
         onSelect={handle}
-        colorByProtocolId={null}
-        activity={undefined}
+        childIndex={new Map()}
+        colorBins={new Map()}
       />,
     );
     fireEvent.click(screen.getByTestId("scaffold-node-c1ccccc1"));
@@ -100,8 +100,8 @@ describe("ScaffoldTreeNode", () => {
         selected={null}
         onToggle={() => {}}
         onSelect={() => {}}
-        colorByProtocolId={null}
-        activity={undefined}
+        childIndex={new Map()}
+        colorBins={new Map()}
       />,
     );
     expect(screen.getByText(/no scaffold/i)).toBeInTheDocument();
@@ -110,6 +110,9 @@ describe("ScaffoldTreeNode", () => {
   it("toggles expand via caret click WITHOUT firing select", () => {
     const onToggle = vi.fn();
     const onSelect = vi.fn();
+    const childIndex = new Map<string, string[]>([
+      ["c1ccccc1", ["c1ccc2ccccc2c1"]],
+    ]);
     render(
       <ScaffoldTreeNode
         scaffoldSmiles="c1ccccc1"
@@ -119,8 +122,8 @@ describe("ScaffoldTreeNode", () => {
         selected={null}
         onToggle={onToggle}
         onSelect={onSelect}
-        colorByProtocolId={null}
-        activity={undefined}
+        childIndex={childIndex}
+        colorBins={new Map()}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /expand/i }));
@@ -129,6 +132,9 @@ describe("ScaffoldTreeNode", () => {
   });
 
   it("recursively renders children when expanded", () => {
+    const childIndex = new Map<string, string[]>([
+      ["c1ccccc1", ["c1ccc2ccccc2c1"]],
+    ]);
     render(
       <ScaffoldTreeNode
         scaffoldSmiles="c1ccccc1"
@@ -138,8 +144,8 @@ describe("ScaffoldTreeNode", () => {
         selected={null}
         onToggle={() => {}}
         onSelect={() => {}}
-        colorByProtocolId={null}
-        activity={undefined}
+        childIndex={childIndex}
+        colorBins={new Map()}
       />,
     );
     // Child node should be rendered

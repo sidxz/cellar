@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
@@ -7,54 +8,58 @@ import {
   NO_SCAFFOLD_SENTINEL,
   type ScaffoldTreeResult,
 } from "../types/scaffold-tree";
-import { buildChildIndex, collectSubtreeMolIds } from "../lib/scaffold-tree-math";
-import { classifyActivity, medianPic50ForMols } from "../lib/scaffold-rollup";
+import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 
 type Props = {
   scaffoldSmiles: string;
   tree: ScaffoldTreeResult;
+  /** Parent -> children map, computed once at the tree root */
+  childIndex: Map<string, string[]>;
+  /** Scaffold -> activity rollup color bin, computed once at the tree root */
+  colorBins: Map<string, ActivityRollupBin>;
   depth: number;
   expanded: Set<string>;
   selected: string | null;
   onToggle: (scaffoldSmiles: string) => void;
   onSelect: (scaffoldSmiles: string) => void;
-  colorByProtocolId: string | null;
-  activity: Record<string, Record<string, any>> | undefined;
 };
 
-const BIN_COLORS: Record<string, string> = {
+const BIN_COLORS: Record<ActivityRollupBin, string> = {
   active_high: "bg-emerald-500",
   active_mid: "bg-amber-400",
   weak: "bg-orange-400",
   inactive: "bg-rose-400",
 };
 
-export function ScaffoldTreeNode(props: Props) {
+function ScaffoldTreeNodeInner(props: Props) {
   const {
     scaffoldSmiles,
     tree,
+    childIndex,
+    colorBins,
     depth,
     expanded,
     selected,
     onToggle,
     onSelect,
-    colorByProtocolId,
-    activity,
   } = props;
 
-  const node = tree.nodes.find((n) => n.scaffold_smiles === scaffoldSmiles);
+  // Map lookup over tree.nodes is O(N) per node — for 30+ nodes recursing,
+  // that's redundant. Build a smiles->node lookup once at the root, walk down.
+  const nodesBySmiles = useMemo(() => {
+    const m = new Map<string, ScaffoldTreeResult["nodes"][number]>();
+    for (const n of tree.nodes) m.set(n.scaffold_smiles, n);
+    return m;
+  }, [tree]);
+
+  const node = nodesBySmiles.get(scaffoldSmiles);
   if (!node) return null;
 
-  const children = buildChildIndex(tree).get(scaffoldSmiles) ?? [];
+  const children = childIndex.get(scaffoldSmiles) ?? [];
   const isExpanded = expanded.has(scaffoldSmiles);
   const isSelected = selected === scaffoldSmiles;
   const isBucket = scaffoldSmiles === NO_SCAFFOLD_SENTINEL;
-
-  let colorBin: string | null = null;
-  if (colorByProtocolId && activity) {
-    const ids = collectSubtreeMolIds(scaffoldSmiles, tree);
-    colorBin = classifyActivity(medianPic50ForMols(ids, activity, colorByProtocolId));
-  }
+  const colorBin = colorBins.get(scaffoldSmiles) ?? null;
 
   return (
     <div className="flex flex-col">
@@ -125,13 +130,13 @@ export function ScaffoldTreeNode(props: Props) {
               key={c}
               scaffoldSmiles={c}
               tree={tree}
+              childIndex={childIndex}
+              colorBins={colorBins}
               depth={depth + 1}
               expanded={expanded}
               selected={selected}
               onToggle={onToggle}
               onSelect={onSelect}
-              colorByProtocolId={colorByProtocolId}
-              activity={activity}
             />
           ))}
         </div>
@@ -139,3 +144,7 @@ export function ScaffoldTreeNode(props: Props) {
     </div>
   );
 }
+
+// Memoize — recursive children re-render only when their actual props change,
+// not on unrelated parent re-renders (e.g. when a sibling subtree is selected).
+export const ScaffoldTreeNode = memo(ScaffoldTreeNodeInner);

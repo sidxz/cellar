@@ -14,7 +14,16 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { useScaffoldTree } from "../hooks/use-scaffold-tree";
 import { ScaffoldTreeNode } from "./scaffold-tree-node";
 import { ScaffoldColorPicker } from "./scaffold-color-picker";
-import { collectSubtreeMolIds, rootNodes } from "../lib/scaffold-tree-math";
+import {
+  buildChildIndex,
+  collectSubtreeMolIds,
+  rootNodes,
+} from "../lib/scaffold-tree-math";
+import {
+  classifyActivity,
+  medianPic50ForMols,
+  type ActivityRollupBin,
+} from "../lib/scaffold-rollup";
 
 type Props = {
   molecules: Molecule[];
@@ -86,6 +95,28 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
     },
     [onOpen, router],
   );
+
+  // Computed once per tree change. Recursive children call buildChildIndex
+  // and collectSubtreeMolIds otherwise — that's O(N^2) work per render.
+  const childIndex = useMemo(
+    () => (tree ? buildChildIndex(tree) : new Map<string, string[]>()),
+    [tree],
+  );
+
+  // Pre-compute per-node activity rollup color once per (tree, colorBy,
+  // activityData) change. Avoids per-node DFS during recursive render.
+  const colorBins = useMemo(() => {
+    const map = new Map<string, ActivityRollupBin>();
+    if (!tree || !colorBy || !activityData) return map;
+    for (const node of tree.nodes) {
+      const ids = collectSubtreeMolIds(node.scaffold_smiles, tree);
+      const bin = classifyActivity(
+        medianPic50ForMols(ids, activityData, colorBy),
+      );
+      if (bin) map.set(node.scaffold_smiles, bin);
+    }
+    return map;
+  }, [tree, colorBy, activityData]);
 
   const filteredMolecules = useMemo(() => {
     if (!tree || selectedScaffold == null) return molecules;
@@ -160,13 +191,13 @@ export function ScaffoldTreeView({ molecules, activityData, onOpen }: Props) {
                 key={root.scaffold_smiles}
                 scaffoldSmiles={root.scaffold_smiles}
                 tree={tree}
+                childIndex={childIndex}
+                colorBins={colorBins}
                 depth={0}
                 expanded={expanded}
                 selected={selectedScaffold}
                 onToggle={handleToggle}
                 onSelect={handleSelect}
-                colorByProtocolId={colorBy}
-                activity={activityData}
               />
             ))}
           </div>
