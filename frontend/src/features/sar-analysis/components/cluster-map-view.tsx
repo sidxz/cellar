@@ -112,8 +112,10 @@ export function ClusterMapView({
   sourceLabel,
 }: ClusterMapViewProps) {
   // --- Picker & color URL state ---
+  // Size-adaptive default N: ~10% of the compound set, clamped to [5, 50].
+  // For a 22-mol collection the default is 5 (not the old hardcoded 50).
   const { picker, n, threshold, setPicker, setN, setThreshold } =
-    usePickerConfig();
+    usePickerConfig({ collectionSize: molecules.length });
   const { mode: colorMode, protocolId: colorProtocolId, setMode: setColorMode } =
     useColorMode({
       defaultMode: defaultColorProtocolId ? "activity" : "cluster",
