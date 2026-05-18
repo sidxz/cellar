@@ -67,6 +67,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     )
     from cellar.interface.routes.dose_response_curves import router as drc_batch_router
     from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
+    from cellar.interface.routes.umap_cluster import router as umap_cluster_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -82,6 +83,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(search_router)
     app.include_router(search_algorithms_router)
     app.include_router(scaffold_tree_router)
+    app.include_router(umap_cluster_router)
     app.include_router(audit_router)
     app.include_router(admin_delete_router)
     app.include_router(campaign_router)
