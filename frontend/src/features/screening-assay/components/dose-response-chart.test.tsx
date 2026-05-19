@@ -433,6 +433,99 @@ describe("<DoseResponseChart /> — edit-session integration", () => {
   });
 });
 
+describe("<DoseResponseChart /> — keyboard shortcuts in edit mode", () => {
+  it("Cmd+Z (or Ctrl+Z) undoes the last toggle while in edit mode", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    // Toggle one point → 1 unsaved change.
+    fireEvent.click(screen.getAllByRole("row")[1]);
+    expect(
+      screen.getByText(/editing — 1 unsaved change(?!s)/i),
+    ).toBeInTheDocument();
+
+    // Fire both meta + ctrl variants so we don't have to mock navigator.platform.
+    fireEvent.keyDown(document, { key: "z", metaKey: true });
+    fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+
+    expect(
+      screen.getByText(/editing — 0 unsaved changes/i),
+    ).toBeInTheDocument();
+  });
+
+  it("Cmd+Shift+Z redoes after an undo", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    fireEvent.click(screen.getAllByRole("row")[1]);
+
+    // Undo (try both modifiers).
+    fireEvent.keyDown(document, { key: "z", metaKey: true });
+    fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+    expect(
+      screen.getByText(/editing — 0 unsaved changes/i),
+    ).toBeInTheDocument();
+
+    // Redo (try both modifiers).
+    fireEvent.keyDown(document, { key: "z", metaKey: true, shiftKey: true });
+    fireEvent.keyDown(document, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(
+      screen.getByText(/editing — 1 unsaved change(?!s)/i),
+    ).toBeInTheDocument();
+  });
+
+  it("Esc with no draft exits edit mode without confirm", () => {
+    reset();
+    const confirmSpy = vi.spyOn(window, "confirm");
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    expect(screen.getByText(/editing/i)).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/editing/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /edit points/i }),
+    ).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("Esc with a dirty draft prompts confirm; saying no keeps edit mode", () => {
+    reset();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    fireEvent.click(screen.getAllByRole("row")[1]);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByText(/editing/i)).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("does not fire when not in edit mode", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    // No edit mode yet — Esc should be a no-op (Edit Points stays visible).
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(
+      screen.getByRole("button", { name: /edit points/i }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("<DoseResponseChart /> — locked-run guard", () => {
   it("disables Edit Points and shows Locked badge when runIsLocked is true", () => {
     reset();

@@ -1069,6 +1069,45 @@ export function DoseResponseChart({
     setEditMode(false);
   }, [editSession, refitPreview]);
 
+  // ── Keyboard shortcuts (edit mode only) ────────────────────────────────────
+  // Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z (or Cmd/Ctrl+Y) = redo, Esc = cancel.
+  // Listener attaches at the document level only while editMode is true so
+  // non-editing renders (search results grid, campaign thumbnails) never
+  // see the global handler. The textarea/input guard lets the save dialog's
+  // note field handle native Cmd+Z text-editing unaffected.
+  useEffect(() => {
+    if (!editMode) return;
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target && target.isContentEditable)
+      ) {
+        return;
+      }
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
+      const key = e.key.toLowerCase();
+
+      if (ctrlOrCmd && key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        editSession.undo();
+      } else if (
+        ctrlOrCmd &&
+        ((key === "z" && e.shiftKey) || key === "y")
+      ) {
+        e.preventDefault();
+        editSession.redo();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleCancelEdit();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [editMode, editSession, handleCancelEdit]);
+
   const handleSaveSubmit = useCallback(
     ({ reason, note }: { reason: SaveExclusionReason; note: string | null }) => {
       if (!editCurve) return;
