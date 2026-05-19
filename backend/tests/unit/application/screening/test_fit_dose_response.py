@@ -600,3 +600,159 @@ def test_fit_overrides_preserves_y_normalization_and_intercepts():
     assert result.intercepts[1].level == 90
     # And the override actually applied.
     assert result.top_constraint == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Sprint 2 — auto-3σ becomes suggestion (no silent removal)
+# ---------------------------------------------------------------------------
+
+
+class _FitterWithOneSuggestion:
+    """Returns a fitted result that nominates a single outlier suggestion.
+
+    Mimics the new fitter contract: the offending point stays in the fit
+    (num_points unchanged); the candidate rides along on ``outlier_suggestions``.
+    """
+
+    def __init__(self, *, suggestion_idx: int, conc: float, response: float) -> None:
+        from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
+
+        self._suggestion = OutlierSuggestion(
+            idx=suggestion_idx,
+            concentration=conc,
+            response=response,
+            residual_sigma=4.2,
+        )
+        self.calls: list[list[ConcentrationResponsePoint]] = []
+
+    def fit(self, points, config):
+        self.calls.append(list(points))
+        return Success(
+            FittedCurveResult(
+                fitted_value=10.0,
+                hill_slope=1.0,
+                top=100.0,
+                bottom=0.0,
+                r_squared=0.97,
+                confidence_interval_low=8.0,
+                confidence_interval_high=12.0,
+                curve_class=CurveClass.FULL,
+                num_points=len(points),
+                raw_data=[
+                    {"concentration": p.concentration, "response": p.response}
+                    for p in points
+                ],
+                excluded_points=[],
+                outlier_suggestions=(self._suggestion,),
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_initial_fit_persists_outlier_suggestion_as_excluded_point_detail():
+    """The initial-fit use case translates fitter ``outlier_suggestions`` into
+    ``ExcludedPointDetail(source=AUTO_3SIGMA, excluded=False)`` on the curve.
+
+    These show up in the UI as yellow-halo "suggested for exclusion" markers
+    that the chemist can explicitly accept or reject."""
+    from cellar.domain.screening_assay.excluded_point_detail import (
+        ExcludedPointDetail,
+        ExclusionReason,
+        ExclusionSource,
+    )
+
+    protocol, y_def, _ = _make_protocol_with_y()
+    concs = [0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=concs
+    )
+
+    # Healthy values everywhere except the third position — the fitter spy
+    # will nominate idx=2 as a suggestion.
+    values = [5.0, 12.0, 99.0, 75.0, 90.0, 95.0]
+    readout_data: list[ReadoutData] = []
+    for w, v in zip(wells, values, strict=True):
+        readout_data.append(
+            _rd(
+                run_id=run.id,
+                well_id=w.id,
+                readout_definition_id=y_def.id,
+                value=v,
+                is_computed=False,
+            )
+        )
+
+    fitter = _FitterWithOneSuggestion(
+        suggestion_idx=2, conc=10.0, response=99.0,
+    )
+    curve_repo = AsyncMock()
+    curve_repo.delete_by_run = AsyncMock()
+    saved_curves: list = []
+
+    async def _capture_save(curve):
+        saved_curves.append(curve)
+
+    curve_repo.save = _capture_save
+    use_case = FitDoseResponseCurves(
+        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter,
+    )
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+    assert isinstance(result, Success)
+    assert len(saved_curves) == 1
+    curve = saved_curves[0]
+    assert curve.excluded_points is not None
+    suggestions = [
+        e for e in curve.excluded_points
+        if isinstance(e, ExcludedPointDetail) and e.is_suggestion
+    ]
+    assert len(suggestions) == 1
+    s = suggestions[0]
+    assert s.idx == 2
+    assert s.source == ExclusionSource.AUTO_3SIGMA
+    assert s.reason == ExclusionReason.AUTO_3SIGMA
+    assert s.excluded is False
+    assert s.author_id is None
+    assert s.concentration == 10.0
+    assert s.response == 99.0
+
+
+@pytest.mark.asyncio
+async def test_initial_fit_no_suggestions_yields_empty_excluded_points():
+    """When the fitter nominates nothing, the curve's ``excluded_points``
+    stays empty — no spurious entries."""
+    protocol, y_def, _ = _make_protocol_with_y()
+    concs = [0.1, 1.0, 10.0, 100.0]
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=concs
+    )
+    readout_data: list[ReadoutData] = []
+    for w, v in zip(wells, [5.0, 30.0, 70.0, 95.0], strict=True):
+        readout_data.append(
+            _rd(
+                run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
+                value=v, is_computed=False,
+            )
+        )
+
+    fitter = _RecordingFitter()  # writes excluded_points=[] + no suggestions
+    curve_repo = AsyncMock()
+    curve_repo.delete_by_run = AsyncMock()
+    saved_curves: list = []
+
+    async def _capture_save(curve):
+        saved_curves.append(curve)
+
+    curve_repo.save = _capture_save
+    use_case = FitDoseResponseCurves(
+        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter,
+    )
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+    assert isinstance(result, Success)
+    assert len(saved_curves) == 1
+    assert saved_curves[0].excluded_points == []

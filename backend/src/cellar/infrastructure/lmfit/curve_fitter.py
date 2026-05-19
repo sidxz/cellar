@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING
 
 import lmfit
 import numpy as np
-import structlog
 from returns.result import Failure, Result, Success
 
 import math
@@ -38,13 +37,12 @@ from cellar.domain.screening_assay.enums import (
     HillSlopeConstraint,
     InterceptBasis,
 )
+from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
 from cellar.domain.shared.errors import DomainError, ValidationError
 
 if TYPE_CHECKING:
     from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 
-
-_log = structlog.get_logger(__name__)
 
 _MIN_FITTING_POINTS = 4
 
@@ -209,6 +207,7 @@ class LmfitCurveFitter:
                     raw_data=raw_data,
                     excluded_points=excluded_data,
                     fit_quality_warnings=[],
+                    outlier_suggestions=(),
                 )
             )
 
@@ -242,80 +241,52 @@ class LmfitCurveFitter:
         r_squared = _r_squared(responses, predicted)
 
         # ──────────────────────────────────────────────────────────────────
-        # Outlier detection + second-pass refit on clean subset.
-        # Threshold comes from the protocol's ``outlier_sigma`` (default 3.0,
-        # CDD-equivalent). ``None`` disables auto-detection.
+        # Outlier detection — emit SUGGESTIONS only, never silently exclude.
+        #
+        # The legacy "detect + refit on clean subset" cascade is gone:
+        # excluding one point manually used to shift the fit and trigger N
+        # more silent auto-exclusions on every refit, leaving chemists
+        # with no idea why their data was vanishing. Now the fitter does
+        # the detection once on the first-pass fit and returns the
+        # candidates as ``OutlierSuggestion`` entries — the FE renders them
+        # as yellow-halo markers; the chemist explicitly accepts or rejects.
+        #
+        # ``config.outlier_sigma is None`` skips detection entirely; this is
+        # used by the Sprint-2 commit/preview paths where the chemist has
+        # hand-curated the exclusion set.
         # ──────────────────────────────────────────────────────────────────
+        outlier_suggestions: tuple[OutlierSuggestion, ...] = ()
         if (
             config.outlier_sigma is not None
             and len(active_points) >= _MIN_POINTS_FOR_OUTLIER_DETECTION
         ):
             residuals = responses - predicted
             outlier_mask = _detect_outliers(residuals, sigma=config.outlier_sigma)
-
             if np.any(outlier_mask):
-                clean_log_c = log_concentrations[~outlier_mask]
-                clean_responses = responses[~outlier_mask]
-
-                if len(clean_log_c) >= _MIN_FITTING_POINTS:
-                    params2, log_ec50_min, log_ec50_max = _build_params(
-                        clean_log_c, clean_responses, config
+                # SD of the full residual set; used to report per-point
+                # severity (residual_sigma) so the FE can rank suggestions.
+                # ddof=1 matches _detect_outliers' leave-one-out SD style.
+                if len(residuals) >= 2:
+                    full_sd = float(np.std(residuals, ddof=1))
+                else:  # pragma: no cover — guarded by min-points check above
+                    full_sd = 0.0
+                suggestions: list[OutlierSuggestion] = []
+                for i, is_outlier in enumerate(outlier_mask):
+                    if not is_outlier:
+                        continue
+                    pt = active_points[i]
+                    residual_sigma = (
+                        abs(float(residuals[i])) / full_sd if full_sd > 0 else 0.0
                     )
-                    try:
-                        fit_result2 = lmfit.Model(_hill_equation).fit(
-                            clean_responses,
-                            params2,
-                            log_c=clean_log_c,
-                            method="leastsq",
+                    suggestions.append(
+                        OutlierSuggestion(
+                            idx=i,
+                            concentration=float(pt.concentration),
+                            response=float(pt.response),
+                            residual_sigma=residual_sigma,
                         )
-                        if fit_result2.success or fit_result2.errorbars:
-                            best = fit_result2.params
-                            fitted_top = float(best["top"].value)
-                            fitted_bottom = float(best["bottom"].value)
-                            fitted_log_ec50 = float(best["log_ec50"].value)
-                            fitted_hill = float(best["hill"].value)
-                            log_ec50_stderr = best["log_ec50"].stderr
-
-                            predicted = _hill_equation(
-                                clean_log_c,
-                                fitted_top,
-                                fitted_bottom,
-                                fitted_log_ec50,
-                                fitted_hill,
-                            )
-                            r_squared = _r_squared(clean_responses, predicted)
-
-                            # Move outliers to excluded_data; rebuild raw_data
-                            for i, is_outlier in enumerate(outlier_mask):
-                                if is_outlier:
-                                    excluded_data.append(
-                                        {
-                                            "concentration": float(active_points[i].concentration),
-                                            "response": float(active_points[i].response),
-                                            "reason": "auto_3sigma",
-                                            "residual": float(residuals[i]),
-                                        }
-                                    )
-                            raw_data = [
-                                {
-                                    "concentration": float(active_points[i].concentration),
-                                    "response": float(active_points[i].response),
-                                }
-                                for i, is_outlier in enumerate(outlier_mask)
-                                if not is_outlier
-                            ]
-
-                            # Update the working arrays for downstream classification
-                            log_concentrations = clean_log_c
-                            responses = clean_responses
-                            concentrations = 10.0**clean_log_c
-                    except Exception as exc:  # noqa: BLE001 — second-pass is opportunistic
-                        # Second-pass failed — keep first-pass results as-is.
-                        _log.warning(
-                            "curve_fitter.second_pass_failed",
-                            error=str(exc),
-                            exc_info=True,
-                        )
+                    )
+                outlier_suggestions = tuple(suggestions)
 
         # ──────────────────────────────────────────────────────────────────
         # Fit quality warnings — compute first so CI logic can consult them
@@ -450,12 +421,15 @@ class LmfitCurveFitter:
                 confidence_interval_low=ci_low,
                 confidence_interval_high=ci_high,
                 curve_class=curve_class,
-                num_points=len(active_points)
-                - len([e for e in excluded_data if e.get("reason") == "auto_3sigma"]),
+                # All active points contributed to the fit — no silent auto-
+                # exclusion. Suggested outliers ride along separately on
+                # ``outlier_suggestions``.
+                num_points=len(active_points),
                 raw_data=raw_data,
                 excluded_points=excluded_data,
                 fit_quality_warnings=warnings,
                 intercept_values=tuple(intercept_values),
+                outlier_suggestions=outlier_suggestions,
             )
         )
 

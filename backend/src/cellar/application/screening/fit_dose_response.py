@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from returns.result import Failure, Result, Success
 
@@ -15,6 +16,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     CurveFittingService,
+    FittedCurveResult,
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
@@ -23,6 +25,11 @@ from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
+from cellar.domain.screening_assay.excluded_point_detail import (
+    ExcludedPointDetail,
+    ExclusionReason,
+    ExclusionSource,
+)
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.repository import DoseResponseCurveRepository
@@ -30,6 +37,44 @@ from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import AuthorizationError, DomainError
 
 _MIN_POINTS = 4
+
+
+def _build_excluded_from_fitter(
+    fitted: FittedCurveResult,
+) -> list[ExcludedPointDetail] | list[dict]:
+    """Translate a ``FittedCurveResult`` into the curve's ``excluded_points``.
+
+    For the initial-fit path (auto-fit on run import) the fitter's input list
+    has no pre-excluded points, so ``fitted.excluded_points`` is always empty.
+    Any ``fitted.outlier_suggestions`` become ``ExcludedPointDetail`` entries
+    with ``source=AUTO_3SIGMA`` and ``excluded=False`` — the FE renders them
+    as yellow-halo "suggested for exclusion" markers; chemists accept or
+    reject in edit mode.
+
+    Returns ``[]`` when neither pre-excluded points nor suggestions exist.
+    """
+    if not fitted.outlier_suggestions:
+        # Preserve the legacy dict-shape path for the (currently impossible)
+        # case where the fitter wrote any pre-excluded entries — the repo
+        # tolerates either shape.
+        return list(fitted.excluded_points or [])
+
+    now = datetime.now(UTC)
+    out: list[ExcludedPointDetail] = []
+    for s in fitted.outlier_suggestions:
+        out.append(
+            ExcludedPointDetail(
+                idx=s.idx,
+                source=ExclusionSource.AUTO_3SIGMA,
+                excluded=False,  # SUGGESTION, not an exclusion
+                reason=ExclusionReason.AUTO_3SIGMA,
+                author_id=None,  # the fitter wrote this, no human author
+                ts=now,
+                concentration=s.concentration,
+                response=s.response,
+            )
+        )
+    return out
 
 
 @dataclass(frozen=True)
@@ -316,6 +361,13 @@ class FitDoseResponseCurves:
                 # so reproducibility doesn't depend on the readout-def's live
                 # config staying unchanged.
                 config_snapshot = serialize_dose_response_config(config)
+                # The fitter no longer silently excludes auto-3σ outliers; it
+                # nominates them on ``outlier_suggestions``. Persist them as
+                # ExcludedPointDetail(source=AUTO_3SIGMA, excluded=False) so
+                # the FE can render yellow-halo "suggested for exclusion"
+                # markers (Sprint-2 FE Task 2.16) — the chemist explicitly
+                # accepts or rejects in edit mode.
+                excluded_points_payload = _build_excluded_from_fitter(fitted)
                 curve = DoseResponseCurve(
                     workspace_id=run.workspace_id,
                     molecule_id=molecule_id,
@@ -334,7 +386,7 @@ class FitDoseResponseCurves:
                     num_points=fitted.num_points,
                     curve_class=fitted.curve_class,
                     raw_data=fitted.raw_data,
-                    excluded_points=fitted.excluded_points or [],
+                    excluded_points=excluded_points_payload,
                     fit_quality_warnings=list(fitted.fit_quality_warnings),
                     intercept_values=list(fitted.intercept_values),
                     dose_response_config_snapshot=config_snapshot,

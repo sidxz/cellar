@@ -12,6 +12,7 @@ from cellar.domain.screening_assay.dose_response_config import (
     InterceptSpec,
 )
 from cellar.domain.screening_assay.enums import CurveClass
+from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
 from cellar.domain.shared.errors import DomainError
 
 
@@ -54,6 +55,13 @@ class FittedCurveResult:
     ``intercept_values`` are the per-spec results when the config asks for
     multiple intercepts (e.g. IC50 + IC90). The first entry's ``value``
     matches the headline ``fitted_value`` for back-compat.
+
+    ``outlier_suggestions`` are auto-detected candidate outliers from the
+    3σ pass. The fitter NEVER removes them silently — it only nominates them.
+    The use-case layer decides what to persist (typically as
+    ``ExcludedPointDetail`` with ``excluded=False``, which the FE renders
+    as yellow-halo "suggested for exclusion" markers). Empty when
+    ``config.outlier_sigma is None``.
     """
 
     fitted_value: float
@@ -72,6 +80,7 @@ class FittedCurveResult:
     excluded_points: list[dict[str, Any]] = field(default_factory=list)
     fit_quality_warnings: list[str] = field(default_factory=list)
     intercept_values: tuple[InterceptValue, ...] = ()
+    outlier_suggestions: tuple[OutlierSuggestion, ...] = ()
 
 
 @runtime_checkable

@@ -1,4 +1,12 @@
-"""Tests for two-pass 3σ outlier detection in LmfitCurveFitter."""
+"""Tests for 3σ outlier *suggestion* detection in LmfitCurveFitter.
+
+Post-redesign: the fitter no longer silently removes outliers + refits.
+It detects candidates on the first-pass fit and returns them as
+``OutlierSuggestion`` entries; the use-case layer persists them as
+``ExcludedPointDetail(source=AUTO_3SIGMA, excluded=False)`` so the FE
+can render them as yellow-halo "suggested" markers for the chemist to
+explicitly accept or reject.
+"""
 
 from __future__ import annotations
 
@@ -38,20 +46,28 @@ def _generate_hill_data_with_outlier(
     return points
 
 
-class TestTwoPassOutlierDetection:
+class TestOutlierSuggestionDetection:
     def setup_method(self):
         self.fitter = LmfitCurveFitter()
 
-    def test_outlier_detected_and_excluded(self):
+    def test_outlier_detected_and_suggested(self):
         points = _generate_hill_data_with_outlier(outlier_index=3, outlier_value=200.0)
         config = _make_config()
         result = self.fitter.fit(points, config)
 
         assert isinstance(result, Success)
         fitted = result.unwrap()
-        assert len(fitted.excluded_points) >= 1
-        outlier_reasons = [p.get("reason") for p in fitted.excluded_points]
-        assert "auto_3sigma" in outlier_reasons
+        # Suggestion present, naming the offending input position.
+        assert len(fitted.outlier_suggestions) >= 1
+        idxs = {s.idx for s in fitted.outlier_suggestions}
+        assert 3 in idxs
+        # No silent exclusion.
+        auto_excluded = [
+            p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
+        ]
+        assert auto_excluded == []
+        # Point still contributed to the fit.
+        assert fitted.num_points == len(points)
 
     def test_no_outliers_when_data_is_clean(self):
         rng = random.Random(42)
@@ -68,17 +84,25 @@ class TestTwoPassOutlierDetection:
 
         assert isinstance(result, Success)
         fitted = result.unwrap()
+        assert fitted.outlier_suggestions == ()
         auto_outliers = [p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"]
         assert len(auto_outliers) == 0
 
-    def test_outlier_improves_fit(self):
+    def test_outlier_present_returns_full_fit_with_suggestion(self):
+        """Post-redesign, the fitter does NOT do a second-pass refit on a
+        clean subset — it returns the full-data fit + the suggestion.
+        The chemist is expected to accept the suggestion (which triggers a
+        refit on commit) if they agree."""
         points = _generate_hill_data_with_outlier(outlier_index=5, outlier_value=180.0)
         config = _make_config()
         result = self.fitter.fit(points, config)
 
         assert isinstance(result, Success)
         fitted = result.unwrap()
-        assert fitted.r_squared > 0.9
+        # The outlier was flagged as a suggestion …
+        assert any(s.idx == 5 for s in fitted.outlier_suggestions)
+        # … but stays in the fit until a chemist confirms (no silent removal).
+        assert fitted.num_points == len(points)
 
     def test_no_outlier_detection_with_few_points(self):
         # 5 points — too few for meaningful outlier detection (threshold is 6)
@@ -95,6 +119,7 @@ class TestTwoPassOutlierDetection:
 
         assert isinstance(result, Success)
         fitted = result.unwrap()
-        # Should NOT have auto-excluded outliers (not enough points)
+        # Too few points → no detection at all (neither suggestions nor exclusions).
+        assert fitted.outlier_suggestions == ()
         auto_outliers = [p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"]
         assert len(auto_outliers) == 0

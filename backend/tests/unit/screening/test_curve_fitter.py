@@ -539,18 +539,31 @@ class TestOutlierSigmaConfig:
         )
         return points
 
-    def test_default_3sigma_removes_clear_outlier(self):
+    def test_default_3sigma_surfaces_clear_outlier_as_suggestion(self):
+        """With the redesigned fitter, auto-3σ is a SUGGESTION, not a silent
+        removal. The candidate appears on ``outlier_suggestions`` and is NOT
+        in ``excluded_points``; the point still contributes to the fit."""
         points = self._points_with_one_clear_outlier()
         cfg = _config_with_ranges()
         fitted = self.fitter.fit(points, cfg).unwrap()
+        # Suggestion present
+        assert len(fitted.outlier_suggestions) == 1, (
+            f"expected 1 outlier suggestion, got {len(fitted.outlier_suggestions)}"
+        )
+        assert fitted.outlier_suggestions[0].idx == 3
+        # No silent exclusion
         auto_excluded = [
             p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
         ]
-        assert len(auto_excluded) == 1, (
-            f"expected 1 auto-excluded outlier, got {len(auto_excluded)}"
+        assert auto_excluded == [], (
+            "auto-3σ must not silently remove points anymore"
         )
+        # Point was used in the fit (num_points unchanged from input)
+        assert fitted.num_points == len(points)
 
-    def test_outlier_sigma_none_disables_removal(self):
+    def test_outlier_sigma_none_disables_detection(self):
+        """``outlier_sigma=None`` skips suggestion detection entirely — used
+        by preview / Sprint-2 commit paths where the chemist owns selection."""
         points = self._points_with_one_clear_outlier()
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
@@ -559,12 +572,14 @@ class TestOutlierSigmaConfig:
             outlier_sigma=None,
         )
         fitted = self.fitter.fit(points, cfg).unwrap()
+        assert fitted.outlier_suggestions == (), (
+            "outlier_sigma=None must skip suggestion detection entirely"
+        )
+        # And of course no silent exclusion either.
         auto_excluded = [
             p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
         ]
-        assert auto_excluded == [], (
-            "outlier_sigma=None must disable auto-removal entirely"
-        )
+        assert auto_excluded == []
 
     def test_outlier_sigma_must_be_positive(self):
         from cellar.domain.shared.errors import ValidationError as VE
@@ -583,17 +598,16 @@ class TestOutlierSigmaConfig:
             )
 
 
-class TestOutlierMaskAlignment:
-    """F2 — outlier indices must map to original active-points order, not the
-    post-cleanup arrays. Bug guard: when a specific point at position 3 is
-    blatantly off, ``raw_data`` must drop that point (and only that point) and
-    the dropped point must end up in ``excluded_points`` with the original
-    concentration/response."""
+class TestOutlierSuggestionAlignment:
+    """F2 (post-redesign) — outlier suggestions must carry the ORIGINAL index +
+    concentration of the offending point. Bug guard: when a specific point at
+    position 3 is blatantly off, the SUGGESTION must name idx=3 and the
+    original concentration; ``raw_data`` is unchanged (no silent removal)."""
 
     def setup_method(self):
         self.fitter = LmfitCurveFitter()
 
-    def test_single_clear_outlier_at_position_three_is_correctly_isolated(self):
+    def test_single_clear_outlier_at_position_three_surfaces_as_suggestion(self):
         # 11 points in a clean rising curve; replace point at index 3 with
         # something massively wrong (residual ~ 60).
         clean = _generate_inhibition_data(
@@ -610,22 +624,86 @@ class TestOutlierMaskAlignment:
         cfg = _config_with_ranges()
         fitted = self.fitter.fit(clean, cfg).unwrap()
 
+        assert len(fitted.outlier_suggestions) == 1, (
+            f"expected exactly 1 outlier suggestion, got "
+            f"{len(fitted.outlier_suggestions)}"
+        )
+        suggestion = fitted.outlier_suggestions[0]
+        # idx must point at the original-input position; concentration must
+        # match the original offending point.
+        assert suggestion.idx == bad_idx
+        assert suggestion.concentration == pytest.approx(original_bad_conc, rel=1e-9)
+        assert suggestion.residual_sigma > 0
+        # Nothing silently moved to excluded_data.
         auto_excluded = [
             p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
         ]
-        assert len(auto_excluded) == 1, (
-            f"expected exactly 1 auto-flagged outlier, got {len(auto_excluded)}"
+        assert auto_excluded == []
+        # raw_data still has all the points (including the bad one) — no
+        # silent surgery on the active-points list.
+        assert len(fitted.raw_data) == len(clean)
+
+
+class TestOutlierSuggestionContract:
+    """Sprint-2 redesign: the fitter emits SUGGESTIONS, never silent removals.
+
+    Single source of truth for the new contract — every other test in this
+    module assumes this behavior."""
+
+    def setup_method(self):
+        self.fitter = LmfitCurveFitter()
+
+    def _points_with_clear_outlier_at(self, idx: int):
+        points = _generate_inhibition_data(
+            ic50=10.0, hill=1.0, top=100.0, bottom=0.0,
+            n_points=11, noise_pct=0.005, conc_min=0.01, conc_max=1000.0,
+            seed=21,
         )
-        # The flagged point must be the actual offending one — not whatever
-        # point landed at index 3 of the post-cleanup array.
-        flagged = auto_excluded[0]
-        assert flagged["concentration"] == pytest.approx(original_bad_conc, rel=1e-9), (
-            f"outlier mask realigned wrong — flagged "
-            f"{flagged['concentration']} not {original_bad_conc}"
+        bad = points[idx]
+        points[idx] = ConcentrationResponsePoint(
+            concentration=bad.concentration,
+            response=bad.response + 60.0,
         )
-        # And no good points leaked into excluded_data
-        good_concs = {p["concentration"] for p in fitted.raw_data}
-        assert flagged["concentration"] not in good_concs
+        return points
+
+    def test_fit_returns_outlier_suggestion_separately_from_exclusions(self):
+        """A clear outlier surfaces as a SUGGESTION (not a silent exclusion)
+        and the offending point still contributes to the fit."""
+        points = self._points_with_clear_outlier_at(idx=5)
+        cfg = _config_with_ranges()
+        result = self.fitter.fit(points, cfg)
+        assert isinstance(result, Success)
+        fitted = result.unwrap()
+        # Suggestion is present and points at the offender.
+        assert any(s.idx == 5 for s in fitted.outlier_suggestions)
+        # The point was NOT silently moved to excluded_points.
+        auto_excluded = [
+            e for e in fitted.excluded_points if e.get("reason") == "auto_3sigma"
+        ]
+        assert auto_excluded == []
+        # num_points unchanged from input — no surgery.
+        assert fitted.num_points == len(points)
+
+    def test_fit_no_suggestions_when_outlier_sigma_is_none(self):
+        """outlier_sigma=None disables the suggestion pass entirely — the
+        Sprint-2 preview/commit paths rely on this to avoid cascade."""
+        points = self._points_with_clear_outlier_at(idx=5)
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            x_readout_name="Concentration",
+            y_readout_name="% Inhibition",
+            outlier_sigma=None,
+        )
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert fitted.outlier_suggestions == ()
+
+    def test_suggestion_carries_residual_severity(self):
+        points = self._points_with_clear_outlier_at(idx=5)
+        cfg = _config_with_ranges()
+        fitted = self.fitter.fit(points, cfg).unwrap()
+        assert len(fitted.outlier_suggestions) >= 1
+        s = fitted.outlier_suggestions[0]
+        assert s.residual_sigma > 0
 
 
 class TestProtocolDrivenClassification:
