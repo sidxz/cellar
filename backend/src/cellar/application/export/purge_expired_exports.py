@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from cellar.application.attachment.storage import StorageClient
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.export.repository import ExportJobRepository
-from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
 
 
 class PurgeExpiredExports:
@@ -21,7 +21,7 @@ class PurgeExpiredExports:
         self,
         uow: UnitOfWork,
         repo: ExportJobRepository,
-        storage: FsspecStorageClient,
+        storage: StorageClient,
     ) -> None:
         self._uow = uow
         self._repo = repo

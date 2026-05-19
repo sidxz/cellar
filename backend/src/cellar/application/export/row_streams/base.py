@@ -1,8 +1,8 @@
 # backend/src/cellar/application/export/row_streams/base.py
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Literal, Protocol
-
 
 ColumnKind = Literal[
     "text",

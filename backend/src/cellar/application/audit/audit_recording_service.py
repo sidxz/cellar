@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
+from cellar.application.shared.transaction_context import TransactionContext
 from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
@@ -42,22 +42,22 @@ class AuditRecordingService:
         correlation_id: uuid.UUID | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
-        session: Any | None = None,
+        session: TransactionContext | None = None,
     ) -> AuditOperation:
         """Create and persist an audit operation with entries.
 
         Parameters
         ----------
         session:
-            When provided (must be an ``AsyncSession``), the audit write is
-            added to *that* session without issuing a separate commit.  The
-            caller (unit-of-work) owns the transaction; if it rolls back the
-            audit write rolls back too.  This is the safe path for mutations
-            that must be audited atomically (e.g. admin hard-delete).
+            When provided, the audit write is added to *that* transaction
+            context without issuing a separate commit. The caller (unit of
+            work) owns the transaction; if it rolls back the audit write
+            rolls back too. This is the safe path for mutations that must
+            be audited atomically (e.g. admin hard-delete).
 
-            When ``None`` (default), a fresh session is opened and committed
-            immediately — the original behaviour used by event handlers and
-            other call sites.
+            When ``None`` (default), the repository opens a fresh session
+            and commits immediately — the original behaviour used by event
+            handlers and other non-transactional call sites.
         """
         now = datetime.now(UTC)
         operation = AuditOperation(

@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import AuthorizationError, ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.base import Base
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
@@ -149,3 +150,107 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
             # subsequent session.flush() does not regress the version column.
             existing.version = loaded_version + 1  # type: ignore[attr-defined]
             aggregate.version = loaded_version + 1
+
+
+class EntityRepository[T: Entity, ModelType: Base](ABC):
+    """Base repository for plain (non-aggregate) domain Entity types.
+
+    Provides the same workspace-scoped read / save / delete surface as
+    ``SQLAlchemyRepository`` but without optimistic concurrency or event
+    plumbing — appropriate for entities that don't carry a ``version``
+    column and don't emit domain events (e.g. ``Target``, ``CompoundFlag``,
+    ``PlateTemplate``).
+
+    Workspace-mismatch is enforced as defence-in-depth on every mutating
+    path: ``save`` raises ``AuthorizationError`` if an existing row's
+    ``workspace_id`` doesn't match the entity being saved; ``delete``
+    pushes the workspace filter into the SQL WHERE clause so cross-tenant
+    deletes are physically impossible.
+    """
+
+    model_class: type[ModelType]
+
+    def __init__(self, uow: AsyncUnitOfWork) -> None:
+        self._uow = uow
+
+    @property
+    def _session(self) -> AsyncSession:
+        return self._uow.session
+
+    # ------------------------------------------------------------------
+    # Abstract mapping contract — subclasses implement these
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def _to_domain(self, model: ModelType) -> T: ...
+
+    @abstractmethod
+    def _to_model(self, entity: T) -> ModelType: ...
+
+    @abstractmethod
+    def _update_model(self, model: ModelType, entity: T) -> None: ...
+
+    # ------------------------------------------------------------------
+    # Standard workspace-scoped queries
+    # ------------------------------------------------------------------
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> T | None:
+        stmt = select(self.model_class).where(
+            self.model_class.id == id,  # type: ignore[attr-defined]
+            self.model_class.workspace_id == workspace_id,  # type: ignore[attr-defined]
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return self._to_domain(model) if model else None
+
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        cursor_id: uuid.UUID | None = None,
+        limit: int | None = None,
+    ) -> list[T]:
+        stmt = (
+            select(self.model_class)
+            .where(self.model_class.workspace_id == workspace_id)  # type: ignore[attr-defined]
+            .order_by(self.model_class.id)  # type: ignore[attr-defined]
+        )
+        if cursor_id is not None:
+            stmt = stmt.where(self.model_class.id > cursor_id)  # type: ignore[attr-defined]
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def save(self, entity: T) -> None:
+        existing = await self._session.get(self.model_class, entity.id)
+        if existing is None:
+            self._session.add(self._to_model(entity))
+            return
+        # Defence-in-depth: refuse to mutate a row that belongs to a
+        # different workspace. find_by_id_in_workspace already filters,
+        # but a use case could load via a different path and still try
+        # to save here.
+        if (
+            hasattr(existing, "workspace_id")
+            and hasattr(entity, "workspace_id")
+            and existing.workspace_id != entity.workspace_id  # type: ignore[attr-defined]
+        ):
+            raise AuthorizationError(
+                f"Cannot update {type(entity).__name__} from a different workspace"
+            )
+        self._update_model(existing, entity)
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
+        """Delete with workspace filter in the SQL WHERE clause.
+
+        Cross-tenant deletes are physically impossible — no row is loaded
+        and re-checked; the DELETE statement itself ANDs the workspace_id.
+        """
+        stmt = sa_delete(self.model_class).where(
+            self.model_class.id == id,  # type: ignore[attr-defined]
+            self.model_class.workspace_id == workspace_id,  # type: ignore[attr-defined]
+        )
+        await self._session.execute(stmt)

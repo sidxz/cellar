@@ -16,6 +16,7 @@ cell at default row height. ``size`` accepts a preset name ("small",
 """
 
 from __future__ import annotations
+
 import io
 import math
 from typing import Literal
@@ -158,7 +159,7 @@ def render_sparkline_png(
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.ticker import LogLocator, FixedLocator
+    from matplotlib.ticker import FixedLocator, LogLocator
 
     width, height = _resolve_size(size)
     points = curve_snapshot.get("data_points") or []

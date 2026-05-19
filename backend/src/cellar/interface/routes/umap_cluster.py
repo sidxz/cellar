@@ -18,15 +18,20 @@ from pydantic import BaseModel, Field, model_validator
 from cellar.application.research_organization.collection_membership import (
     ListCollectionMoleculesQuery,
 )
-from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
-from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.cancel_umap_cluster_job import (
+    CancelUmapClusterJob,
+    CancelUmapClusterJobInput,
+)
+from cellar.application.sar_analysis.get_umap_cluster_job import (
+    GetUmapClusterJob,
+    GetUmapClusterJobInput,
+)
 from cellar.application.sar_analysis.start_umap_cluster_job import (
     StartUmapClusterJob,
     StartUmapClusterJobInput,
 )
 from cellar.domain.sar_analysis.umap_job import UmapJob
 from cellar.domain.sar_analysis.umap_types import UmapResult
-from cellar.interface.error_handlers import result_to_response
 from cellar.interface.dependencies import AuthDep
 from cellar.interface.dependencies._research_organization import ListCollectionMoleculesDep
 from cellar.interface.dependencies._sar_analysis import (
@@ -34,6 +39,7 @@ from cellar.interface.dependencies._sar_analysis import (
     GetUmapClusterJobDep,
     StartUmapClusterJobDep,
 )
+from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/sar", tags=["sar-analysis"])
 
@@ -250,9 +256,11 @@ async def get_umap_cluster_job(
 
     Returns the computed result once ``status == "ready"``.
     """
-    job = await uc.execute(job_id)
-    if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UMAP job not found.")
+    job = result_to_response(
+        await uc.execute(
+            GetUmapClusterJobInput(job_id=job_id, workspace_id=auth.workspace_id)
+        )
+    )
     return StartUmapClusterResponse(
         result=_result_to_dto(job.result) if job.result is not None else None,
         job=_job_to_dto(job),
@@ -265,5 +273,13 @@ async def cancel_umap_cluster_job(
     auth: AuthDep,
     uc: CancelUmapClusterJobDep,
 ) -> None:
-    """Request cancellation of a pending or running UMAP cluster job."""
-    await uc.execute(job_id)
+    """Request cancellation of a pending or running UMAP cluster job.
+
+    Result is unwrapped to convert a NotFoundError to a 404 via the standard
+    error handler. The 204 response body stays empty regardless.
+    """
+    result_to_response(
+        await uc.execute(
+            CancelUmapClusterJobInput(job_id=job_id, workspace_id=auth.workspace_id)
+        )
+    )

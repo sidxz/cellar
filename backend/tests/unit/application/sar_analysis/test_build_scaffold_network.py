@@ -13,6 +13,14 @@ from cellar.domain.sar_analysis.scaffold_tree_types import (
     ScaffoldTreeResult,
     ScaffoldTreeStats,
 )
+from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
+
+
+def _real_builder() -> ScaffoldNetworkBuilder:
+    """Concrete RDKit-backed builder. Application unit tests are allowed to
+    instantiate infra adapters directly — what's forbidden is the production
+    code path doing so. See `application/sar_analysis/scaffold_network.py`."""
+    return ScaffoldNetworkBuilder()
 
 
 class _NullUoW:
@@ -58,6 +66,7 @@ async def test_empty_input_returns_empty_result():
         molecule_fetcher=_FakeMoleculeFetcher([]),
         job_repository=_NeverCachingRepo(),
         uow=_NullUoW(),
+        network_builder=_real_builder(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
@@ -79,6 +88,7 @@ async def test_acyclic_mols_grouped_under_no_scaffold_bucket():
         molecule_fetcher=_FakeMoleculeFetcher([(m1, "CCCC", ""), (m2, "CCCCO", "")]),
         job_repository=_NeverCachingRepo(),
         uow=_NullUoW(),
+        network_builder=_real_builder(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
@@ -101,6 +111,7 @@ async def test_ringed_mols_yield_network_with_member_counts():
         ]),
         job_repository=_NeverCachingRepo(),
         uow=_NullUoW(),
+        network_builder=_real_builder(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(
@@ -130,6 +141,7 @@ async def test_cache_hit_short_circuits():
         molecule_fetcher=_SpyFetcher(),
         job_repository=_AlwaysCacheHitRepo(),
         uow=_NullUoW(),
+        network_builder=_real_builder(),
         cache_ttl_seconds=3600,
     )
     out = await uc.execute(

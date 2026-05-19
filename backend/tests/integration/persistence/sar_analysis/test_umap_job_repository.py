@@ -34,8 +34,9 @@ def _empty_result(picker: str = "maxmin") -> UmapResult:
 
 @pytest.mark.asyncio
 async def test_round_trip(uow) -> None:
+    workspace_id = uuid4()
     job = UmapJob.create(
-        workspace_id=uuid4(),
+        workspace_id=workspace_id,
         requested_by=uuid4(),
         ids_hash="abc",
         picker="maxmin",
@@ -50,7 +51,7 @@ async def test_round_trip(uow) -> None:
 
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
-        found = await repo.find_by_id(job.id)
+        found = await repo.find_by_id(job.id, workspace_id=workspace_id)
 
     assert found is not None
     assert found.id == job.id
@@ -58,11 +59,38 @@ async def test_round_trip(uow) -> None:
 
 
 @pytest.mark.asyncio
+async def test_find_by_id_isolates_across_workspaces(uow) -> None:
+    """Cross-workspace probe by job UUID must return None."""
+    workspace_a = uuid4()
+    workspace_b = uuid4()
+    job = UmapJob.create(
+        workspace_id=workspace_a,
+        requested_by=uuid4(),
+        ids_hash=f"iso-{uuid4().hex}",
+        picker="maxmin",
+        picker_params={"n": 50},
+        picker_param_hash="ph",
+        now=_now(),
+    )
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        miss = await repo.find_by_id(job.id, workspace_id=workspace_b)
+
+    assert miss is None
+
+
+@pytest.mark.asyncio
 async def test_find_cached_hits_ready_within_ttl(uow) -> None:
     now = _now()
+    workspace_id = uuid4()
     job = (
         UmapJob.create(
-            workspace_id=uuid4(),
+            workspace_id=workspace_id,
             requested_by=uuid4(),
             ids_hash="X",
             picker="maxmin",
@@ -81,7 +109,11 @@ async def test_find_cached_hits_ready_within_ttl(uow) -> None:
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         found = await repo.find_cached(
-            ids_hash="X", picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
+            workspace_id=workspace_id,
+            ids_hash="X",
+            picker="maxmin",
+            picker_param_hash="ph",
+            ttl_seconds=3600,
         )
 
     assert found is not None
@@ -91,9 +123,10 @@ async def test_find_cached_hits_ready_within_ttl(uow) -> None:
 @pytest.mark.asyncio
 async def test_find_cached_misses_on_different_picker(uow) -> None:
     now = _now()
+    workspace_id = uuid4()
     job = (
         UmapJob.create(
-            workspace_id=uuid4(),
+            workspace_id=workspace_id,
             requested_by=uuid4(),
             ids_hash="X",
             picker="maxmin",
@@ -112,7 +145,11 @@ async def test_find_cached_misses_on_different_picker(uow) -> None:
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         miss = await repo.find_cached(
-            ids_hash="X", picker="butina", picker_param_hash="phA", ttl_seconds=3600
+            workspace_id=workspace_id,
+            ids_hash="X",
+            picker="butina",
+            picker_param_hash="phA",
+            ttl_seconds=3600,
         )
 
     assert miss is None
@@ -126,10 +163,11 @@ async def test_find_cached_misses_past_ttl(uow) -> None:
     # commit to the same shared DB (the UoW does NOT roll back on success),
     # so hash collisions between tests cause spurious cache hits.
     unique_hash = f"ttl-test-{uuid4().hex}"
+    workspace_id = uuid4()
     now = _now()
     job = (
         UmapJob.create(
-            workspace_id=uuid4(),
+            workspace_id=workspace_id,
             requested_by=uuid4(),
             ids_hash=unique_hash,
             picker="maxmin",
@@ -148,7 +186,49 @@ async def test_find_cached_misses_past_ttl(uow) -> None:
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         miss = await repo.find_cached(
-            ids_hash=unique_hash, picker="maxmin", picker_param_hash="ph", ttl_seconds=3600
+            workspace_id=workspace_id,
+            ids_hash=unique_hash,
+            picker="maxmin",
+            picker_param_hash="ph",
+            ttl_seconds=3600,
+        )
+
+    assert miss is None
+
+
+@pytest.mark.asyncio
+async def test_find_cached_isolates_across_workspaces(uow) -> None:
+    """Same ids_hash in different workspaces must NOT cross-pollinate."""
+    workspace_a = uuid4()
+    workspace_b = uuid4()
+    shared_hash = f"shared-{uuid4().hex}"
+    now = _now()
+    job = (
+        UmapJob.create(
+            workspace_id=workspace_a,
+            requested_by=uuid4(),
+            ids_hash=shared_hash,
+            picker="maxmin",
+            picker_params={"n": 50},
+            picker_param_hash="ph",
+            now=now - timedelta(minutes=5),
+        )
+        .mark_running(now - timedelta(minutes=4))
+        .mark_ready(_empty_result(), now - timedelta(minutes=3))
+    )
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        miss = await repo.find_cached(
+            workspace_id=workspace_b,
+            ids_hash=shared_hash,
+            picker="maxmin",
+            picker_param_hash="ph",
+            ttl_seconds=3600,
         )
 
     assert miss is None

@@ -24,6 +24,7 @@ from uuid import UUID
 from rdkit import Chem
 
 from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.sar_analysis.scaffold_network import ScaffoldNetworkBuilder
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.sar_analysis.scaffold_tree_types import (
     NO_SCAFFOLD_SENTINEL,
@@ -32,7 +33,6 @@ from cellar.domain.sar_analysis.scaffold_tree_types import (
     ScaffoldTreeResult,
     ScaffoldTreeStats,
 )
-from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
 
 
 @dataclass(frozen=True)
@@ -60,14 +60,14 @@ class BuildScaffoldNetwork:
         molecule_fetcher: MoleculeFetcherForScaffoldTree,
         job_repository: ScaffoldTreeJobRepository,
         uow: UnitOfWork,
+        network_builder: ScaffoldNetworkBuilder,
         cache_ttl_seconds: int = 3600,
-        network_builder: ScaffoldNetworkBuilder | None = None,
     ) -> None:
         self._fetcher = molecule_fetcher
         self._repo = job_repository
         self._uow = uow
         self._ttl = cache_ttl_seconds
-        self._builder = network_builder or ScaffoldNetworkBuilder()
+        self._builder = network_builder
 
     async def execute(self, payload: BuildScaffoldNetworkInput) -> ScaffoldTreeResult:
         ids_hash = compute_ids_hash(payload.molecule_ids)

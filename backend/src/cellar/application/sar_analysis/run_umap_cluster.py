@@ -72,7 +72,9 @@ class RunUmapCluster:
         running = None
         try:
             async with self.uow:
-                job = await self.repository.find_by_id(job_id)
+                job = await self.repository.find_by_id(
+                    job_id, workspace_id=workspace_id
+                )
                 if job is None:
                     log.error("umap_cluster_job_not_found")
                     return
@@ -102,7 +104,9 @@ class RunUmapCluster:
             log.exception("umap_cluster_job_failed")
             try:
                 async with self.uow:
-                    current = await self.repository.find_by_id(job_id)
+                    current = await self.repository.find_by_id(
+                        job_id, workspace_id=workspace_id
+                    )
                     if current is not None:
                         failed = current.mark_failed(str(exc), datetime.now(timezone.utc))
                         await self.repository.save(failed)

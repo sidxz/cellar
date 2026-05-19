@@ -3,11 +3,11 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+from returns.result import Failure, Success
 
 from cellar.application.sar_analysis.get_scaffold_tree_job import (
     GetScaffoldTreeJob,
     GetScaffoldTreeJobInput,
-    ScaffoldTreeJobNotFound,
 )
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import (
     CancelScaffoldTreeJob,
@@ -17,6 +17,7 @@ from cellar.domain.sar_analysis.scaffold_tree_job import (
     ScaffoldTreeJob,
     ScaffoldTreeJobStatus,
 )
+from cellar.domain.shared.errors import NotFoundError
 
 
 class _NullUoW:
@@ -68,7 +69,7 @@ class _StubOrchestrator:
 
 
 @pytest.mark.asyncio
-async def test_get_returns_job_when_present():
+async def test_get_returns_success_when_present():
     workspace_id = uuid.uuid4()
     job = ScaffoldTreeJob.create(
         workspace_id=workspace_id, requested_by=uuid.uuid4(),
@@ -76,24 +77,24 @@ async def test_get_returns_job_when_present():
     )
     repo = _InMemoryRepo()
     await repo.save(job)
-    fetched = await GetScaffoldTreeJob(repository=repo, uow=_NullUoW()).execute(
+    result = await GetScaffoldTreeJob(repository=repo, uow=_NullUoW()).execute(
         GetScaffoldTreeJobInput(job_id=job.id, workspace_id=workspace_id)
     )
-    assert fetched.id == job.id
+    assert isinstance(result, Success)
+    assert result.unwrap().id == job.id
 
 
 @pytest.mark.asyncio
-async def test_get_raises_not_found_when_missing():
-    with pytest.raises(ScaffoldTreeJobNotFound):
-        await GetScaffoldTreeJob(repository=_InMemoryRepo(), uow=_NullUoW()).execute(
-            GetScaffoldTreeJobInput(
-                job_id=uuid.uuid4(), workspace_id=uuid.uuid4()
-            )
-        )
+async def test_get_returns_failure_when_missing():
+    result = await GetScaffoldTreeJob(repository=_InMemoryRepo(), uow=_NullUoW()).execute(
+        GetScaffoldTreeJobInput(job_id=uuid.uuid4(), workspace_id=uuid.uuid4())
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), NotFoundError)
 
 
 @pytest.mark.asyncio
-async def test_get_raises_not_found_when_workspace_mismatch():
+async def test_get_returns_failure_when_workspace_mismatch():
     workspace_id = uuid.uuid4()
     other_workspace = uuid.uuid4()
     job = ScaffoldTreeJob.create(
@@ -102,10 +103,11 @@ async def test_get_raises_not_found_when_workspace_mismatch():
     )
     repo = _InMemoryRepo()
     await repo.save(job)
-    with pytest.raises(ScaffoldTreeJobNotFound):
-        await GetScaffoldTreeJob(repository=repo, uow=_NullUoW()).execute(
-            GetScaffoldTreeJobInput(job_id=job.id, workspace_id=other_workspace)
-        )
+    result = await GetScaffoldTreeJob(repository=repo, uow=_NullUoW()).execute(
+        GetScaffoldTreeJobInput(job_id=job.id, workspace_id=other_workspace)
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), NotFoundError)
 
 
 @pytest.mark.asyncio
@@ -118,7 +120,7 @@ async def test_cancel_transitions_to_cancelled_and_calls_orchestrator():
     repo = _InMemoryRepo()
     await repo.save(job)
     orchestrator = _StubOrchestrator()
-    cancelled = await CancelScaffoldTreeJob(
+    result = await CancelScaffoldTreeJob(
         repository=repo, orchestrator=orchestrator, uow=_NullUoW()
     ).execute(
         CancelScaffoldTreeJobInput(
@@ -126,7 +128,8 @@ async def test_cancel_transitions_to_cancelled_and_calls_orchestrator():
             now=datetime.now(timezone.utc),
         )
     )
-    assert cancelled.status == ScaffoldTreeJobStatus.CANCELLED
+    assert isinstance(result, Success)
+    assert result.unwrap().status == ScaffoldTreeJobStatus.CANCELLED
     assert orchestrator.cancels == [job.id]
 
 
@@ -144,11 +147,27 @@ async def test_cancel_idempotent_on_terminal_returns_unchanged():
     )
     repo = _InMemoryRepo()
     await repo.save(job)
-    out = await CancelScaffoldTreeJob(
+    result = await CancelScaffoldTreeJob(
         repository=repo, orchestrator=_StubOrchestrator(), uow=_NullUoW()
     ).execute(
         CancelScaffoldTreeJobInput(
             job_id=job.id, workspace_id=workspace_id, now=now,
         )
     )
-    assert out.status == ScaffoldTreeJobStatus.FAILED  # unchanged
+    assert isinstance(result, Success)
+    assert result.unwrap().status == ScaffoldTreeJobStatus.FAILED  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_cancel_returns_failure_when_missing():
+    result = await CancelScaffoldTreeJob(
+        repository=_InMemoryRepo(), orchestrator=_StubOrchestrator(), uow=_NullUoW()
+    ).execute(
+        CancelScaffoldTreeJobInput(
+            job_id=uuid.uuid4(),
+            workspace_id=uuid.uuid4(),
+            now=datetime.now(timezone.utc),
+        )
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), NotFoundError)

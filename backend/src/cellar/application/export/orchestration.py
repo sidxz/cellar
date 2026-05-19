@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 # Re-export for symmetry with BulkRegistrationOrchestrator callers.
-from cellar.application.orchestration.workflow_status import WorkflowOrchestratorUnavailable  # noqa: F401
+from cellar.application.orchestration.workflow_status import (
+    WorkflowOrchestratorUnavailable,  # noqa: F401
+)
 
 __all__ = ["ExportOrchestrator", "StartExportWorkflowRequest", "WorkflowOrchestratorUnavailable"]
 

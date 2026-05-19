@@ -22,19 +22,18 @@ are connected by rotatable bonds (e.g. biphenyl → benzene parent).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import structlog
 from rdkit import Chem
 from rdkit.Chem.Scaffolds import rdScaffoldNetwork
 
+# Re-export the pure-data shape from application so existing infra callers
+# (and external tests) keep working without churn. New code should import
+# RawScaffoldNetwork from `cellar.application.sar_analysis.scaffold_network`.
+from cellar.application.sar_analysis.scaffold_network import RawScaffoldNetwork
+
+__all__ = ["RawScaffoldNetwork", "ScaffoldNetworkBuilder"]
+
 logger = structlog.get_logger(__name__)
-
-
-@dataclass(frozen=True)
-class RawScaffoldNetwork:
-    node_smiles: list[str] = field(default_factory=list)
-    edges: list[tuple[str, str]] = field(default_factory=list)  # (parent, child)
 
 
 class ScaffoldNetworkBuilder:

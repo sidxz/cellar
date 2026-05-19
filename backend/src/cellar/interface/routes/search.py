@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, TypeAdapter, model_validator
 from cellar.application.research_organization.count_search import CountSearchQuery
 from cellar.application.research_organization.execute_search import ExecuteSearchQuery
 from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.research_organization.criteria_walker import walk_criteria
 from cellar.domain.sar_analysis.search_modes import SearchMode
 from cellar.domain.shared.aggregation_types import SelectionRule
 from cellar.interface.dependencies import AuthDep, CountSearchDep, ExecuteSearchDep
@@ -120,17 +121,22 @@ _structure_adapter: TypeAdapter[_ExactMatch | _SubstructureMatch | _SimilarityMa
 
 
 def _walk_validate_structures(criteria: list[dict[str, Any]]) -> None:
-    """Recursively validate every {type: structure} criterion in the criteria tree."""
-    for c in criteria:
-        ctype = c.get("type")
-        if ctype == "structure":
-            payload = {k: v for k, v in c.items() if k != "type"}
-            # Accept legacy `search_type` key as `kind`.
-            if "kind" not in payload and "search_type" in payload:
-                payload["kind"] = payload.pop("search_type")
-            _structure_adapter.validate_python(payload)
-        elif ctype == "group":
-            _walk_validate_structures(c.get("criteria", []))
+    """Validate every ``{type: structure}`` criterion in the criteria tree.
+
+    Iterates via the shared ``walk_criteria`` traversal so we never re-encode
+    the group/leaf recursion locally.
+    """
+
+    def _validate(c: dict[str, Any]) -> None:
+        if c.get("type") != "structure":
+            return
+        payload = {k: v for k, v in c.items() if k != "type"}
+        # Accept legacy `search_type` key as `kind`.
+        if "kind" not in payload and "search_type" in payload:
+            payload["kind"] = payload.pop("search_type")
+        _structure_adapter.validate_python(payload)
+
+    walk_criteria(criteria, _validate)
 
 
 class ExecuteSearchBody(BaseModel):

@@ -30,6 +30,8 @@ from cellar.application.screening.list_readout_data_enriched import (
     ListReadoutDataEnrichedQuery,
 )
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.interface.dependencies import (
     AuthDep,
     BulkCreateReadoutDataDep,
@@ -41,9 +43,15 @@ from cellar.interface.dependencies import (
     ReadoutCalculationEngineDep,
     RefitDoseResponseCurveDep,
 )
-from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes._intercept_response import (
+    InterceptSpecResponse as InterceptSpecModel,
+)
+from cellar.interface.routes._intercept_response import (
+    InterceptValueResponse as InterceptValueModel,
+)
+
+__all__ = ["InterceptSpecModel", "InterceptValueModel"]
 
 router = APIRouter(prefix="/api/v1", tags=["readout-data"])
 
@@ -98,21 +106,6 @@ class ReadoutDataResponse(BaseModel):
             is_outlier=rd.is_outlier,
             is_computed=rd.is_computed,
         )
-
-
-class InterceptSpecModel(BaseModel):
-    kind: str  # "ic" | "ec"
-    level: float
-    basis: str = "relative_percent"
-    label: str | None = None
-
-
-class InterceptValueModel(BaseModel):
-    spec: InterceptSpecModel
-    value: float
-    confidence_interval_low: float | None = None
-    confidence_interval_high: float | None = None
-    at_bound: bool = False
 
 
 class DoseResponseCurveResponse(BaseModel):
@@ -188,18 +181,7 @@ class DoseResponseCurveResponse(BaseModel):
             excluded_points=c.excluded_points,
             fit_quality_warnings=list(getattr(c, "fit_quality_warnings", []) or []),
             intercept_values=[
-                InterceptValueModel(
-                    spec=InterceptSpecModel(
-                        kind=iv.spec.kind.value,
-                        level=iv.spec.level,
-                        basis=iv.spec.basis.value,
-                        label=iv.spec.label,
-                    ),
-                    value=iv.value,
-                    confidence_interval_low=iv.confidence_interval_low,
-                    confidence_interval_high=iv.confidence_interval_high,
-                    at_bound=iv.at_bound,
-                )
+                InterceptValueModel.from_domain(iv)
                 for iv in (getattr(c, "intercept_values", []) or [])
             ],
         )

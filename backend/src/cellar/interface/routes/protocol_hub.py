@@ -21,6 +21,12 @@ from cellar.interface.dependencies import (
     GetProtocolStatsDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes._intercept_response import (
+    InterceptSpecResponse,
+    InterceptValueResponse,
+)
+
+__all__ = ["InterceptSpecResponse", "InterceptValueResponse"]
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocol-hub"])
 
@@ -55,21 +61,6 @@ class ProtocolStatsResponse(BaseModel):
     hit_count: int | None = None
     hit_criteria_applied: bool
     latest_run: LatestRunResponse | None = None
-
-
-class InterceptSpecResponse(BaseModel):
-    kind: str  # "ic" | "ec"
-    level: float
-    basis: str  # "relative_percent" | "absolute"
-    label: str | None = None
-
-
-class InterceptValueResponse(BaseModel):
-    spec: InterceptSpecResponse
-    value: float
-    confidence_interval_low: float | None = None
-    confidence_interval_high: float | None = None
-    at_bound: bool = False
 
 
 class CurveParamsResponse(BaseModel):
@@ -202,18 +193,7 @@ async def get_protocol_activity_summary(
                                 fitted_value=rv.curve_params.fitted_value,
                                 r_squared=rv.curve_params.r_squared,
                                 intercept_values=[
-                                    InterceptValueResponse(
-                                        spec=InterceptSpecResponse(
-                                            kind=iv.spec.kind,
-                                            level=iv.spec.level,
-                                            basis=iv.spec.basis,
-                                            label=iv.spec.label,
-                                        ),
-                                        value=iv.value,
-                                        confidence_interval_low=iv.confidence_interval_low,
-                                        confidence_interval_high=iv.confidence_interval_high,
-                                        at_bound=iv.at_bound,
-                                    )
+                                    InterceptValueResponse.from_domain(iv)
                                     for iv in rv.curve_params.intercept_values
                                 ],
                             )

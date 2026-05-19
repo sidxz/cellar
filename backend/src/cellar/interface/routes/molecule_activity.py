@@ -14,11 +14,17 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from cellar.application.screening.get_molecule_activity_detail import (
-    MoleculeActivityDetail,
     GetMoleculeActivityDetailQuery,
+    MoleculeActivityDetail,
 )
 from cellar.interface.dependencies import AuthDep, GetMoleculeActivityDetailDep
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes._intercept_response import (
+    InterceptSpecResponse,
+    InterceptValueResponse,
+)
+
+__all__ = ["InterceptSpecResponse", "InterceptValueResponse"]
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecule-activity"])
 
@@ -26,21 +32,6 @@ router = APIRouter(prefix="/api/v1/molecules", tags=["molecule-activity"])
 # ---------------------------------------------------------------------------
 # Response models
 # ---------------------------------------------------------------------------
-
-
-class InterceptSpecResponse(BaseModel):
-    kind: str  # "ic" | "ec"
-    level: float
-    basis: str  # "relative_percent" | "absolute"
-    label: str | None = None
-
-
-class InterceptValueResponse(BaseModel):
-    spec: InterceptSpecResponse
-    value: float
-    confidence_interval_low: float | None = None
-    confidence_interval_high: float | None = None
-    at_bound: bool = False
 
 
 class CurveDetailResponse(BaseModel):
@@ -116,18 +107,7 @@ class MoleculeActivityDetailResponse(BaseModel):
                             excluded_points=c.excluded_points,
                             fit_quality_warnings=c.fit_quality_warnings,
                             intercept_values=[
-                                InterceptValueResponse(
-                                    spec=InterceptSpecResponse(
-                                        kind=iv.spec.kind,
-                                        level=iv.spec.level,
-                                        basis=iv.spec.basis,
-                                        label=iv.spec.label,
-                                    ),
-                                    value=iv.value,
-                                    confidence_interval_low=iv.confidence_interval_low,
-                                    confidence_interval_high=iv.confidence_interval_high,
-                                    at_bound=iv.at_bound,
-                                )
+                                InterceptValueResponse.from_domain(iv)
                                 for iv in c.intercept_values
                             ],
                         )

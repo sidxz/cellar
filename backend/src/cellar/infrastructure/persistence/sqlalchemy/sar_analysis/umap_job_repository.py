@@ -123,16 +123,29 @@ class SQLAlchemyUmapJobRepository:
         existing = await session.get(UmapJobModel, job.id)
         if existing is None:
             session.add(_domain_to_model(job))
-        else:
-            _apply_to_model(existing, job)
+            return
+        if existing.workspace_id != job.workspace_id:
+            from cellar.domain.shared.errors import AuthorizationError
 
-    async def find_by_id(self, job_id: UUID) -> UmapJob | None:
-        model = await self._uow.session.get(UmapJobModel, job_id)
+            raise AuthorizationError(
+                f"Cannot update UmapJob {job.id}: workspace mismatch"
+            )
+        _apply_to_model(existing, job)
+
+    async def find_by_id(
+        self, job_id: UUID, *, workspace_id: UUID
+    ) -> UmapJob | None:
+        stmt = select(UmapJobModel).where(
+            UmapJobModel.id == job_id,
+            UmapJobModel.workspace_id == workspace_id,
+        )
+        model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
         return _model_to_domain(model) if model else None
 
     async def find_cached(
         self,
         *,
+        workspace_id: UUID,
         ids_hash: str,
         picker: str,
         picker_param_hash: str,
@@ -142,6 +155,7 @@ class SQLAlchemyUmapJobRepository:
         stmt = (
             select(UmapJobModel)
             .where(
+                UmapJobModel.workspace_id == workspace_id,
                 UmapJobModel.ids_hash == ids_hash,
                 UmapJobModel.picker == picker,
                 UmapJobModel.picker_param_hash == picker_param_hash,
@@ -157,6 +171,7 @@ class SQLAlchemyUmapJobRepository:
     async def find_compatible_for_pick(
         self,
         *,
+        workspace_id: UUID,
         ids_hash: str,
         threshold: float,
         ttl_seconds: int,
@@ -169,12 +184,11 @@ class SQLAlchemyUmapJobRepository:
         step). The matched job may have any picker / N.
         """
         cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=ttl_seconds)
-        # picker_params is JSONB. Match the threshold key inside it. The path
-        # extraction uses the JSONB ->> operator (text), then cast to float.
         threshold_expr = UmapJobModel.picker_params["threshold"].as_float()
         stmt = (
             select(UmapJobModel)
             .where(
+                UmapJobModel.workspace_id == workspace_id,
                 UmapJobModel.ids_hash == ids_hash,
                 threshold_expr == threshold,
                 UmapJobModel.status == UmapJobStatus.READY.value,

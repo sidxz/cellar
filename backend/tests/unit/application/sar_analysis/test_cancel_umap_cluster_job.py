@@ -4,16 +4,28 @@ import pytest
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
+from returns.result import Failure, Success
+
+from cellar.application.sar_analysis.cancel_umap_cluster_job import (
+    CancelUmapClusterJob,
+    CancelUmapClusterJobInput,
+)
 from cellar.domain.sar_analysis.umap_job import UmapJob, UmapJobStatus
+from cellar.domain.shared.errors import NotFoundError
 
 
 class _Repo:
     def __init__(self, job):
         self.job = job
         self.saved = []
+        self.calls: list[tuple] = []
 
-    async def find_by_id(self, _):
+    async def find_by_id(self, job_id, *, workspace_id):
+        self.calls.append((job_id, workspace_id))
+        if self.job is None:
+            return None
+        if self.job.workspace_id != workspace_id:
+            return None
         return self.job
 
     async def save(self, j):
@@ -58,35 +70,67 @@ async def test_cancels_pending_job():
     job = _make_job()
     repo = _Repo(job)
     orch = _Orch()
-    await CancelUmapClusterJob(repository=repo, uow=_Uow(), orchestrator=orch).execute(job.id)
+    result = await CancelUmapClusterJob(
+        repository=repo, uow=_Uow(), orchestrator=orch
+    ).execute(
+        CancelUmapClusterJobInput(job_id=job.id, workspace_id=job.workspace_id)
+    )
+    assert isinstance(result, Success)
     assert repo.saved[0].status == UmapJobStatus.CANCELLED
     assert orch.cancelled == [job.id]
 
 
 @pytest.mark.asyncio
-async def test_noop_when_job_missing():
-    """Returns silently when the job does not exist."""
+async def test_returns_failure_when_job_missing():
+    """The Result-based API surfaces NotFoundError so routes can return a 404."""
     repo = _Repo(None)
     orch = _Orch()
-    # Should not raise.
-    await CancelUmapClusterJob(repository=repo, uow=_Uow(), orchestrator=orch).execute(uuid4())
+    result = await CancelUmapClusterJob(
+        repository=repo, uow=_Uow(), orchestrator=orch
+    ).execute(
+        CancelUmapClusterJobInput(job_id=uuid4(), workspace_id=uuid4())
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), NotFoundError)
     assert repo.saved == []
     assert orch.cancelled == []
 
 
 @pytest.mark.asyncio
 async def test_noop_on_terminal_job():
-    """Idempotent when the job is already in a terminal state."""
+    """Idempotent when the job is already in a terminal state — returns Success(job)."""
     job = _make_job()
     now = datetime.now(timezone.utc)
     terminal_job = job.mark_running(now).mark_ready(
-        # UmapResult minimal stub
         type("R", (), {"points": [], "picker_indices": []})(),
         now,
     )
     repo = _Repo(terminal_job)
     orch = _Orch()
-    # Should not raise; terminal transition is swallowed.
-    await CancelUmapClusterJob(repository=repo, uow=_Uow(), orchestrator=orch).execute(terminal_job.id)
+    result = await CancelUmapClusterJob(
+        repository=repo, uow=_Uow(), orchestrator=orch
+    ).execute(
+        CancelUmapClusterJobInput(
+            job_id=terminal_job.id, workspace_id=terminal_job.workspace_id
+        )
+    )
+    assert isinstance(result, Success)
+    assert repo.saved == []
+    assert orch.cancelled == []
+
+
+@pytest.mark.asyncio
+async def test_isolates_across_workspaces():
+    """A cancel from workspace B must not touch a job owned by workspace A."""
+    job = _make_job()
+    repo = _Repo(job)
+    orch = _Orch()
+    result = await CancelUmapClusterJob(
+        repository=repo, uow=_Uow(), orchestrator=orch
+    ).execute(
+        CancelUmapClusterJobInput(job_id=job.id, workspace_id=uuid4())
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), NotFoundError)
     assert repo.saved == []
     assert orch.cancelled == []

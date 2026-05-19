@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, AsyncIterator
+from typing import AsyncIterator, Protocol
 
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 

@@ -15,6 +15,7 @@ from typing import AsyncIterator, Callable
 
 import structlog
 
+from cellar.application.attachment.storage import StorageClient
 from cellar.application.export.renderers.base import ExportRenderer, RenderOptions
 from cellar.application.export.renderers.csv_renderer import CsvRenderer
 from cellar.application.export.renderers.excel_renderer import ExcelRenderer
@@ -26,7 +27,6 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
 from cellar.domain.export.export_job import ExportJob
 from cellar.domain.export.repository import ExportJobRepository
-from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
 
 logger = structlog.get_logger(__name__)
 
@@ -50,7 +50,7 @@ class RenderExport:
 
     uow: UnitOfWork
     repo: ExportJobRepository
-    storage: FsspecStorageClient
+    storage: StorageClient
     build_search_stream: Callable[[ExportJob], SearchResultsRowStream]
 
     async def __call__(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> None:

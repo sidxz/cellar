@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from cellar.application.sar_analysis.get_scaffold_tree_job import ScaffoldTreeJobNotFound
+from returns.result import Failure, Result, Success
+
 from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
 from cellar.application.sar_analysis.start_scaffold_tree_job import ScaffoldTreeOrchestrator
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -12,6 +13,7 @@ from cellar.domain.sar_analysis.scaffold_tree_job import (
     InvalidScaffoldTreeJobTransition,
     ScaffoldTreeJob,
 )
+from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
 @dataclass(frozen=True)
@@ -33,16 +35,18 @@ class CancelScaffoldTreeJob:
         self._orchestrator = orchestrator
         self._uow = uow
 
-    async def execute(self, payload: CancelScaffoldTreeJobInput) -> ScaffoldTreeJob:
+    async def execute(
+        self, payload: CancelScaffoldTreeJobInput
+    ) -> Result[ScaffoldTreeJob, DomainError]:
         async with self._uow:
             job = await self._repo.find_by_id(payload.job_id, workspace_id=payload.workspace_id)
             if job is None:
-                raise ScaffoldTreeJobNotFound(str(payload.job_id))
+                return Failure(NotFoundError("ScaffoldTreeJob", str(payload.job_id)))
             try:
                 cancelled = job.mark_cancelled(payload.now)
             except InvalidScaffoldTreeJobTransition:
-                return job  # already terminal — idempotent no-op
+                return Success(job)  # already terminal — idempotent no-op
             await self._repo.save(cancelled)
             await self._uow.commit()
         await self._orchestrator.cancel(job_id=job.id)
-        return cancelled
+        return Success(cancelled)

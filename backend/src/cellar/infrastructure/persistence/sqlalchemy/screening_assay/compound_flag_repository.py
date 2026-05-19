@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from cellar.domain.screening_assay.compound_flag import CompoundFlag, FlagType
+from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
+    EntityRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model import (
     CompoundFlagModel,
 )
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
-class SQLAlchemyCompoundFlagRepository:
+class SQLAlchemyCompoundFlagRepository(
+    EntityRepository[CompoundFlag, CompoundFlagModel]
+):
     """Persists CompoundFlag entities to PostgreSQL."""
 
-    def __init__(self, uow: AsyncUnitOfWork) -> None:
-        self._uow = uow
+    model_class = CompoundFlagModel
 
     async def list_by_protocol(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
@@ -26,51 +29,10 @@ class SQLAlchemyCompoundFlagRepository:
             CompoundFlagModel.workspace_id == workspace_id,
             CompoundFlagModel.protocol_id == protocol_id,
         )
-        result = await self._uow.session.execute(stmt)
+        result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
 
-    async def save(self, flag: CompoundFlag) -> None:
-        existing = await self._uow.session.get(CompoundFlagModel, flag.id)
-        if existing is not None:
-            if existing.workspace_id != flag.workspace_id:
-                from cellar.domain.shared.errors import AuthorizationError
-
-                raise AuthorizationError("Cannot update CompoundFlag from a different workspace")
-            self._update_model(existing, flag)
-        else:
-            model = self._to_model(flag)
-            self._uow.session.add(model)
-
-    @staticmethod
-    def _update_model(model: CompoundFlagModel, flag: CompoundFlag) -> None:
-        model.flag_type = flag.flag_type.value
-        model.note = flag.note
-
-    async def find_by_id_in_workspace(
-        self, workspace_id: uuid.UUID, id: uuid.UUID
-    ) -> CompoundFlag | None:
-        """Load by PK scoped to workspace (used by admin hard-delete)."""
-        stmt = select(CompoundFlagModel).where(
-            CompoundFlagModel.id == id,
-            CompoundFlagModel.workspace_id == workspace_id,
-        )
-        result = await self._uow.session.execute(stmt)
-        model = result.scalar_one_or_none()
-        return self._to_domain(model) if model is not None else None
-
-    async def delete(self, workspace_id: uuid.UUID, flag_id: uuid.UUID) -> None:
-        stmt = delete(CompoundFlagModel).where(
-            CompoundFlagModel.id == flag_id,
-            CompoundFlagModel.workspace_id == workspace_id,
-        )
-        await self._uow.session.execute(stmt)
-
-    # ------------------------------------------------------------------
-    # Mapping
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _to_domain(m: CompoundFlagModel) -> CompoundFlag:
+    def _to_domain(self, m: CompoundFlagModel) -> CompoundFlag:
         return CompoundFlag(
             id=m.id,
             workspace_id=m.workspace_id,
@@ -82,8 +44,7 @@ class SQLAlchemyCompoundFlagRepository:
             created_at=m.created_at,
         )
 
-    @staticmethod
-    def _to_model(f: CompoundFlag) -> CompoundFlagModel:
+    def _to_model(self, f: CompoundFlag) -> CompoundFlagModel:
         return CompoundFlagModel(
             id=f.id,
             workspace_id=f.workspace_id,
@@ -94,3 +55,7 @@ class SQLAlchemyCompoundFlagRepository:
             note=f.note,
             created_at=f.created_at,
         )
+
+    def _update_model(self, model: CompoundFlagModel, flag: CompoundFlag) -> None:
+        model.flag_type = flag.flag_type.value
+        model.note = flag.note

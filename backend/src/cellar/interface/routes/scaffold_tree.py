@@ -26,14 +26,12 @@ from cellar.application.sar_analysis.cancel_scaffold_tree_job import (
 from cellar.application.sar_analysis.get_scaffold_tree_job import (
     GetScaffoldTreeJob,
     GetScaffoldTreeJobInput,
-    ScaffoldTreeJobNotFound,
 )
 from cellar.application.sar_analysis.start_scaffold_tree_job import (
     StartScaffoldTreeJob,
     StartScaffoldTreeJobInput,
 )
 from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
-from cellar.interface.error_handlers import result_to_response
 from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 from cellar.interface.dependencies import AuthDep
 from cellar.interface.dependencies._research_organization import (
@@ -44,6 +42,7 @@ from cellar.interface.dependencies._sar_analysis import (
     GetScaffoldTreeJobDep,
     StartScaffoldTreeJobDep,
 )
+from cellar.interface.error_handlers import result_to_response
 
 # A cap that's well above any realistic curated collection size. Bypasses the
 # generic search-endpoint pagination clamp (MAX_PAGE_SIZE=200) which exists for
@@ -202,12 +201,11 @@ async def get_scaffold_tree_job(
 
     Returns the computed tree once ``status == "ready"``.
     """
-    try:
-        job = await uc.execute(
+    job = result_to_response(
+        await uc.execute(
             GetScaffoldTreeJobInput(job_id=job_id, workspace_id=auth.workspace_id)
         )
-    except ScaffoldTreeJobNotFound:
-        raise HTTPException(status_code=404, detail="scaffold tree job not found")
+    )
     return JobDetailResponse(
         id=job.id,
         status=job.status.value,
@@ -227,16 +225,15 @@ async def cancel_scaffold_tree_job(
     uc: CancelScaffoldTreeJobDep,
 ) -> JobDetailResponse:
     """Request cancellation of a pending or running scaffold tree job."""
-    try:
-        job = await uc.execute(
+    job = result_to_response(
+        await uc.execute(
             CancelScaffoldTreeJobInput(
                 job_id=job_id,
                 workspace_id=auth.workspace_id,
                 now=datetime.now(timezone.utc),
             )
         )
-    except ScaffoldTreeJobNotFound:
-        raise HTTPException(status_code=404, detail="scaffold tree job not found")
+    )
     return JobDetailResponse(
         id=job.id,
         status=job.status.value,

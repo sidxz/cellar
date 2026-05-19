@@ -6,12 +6,10 @@ Concrete implementation lives in infrastructure.persistence.unit_of_work.
 from __future__ import annotations
 
 from types import TracebackType
-from typing import TYPE_CHECKING, Protocol, Self
+from typing import Protocol, Self
 
+from cellar.application.shared.transaction_context import TransactionContext
 from cellar.domain.shared.events import DomainEvent
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class UnitOfWork(Protocol):
@@ -25,13 +23,18 @@ class UnitOfWork(Protocol):
     def is_active(self) -> bool: ...
 
     @property
-    def session(self) -> AsyncSession:
-        """The active SQLAlchemy session.
+    def session(self) -> TransactionContext:
+        """The active transaction context.
 
-        Accessible within an ``async with uow:`` block.  Infrastructure
-        code (e.g. CascadeService implementations) may use this to pass
-        the session to SQLAlchemy-level helpers.  Application-layer use
-        cases should prefer repo/service abstractions over raw sessions.
+        Accessible within an ``async with uow:`` block. Audit and cascade
+        helpers may thread this into ``repo.save_with_session(...)`` calls
+        so the participating write rolls back with the surrounding
+        transaction. Application use cases should prefer repo abstractions
+        over the raw context.
+
+        The concrete return type is ``sqlalchemy.ext.asyncio.AsyncSession``
+        (which satisfies ``TransactionContext`` structurally), but the
+        application layer must not name that infra type.
         """
         ...
 

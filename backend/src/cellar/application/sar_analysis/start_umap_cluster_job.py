@@ -73,6 +73,7 @@ class StartUmapClusterJob:
 
         async with self._uow:
             cached = await self._repo.find_cached(
+                workspace_id=payload.workspace_id,
                 ids_hash=ids_hash,
                 picker=payload.picker,
                 picker_param_hash=pp_hash,
@@ -88,6 +89,7 @@ class StartUmapClusterJob:
         threshold = float(payload.picker_params.get("threshold", 0.4))
         async with self._uow:
             partial = await self._repo.find_compatible_for_pick(
+                workspace_id=payload.workspace_id,
                 ids_hash=ids_hash,
                 threshold=threshold,
                 ttl_seconds=3600,

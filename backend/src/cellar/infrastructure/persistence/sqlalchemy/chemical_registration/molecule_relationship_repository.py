@@ -1,34 +1,33 @@
 """SQLAlchemy repository for MoleculeRelationship entities.
 
-Follows the same UoW pattern as SQLAlchemyMergeEventRepository — takes
-AsyncUnitOfWork for transaction management.
+MoleculeRelationship is a plain Entity (no version, no domain events). Inherits
+the workspace-scoped read/save/delete surface from ``EntityRepository``.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from cellar.domain.chemical_registration.enums import RelationshipType
-from cellar.domain.chemical_registration.molecule_relationship import MoleculeRelationship
-from cellar.domain.shared.errors import AuthorizationError
+from cellar.domain.chemical_registration.molecule_relationship import (
+    MoleculeRelationship,
+)
+from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
+    EntityRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeRelationshipModel,
 )
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
-class SQLAlchemyMoleculeRelationshipRepository:
+class SQLAlchemyMoleculeRelationshipRepository(
+    EntityRepository[MoleculeRelationship, MoleculeRelationshipModel]
+):
     """Simple CRUD repository for MoleculeRelationship (not an aggregate root)."""
 
-    def __init__(self, uow: AsyncUnitOfWork) -> None:
-        self._uow = uow
-
-    @property
-    def _session(self) -> AsyncSession:
-        return self._uow.session
+    model_class = MoleculeRelationshipModel
 
     def _to_domain(self, model: MoleculeRelationshipModel) -> MoleculeRelationship:
         return MoleculeRelationship(
@@ -54,23 +53,11 @@ class SQLAlchemyMoleculeRelationshipRepository:
             created_by=entity.created_by,
         )
 
-    async def _find_by_id_unscoped(self, id: uuid.UUID) -> MoleculeRelationship | None:
-        model = await self._session.get(MoleculeRelationshipModel, id)
-        return self._to_domain(model) if model else None
-
-    async def find_by_id_in_workspace(
-        self, workspace_id: uuid.UUID, id: uuid.UUID
-    ) -> MoleculeRelationship | None:
-        """Load by PK scoped to workspace."""
-        stmt = select(MoleculeRelationshipModel).where(
-            MoleculeRelationshipModel.id == id,
-            MoleculeRelationshipModel.workspace_id == workspace_id,
-        )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-        if model is None:
-            return None
-        return self._to_domain(model)
+    def _update_model(
+        self, model: MoleculeRelationshipModel, entity: MoleculeRelationship
+    ) -> None:
+        model.relationship_type = entity.relationship_type.value
+        model.notes = entity.notes
 
     async def find_by_source(
         self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID
@@ -91,20 +78,3 @@ class SQLAlchemyMoleculeRelationshipRepository:
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars()]
-
-    async def save(self, entity: MoleculeRelationship) -> None:
-        existing = await self._session.get(MoleculeRelationshipModel, entity.id)
-        if existing is not None and existing.workspace_id != entity.workspace_id:
-            raise AuthorizationError(
-                "Cannot update MoleculeRelationship from a different workspace"
-            )
-        model = self._to_model(entity)
-        self._session.add(model)
-        await self._session.flush()
-
-    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
-        stmt = delete(MoleculeRelationshipModel).where(
-            MoleculeRelationshipModel.workspace_id == workspace_id,
-            MoleculeRelationshipModel.id == id,
-        )
-        await self._session.execute(stmt)

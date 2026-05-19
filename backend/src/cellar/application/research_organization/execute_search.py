@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import date, timedelta
 from typing import Any
 
 from returns.result import Failure, Result, Success
@@ -16,6 +15,10 @@ from cellar.application.shared.pagination import EnrichedPageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.research_organization.criteria_walker import (
+    any_match,
+    walk_criteria,
+)
 from cellar.domain.research_organization.repository import SavedSearchRepository
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.aggregation_types import SelectionRule
@@ -184,16 +187,11 @@ class ExecuteSearch:
 
 def _query_has_similarity(criteria: list[dict]) -> bool:
     """Return True if any criterion (recursively) is a similarity structure search."""
-    for c in criteria:
-        ctype = c.get("type")
-        if ctype == "structure":
-            kind = c.get("kind") or c.get("search_type")
-            if kind == "similarity":
-                return True
-        elif ctype == "group":
-            if _query_has_similarity(c.get("criteria", [])):
-                return True
-    return False
+    return any_match(
+        criteria,
+        lambda c: c.get("type") == "structure"
+        and (c.get("kind") or c.get("search_type")) == "similarity",
+    )
 
 
 def _collect_run_scopes(
@@ -223,22 +221,19 @@ def _collect_run_scopes(
     scopes: dict[str, RunScope] = {}
     activity_scopes_by_protocol: dict[str, RunScope] = {}
 
-    def walk(crits: list[dict]) -> None:
-        for c in crits:
-            ctype = c.get("type")
-            if ctype == "activity":
-                proto_id = c.get("protocol_id")
-                rs_raw = c.get("run_scope")
-                if proto_id is None or not rs_raw:
-                    continue
-                parsed = _parse_run_scope(rs_raw)
-                if parsed.is_all():
-                    continue
-                activity_scopes_by_protocol[str(proto_id)] = parsed
-            elif ctype == "group":
-                walk(c.get("criteria", []))
+    def _visit(c: dict) -> None:
+        if c.get("type") != "activity":
+            return
+        proto_id = c.get("protocol_id")
+        rs_raw = c.get("run_scope")
+        if proto_id is None or not rs_raw:
+            return
+        parsed = _parse_run_scope(rs_raw)
+        if parsed.is_all():
+            return
+        activity_scopes_by_protocol[str(proto_id)] = parsed
 
-    walk(criteria)
+    walk_criteria(criteria, _visit)
     if not activity_scopes_by_protocol or not drc_col_keys:
         return {}
 
@@ -255,58 +250,10 @@ def _collect_run_scopes(
 
 
 def _parse_run_scope(raw: dict[str, Any]) -> RunScope:
-    """Adapt the wire-shape ``run_scope`` dict to the domain ``RunScope``.
+    """Thin alias around the domain VO's single parser.
 
-    Wire shape is the ``mode``-keyed dict the FE already sends and the
-    activity composer already parses for SQL filtering. We translate
-    each mode to the domain's smart constructor so the enrichment
-    service and the SQL composer apply the same scope:
-
-      * ``mode="any"`` (or ``"all"``) → ``RunScope.all()``
-      * ``mode="latest"`` → ``RunScope.last_n(1)``
-      * ``mode="past_n_days", days=N`` → ``RunScope.since(today - N days)``
-      * ``mode="specific", run_ids=[...]`` (or legacy ``run_id``) →
-        ``RunScope.run_ids(...)``
-      * ``mode="date_range", date_from=..., date_to=...`` →
-        ``RunScope.between(...)``
-
-    Unknown / malformed modes silently fall back to ``RunScope.all()``
-    rather than raising: the SQL composer's stricter validation will
-    surface a 422 to the user, and we don't want the enrichment to
-    blow up after the rows already loaded.
+    Kept as a module-level helper so the call site (`_collect_run_scopes`)
+    reads as a verb. The actual wire-shape interpretation lives in
+    ``RunScope.from_wire``.
     """
-    mode = raw.get("mode")
-    if mode in (None, "any", "all"):
-        return RunScope.all()
-    if mode == "latest":
-        return RunScope.last_n(1)
-    if mode == "past_n_days":
-        try:
-            days = int(raw.get("days", 30))
-        except (TypeError, ValueError):
-            return RunScope.all()
-        return RunScope.since(date.today() - timedelta(days=max(days, 0)))
-    if mode == "specific":
-        raw_ids = raw.get("run_ids")
-        if not raw_ids:
-            single = raw.get("run_id")
-            raw_ids = [single] if single else []
-        try:
-            ids = [uuid.UUID(str(x)) for x in raw_ids]
-        except (TypeError, ValueError):
-            return RunScope.all()
-        return RunScope.run_ids(ids) if ids else RunScope.all()
-    if mode == "date_range":
-        df = raw.get("date_from")
-        dt = raw.get("date_to")
-        try:
-            d_from = date.fromisoformat(df) if df else None
-            d_to = date.fromisoformat(dt) if dt else None
-        except (TypeError, ValueError):
-            return RunScope.all()
-        if d_from is not None and d_to is not None:
-            return RunScope.between(d_from, d_to)
-        if d_from is not None:
-            return RunScope.since(d_from)
-        return RunScope.all()
-    return RunScope.all()
+    return RunScope.from_wire(raw)

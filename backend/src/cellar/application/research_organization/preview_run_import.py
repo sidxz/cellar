@@ -6,16 +6,14 @@ be added, applies the user's filter mode (ANY/ALL), and returns a
 DAIKON-shaped preview document for the FE to render — without mutating
 the campaign.
 
-DRY: hit-call computation reuses ``_compute_hit_call``; candidate
-fetching reuses ``ChannelResolutionQuery.fetch_candidates_for_runs``.
-Selection-rule application is inlined here (the close-time
-``ChannelResolver`` has near-identical logic — to be shared via a common
-helper in a follow-up refactor).
+DRY: hit-call computation reuses ``_compute_hit_call``; candidate fetching
+reuses ``ChannelResolutionQuery.fetch_candidates_for_runs``; selection-rule
+application delegates to the shared ``apply_selection_rule`` aggregator —
+the same single source of truth the close-time ``ChannelResolver`` uses.
 """
 
 from __future__ import annotations
 
-import math
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -28,13 +26,12 @@ from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ResolvedCandidate,
     _compute_hit_call,
-    _intercept_scalar,
-    _resolve_intercept,
 )
 from cellar.application.screening.curve_snapshot import (
     build_aggregate_curve_snapshot,
     build_curve_snapshot,
 )
+from cellar.application.screening.run_aggregation import apply_selection_rule
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -44,6 +41,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
+from cellar.domain.screening_assay.aggregation_types import QualifierHandling
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -128,124 +126,74 @@ class _Picked:
     curve_snapshot: dict | None = None
 
 
+_AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN}
+_AGGREGATE_LABELS = {
+    SelectionRule.MEAN_ACROSS_RUNS: "mean",
+    SelectionRule.GEOMETRIC_MEAN: "gmean",
+}
+
+
 def _apply_selection_rule(
     candidates: list[ResolvedCandidate],
     rule: SelectionRule,
     intercept_key: InterceptKey | None = None,
 ) -> _Picked | None:
-    """Apply a selection rule to a pre-filtered candidate list.
+    """Adapt the shared aggregator's output to the preview's ``_Picked`` shape.
 
-    Returns None for ND (empty candidates, MANUAL_PICK, or — for
-    GEOMETRIC_MEAN — when no candidate has a strictly positive value).
+    Delegates all selection-rule logic (LATEST / MEAN / GMEAN / MANUAL_PICK +
+    ND handling for Inactive / at_bound / missing intercepts) to the shared
+    ``apply_selection_rule`` in ``application/screening/run_aggregation.py``
+    so that the wizard's preview can never drift from what the close-time
+    ``ChannelResolver`` writes on Save.
 
-    ``intercept_key`` identifies which value to extract per candidate
-    before aggregating: ``None`` reads ``c.value`` (primary fit or raw
-    readout), otherwise looks up the matching intercept on
-    ``c.intercept_values``. For MEAN / GEOMETRIC_MEAN, the aggregate is
-    computed over each candidate's intercept-specific value (so the mean
-    EC90 is the average of three EC90 numbers, not the EC90 lookup on the
-    average curve).
+    Returns ``None`` only when:
+    - candidates is empty, or
+    - rule is ``MANUAL_PICK`` (preview surfaces no cell — chemist will pick).
+
+    All other ND outcomes (all-Inactive LATEST, mean with no EQ contributors,
+    gmean with no positives) round-trip as ``_Picked(value=None, qualifier=ND)``
+    so the preview cell still carries the rep run's metadata for the FE.
     """
     if not candidates:
         return None
-    contributing = [c.run_id for c in candidates]
-    n = len(candidates)
-    unit_seed = candidates[0].unit or "-"
-    pname_seed = candidates[0].protocol_name
-    pver_seed = candidates[0].protocol_version
+    if rule == SelectionRule.MANUAL_PICK:
+        return None
 
-    # Representative candidate for curve-shape snapshot (latest run by date).
-    # No-op for readout_data sources — build_curve_snapshot returns None
-    # when the candidate carries no curve_top/bottom/hill_slope.
-    rep = max(candidates, key=lambda c: c.run_date or date.min)
-    snapshot = build_curve_snapshot(rep)
+    result = apply_selection_rule(
+        candidates,
+        rule,
+        QualifierHandling.INCLUDE_QUALIFIED,
+        intercept_key,
+    )
 
-    if rule == SelectionRule.LATEST_APPROVED_RUN:
-        pick = rep
-        value, resolved_qualifier = _resolve_intercept(pick, intercept_key)
-        # Resolver-derived qualifier (ND / GT-from-at-bound) overrides the
-        # candidate's wire-level qualifier; see the matching note in
-        # channel_resolution.resolve().
-        qualifier = (
-            resolved_qualifier
-            if resolved_qualifier != ValueQualifier.EQ
-            else pick.qualifier
+    rep = result.representative_run or max(
+        candidates, key=lambda c: c.run_date or date.min
+    )
+    is_aggregate = rule in _AGGREGATE_RULES
+
+    if is_aggregate and result.value is not None:
+        snapshot = build_aggregate_curve_snapshot(
+            candidates,
+            aggregate_value=result.value,
+            aggregate_label=_AGGREGATE_LABELS[rule],
         )
-        return _Picked(
-            value=value,
-            qualifier=qualifier,
-            unit=pick.unit or "-",
-            source_run_id=pick.run_id,
-            source_curve_id=pick.curve_id,
-            source_readout_id=pick.readout_id,
-            protocol_name=pick.protocol_name,
-            protocol_version=pick.protocol_version,
-            run_date=pick.run_date,
-            contributing_run_ids=contributing,
-            replicate_count=n,
-            curve_snapshot=snapshot,
-        )
-    if rule == SelectionRule.MEAN_ACROSS_RUNS:
-        # _intercept_scalar already drops non-EQ candidates (Inactive,
-        # at_bound, missing intercept) — aggregates only the healthy ones.
-        ik_vals = [
-            v
-            for v in (_intercept_scalar(c, intercept_key) for c in candidates)
-            if v is not None
-        ]
-        value: float | None = sum(ik_vals) / len(ik_vals) if ik_vals else None
-        # Aggregate-mode snapshot extension: when we have a real value, the
-        # chart needs every contributor's curve shape + the marker position.
-        # On ND (no healthy contributors), fall back to the rep snapshot so
-        # the curve column still renders the latest curve.
-        agg_snapshot = (
-            build_aggregate_curve_snapshot(
-                candidates, aggregate_value=value, aggregate_label="mean"
-            )
-            if value is not None
-            else snapshot
-        )
-        return _Picked(
-            value=value,
-            qualifier=ValueQualifier.EQ,
-            unit=unit_seed,
-            source_run_id=None,
-            source_curve_id=None,
-            source_readout_id=None,
-            protocol_name=pname_seed,
-            protocol_version=pver_seed,
-            run_date=None,
-            contributing_run_ids=contributing,
-            replicate_count=n,
-            curve_snapshot=agg_snapshot,
-        )
-    if rule == SelectionRule.GEOMETRIC_MEAN:
-        positives = [
-            v
-            for v in (_intercept_scalar(c, intercept_key) for c in candidates)
-            if v is not None and v > 0
-        ]
-        if not positives:
-            return None
-        gmean_value = math.exp(sum(math.log(v) for v in positives) / len(positives))
-        return _Picked(
-            value=gmean_value,
-            qualifier=ValueQualifier.EQ,
-            unit=unit_seed,
-            source_run_id=None,
-            source_curve_id=None,
-            source_readout_id=None,
-            protocol_name=pname_seed,
-            protocol_version=pver_seed,
-            run_date=None,
-            contributing_run_ids=contributing,
-            replicate_count=n,
-            curve_snapshot=build_aggregate_curve_snapshot(
-                candidates, aggregate_value=gmean_value, aggregate_label="gmean"
-            ),
-        )
-    # MANUAL_PICK — ND placeholder
-    return None
+    else:
+        snapshot = build_curve_snapshot(rep)
+
+    return _Picked(
+        value=result.value,
+        qualifier=result.qualifier,
+        unit=rep.unit or "-",
+        source_run_id=None if is_aggregate else rep.run_id,
+        source_curve_id=None if is_aggregate else rep.curve_id,
+        source_readout_id=None if is_aggregate else rep.readout_id,
+        protocol_name=rep.protocol_name,
+        protocol_version=rep.protocol_version,
+        run_date=None if is_aggregate else rep.run_date,
+        contributing_run_ids=result.contributing_run_ids or [c.run_id for c in candidates],
+        replicate_count=len(candidates),
+        curve_snapshot=snapshot,
+    )
 
 
 # ---------------------------------------------------------------------------

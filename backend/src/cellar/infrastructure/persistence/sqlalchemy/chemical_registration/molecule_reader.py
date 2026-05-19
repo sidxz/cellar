@@ -16,6 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.research_organization.criteria_walker import find_first
 from cellar.domain.sar_analysis.search_modes import MODE_DEFAULTS, SearchMode
 from cellar.domain.sar_analysis.similarity_metric import (
     SimilarityMetric,
@@ -365,51 +366,37 @@ async def _set_similarity_threshold(session: AsyncSession, query: dict[str, Any]
     await session.execute(text(f"SET rdkit.tanimoto_threshold = {threshold}"))
 
 
+def _is_tanimoto_similarity(criterion: dict[str, Any]) -> bool:
+    """Predicate: leaf is a similarity structure clause using the Tanimoto metric."""
+    if criterion.get("type") != "structure":
+        return False
+    kind = criterion.get("kind") or criterion.get("search_type")
+    if kind != "similarity":
+        return False
+    metric_payload = criterion.get("metric")
+    if metric_payload and metric_payload.get("kind") == "tversky":
+        return False
+    if metric_payload is None and criterion.get("mode") == "fragment_in_target":
+        return False  # mode default is Tversky
+    return True
+
+
 def _find_first_tanimoto_threshold(criteria: list[dict[str, Any]]) -> float | None:
-    """Walk criteria (and nested groups) and return the first Tanimoto similarity
-    threshold encountered, or None if no Tanimoto similarity clause exists.
+    """First Tanimoto-similarity threshold in the tree, or None.
 
-    Returns ``None`` for Tversky clauses (whether via explicit metric or via the
-    fragment_in_target mode default).
+    Returns ``None`` for Tversky clauses (whether via explicit metric or via
+    the ``fragment_in_target`` mode default).
     """
-    for criterion in criteria:
-        ctype = criterion.get("type")
-        if ctype == "structure":
-            kind = criterion.get("kind") or criterion.get("search_type")
-            if kind != "similarity":
-                continue
-
-            # Explicit metric wins.
-            metric_payload = criterion.get("metric")
-            if metric_payload and metric_payload.get("kind") == "tversky":
-                continue
-
-            # If no explicit metric, mode determines metric type.
-            if metric_payload is None:
-                mode = criterion.get("mode")
-                if mode == "fragment_in_target":
-                    continue  # mode default is Tversky
-
-            t = criterion.get("threshold")
-            if t is None:
-                mode = criterion.get("mode")
-                if mode is not None:
-                    from cellar.domain.sar_analysis.search_modes import (
-                        MODE_DEFAULTS,
-                        SearchMode,
-                    )
-
-                    t = MODE_DEFAULTS[SearchMode(mode)].threshold
-                else:
-                    continue
-            return float(t)
-
-        if ctype == "group":
-            nested = _find_first_tanimoto_threshold(criterion.get("criteria", []))
-            if nested is not None:
-                return nested
-
-    return None
+    hit = find_first(criteria, _is_tanimoto_similarity)
+    if hit is None:
+        return None
+    t = hit.get("threshold")
+    if t is None:
+        mode = hit.get("mode")
+        if mode is None:
+            return None
+        t = MODE_DEFAULTS[SearchMode(mode)].threshold
+    return float(t)
 
 
 def _parse_drc_sort(sort_by: str | None) -> uuid.UUID | None:
@@ -434,20 +421,12 @@ def _parse_drc_sort(sort_by: str | None) -> uuid.UUID | None:
 def _find_first_similarity_criterion(
     criteria: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Walk criteria (and nested groups) and return the first similarity structure
-    criterion encountered, or None.
-    """
-    for criterion in criteria:
-        ctype = criterion.get("type")
-        if ctype == "structure":
-            kind = criterion.get("kind") or criterion.get("search_type")
-            if kind == "similarity":
-                return criterion
-        elif ctype == "group":
-            found = _find_first_similarity_criterion(criterion.get("criteria", []))
-            if found is not None:
-                return found
-    return None
+    """First similarity-structure criterion in the tree, or None."""
+    return find_first(
+        criteria,
+        lambda c: c.get("type") == "structure"
+        and (c.get("kind") or c.get("search_type")) == "similarity",
+    )
 
 
 def _build_score_clause(criterion: dict[str, Any]):
