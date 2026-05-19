@@ -12,6 +12,7 @@ from cellar.domain.screening_assay.excluded_point_detail import (
     ExclusionReason,
     ExclusionSource,
 )
+from cellar.domain.shared.errors import ValidationError
 
 
 def test_constructs_with_required_fields_manual():
@@ -40,7 +41,7 @@ def test_suggestion_is_unexcluded_auto_source():
 
 
 def test_manual_exclusion_requires_author_id():
-    with pytest.raises(ValueError, match="author_id required for manual"):
+    with pytest.raises(ValidationError, match="author_id required for manual"):
         ExcludedPointDetail(
             idx=3,
             source=ExclusionSource.MANUAL,
@@ -53,7 +54,7 @@ def test_manual_exclusion_requires_author_id():
 
 def test_auto_source_with_outlier_reason_rejected():
     # source MANUAL must NOT carry AUTO_3SIGMA reason
-    with pytest.raises(ValueError, match="AUTO_3SIGMA reason only valid for AUTO source"):
+    with pytest.raises(ValidationError, match="AUTO_3SIGMA reason only valid for AUTO source"):
         ExcludedPointDetail(
             idx=3,
             source=ExclusionSource.MANUAL,

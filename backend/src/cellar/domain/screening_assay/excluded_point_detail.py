@@ -9,19 +9,21 @@ derive concentration/response from raw_data[idx] at render time.
 
 from __future__ import annotations
 
-import enum
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
+from cellar.domain.shared.errors import ValidationError
 
-class ExclusionSource(str, enum.Enum):
+
+class ExclusionSource(StrEnum):
     MANUAL = "manual"
     AUTO_3SIGMA = "auto_3sigma"
 
 
-class ExclusionReason(str, enum.Enum):
+class ExclusionReason(StrEnum):
     OUTLIER = "outlier"
     INSTRUMENT_ARTIFACT = "instrument_artifact"
     CONCENTRATION_ERROR = "concentration_error"
@@ -52,12 +54,12 @@ class ExcludedPointDetail:
 
     def __post_init__(self) -> None:
         if self.source == ExclusionSource.MANUAL and self.author_id is None:
-            raise ValueError("author_id required for manual exclusions")
+            raise ValidationError("author_id required for manual exclusions")
         if (
             self.source == ExclusionSource.MANUAL
             and self.reason == ExclusionReason.AUTO_3SIGMA
         ):
-            raise ValueError("AUTO_3SIGMA reason only valid for AUTO source")
+            raise ValidationError("AUTO_3SIGMA reason only valid for AUTO source")
 
     @property
     def is_suggestion(self) -> bool:
