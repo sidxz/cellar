@@ -46,12 +46,14 @@ class _FakeUow:
     def __init__(self) -> None:
         # Any sentinel — the audit spy just records the kwarg.
         self.session = object()
+        self.commit_called = False
 
     @property
     def is_active(self) -> bool:
         return False
 
     async def commit(self):
+        self.commit_called = True
         return []
 
     async def rollback(self) -> None:
@@ -100,10 +102,15 @@ class _AuditSpy:
     def __init__(self) -> None:
         self.last_record: dict | None = None
         self.call_count = 0
+        # When set, ``record`` raises this exception after capturing the call.
+        # Used to prove audit failures roll back the surrounding transaction.
+        self.fail_with: Exception | None = None
 
     async def record(self, **kwargs):
         self.call_count += 1
         self.last_record = kwargs
+        if self.fail_with is not None:
+            raise self.fail_with
         return object()  # AuditOperation stand-in
 
 
@@ -439,3 +446,37 @@ async def test_commit_refit_rich_payload_requires_auth():
     )
     result = await use_case(cmd, auth=None)
     assert isinstance(result, Failure)
+
+
+@pytest.mark.asyncio
+async def test_commit_refit_rich_payload_audit_failure_rolls_back():
+    """Atomicity: when ``audit.record()`` raises, the surrounding UoW must NOT
+    commit. ``session=self._uow.session`` is what binds the audit write to the
+    same transaction as the curve save — this test locks that contract."""
+    pairs = [(0.01, 5.0), (0.1, 10.0), (1.0, 20.0), (10.0, 60.0)]
+    curve = _make_curve_with_points(pairs)
+    audit = _AuditSpy()
+    audit.fail_with = RuntimeError("audit went boom")
+    use_case, _ = _make_use_case(curve, audit=audit)
+
+    cmd = RefitDoseResponseCurveCommand(
+        workspace_id=WS,
+        curve_id=curve.id,
+        exclusions=[
+            ExclusionPayloadEntry(
+                idx=2,
+                source=ExclusionSource.MANUAL,
+                excluded=True,
+                reason=ExclusionReason.OUTLIER,
+            ),
+        ],
+        save_reason=ExclusionReason.OUTLIER,
+    )
+    with pytest.raises(RuntimeError, match="audit went boom"):
+        await use_case(cmd, auth=_make_auth())
+
+    # The audit spy was reached (proving the path got that far)...
+    assert audit.call_count == 1
+    # ...but the UoW never committed: audit failure must abort the refit
+    # atomically alongside the curve save.
+    assert use_case._uow.commit_called is False

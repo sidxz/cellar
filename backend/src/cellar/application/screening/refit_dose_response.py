@@ -270,7 +270,6 @@ class RefitDoseResponseCurve:
                 save_reason = (
                     input.save_reason.value if input.save_reason else "unspecified"
                 )
-                save_note = input.save_note or ""
                 await self._audit.record(
                     workspace_id=input.workspace_id,
                     operation_type=OperationType.CURVE_POINT_EXCLUSION,
@@ -291,7 +290,11 @@ class RefitDoseResponseCurve:
                             ),
                         )
                     ],
-                    reason=f"{save_reason}: {save_note}".rstrip(": "),
+                    reason=(
+                        f"{save_reason}: {input.save_note}"
+                        if input.save_note
+                        else save_reason
+                    ),
                     session=self._uow.session,
                 )
 
