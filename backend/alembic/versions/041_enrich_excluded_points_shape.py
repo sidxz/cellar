@@ -26,16 +26,19 @@ depends_on: None = None
 
 
 def upgrade() -> None:
-    # Backfill existing rows: every legacy excluded_points entry becomes
-    # {idx, source: "auto_3sigma", excluded: true, reason: <existing or null>,
-    #  note: null, author_id: null, ts: <curve.updated_at or now()>}
+    # Backfill existing rows: legacy [{concentration, response, reason?}] →
+    # [{idx: null, concentration, response, source, excluded, reason, note, author_id, ts}].
+    # Legacy entries have no idx (curve_fitter.py:177 writes by value, not by index);
+    # preserve concentration+response so the chart can still render X markers.
     op.execute("""
         UPDATE dose_response_curves
         SET excluded_points = (
             SELECT jsonb_agg(
                 jsonb_build_object(
-                    'idx', (entry->>'idx')::int,
-                    'source', COALESCE(entry->>'source', 'auto_3sigma'),
+                    'idx', NULL,
+                    'concentration', (entry->>'concentration')::float,
+                    'response', (entry->>'response')::float,
+                    'source', 'auto_3sigma',
                     'excluded', true,
                     'reason', COALESCE(entry->>'reason', 'auto_3sigma'),
                     'note', NULL,
@@ -51,12 +54,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Restore legacy shape, preserving concentration+response.
     op.execute("""
         UPDATE dose_response_curves
         SET excluded_points = (
             SELECT jsonb_agg(
                 jsonb_build_object(
-                    'idx', (entry->>'idx')::int,
+                    'concentration', (entry->>'concentration')::float,
+                    'response', (entry->>'response')::float,
                     'reason', entry->>'reason'
                 )
             )
