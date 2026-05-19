@@ -121,6 +121,9 @@ from cellar.application.screening.protocol_stats_reader import ProtocolStatsRead
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
+from cellar.application.screening.refit_dose_response_preview import (
+    RefitDoseResponseCurvePreview,
+)
 from cellar.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     DeleteRunImportTemplate,
@@ -503,6 +506,16 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(RefitDoseResponseCurve, _refit_dose_response_curve)
+
+    def _refit_dose_response_curve_preview(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RefitDoseResponseCurvePreview(
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            curve_fitter=c[CurveFittingService],
+        )
+
+    container.define(RefitDoseResponseCurvePreview, _refit_dose_response_curve_preview)
 
     def _classify_dose_response_curve(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
