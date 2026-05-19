@@ -512,6 +512,7 @@ def register_screening(container: Container) -> None:
     def _refit_dose_response_curve_preview(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RefitDoseResponseCurvePreview(
+            uow=uow,
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             curve_fitter=c[CurveFittingService],

@@ -28,6 +28,7 @@ from cellar.application.screening._dr_point_reconstruction import (
     build_points_with_exclusions,
 )
 from cellar.application.shared.command import Command
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     CurveFittingService,
@@ -78,10 +79,15 @@ class RefitDoseResponseCurvePreview:
     def __init__(
         self,
         *,
+        uow: UnitOfWork,
         curve_repo: DoseResponseCurveRepository,
         protocol_repo: ProtocolRepository,
         curve_fitter: CurveFittingService,
     ) -> None:
+        # The UoW is required so the SQLAlchemy repos can resolve their
+        # session. No commit is ever issued — preview is purely read-side and
+        # the use case never persists.
+        self._uow = uow
         self._curve_repo = curve_repo
         self._protocol_repo = protocol_repo
         self._curve_fitter = curve_fitter
@@ -93,18 +99,19 @@ class RefitDoseResponseCurvePreview:
     ) -> Result[PreviewRefitResult, DomainError]:
         require_editor(auth)
 
-        curve = await self._curve_repo.find_by_id_in_workspace(
-            input.workspace_id, input.curve_id
-        )
-        if curve is None:
-            return Failure(NotFoundError("DoseResponseCurve", str(input.curve_id)))
+        async with self._uow:
+            curve = await self._curve_repo.find_by_id_in_workspace(
+                input.workspace_id, input.curve_id
+            )
+            if curve is None:
+                return Failure(NotFoundError("DoseResponseCurve", str(input.curve_id)))
 
-        # Point reconstruction mirrors RefitDoseResponseCurve exactly — both
-        # paths delegate to the shared helper so preview and commit can never
-        # drift on index→dose semantics.
-        points = build_points_with_exclusions(curve, input.excluded_point_indices)
+            # Point reconstruction mirrors RefitDoseResponseCurve exactly — both
+            # paths delegate to the shared helper so preview and commit can never
+            # drift on index→dose semantics.
+            points = build_points_with_exclusions(curve, input.excluded_point_indices)
 
-        config = await self._build_preview_config(curve)
+            config = await self._build_preview_config(curve)
 
         fit_result = self._curve_fitter.fit(points, config)
         if isinstance(fit_result, Failure):

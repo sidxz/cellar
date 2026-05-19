@@ -79,6 +79,9 @@ from cellar.application.screening.plate_templates import (
 )
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
+from cellar.application.screening.refit_dose_response_preview import (
+    RefitDoseResponseCurvePreview,
+)
 from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.screening.update_target import UpdateTarget
@@ -136,6 +139,7 @@ __all__ = [
     "CreateDoseResponseCurveDep",
     "ListDoseResponseByRunDep",
     "RefitDoseResponseCurveDep",
+    "RefitDoseResponseCurvePreviewDep",
     "ClassifyDoseResponseCurveDep",
     "MoleculeActivityServiceDep",
     "GetMoleculeActivityDetailDep",
@@ -245,6 +249,10 @@ ListDoseResponseByRunDep = Annotated[
 ]
 RefitDoseResponseCurveDep = Annotated[
     RefitDoseResponseCurve, Depends(_get_use_case(RefitDoseResponseCurve))
+]
+RefitDoseResponseCurvePreviewDep = Annotated[
+    RefitDoseResponseCurvePreview,
+    Depends(_get_use_case(RefitDoseResponseCurvePreview)),
 ]
 ClassifyDoseResponseCurveDep = Annotated[
     ClassifyDoseResponseCurve, Depends(_get_use_case(ClassifyDoseResponseCurve))

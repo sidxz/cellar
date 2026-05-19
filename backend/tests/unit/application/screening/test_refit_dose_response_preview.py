@@ -113,6 +113,21 @@ def _make_protocol() -> Protocol:
     )
 
 
+class _FakeUoW:
+    """Minimal async-context-manager UoW for unit tests.
+
+    The preview use case enters the UoW so the real SQLAlchemy repos can
+    resolve their session. In unit tests the repos are mocks; the UoW just
+    needs to support ``async with`` cleanly.
+    """
+
+    async def __aenter__(self) -> _FakeUoW:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
 def _build_use_case(curve, fitter):
     """Wire a use case with a curve_repo that returns ``curve`` (or None) and a
     save spy we can assert is never called."""
@@ -123,6 +138,7 @@ def _build_use_case(curve, fitter):
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=_make_protocol())
     return (
         RefitDoseResponseCurvePreview(
+            uow=_FakeUoW(),
             curve_repo=curve_repo,
             protocol_repo=protocol_repo,
             curve_fitter=fitter,

@@ -42,6 +42,7 @@ from cellar.interface.dependencies import (
     ListReadoutDataEnrichedDep,
     ReadoutCalculationEngineDep,
     RefitDoseResponseCurveDep,
+    RefitDoseResponseCurvePreviewDep,
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.routes._intercept_response import (
@@ -281,6 +282,33 @@ class RefitDoseResponseCurveRequest(BaseModel):
     disable_auto_outliers: bool = False
 
 
+class RefitPreviewRequest(BaseModel):
+    """Compute-only preview refit request.
+
+    The FE fires this on every draft toggle during point editing. Field name
+    ``excluded_indices`` is kept short for FE friendliness; it maps to the
+    use case command's ``excluded_point_indices``.
+    """
+
+    excluded_indices: list[int] = Field(default_factory=list)
+
+
+class RefitPreviewResponse(BaseModel):
+    """Mirror of ``PreviewRefitResult`` — the subset the FE needs to redraw
+    the candidate curve during point editing."""
+
+    fitted_value: float
+    hill_slope: float
+    top: float
+    bottom: float
+    r_squared: float
+    confidence_interval_low: float | None = None
+    confidence_interval_high: float | None = None
+    curve_class: str
+    points_in_fit: int
+    points_total: int
+
+
 class ClassifyDoseResponseCurveRequest(BaseModel):
     curve_class: str
 
@@ -460,6 +488,50 @@ async def refit_dose_response_curve(
         auth=auth,
     )
     return DoseResponseCurveResponse.from_domain(result_to_response(result))
+
+
+@router.post(
+    "/dose-response-curves/{curve_id}/refit-preview",
+    response_model=RefitPreviewResponse,
+    summary="Preview a dose-response refit without persisting (compute-only).",
+)
+async def refit_dose_response_curve_preview(
+    curve_id: uuid.UUID,
+    body: RefitPreviewRequest,
+    auth: AuthDep,
+    uc: RefitDoseResponseCurvePreviewDep,
+) -> RefitPreviewResponse:
+    """Compute-only preview refit.
+
+    The FE calls this on every draft toggle during point editing; never
+    persists, never audits, never auto-excludes. The existing /refit endpoint
+    handles commit on Save.
+    """
+    from cellar.application.screening.refit_dose_response_preview import (
+        PreviewRefitCommand,
+    )
+
+    result = await uc(
+        PreviewRefitCommand(
+            workspace_id=auth.workspace_id,
+            curve_id=curve_id,
+            excluded_point_indices=body.excluded_indices,
+        ),
+        auth=auth,
+    )
+    fitted = result_to_response(result)
+    return RefitPreviewResponse(
+        fitted_value=fitted.fitted_value,
+        hill_slope=fitted.hill_slope,
+        top=fitted.top,
+        bottom=fitted.bottom,
+        r_squared=fitted.r_squared,
+        confidence_interval_low=fitted.confidence_interval_low,
+        confidence_interval_high=fitted.confidence_interval_high,
+        curve_class=fitted.curve_class,
+        points_in_fit=fitted.points_in_fit,
+        points_total=fitted.points_total,
+    )
 
 
 @router.patch(
